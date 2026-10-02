@@ -186,6 +186,24 @@ export const RunDto = z.object({
 });
 export type RunDto = z.infer<typeof RunDto>;
 
+export const RunsQuery = z.object({
+  templateId: z.uuid().optional(),
+  userId: z.uuid().optional(),
+  status: z.enum(['ok', 'error']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+});
+export type RunsQuery = z.infer<typeof RunsQuery>;
+
+export const RUNS_PAGE_SIZE = 50;
+
+export const RunsPage = z.object({
+  items: z.array(RunDto),
+  total: z.number(),
+  page: z.number(),
+  pageSize: z.number(),
+});
+export type RunsPage = z.infer<typeof RunsPage>;
+
 export const ApiError = z.object({
   error: z.object({ code: z.string(), message: z.string(), details: z.unknown().optional() }),
 });

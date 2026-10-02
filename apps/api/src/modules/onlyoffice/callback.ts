@@ -19,7 +19,11 @@ const SAVE_ERRORS: Record<number, string> = {
   7: 'ошибка принудительного сохранения OnlyOffice',
 };
 
-async function verifiedPayload(deps: AppDeps, body: unknown, authorization?: string): Promise<unknown> {
+async function verifiedPayload(
+  deps: AppDeps,
+  body: unknown,
+  authorization?: string,
+): Promise<unknown> {
   const secret = deps.config.onlyofficeJwtSecret;
   const bodyToken = (body as { token?: unknown } | null)?.token;
   try {
@@ -34,7 +38,10 @@ async function verifiedPayload(deps: AppDeps, body: unknown, authorization?: str
   throw new AppError('FORBIDDEN', 403, 'неверная подпись OnlyOffice');
 }
 
-async function existingUserId(db: Pick<AppDeps['db'], 'select'>, id: string | undefined): Promise<string | null> {
+async function existingUserId(
+  db: Pick<AppDeps['db'], 'select'>,
+  id: string | undefined,
+): Promise<string | null> {
   if (!id || !z.uuid().safeParse(id).success) return null;
   const [u] = await db.select({ id: users.id }).from(users).where(eq(users.id, id));
   return u?.id ?? null;
@@ -48,20 +55,29 @@ export async function handleCallback(
   log?: { warn(o: unknown, msg?: string): void },
 ): Promise<void> {
   const parsed = Callback.safeParse(await verifiedPayload(deps, body, authorization));
-  if (!parsed.success) throw new AppError('BAD_CALLBACK', 400, 'неверный формат callback OnlyOffice');
+  if (!parsed.success)
+    throw new AppError('BAD_CALLBACK', 400, 'неверный формат callback OnlyOffice');
   const cb = parsed.data;
   if (![2, 3, 6, 7].includes(cb.status)) return; // остальные статусы не требуют действий и блокировок
-  const [exists] = await deps.db.select({ id: templates.id }).from(templates).where(eq(templates.id, templateId));
+  const [exists] = await deps.db
+    .select({ id: templates.id })
+    .from(templates)
+    .where(eq(templates.id, templateId));
   if (!exists) return; // шаблон удалён: подтверждаем, чтобы Document Server не повторял callback
 
   let downloadFailed = false;
   try {
     await deps.db.transaction(async (tx) => {
       // Блокировка строки сериализует параллельные callback-и и ручную замену файла.
-      const [row] = await tx.select().from(templates).where(eq(templates.id, templateId)).for('update');
+      const [row] = await tx
+        .select()
+        .from(templates)
+        .where(eq(templates.id, templateId))
+        .for('update');
       // Колбэк от закрытой сессии (ключ уже сменился) не должен затирать новую версию.
       if (!row || cb.key !== row.docKey) return;
-      const setError = (msg: string) => tx.update(templates).set({ lastSaveError: msg }).where(eq(templates.id, row.id));
+      const setError = (msg: string) =>
+        tx.update(templates).set({ lastSaveError: msg }).where(eq(templates.id, row.id));
 
       if (cb.status === 3 || cb.status === 7) {
         log?.warn({ templateId, status: cb.status }, SAVE_ERRORS[cb.status]);

@@ -11,7 +11,13 @@ export async function cleanupOldReports(
   const rows = await deps.db
     .select({ id: reportRuns.id, filePath: reportRuns.filePath })
     .from(reportRuns)
-    .where(and(eq(reportRuns.fileDeleted, false), isNotNull(reportRuns.filePath), lt(reportRuns.createdAt, threshold)));
+    .where(
+      and(
+        eq(reportRuns.fileDeleted, false),
+        isNotNull(reportRuns.filePath),
+        lt(reportRuns.createdAt, threshold),
+      ),
+    );
   let done = 0;
   for (const r of rows) {
     try {
@@ -29,7 +35,10 @@ export function startCleanupTimer(
   deps: AppDeps,
   log: { error(o: unknown, msg?: string): void; warn(o: unknown, msg?: string): void },
 ): () => void {
-  const tick = () => cleanupOldReports(deps, new Date(), log).catch((e) => log.error(e, 'очистка отчётов не удалась'));
+  const tick = () =>
+    cleanupOldReports(deps, new Date(), log).catch((e) =>
+      log.error(e, 'очистка отчётов не удалась'),
+    );
   void tick();
   const timer = setInterval(tick, 60 * 60 * 1000);
   timer.unref();

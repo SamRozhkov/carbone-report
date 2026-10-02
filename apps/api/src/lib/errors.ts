@@ -35,7 +35,8 @@ const CLIENT_ERROR_MESSAGES: Record<string, string> = {
 export function registerErrorHandler(app: App): void {
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof AppError) {
-      if (err.internal !== undefined) req.log.warn({ err: err.internal, code: err.code }, err.message);
+      if (err.internal !== undefined)
+        req.log.warn({ err: err.internal, code: err.code }, err.message);
       const body: { code: string; message: string; details?: unknown } = {
         code: err.code,
         message: err.message,
@@ -63,6 +64,8 @@ export function registerErrorHandler(app: App): void {
       });
     }
     req.log.error(err);
-    return reply.status(500).send({ error: { code: 'INTERNAL', message: 'внутренняя ошибка сервера' } });
+    return reply
+      .status(500)
+      .send({ error: { code: 'INTERNAL', message: 'внутренняя ошибка сервера' } });
   });
 }

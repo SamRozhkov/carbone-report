@@ -1,7 +1,8 @@
 import JSZip from 'jszip';
 
 const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
-const REL_DOC = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
+const REL_DOC =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
 
 async function zip(files: Record<string, string>): Promise<Buffer> {
   const z = new JSZip();

@@ -21,7 +21,14 @@ import { contentDisposition, isZip, MIME } from '../../lib/http';
 import { currentUser, type Guards } from '../auth/guards';
 import { checkParamDefaults } from '../queries/params';
 import { createBlankDocument } from './blank';
-import { loadTemplate, loadTemplateFull, templateFilePath, toAdminDetails, toDetails, toSummary } from './service';
+import {
+  loadTemplate,
+  loadTemplateFull,
+  templateFilePath,
+  toAdminDetails,
+  toDetails,
+  toSummary,
+} from './service';
 
 const MAX_FILE = 20 * 1024 * 1024;
 
@@ -39,7 +46,10 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
   const { db, storage } = deps;
 
   async function ensureDatasource(id: string) {
-    const [ds] = await db.select({ id: datasources.id }).from(datasources).where(eq(datasources.id, id));
+    const [ds] = await db
+      .select({ id: datasources.id })
+      .from(datasources)
+      .where(eq(datasources.id, id));
     if (!ds) throw badRequest('источник данных не найден');
   }
 
@@ -62,7 +72,14 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
   }
 
   async function insertTemplate(
-    v: { name: string; description: string; datasourceId: string; ext: TemplateExt; data: Buffer; userId: string },
+    v: {
+      name: string;
+      description: string;
+      datasourceId: string;
+      ext: TemplateExt;
+      data: Buffer;
+      userId: string;
+    },
     extra?: {
       defaultOutput?: OutputFormat;
       queries?: TemplateQuery[];
@@ -90,10 +107,14 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           })
           .returning();
         if (extra?.queries?.length) {
-          await tx.insert(templateQueries).values(extra.queries.map((q, i) => ({ ...q, templateId: id, sortOrder: i })));
+          await tx
+            .insert(templateQueries)
+            .values(extra.queries.map((q, i) => ({ ...q, templateId: id, sortOrder: i })));
         }
         if (extra?.params?.length) {
-          await tx.insert(templateParams).values(extra.params.map((p, i) => ({ ...p, templateId: id, sortOrder: i })));
+          await tx
+            .insert(templateParams)
+            .values(extra.params.map((p, i) => ({ ...p, templateId: id, sortOrder: i })));
         }
         return row!;
       });
@@ -113,20 +134,28 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     return currentUser(req).role === 'admin' ? toAdminDetails(full) : toDetails(full);
   });
 
-  app.post('/api/templates', { ...admin, schema: { body: CreateTemplateBody } }, async (req, reply) => {
-    const row = await insertTemplate({
-      ...req.body,
-      ext: req.body.blank,
-      data: await createBlankDocument(req.body.blank),
-      userId: currentUser(req).id,
-    });
-    return reply.status(201).send(toSummary(row));
-  });
+  app.post(
+    '/api/templates',
+    { ...admin, schema: { body: CreateTemplateBody } },
+    async (req, reply) => {
+      const row = await insertTemplate({
+        ...req.body,
+        ext: req.body.blank,
+        data: await createBlankDocument(req.body.blank),
+        userId: currentUser(req).id,
+      });
+      return reply.status(201).send(toSummary(row));
+    },
+  );
 
   app.post('/api/templates/upload', admin, async (req, reply) => {
     const { fields, ext, data } = await readUpload(req);
     const meta = z
-      .object({ name: z.string().trim().min(1), description: z.string().default(''), datasourceId: z.uuid() })
+      .object({
+        name: z.string().trim().min(1),
+        description: z.string().default(''),
+        datasourceId: z.uuid(),
+      })
       .safeParse(fields);
     if (!meta.success) throw badRequest('укажите название и источник данных');
     const row = await insertTemplate({ ...meta.data, ext, data, userId: currentUser(req).id });
@@ -139,7 +168,11 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     if (ext !== row.fileExt) throw badRequest(`ожидается файл .${row.fileExt}`);
     const updated = await db.transaction(async (tx) => {
       // Блокировка строки: ручная замена не должна пересекаться с callback OnlyOffice.
-      await tx.select({ id: templates.id }).from(templates).where(eq(templates.id, row.id)).for('update');
+      await tx
+        .select({ id: templates.id })
+        .from(templates)
+        .where(eq(templates.id, row.id))
+        .for('update');
       await storage.write(row.filePath, data);
       const [u] = await tx
         .update(templates)
@@ -157,63 +190,90 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     return toAdminDetails(await loadTemplateFull(db, updated!.id));
   });
 
-  app.patch('/api/templates/:id', { ...admin, schema: { params: IdParams, body: UpdateTemplateBody } }, async (req) => {
-    const row = await loadTemplate(db, req.params.id);
-    if (req.body.defaultOutput && !outputFormatsFor(row.fileExt).includes(req.body.defaultOutput)) {
-      throw badRequest(`формат ${req.body.defaultOutput} недоступен для .${row.fileExt}`);
-    }
-    if (req.body.datasourceId) await ensureDatasource(req.body.datasourceId);
-    await db
-      .update(templates)
-      .set({ ...req.body, updatedAt: new Date(), updatedBy: currentUser(req).id })
-      .where(eq(templates.id, row.id));
-    return toAdminDetails(await loadTemplateFull(db, row.id));
-  });
+  app.patch(
+    '/api/templates/:id',
+    { ...admin, schema: { params: IdParams, body: UpdateTemplateBody } },
+    async (req) => {
+      const row = await loadTemplate(db, req.params.id);
+      if (
+        req.body.defaultOutput &&
+        !outputFormatsFor(row.fileExt).includes(req.body.defaultOutput)
+      ) {
+        throw badRequest(`формат ${req.body.defaultOutput} недоступен для .${row.fileExt}`);
+      }
+      if (req.body.datasourceId) await ensureDatasource(req.body.datasourceId);
+      await db
+        .update(templates)
+        .set({ ...req.body, updatedAt: new Date(), updatedBy: currentUser(req).id })
+        .where(eq(templates.id, row.id));
+      return toAdminDetails(await loadTemplateFull(db, row.id));
+    },
+  );
 
-  app.delete('/api/templates/:id', { ...admin, schema: { params: IdParams } }, async (req, reply) => {
-    const row = await loadTemplate(db, req.params.id);
-    await db.delete(templates).where(eq(templates.id, row.id));
-    await storage.remove(row.filePath);
-    return reply.status(204).send();
-  });
+  app.delete(
+    '/api/templates/:id',
+    { ...admin, schema: { params: IdParams } },
+    async (req, reply) => {
+      const row = await loadTemplate(db, req.params.id);
+      await db.delete(templates).where(eq(templates.id, row.id));
+      await storage.remove(row.filePath);
+      return reply.status(204).send();
+    },
+  );
 
-  app.post('/api/templates/:id/duplicate', { ...admin, schema: { params: IdParams } }, async (req, reply) => {
-    const src = await loadTemplateFull(db, req.params.id);
-    const row = await insertTemplate(
-      {
-        name: `${src.row.name} (копия)`,
-        description: src.row.description,
-        datasourceId: src.row.datasourceId,
-        ext: src.row.fileExt,
-        data: await storage.read(src.row.filePath),
-        userId: currentUser(req).id,
-      },
-      { defaultOutput: src.row.defaultOutput, queries: src.queries, params: src.params },
-    );
-    return reply.status(201).send(toSummary(row));
-  });
+  app.post(
+    '/api/templates/:id/duplicate',
+    { ...admin, schema: { params: IdParams } },
+    async (req, reply) => {
+      const src = await loadTemplateFull(db, req.params.id);
+      const row = await insertTemplate(
+        {
+          name: `${src.row.name} (копия)`,
+          description: src.row.description,
+          datasourceId: src.row.datasourceId,
+          ext: src.row.fileExt,
+          data: await storage.read(src.row.filePath),
+          userId: currentUser(req).id,
+        },
+        { defaultOutput: src.row.defaultOutput, queries: src.queries, params: src.params },
+      );
+      return reply.status(201).send(toSummary(row));
+    },
+  );
 
-  app.get('/api/templates/:id/download', { ...admin, schema: { params: IdParams } }, async (req, reply) => {
-    const row = await loadTemplate(db, req.params.id);
-    const data = await storage.read(row.filePath);
-    return reply
-      .header('content-type', MIME[row.fileExt])
-      .header('content-disposition', contentDisposition(`${row.name}.${row.fileExt}`))
-      .send(data);
-  });
+  app.get(
+    '/api/templates/:id/download',
+    { ...admin, schema: { params: IdParams } },
+    async (req, reply) => {
+      const row = await loadTemplate(db, req.params.id);
+      const data = await storage.read(row.filePath);
+      return reply
+        .header('content-type', MIME[row.fileExt])
+        .header('content-disposition', contentDisposition(`${row.name}.${row.fileExt}`))
+        .send(data);
+    },
+  );
 
   app.put(
     '/api/templates/:id/queries',
     { ...admin, schema: { params: IdParams, body: z.array(TemplateQuery) } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
-      uniqueOrFail(req.body.map((q) => q.key), 'ключ запроса');
+      uniqueOrFail(
+        req.body.map((q) => q.key),
+        'ключ запроса',
+      );
       await db.transaction(async (tx) => {
         await tx.delete(templateQueries).where(eq(templateQueries.templateId, row.id));
         if (req.body.length) {
-          await tx.insert(templateQueries).values(req.body.map((q, i) => ({ ...q, templateId: row.id, sortOrder: i })));
+          await tx
+            .insert(templateQueries)
+            .values(req.body.map((q, i) => ({ ...q, templateId: row.id, sortOrder: i })));
         }
-        await tx.update(templates).set({ updatedAt: new Date(), updatedBy: currentUser(req).id }).where(eq(templates.id, row.id));
+        await tx
+          .update(templates)
+          .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
+          .where(eq(templates.id, row.id));
       });
       return toAdminDetails(await loadTemplateFull(db, row.id));
     },
@@ -224,14 +284,22 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     { ...admin, schema: { params: IdParams, body: z.array(TemplateParam) } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
-      uniqueOrFail(req.body.map((p) => p.name), 'параметр');
+      uniqueOrFail(
+        req.body.map((p) => p.name),
+        'параметр',
+      );
       checkParamDefaults(req.body);
       await db.transaction(async (tx) => {
         await tx.delete(templateParams).where(eq(templateParams.templateId, row.id));
         if (req.body.length) {
-          await tx.insert(templateParams).values(req.body.map((p, i) => ({ ...p, templateId: row.id, sortOrder: i })));
+          await tx
+            .insert(templateParams)
+            .values(req.body.map((p, i) => ({ ...p, templateId: row.id, sortOrder: i })));
         }
-        await tx.update(templates).set({ updatedAt: new Date(), updatedBy: currentUser(req).id }).where(eq(templates.id, row.id));
+        await tx
+          .update(templates)
+          .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
+          .where(eq(templates.id, row.id));
       });
       return toAdminDetails(await loadTemplateFull(db, row.id));
     },

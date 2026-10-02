@@ -20,7 +20,10 @@ const deps: AppDeps = {
   storage: new Storage(config.storageDir),
   sources: createSourcePools({ db, config }),
   carbone: new CarboneClient({ baseUrl: config.carboneUrl }),
-  onlyoffice: createOnlyOfficeCommands({ baseUrl: config.onlyofficeInternalUrl, secret: config.onlyofficeJwtSecret }),
+  onlyoffice: createOnlyOfficeCommands({
+    baseUrl: config.onlyofficeInternalUrl,
+    secret: config.onlyofficeJwtSecret,
+  }),
   fetchFile,
 };
 

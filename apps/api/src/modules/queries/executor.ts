@@ -25,7 +25,11 @@ function mapPgError(key: string, e: unknown): unknown {
   const code = (e as { code?: string }).code;
   if (code === '57014') return new AppError('TIMEOUT', 504, 'превышено время ожидания');
   if (code === '25006') {
-    return new AppError('SQL_ERROR', 400, `запрос "${key}": запись запрещена — запросы выполняются только на чтение`);
+    return new AppError(
+      'SQL_ERROR',
+      400,
+      `запрос "${key}": запись запрещена — запросы выполняются только на чтение`,
+    );
   }
   return new AppError('SQL_ERROR', 400, `запрос "${key}": ${(e as Error).message}`);
 }
@@ -51,7 +55,13 @@ async function withReadOnly<T>(
   try {
     client = await pool.connect();
   } catch (e) {
-    throw new AppError('DATASOURCE_UNAVAILABLE', 502, `не удалось подключиться к источнику "${sourceName}"`, undefined, (e as Error).message);
+    throw new AppError(
+      'DATASOURCE_UNAVAILABLE',
+      502,
+      `не удалось подключиться к источнику "${sourceName}"`,
+      undefined,
+      (e as Error).message,
+    );
   }
   let broken = false;
   // pg-pool снимает свой обработчик 'error' на время аренды; без своего процесс упадёт при обрыве соединения.
@@ -83,7 +93,13 @@ async function withReadOnly<T>(
   } catch (e) {
     if (e instanceof AppError) throw e;
     broken = true;
-    throw new AppError('DATASOURCE_UNAVAILABLE', 502, `соединение с источником "${sourceName}" прервано`, undefined, (e as Error).message);
+    throw new AppError(
+      'DATASOURCE_UNAVAILABLE',
+      502,
+      `соединение с источником "${sourceName}" прервано`,
+      undefined,
+      (e as Error).message,
+    );
   } finally {
     try {
       await client.query('ROLLBACK');
@@ -97,9 +113,14 @@ async function withReadOnly<T>(
   }
 }
 
-function readBatch(cursor: Cursor, n: number): Promise<{ rows: Row[]; fields?: { name: string }[] }> {
+function readBatch(
+  cursor: Cursor,
+  n: number,
+): Promise<{ rows: Row[]; fields?: { name: string }[] }> {
   return new Promise((resolve, reject) => {
-    cursor.read(n, (err, rows, result) => (err ? reject(err) : resolve({ rows, fields: result?.fields })));
+    cursor.read(n, (err, rows, result) =>
+      err ? reject(err) : resolve({ rows, fields: result?.fields }),
+    );
   });
 }
 
@@ -114,11 +135,13 @@ async function readQuery(
   try {
     parsed = parseSqlParams(sql);
   } catch (e) {
-    if (e instanceof SqlParamError) throw new AppError('SQL_ERROR', 400, `запрос "${key}": ${e.message}`);
+    if (e instanceof SqlParamError)
+      throw new AppError('SQL_ERROR', 400, `запрос "${key}": ${e.message}`);
     throw e;
   }
   const values = parsed.names.map((name) => {
-    if (!Object.hasOwn(params, name)) throw new AppError('CONFIG', 400, `запрос "${key}": неизвестный параметр :${name}`);
+    if (!Object.hasOwn(params, name))
+      throw new AppError('CONFIG', 400, `запрос "${key}": неизвестный параметр :${name}`);
     return params[name];
   });
 
@@ -134,7 +157,10 @@ async function readQuery(
   return result;
 }
 
-async function readAll(cursor: Cursor, limit: number): Promise<{ columns: string[]; rows: Row[]; truncated: boolean }> {
+async function readAll(
+  cursor: Cursor,
+  limit: number,
+): Promise<{ columns: string[]; rows: Row[]; truncated: boolean }> {
   const rows: Row[] = [];
   let columns: string[] = [];
   for (;;) {
@@ -164,7 +190,11 @@ export function runQueries(
       const r = await readQuery(tx.client, q.key, q.sql, params, limit);
       await tx.guard(q.key);
       if (q.mode === 'list' && r.truncated) {
-        throw new AppError('TOO_MANY_ROWS', 400, `запрос "${q.key}" вернул больше ${limits.maxRows} строк`);
+        throw new AppError(
+          'TOO_MANY_ROWS',
+          400,
+          `запрос "${q.key}" вернул больше ${limits.maxRows} строк`,
+        );
       }
       results.push({ key: q.key, mode: q.mode, columns: r.columns, rows: r.rows });
     }

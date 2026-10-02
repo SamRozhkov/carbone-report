@@ -1,5 +1,22 @@
-import type { OutputFormat, ParamType, ParamValue, QueryMode, Role, SelectOption, TemplateExt } from '@carbone-reports/shared';
-import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import type {
+  OutputFormat,
+  ParamType,
+  ParamValue,
+  QueryMode,
+  Role,
+  SelectOption,
+  TemplateExt,
+} from '@carbone-reports/shared';
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 

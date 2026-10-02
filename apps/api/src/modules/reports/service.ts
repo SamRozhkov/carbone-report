@@ -1,4 +1,9 @@
-import { outputFormatsFor, type OutputFormat, type ParamValue, type ParamsInput } from '@carbone-reports/shared';
+import {
+  outputFormatsFor,
+  type OutputFormat,
+  type ParamValue,
+  type ParamsInput,
+} from '@carbone-reports/shared';
 import type { AppDeps } from '../../deps';
 import { badRequest } from '../../lib/errors';
 import { buildReportData } from '../queries/build-data';
@@ -27,7 +32,12 @@ export function assertFormat(full: TemplateFull, format: OutputFormat): void {
   }
 }
 
-export function renderReport(deps: AppDeps, full: TemplateFull, data: unknown, format: OutputFormat): Promise<Buffer> {
+export function renderReport(
+  deps: AppDeps,
+  full: TemplateFull,
+  data: unknown,
+  format: OutputFormat,
+): Promise<Buffer> {
   return deps.carbone.render(templateFileRef(deps, full.row), data, {
     convertTo: format,
     lang: 'ru-ru',

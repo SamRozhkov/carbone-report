@@ -39,7 +39,10 @@ export type ParamValue = z.infer<typeof ParamValue>;
 
 export const TemplateParam = z
   .object({
-    name: z.string().regex(IDENT_RE, 'имя: латиница, цифры и _').refine(notReserved, 'зарезервированное имя'),
+    name: z
+      .string()
+      .regex(IDENT_RE, 'имя: латиница, цифры и _')
+      .refine(notReserved, 'зарезервированное имя'),
     label: z.string().min(1),
     type: ParamType,
     required: z.boolean(),
@@ -68,7 +71,10 @@ export type TemplateQuery = z.infer<typeof TemplateQuery>;
 
 // ---- DTO ----
 
-export const LoginBody = z.object({ login: z.string().min(1), password: z.string().min(1).max(1024) });
+export const LoginBody = z.object({
+  login: z.string().min(1),
+  password: z.string().min(1).max(1024),
+});
 export type LoginBody = z.infer<typeof LoginBody>;
 
 export const UserDto = z.object({

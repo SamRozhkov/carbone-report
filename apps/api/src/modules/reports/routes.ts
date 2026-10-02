@@ -65,7 +65,9 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         const filePath = `reports/${runId}.${req.body.format}`;
         await storage.write(filePath, file);
         try {
-          await db.insert(reportRuns).values({ ...base, params, status: 'ok', filePath, durationMs: Date.now() - started });
+          await db
+            .insert(reportRuns)
+            .values({ ...base, params, status: 'ok', filePath, durationMs: Date.now() - started });
         } catch (insertErr) {
           await storage.remove(filePath).catch(() => undefined);
           throw insertErr;
@@ -91,52 +93,59 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
     },
   );
 
-  app.get('/api/runs', { preHandler: guards.requireUser, schema: { querystring: RunsQuery } }, async (req): Promise<RunsPage> => {
-    const me = currentUser(req);
-    const q = req.query;
-    const where: SQL[] = [];
-    // Обычный пользователь всегда видит только свои запуски, фильтр userId игнорируется.
-    if (me.role !== 'admin') where.push(eq(reportRuns.userId, me.id));
-    else if (q.userId) where.push(eq(reportRuns.userId, q.userId));
-    if (q.templateId) where.push(eq(reportRuns.templateId, q.templateId));
-    if (q.status) where.push(eq(reportRuns.status, q.status));
-    const cond = where.length ? and(...where) : undefined;
+  app.get(
+    '/api/runs',
+    { preHandler: guards.requireUser, schema: { querystring: RunsQuery } },
+    async (req): Promise<RunsPage> => {
+      const me = currentUser(req);
+      const q = req.query;
+      const where: SQL[] = [];
+      // Обычный пользователь всегда видит только свои запуски, фильтр userId игнорируется.
+      if (me.role !== 'admin') where.push(eq(reportRuns.userId, me.id));
+      else if (q.userId) where.push(eq(reportRuns.userId, q.userId));
+      if (q.templateId) where.push(eq(reportRuns.templateId, q.templateId));
+      if (q.status) where.push(eq(reportRuns.status, q.status));
+      const cond = where.length ? and(...where) : undefined;
 
-    const [rows, [totalRow]] = await Promise.all([
-      db
-        .select({ run: reportRuns, login: users.login })
-        .from(reportRuns)
-        .innerJoin(users, eq(users.id, reportRuns.userId))
-        .where(cond)
-        .orderBy(desc(reportRuns.createdAt), desc(reportRuns.id))
-        .limit(RUNS_PAGE_SIZE)
-        .offset((q.page - 1) * RUNS_PAGE_SIZE),
-      db.select({ n: count() }).from(reportRuns).where(cond),
-    ]);
+      const [rows, [totalRow]] = await Promise.all([
+        db
+          .select({ run: reportRuns, login: users.login })
+          .from(reportRuns)
+          .innerJoin(users, eq(users.id, reportRuns.userId))
+          .where(cond)
+          .orderBy(desc(reportRuns.createdAt), desc(reportRuns.id))
+          .limit(RUNS_PAGE_SIZE)
+          .offset((q.page - 1) * RUNS_PAGE_SIZE),
+        db.select({ n: count() }).from(reportRuns).where(cond),
+      ]);
 
-    const items: RunDto[] = rows.map(({ run, login }) => ({
-      id: run.id,
-      templateId: run.templateId,
-      templateName: run.templateName,
-      templateVersion: run.templateVersion,
-      userId: run.userId,
-      userLogin: login,
-      params: run.params,
-      outputFormat: run.outputFormat,
-      status: run.status,
-      error: run.error,
-      fileAvailable: run.status === 'ok' && !!run.filePath && !run.fileDeleted,
-      durationMs: run.durationMs,
-      createdAt: run.createdAt.toISOString(),
-    }));
-    return { items, total: totalRow?.n ?? 0, page: q.page, pageSize: RUNS_PAGE_SIZE };
-  });
+      const items: RunDto[] = rows.map(({ run, login }) => ({
+        id: run.id,
+        templateId: run.templateId,
+        templateName: run.templateName,
+        templateVersion: run.templateVersion,
+        userId: run.userId,
+        userLogin: login,
+        params: run.params,
+        outputFormat: run.outputFormat,
+        status: run.status,
+        error: run.error,
+        fileAvailable: run.status === 'ok' && !!run.filePath && !run.fileDeleted,
+        durationMs: run.durationMs,
+        createdAt: run.createdAt.toISOString(),
+      }));
+      return { items, total: totalRow?.n ?? 0, page: q.page, pageSize: RUNS_PAGE_SIZE };
+    },
+  );
 
   app.get(
     '/api/runs/:id/file',
     {
       preHandler: guards.requireUser,
-      schema: { params: IdParams, querystring: z.object({ inline: z.enum(['0', '1']).optional() }) },
+      schema: {
+        params: IdParams,
+        querystring: z.object({ inline: z.enum(['0', '1']).optional() }),
+      },
     },
     async (req, reply) => {
       const me = currentUser(req);
@@ -149,7 +158,8 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
       try {
         content = await storage.read(run.filePath);
       } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'ENOENT') throw new AppError('GONE', 410, 'файл удалён по сроку хранения');
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT')
+          throw new AppError('GONE', 410, 'файл удалён по сроку хранения');
         throw e;
       }
       const date = run.createdAt.toISOString().slice(0, 10);
@@ -157,7 +167,10 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         .header('content-type', MIME[run.outputFormat])
         .header(
           'content-disposition',
-          contentDisposition(`${run.templateName} ${date}.${run.outputFormat}`, req.query.inline === '1'),
+          contentDisposition(
+            `${run.templateName} ${date}.${run.outputFormat}`,
+            req.query.inline === '1',
+          ),
         )
         .send(content);
     },

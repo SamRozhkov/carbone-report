@@ -35,7 +35,9 @@ describe('auth', () => {
 
   it('вход с верным паролем ставит httpOnly cookie, /me возвращает пользователя', async () => {
     const res = await t.app.inject({
-      method: 'POST', url: '/api/auth/login', payload: { login: 'root', password: 'rootpass123' },
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: 'root', password: 'rootpass123' },
     });
     expect(res.statusCode).toBe(200);
     const setCookie = String(res.headers['set-cookie']);
@@ -47,8 +49,16 @@ describe('auth', () => {
   });
 
   it('неверный пароль → 401 без подсказки, существует ли логин', async () => {
-    const a = await t.app.inject({ method: 'POST', url: '/api/auth/login', payload: { login: 'root', password: 'bad' } });
-    const b = await t.app.inject({ method: 'POST', url: '/api/auth/login', payload: { login: 'nobody', password: 'bad' } });
+    const a = await t.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: 'root', password: 'bad' },
+    });
+    const b = await t.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: 'nobody', password: 'bad' },
+    });
     expect(a.statusCode).toBe(401);
     expect(b.statusCode).toBe(401);
     expect(a.json()).toEqual(b.json());
@@ -68,7 +78,11 @@ describe('auth', () => {
 
   it('logout очищает cookie', async () => {
     const { cookie } = await loginAs(t, 'user');
-    const res = await t.app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } });
+    const res = await t.app.inject({
+      method: 'POST',
+      url: '/api/auth/logout',
+      headers: { cookie },
+    });
     expect(res.statusCode).toBe(204);
     expect(String(res.headers['set-cookie'])).toMatch(/session=;/);
   });
@@ -82,7 +96,10 @@ describe('auth', () => {
     const blocked = await attempt(user.login.toUpperCase(), 'bad');
     expect(blocked.statusCode).toBe(429);
     expect(blocked.json()).toEqual({
-      error: { code: 'TOO_MANY_ATTEMPTS', message: 'слишком много попыток входа, повторите через минуту' },
+      error: {
+        code: 'TOO_MANY_ATTEMPTS',
+        message: 'слишком много попыток входа, повторите через минуту',
+      },
     });
     const other = await loginAs(t, 'user');
     expect((await attempt(other.user.login, 'bad')).statusCode).toBe(401);
@@ -91,7 +108,9 @@ describe('auth', () => {
 
   it('пароль длиннее 1024 символов при входе → 400', async () => {
     const res = await t.app.inject({
-      method: 'POST', url: '/api/auth/login', payload: { login: 'root', password: 'x'.repeat(1025) },
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: 'root', password: 'x'.repeat(1025) },
     });
     expect(res.statusCode).toBe(400);
   });

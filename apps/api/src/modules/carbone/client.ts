@@ -20,7 +20,8 @@ export class CarboneClient implements CarboneRenderer {
     const signal = AbortSignal.timeout(opts.timeoutMs);
     try {
       const cached = this.ids.get(tpl.id);
-      let carboneId = cached?.version === tpl.version ? cached.carboneId : await this.upload(tpl, signal);
+      let carboneId =
+        cached?.version === tpl.version ? cached.carboneId : await this.upload(tpl, signal);
       try {
         return await this.renderWith(carboneId, data, opts, signal);
       } catch (e) {
@@ -30,7 +31,8 @@ export class CarboneClient implements CarboneRenderer {
       }
     } catch (e) {
       if (e instanceof AppError) throw e;
-      if (e instanceof TemplateMissing) throw new AppError('CARBONE_ERROR', 502, 'ошибка генерации: шаблон не найден');
+      if (e instanceof TemplateMissing)
+        throw new AppError('CARBONE_ERROR', 502, 'ошибка генерации: шаблон не найден');
       if (signal.aborted) throw new AppError('TIMEOUT', 504, 'превышено время ожидания');
       throw new AppError('CARBONE_ERROR', 502, 'сервис генерации недоступен');
     }
@@ -45,12 +47,18 @@ export class CarboneClient implements CarboneRenderer {
       body: form,
       signal,
     });
-    const body = (await res.json().catch(() => null)) as
-      | { success?: boolean; error?: string; data?: { templateId?: string } }
-      | null;
+    const body = (await res.json().catch(() => null)) as {
+      success?: boolean;
+      error?: string;
+      data?: { templateId?: string };
+    } | null;
     const id = body?.data?.templateId;
     if (!res.ok || !body?.success || !id) {
-      throw new AppError('CARBONE_ERROR', 502, `ошибка загрузки шаблона: ${body?.error ?? res.status}`);
+      throw new AppError(
+        'CARBONE_ERROR',
+        502,
+        `ошибка загрузки шаблона: ${body?.error ?? res.status}`,
+      );
     }
     this.ids.set(tpl.id, { version: tpl.version, carboneId: id });
     return id;
@@ -62,12 +70,20 @@ export class CarboneClient implements CarboneRenderer {
     opts: RenderOptions,
     signal: AbortSignal,
   ): Promise<Buffer> {
-    const res = await this.fetch(`${this.baseUrl}/render/${encodeURIComponent(carboneId)}?download=true`, {
-      method: 'POST',
-      headers: { ...VERSION_HEADER, 'content-type': 'application/json' },
-      body: JSON.stringify({ data, convertTo: opts.convertTo, lang: opts.lang, timezone: opts.timezone }),
-      signal,
-    });
+    const res = await this.fetch(
+      `${this.baseUrl}/render/${encodeURIComponent(carboneId)}?download=true`,
+      {
+        method: 'POST',
+        headers: { ...VERSION_HEADER, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          data,
+          convertTo: opts.convertTo,
+          lang: opts.lang,
+          timezone: opts.timezone,
+        }),
+        signal,
+      },
+    );
     const isJson = (res.headers.get('content-type') ?? '').includes('application/json');
     if (res.ok && !isJson) return Buffer.from(await res.arrayBuffer());
 

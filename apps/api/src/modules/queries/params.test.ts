@@ -3,8 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { AppError } from '../../lib/errors';
 import { checkParamDefaults, resolveParams } from './params';
 
-const def = (over: Partial<TemplateParam> & Pick<TemplateParam, 'name' | 'type'>): TemplateParam => ({
-  label: over.name, required: false, defaultValue: null, options: null, ...over,
+const def = (
+  over: Partial<TemplateParam> & Pick<TemplateParam, 'name' | 'type'>,
+): TemplateParam => ({
+  label: over.name,
+  required: false,
+  defaultValue: null,
+  options: null,
+  ...over,
 });
 
 function fieldsOf(fn: () => unknown): Record<string, string> {
@@ -27,21 +33,32 @@ describe('resolveParams', () => {
       def({ name: 'sel', type: 'select', options: [{ value: 'new', label: 'Новый' }] }),
     ];
     expect(resolveParams(defs, { s: 'x', n: 1.5, d: '2026-01-31', b: false, sel: 'new' })).toEqual({
-      s: 'x', n: 1.5, d: '2026-01-31', b: false, sel: 'new',
+      s: 'x',
+      n: 1.5,
+      d: '2026-01-31',
+      b: false,
+      sel: 'new',
     });
   });
 
   it('подставляет default, затем null для необязательных', () => {
-    const defs = [def({ name: 'a', type: 'number', defaultValue: 10 }), def({ name: 'b', type: 'string' })];
+    const defs = [
+      def({ name: 'a', type: 'number', defaultValue: 10 }),
+      def({ name: 'b', type: 'string' }),
+    ];
     expect(resolveParams(defs, {})).toEqual({ a: 10, b: null });
   });
 
   it('пустая строка считается отсутствующим значением', () => {
-    expect(resolveParams([def({ name: 'a', type: 'string', defaultValue: 'x' })], { a: '' })).toEqual({ a: 'x' });
+    expect(
+      resolveParams([def({ name: 'a', type: 'string', defaultValue: 'x' })], { a: '' }),
+    ).toEqual({ a: 'x' });
   });
 
   it('обязательный без значения и без default → ошибка поля', () => {
-    expect(fieldsOf(() => resolveParams([def({ name: 'a', type: 'date', required: true })], {}))).toEqual({
+    expect(
+      fieldsOf(() => resolveParams([def({ name: 'a', type: 'date', required: true })], {})),
+    ).toEqual({
       a: 'обязательный параметр',
     });
   });
@@ -68,7 +85,9 @@ describe('resolveParams', () => {
   });
 
   it('унаследованные свойства не считаются значениями', () => {
-    expect(resolveParams([def({ name: 'toString', type: 'string' })], {})).toEqual({ toString: null });
+    expect(resolveParams([def({ name: 'toString', type: 'string' })], {})).toEqual({
+      toString: null,
+    });
   });
 
   it('лишние ключи во входе игнорируются', () => {
@@ -78,7 +97,9 @@ describe('resolveParams', () => {
 
 describe('checkParamDefaults', () => {
   it('отклоняет default неверного типа', () => {
-    expect(fieldsOf(() => checkParamDefaults([def({ name: 'n', type: 'number', defaultValue: 'abc' })]))).toEqual({
+    expect(
+      fieldsOf(() => checkParamDefaults([def({ name: 'n', type: 'number', defaultValue: 'abc' })])),
+    ).toEqual({
       n: 'значение по умолчанию: ожидается число',
     });
   });

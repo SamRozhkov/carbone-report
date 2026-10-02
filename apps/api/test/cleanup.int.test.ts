@@ -17,8 +17,17 @@ async function run(daysAgo: number) {
   const filePath = `reports/${id}.pdf`;
   await t.deps.storage.write(filePath, Buffer.from('pdf'));
   await t.deps.db.insert(reportRuns).values({
-    id, templateId: null, templateName: 'x', templateVersion: 1, userId, params: {}, outputFormat: 'pdf',
-    status: 'ok', filePath, durationMs: 1, createdAt: new Date(Date.now() - daysAgo * 86_400_000),
+    id,
+    templateId: null,
+    templateName: 'x',
+    templateVersion: 1,
+    userId,
+    params: {},
+    outputFormat: 'pdf',
+    status: 'ok',
+    filePath,
+    durationMs: 1,
+    createdAt: new Date(Date.now() - daysAgo * 86_400_000),
   });
   return { id, filePath };
 }
@@ -43,7 +52,9 @@ describe('cleanupOldReports', () => {
     };
     try {
       const warns: unknown[] = [];
-      expect(await cleanupOldReports(t.deps, new Date(), { warn: (o) => void warns.push(o) })).toBe(1);
+      expect(await cleanupOldReports(t.deps, new Date(), { warn: (o) => void warns.push(o) })).toBe(
+        1,
+      );
       expect(warns).toHaveLength(1);
     } finally {
       t.deps.storage.remove = orig;
@@ -61,7 +72,11 @@ describe('cleanupOldReports', () => {
     const old = await run(40);
     await cleanupOldReports(t.deps);
     const cookie = (await loginAs(t, 'admin')).cookie;
-    const r = await t.app.inject({ method: 'GET', url: `/api/runs/${old.id}/file`, headers: { cookie } });
+    const r = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${old.id}/file`,
+      headers: { cookie },
+    });
     expect(r.statusCode).toBe(410);
   });
 });

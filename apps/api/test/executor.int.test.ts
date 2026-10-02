@@ -40,27 +40,54 @@ async function err(p: Promise<unknown>): Promise<AppError> {
 describe('runQueries', () => {
   it('выполняет несколько запросов с параметрами', async () => {
     const r = await runQueries(
-      pool, 'src',
+      pool,
+      'src',
       [
-        { key: 'orders', mode: 'list', sql: 'select id, total from orders where created >= :from order by id' },
+        {
+          key: 'orders',
+          mode: 'list',
+          sql: 'select id, total from orders where created >= :from order by id',
+        },
         { key: 'company', mode: 'single', sql: 'select name from company' },
       ],
       { from: '2026-01-03' },
       limits,
     );
     expect(r).toEqual([
-      { key: 'orders', mode: 'list', columns: ['id', 'total'], rows: [{ id: 2, total: 20 }, { id: 3, total: 30 }] },
+      {
+        key: 'orders',
+        mode: 'list',
+        columns: ['id', 'total'],
+        rows: [
+          { id: 2, total: 20 },
+          { id: 3, total: 30 },
+        ],
+      },
       { key: 'company', mode: 'single', columns: ['name'], rows: [{ name: 'ООО Ромашка' }] },
     ]);
   });
 
   it('колонки возвращаются и для пустого результата', async () => {
-    const [r] = await runQueries(pool, 'src', [{ key: 'o', mode: 'list', sql: 'select id from orders where false' }], {}, limits);
+    const [r] = await runQueries(
+      pool,
+      'src',
+      [{ key: 'o', mode: 'list', sql: 'select id from orders where false' }],
+      {},
+      limits,
+    );
     expect(r).toMatchObject({ columns: ['id'], rows: [] });
   });
 
   it('запрет записи: INSERT падает с понятной ошибкой', async () => {
-    const e = await err(runQueries(pool, 'src', [{ key: 'w', mode: 'list', sql: 'insert into company values (\'x\') returning *' }], {}, limits));
+    const e = await err(
+      runQueries(
+        pool,
+        'src',
+        [{ key: 'w', mode: 'list', sql: "insert into company values ('x') returning *" }],
+        {},
+        limits,
+      ),
+    );
     expect(e.code).toBe('SQL_ERROR');
     expect(e.message).toMatch(/^запрос "w": .*только на чтение/);
     const { rows } = await pool.query('select count(*)::int as n from company');
@@ -68,40 +95,62 @@ describe('runQueries', () => {
   });
 
   it('statement_timeout → TIMEOUT 504', async () => {
-    const e = await err(runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select pg_sleep(3)' }], {}, limits));
+    const e = await err(
+      runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select pg_sleep(3)' }], {}, limits),
+    );
     expect([e.code, e.status]).toEqual(['TIMEOUT', 504]);
   });
 
   it('превышение maxRows в list → TOO_MANY_ROWS', async () => {
-    const e = await err(runQueries(pool, 'src', [{ key: 'big', mode: 'list', sql: 'select n from big' }], {}, limits));
+    const e = await err(
+      runQueries(pool, 'src', [{ key: 'big', mode: 'list', sql: 'select n from big' }], {}, limits),
+    );
     expect(e.code).toBe('TOO_MANY_ROWS');
     expect(e.message).toBe('запрос "big" вернул больше 5 строк');
   });
 
   it('single читает только первую строку и не упирается в лимит', async () => {
-    const [r] = await runQueries(pool, 'src', [{ key: 'b', mode: 'single', sql: 'select n from big order by n' }], {}, limits);
+    const [r] = await runQueries(
+      pool,
+      'src',
+      [{ key: 'b', mode: 'single', sql: 'select n from big order by n' }],
+      {},
+      limits,
+    );
     expect(r!.rows).toEqual([{ n: 1 }]);
   });
 
   it('синтаксическая ошибка → SQL_ERROR с ключом запроса', async () => {
-    const e = await err(runQueries(pool, 'src', [{ key: 'bad', mode: 'list', sql: 'selec 1' }], {}, limits));
+    const e = await err(
+      runQueries(pool, 'src', [{ key: 'bad', mode: 'list', sql: 'selec 1' }], {}, limits),
+    );
     expect(e.code).toBe('SQL_ERROR');
     expect(e.message).toMatch(/^запрос "bad": /);
   });
 
   it('имя из прототипа (:toString) не считается параметром → CONFIG', async () => {
-    const e = await err(runQueries(pool, 'src', [{ key: 'q', mode: 'list', sql: 'select :toString' }], {}, limits));
+    const e = await err(
+      runQueries(pool, 'src', [{ key: 'q', mode: 'list', sql: 'select :toString' }], {}, limits),
+    );
     expect(e.code).toBe('CONFIG');
   });
 
   it('неизвестный параметр → CONFIG', async () => {
-    const e = await err(runQueries(pool, 'src', [{ key: 'q', mode: 'list', sql: 'select :nope' }], {}, limits));
+    const e = await err(
+      runQueries(pool, 'src', [{ key: 'q', mode: 'list', sql: 'select :nope' }], {}, limits),
+    );
     expect(e.code).toBe('CONFIG');
     expect(e.message).toBe('запрос "q": неизвестный параметр :nope');
   });
 
   it('значение параметра не интерпретируется как SQL', async () => {
-    const [r] = await runQueries(pool, 'src', [{ key: 'q', mode: 'single', sql: 'select :v::text as v' }], { v: "'; drop table orders; --" }, limits);
+    const [r] = await runQueries(
+      pool,
+      'src',
+      [{ key: 'q', mode: 'single', sql: 'select :v::text as v' }],
+      { v: "'; drop table orders; --" },
+      limits,
+    );
     expect(r!.rows[0]).toEqual({ v: "'; drop table orders; --" });
     const { rows } = await pool.query('select count(*)::int as n from orders');
     expect(rows[0].n).toBe(3);
@@ -109,28 +158,51 @@ describe('runQueries', () => {
 
   it('недоступный источник → DATASOURCE_UNAVAILABLE 502', async () => {
     const dead = new pg.Pool({ host: '127.0.0.1', port: 1, connectionTimeoutMillis: 500 });
-    const e = await err(runQueries(dead, 'Склад', [{ key: 'q', mode: 'list', sql: 'select 1' }], {}, limits));
-    expect([e.code, e.status, e.message]).toEqual(['DATASOURCE_UNAVAILABLE', 502, 'не удалось подключиться к источнику "Склад"']);
+    const e = await err(
+      runQueries(dead, 'Склад', [{ key: 'q', mode: 'list', sql: 'select 1' }], {}, limits),
+    );
+    expect([e.code, e.status, e.message]).toEqual([
+      'DATASOURCE_UNAVAILABLE',
+      502,
+      'не удалось подключиться к источнику "Склад"',
+    ]);
     await dead.end();
   });
 
   it('после ошибки соединение возвращается в пул исправным', async () => {
     await err(runQueries(pool, 'src', [{ key: 'bad', mode: 'list', sql: 'selec 1' }], {}, limits));
-    const [r] = await runQueries(pool, 'src', [{ key: 'ok', mode: 'single', sql: 'select 1 as x' }], {}, limits);
+    const [r] = await runQueries(
+      pool,
+      'src',
+      [{ key: 'ok', mode: 'single', sql: 'select 1 as x' }],
+      {},
+      limits,
+    );
     expect(r!.rows).toEqual([{ x: 1 }]);
   });
 });
 
 describe('целостность транзакции', () => {
-  const insert = { key: 'w', mode: 'list' as const, sql: "insert into company values ('x') returning *" };
-  const companyCount = async () => (await pool.query('select count(*)::int as n from company')).rows[0].n as number;
+  const insert = {
+    key: 'w',
+    mode: 'list' as const,
+    sql: "insert into company values ('x') returning *",
+  };
+  const companyCount = async () =>
+    (await pool.query('select count(*)::int as n from company')).rows[0].n as number;
 
   it.each(['commit', 'rollback', 'end', 'abort', 'commit and chain', 'rollback and chain'])(
     '%s как первый запрос → SQL_ERROR, запись не проходит',
     async (sql) => {
       const before = await companyCount();
-      const e = await err(runQueries(pool, 'src', [{ key: 'c', mode: 'list', sql }, insert], {}, limits));
-      expect([e.code, e.status, e.message]).toEqual(['SQL_ERROR', 400, 'запрос "c": управление транзакциями запрещено']);
+      const e = await err(
+        runQueries(pool, 'src', [{ key: 'c', mode: 'list', sql }, insert], {}, limits),
+      );
+      expect([e.code, e.status, e.message]).toEqual([
+        'SQL_ERROR',
+        400,
+        'запрос "c": управление транзакциями запрещено',
+      ]);
       expect(await companyCount()).toBe(before);
     },
     10_000,
@@ -138,54 +210,117 @@ describe('целостность транзакции', () => {
 
   it('commit + set_config не протекает в пул', async () => {
     const e = await err(
-      runQueries(onePool, 'src', [
-        { key: 'c', mode: 'list', sql: 'commit' },
-        { key: 's', mode: 'single', sql: "select set_config('search_path','evil',false)" },
-      ], {}, limits),
+      runQueries(
+        onePool,
+        'src',
+        [
+          { key: 'c', mode: 'list', sql: 'commit' },
+          { key: 's', mode: 'single', sql: "select set_config('search_path','evil',false)" },
+        ],
+        {},
+        limits,
+      ),
     );
     expect(e.code).toBe('SQL_ERROR');
-    const [r] = await runQueries(onePool, 'src', [{ key: 'p', mode: 'single', sql: "select current_setting('search_path') as sp" }], {}, limits);
+    const [r] = await runQueries(
+      onePool,
+      'src',
+      [{ key: 'p', mode: 'single', sql: "select current_setting('search_path') as sp" }],
+      {},
+      limits,
+    );
     expect(r!.rows[0]).not.toEqual({ sp: 'evil' });
   }, 10_000);
 
   it('advisory-лок не переживает запрос', async () => {
-    await runQueries(onePool, 'src', [{ key: 'l', mode: 'single', sql: 'select pg_advisory_lock(42)' }], {}, limits);
-    const [r] = await runQueries(onePool, 'src', [{ key: 'n', mode: 'single', sql: "select count(*)::int as n from pg_locks where locktype = 'advisory' and pid = pg_backend_pid()" }], {}, limits);
+    await runQueries(
+      onePool,
+      'src',
+      [{ key: 'l', mode: 'single', sql: 'select pg_advisory_lock(42)' }],
+      {},
+      limits,
+    );
+    const [r] = await runQueries(
+      onePool,
+      'src',
+      [
+        {
+          key: 'n',
+          mode: 'single',
+          sql: "select count(*)::int as n from pg_locks where locktype = 'advisory' and pid = pg_backend_pid()",
+        },
+      ],
+      {},
+      limits,
+    );
     expect(r!.rows).toEqual([{ n: 0 }]);
   }, 10_000);
 
   it('prepared statement не переживает запрос', async () => {
-    await runQueries(onePool, 'src', [{ key: 'p', mode: 'single', sql: 'prepare zz as select 1' }], {}, limits).catch(() => {});
-    const e = await err(runQueries(onePool, 'src', [{ key: 'x', mode: 'single', sql: 'execute zz' }], {}, limits));
+    await runQueries(
+      onePool,
+      'src',
+      [{ key: 'p', mode: 'single', sql: 'prepare zz as select 1' }],
+      {},
+      limits,
+    ).catch(() => {});
+    const e = await err(
+      runQueries(onePool, 'src', [{ key: 'x', mode: 'single', sql: 'execute zz' }], {}, limits),
+    );
     expect(e.code).toBe('SQL_ERROR');
   }, 10_000);
 
   it('previewQuery: commit → SQL_ERROR', async () => {
     const e = await err(previewQuery(pool, 'src', 'commit', {}, { ...limits, previewRows: 3 }));
-    expect([e.code, e.message]).toEqual(['SQL_ERROR', 'запрос "preview": управление транзакциями запрещено']);
+    expect([e.code, e.message]).toEqual([
+      'SQL_ERROR',
+      'запрос "preview": управление транзакциями запрещено',
+    ]);
   }, 10_000);
 });
 
 describe('устойчивость', () => {
-  const ok = () => runQueries(pool, 'src', [{ key: 'ok', mode: 'single', sql: 'select 1 as x' }], {}, limits);
+  const ok = () =>
+    runQueries(pool, 'src', [{ key: 'ok', mode: 'single', sql: 'select 1 as x' }], {}, limits);
 
   it('после TIMEOUT следующий запрос проходит', async () => {
-    await err(runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select pg_sleep(3)' }], {}, limits));
+    await err(
+      runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select pg_sleep(3)' }], {}, limits),
+    );
     expect((await ok())[0]!.rows).toEqual([{ x: 1 }]);
   }, 10_000);
 
   it('после TOO_MANY_ROWS следующий запрос проходит', async () => {
-    await err(runQueries(pool, 'src', [{ key: 'big', mode: 'list', sql: 'select n from big' }], {}, limits));
+    await err(
+      runQueries(pool, 'src', [{ key: 'big', mode: 'list', sql: 'select n from big' }], {}, limits),
+    );
     expect((await ok())[0]!.rows).toEqual([{ x: 1 }]);
   }, 10_000);
 
   it('обрыв соединения посреди запроса → DATASOURCE_UNAVAILABLE, пул жив', async () => {
-    const running = runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select pg_sleep(5)' }], {}, { timeoutMs: 10_000, maxRows: 5 });
-    const settled = running.then(() => undefined, (e: unknown) => e);
+    const running = runQueries(
+      pool,
+      'src',
+      [{ key: 's', mode: 'list', sql: 'select pg_sleep(5)' }],
+      {},
+      { timeoutMs: 10_000, maxRows: 5 },
+    );
+    const settled = running.then(
+      () => undefined,
+      (e: unknown) => e,
+    );
     await new Promise((r) => setTimeout(r, 300));
-    const admin = new pg.Client({ host: srcConn.host, port: srcConn.port, database: srcConn.database, user: srcConn.username, password: srcConn.password });
+    const admin = new pg.Client({
+      host: srcConn.host,
+      port: srcConn.port,
+      database: srcConn.database,
+      user: srcConn.username,
+      password: srcConn.password,
+    });
     await admin.connect();
-    await admin.query("select pg_terminate_backend(pid) from pg_stat_activity where query like '%pg_sleep(5)%' and pid <> pg_backend_pid()");
+    await admin.query(
+      "select pg_terminate_backend(pid) from pg_stat_activity where query like '%pg_sleep(5)%' and pid <> pg_backend_pid()",
+    );
     await admin.end();
     const e = (await settled) as AppError;
     expect(e).toBeInstanceOf(AppError);
@@ -196,7 +331,13 @@ describe('устойчивость', () => {
 
 describe('previewQuery', () => {
   it('возвращает не больше previewRows строк и флаг truncated', async () => {
-    const r = await previewQuery(pool, 'src', 'select n from big order by n', {}, { ...limits, previewRows: 3 });
+    const r = await previewQuery(
+      pool,
+      'src',
+      'select n from big order by n',
+      {},
+      { ...limits, previewRows: 3 },
+    );
     expect(r).toEqual({ columns: ['n'], rows: [{ n: 1 }, { n: 2 }, { n: 3 }], truncated: true });
   });
   it('truncated=false, если строк меньше лимита', async () => {

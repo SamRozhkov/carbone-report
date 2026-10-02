@@ -30,8 +30,16 @@ export async function loadTemplate(db: Db, id: string): Promise<TemplateRow> {
 export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull> {
   const row = await loadTemplate(db, id);
   const [qs, ps] = await Promise.all([
-    db.select().from(templateQueries).where(eq(templateQueries.templateId, id)).orderBy(asc(templateQueries.sortOrder)),
-    db.select().from(templateParams).where(eq(templateParams.templateId, id)).orderBy(asc(templateParams.sortOrder)),
+    db
+      .select()
+      .from(templateQueries)
+      .where(eq(templateQueries.templateId, id))
+      .orderBy(asc(templateQueries.sortOrder)),
+    db
+      .select()
+      .from(templateParams)
+      .where(eq(templateParams.templateId, id))
+      .orderBy(asc(templateParams.sortOrder)),
   ]);
   return {
     row,

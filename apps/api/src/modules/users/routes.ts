@@ -15,8 +15,9 @@ export const toUserDto = (r: UserRow): UserDto => ({
   createdAt: r.createdAt.toISOString(),
 });
 
-const isUniqueViolation = (e: unknown) => (e as { code?: string })?.code === '23505'
-  || (e as { cause?: { code?: string } })?.cause?.code === '23505';
+const isUniqueViolation = (e: unknown) =>
+  (e as { code?: string })?.code === '23505' ||
+  (e as { cause?: { code?: string } })?.cause?.code === '23505';
 
 export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): void {
   const pre = { preHandler: guards.requireAdmin };
@@ -30,7 +31,11 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
     try {
       const [row] = await deps.db
         .insert(users)
-        .values({ login: req.body.login, role: req.body.role, passwordHash: await hashPassword(req.body.password) })
+        .values({
+          login: req.body.login,
+          role: req.body.role,
+          passwordHash: await hashPassword(req.body.password),
+        })
         .returning();
       return reply.status(201).send(toUserDto(row!));
     } catch (e) {
@@ -39,35 +44,52 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
     }
   });
 
-  app.patch('/api/users/:id', { ...pre, schema: { params: IdParams, body: UpdateUserBody } }, async (req) => {
-    const me = currentUser(req);
-    const { password, role, blocked } = req.body;
-    if (req.params.id === me.id && (blocked === true || role === 'user')) {
-      throw badRequest('нельзя заблокировать или понизить собственную учётную запись');
-    }
-    const patch: Partial<UserRow> = {};
-    if (password !== undefined) patch.passwordHash = await hashPassword(password);
-    if (role !== undefined) patch.role = role;
-    if (blocked !== undefined) patch.blocked = blocked;
-    if (Object.keys(patch).length === 0) throw badRequest('нет изменений');
-    const [row] = await deps.db.update(users).set(patch).where(eq(users.id, req.params.id)).returning();
-    if (!row) throw notFound('пользователь');
-    return toUserDto(row);
-  });
+  app.patch(
+    '/api/users/:id',
+    { ...pre, schema: { params: IdParams, body: UpdateUserBody } },
+    async (req) => {
+      const me = currentUser(req);
+      const { password, role, blocked } = req.body;
+      if (req.params.id === me.id && (blocked === true || role === 'user')) {
+        throw badRequest('нельзя заблокировать или понизить собственную учётную запись');
+      }
+      const patch: Partial<UserRow> = {};
+      if (password !== undefined) patch.passwordHash = await hashPassword(password);
+      if (role !== undefined) patch.role = role;
+      if (blocked !== undefined) patch.blocked = blocked;
+      if (Object.keys(patch).length === 0) throw badRequest('нет изменений');
+      const [row] = await deps.db
+        .update(users)
+        .set(patch)
+        .where(eq(users.id, req.params.id))
+        .returning();
+      if (!row) throw notFound('пользователь');
+      return toUserDto(row);
+    },
+  );
 
   app.delete('/api/users/:id', { ...pre, schema: { params: IdParams } }, async (req, reply) => {
-    if (req.params.id === currentUser(req).id) throw badRequest('нельзя удалить собственную учётную запись');
+    if (req.params.id === currentUser(req).id)
+      throw badRequest('нельзя удалить собственную учётную запись');
     // Запуски удаляются каскадом, поэтому пути файлов нужно собрать до удаления пользователя.
     const files = await deps.db
       .select({ filePath: reportRuns.filePath })
       .from(reportRuns)
-      .where(and(eq(reportRuns.userId, req.params.id), isNotNull(reportRuns.filePath), eq(reportRuns.fileDeleted, false)));
+      .where(
+        and(
+          eq(reportRuns.userId, req.params.id),
+          isNotNull(reportRuns.filePath),
+          eq(reportRuns.fileDeleted, false),
+        ),
+      );
     const [row] = await deps.db.delete(users).where(eq(users.id, req.params.id)).returning();
     if (!row) throw notFound('пользователь');
     for (const f of files) {
       await deps.storage
         .remove(f.filePath!)
-        .catch((err) => req.log.warn({ err, filePath: f.filePath }, 'не удалось удалить файл отчёта'));
+        .catch((err) =>
+          req.log.warn({ err, filePath: f.filePath }, 'не удалось удалить файл отчёта'),
+        );
     }
     return reply.status(204).send();
   });

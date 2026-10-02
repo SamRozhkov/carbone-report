@@ -8,7 +8,9 @@ export async function ensureAdmin(deps: AppDeps, log: { warn(msg: string): void 
   const [r] = await deps.db.select({ n: count() }).from(users);
   if (r && r.n > 0) return;
   if (!adminLogin || !adminPassword) {
-    log.warn('в системе нет пользователей, а ADMIN_LOGIN/ADMIN_PASSWORD не заданы: войти будет невозможно');
+    log.warn(
+      'в системе нет пользователей, а ADMIN_LOGIN/ADMIN_PASSWORD не заданы: войти будет невозможно',
+    );
     return;
   }
   await deps.db

@@ -1,4 +1,9 @@
-import { DATE_RE, type ParamValue, type ParamsInput, type TemplateParam } from '@carbone-reports/shared';
+import {
+  DATE_RE,
+  type ParamValue,
+  type ParamsInput,
+  type TemplateParam,
+} from '@carbone-reports/shared';
 import { AppError } from '../../lib/errors';
 
 function isValidDate(v: string): boolean {
@@ -32,7 +37,10 @@ function fail(fields: Record<string, string>): never {
   throw new AppError('VALIDATION', 400, 'неверные параметры', { fields });
 }
 
-export function resolveParams(defs: TemplateParam[], input: ParamsInput): Record<string, ParamValue> {
+export function resolveParams(
+  defs: TemplateParam[],
+  input: ParamsInput,
+): Record<string, ParamValue> {
   const out: Record<string, ParamValue> = {};
   const fields: Record<string, string> = {};
   for (const def of defs) {

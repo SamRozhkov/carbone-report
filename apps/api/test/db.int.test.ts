@@ -14,7 +14,14 @@ describe('база данных', () => {
       sql`select table_name from information_schema.tables where table_schema = 'public' order by 1`,
     );
     expect(r.rows.map((x) => x.table_name)).toEqual(
-      expect.arrayContaining(['datasources', 'report_runs', 'template_params', 'template_queries', 'templates', 'users']),
+      expect.arrayContaining([
+        'datasources',
+        'report_runs',
+        'template_params',
+        'template_queries',
+        'templates',
+        'users',
+      ]),
     );
   });
   it('GET /api/health работает', async () => {

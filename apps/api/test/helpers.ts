@@ -119,7 +119,9 @@ export async function loginAs(t: TestApp, role: Role): Promise<{ cookie: string;
     .values({ login, passwordHash: await hashPassword('password123'), role })
     .returning();
   const res = await t.app.inject({
-    method: 'POST', url: '/api/auth/login', payload: { login, password: 'password123' },
+    method: 'POST',
+    url: '/api/auth/login',
+    payload: { login, password: 'password123' },
   });
   if (res.statusCode !== 200) throw new Error(`login failed: ${res.body}`);
   const cookie = String(res.headers['set-cookie']).split(';')[0]!;
@@ -133,16 +135,28 @@ export async function createTemplate(
   opts: { queries?: TemplateQuery[]; params?: TemplateParam[] } = {},
 ): Promise<string> {
   const r = await t.app.inject({
-    method: 'POST', url: '/api/templates', headers: { cookie },
+    method: 'POST',
+    url: '/api/templates',
+    headers: { cookie },
     payload: { name: `Шаблон ${randomUUID().slice(0, 4)}`, datasourceId, blank: 'docx' },
   });
   if (r.statusCode !== 201) throw new Error(r.body);
   const id = r.json().id as string;
   if (opts.queries) {
-    await t.app.inject({ method: 'PUT', url: `/api/templates/${id}/queries`, headers: { cookie }, payload: opts.queries });
+    await t.app.inject({
+      method: 'PUT',
+      url: `/api/templates/${id}/queries`,
+      headers: { cookie },
+      payload: opts.queries,
+    });
   }
   if (opts.params) {
-    await t.app.inject({ method: 'PUT', url: `/api/templates/${id}/params`, headers: { cookie }, payload: opts.params });
+    await t.app.inject({
+      method: 'PUT',
+      url: `/api/templates/${id}/params`,
+      headers: { cookie },
+      payload: opts.params,
+    });
   }
   return id;
 }

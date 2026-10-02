@@ -14,7 +14,8 @@ export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards
   app.get(
     '/api/templates/:id/editor-config',
     { preHandler: guards.requireAdmin, schema: { params: IdParams } },
-    async (req) => buildEditorConfig(deps, await loadTemplate(deps.db, req.params.id), currentUser(req)),
+    async (req) =>
+      buildEditorConfig(deps, await loadTemplate(deps.db, req.params.id), currentUser(req)),
   );
 
   app.post(
@@ -32,10 +33,13 @@ export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards
     '/internal/templates/:id/file',
     { schema: { params: IdParams, querystring: z.object({ t: z.string().optional() }) } },
     async (req, reply) => {
-      const ok = req.query.t && (await verifyFileToken(req.query.t, req.params.id, deps.config.appSecret));
+      const ok =
+        req.query.t && (await verifyFileToken(req.query.t, req.params.id, deps.config.appSecret));
       if (!ok) throw new AppError('FORBIDDEN', 403, 'неверный токен файла');
       const row = await loadTemplate(deps.db, req.params.id);
-      return reply.header('content-type', MIME[row.fileExt]).send(await deps.storage.read(row.filePath));
+      return reply
+        .header('content-type', MIME[row.fileExt])
+        .send(await deps.storage.read(row.filePath));
     },
   );
 

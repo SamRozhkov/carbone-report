@@ -60,7 +60,9 @@ export function connParamsFromRow(row: DatasourceRow, key: Buffer): ConnParams {
   };
 }
 
-export async function testConnection(c: ConnParams): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function testConnection(
+  c: ConnParams,
+): Promise<{ ok: true } | { ok: false; message: string }> {
   const { max: _max, idleTimeoutMillis: _idle, ...cfg } = poolConfig(c);
   const client = new pg.Client(cfg);
   try {

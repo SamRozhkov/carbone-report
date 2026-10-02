@@ -11,6 +11,7 @@
 **Spec:** `docs/superpowers/specs/2026-10-02-carbone-reports-design.md`
 
 **Разбиение на планы:**
+
 - **План 1 (этот):** бэкенд. Результат проверяется юнит- и интеграционными тестами и smoke-запуском сервера.
 - **План 2:** фронтенд `apps/web` (React + GravityUI, все экраны §8). Пишется после выполнения Плана 1, опирается на реальные DTO из `shared`.
 - **План 3:** `docker-compose.yml` (web/nginx, api, carbone, onlyoffice, postgres), демо-профиль, E2E на Playwright.
@@ -86,6 +87,7 @@ apps/api/
 ### Task 1: Монорепо, пакет `shared`, каркас `api`
 
 **Files:**
+
 - Create: `package.json`, `pnpm-workspace.yaml`, `.nvmrc`, `.gitignore`, `.prettierrc.json`, `tsconfig.base.json`, `eslint.config.js`
 - Create: `packages/shared/package.json`, `packages/shared/tsconfig.json`, `packages/shared/src/index.ts`
 - Test: `packages/shared/src/index.test.ts`
@@ -93,6 +95,7 @@ apps/api/
 - Test: `apps/api/src/app.test.ts`
 
 **Interfaces:**
+
 - Produces (`@carbone-reports/shared`): `IDENT_RE`, `Role`, `TemplateExt`, `OutputFormat`, `ParamType`, `SelectOption`, `TemplateParam`, `TemplateQuery`, `outputFormatsFor(ext)`, DTO-схемы `LoginBody`, `UserDto`, `CreateUserBody`, `UpdateUserBody`, `DatasourceBody`, `DatasourceDto`, `TemplateSummary`, `TemplateDetails`, `TemplateAdminDetails`, `CreateTemplateBody`, `UpdateTemplateBody`, `RenderBody`, `PreviewBody`, `RunQueryBody`, `RunDto`, `ApiError`, и одноимённые TS-типы (`type X = z.infer<typeof X>`).
 - Produces (`apps/api/src/app.ts`): `createFastify(): App`, `type App`, `buildApp(deps: AppDeps): Promise<App>` (в этой задаче `AppDeps` — временно `{}`; финальный вид задаётся в Task 3).
 
@@ -109,11 +112,13 @@ pnpm -v   # 10.34.6
 - [ ] **Step 2: Корневые файлы**
 
 `.nvmrc`:
+
 ```
 22
 ```
 
 `package.json`:
+
 ```json
 {
   "name": "carbone-reports",
@@ -139,6 +144,7 @@ pnpm -v   # 10.34.6
 ```
 
 `pnpm-workspace.yaml`:
+
 ```yaml
 packages:
   - apps/*
@@ -149,6 +155,7 @@ onlyBuiltDependencies:
 ```
 
 `.gitignore`:
+
 ```
 node_modules/
 dist/
@@ -159,11 +166,13 @@ coverage/
 ```
 
 `.prettierrc.json`:
+
 ```json
 { "singleQuote": true, "semi": true, "printWidth": 100, "trailingComma": "all" }
 ```
 
 `tsconfig.base.json`:
+
 ```json
 {
   "compilerOptions": {
@@ -185,6 +194,7 @@ coverage/
 ```
 
 `eslint.config.js`:
+
 ```js
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
@@ -204,6 +214,7 @@ export default tseslint.config(
 - [ ] **Step 3: Пакет `shared` — сначала тест**
 
 `packages/shared/package.json`:
+
 ```json
 {
   "name": "@carbone-reports/shared",
@@ -221,21 +232,27 @@ export default tseslint.config(
 ```
 
 `packages/shared/tsconfig.json`:
+
 ```json
 { "extends": "../../tsconfig.base.json", "include": ["src"] }
 ```
 
 `packages/shared/src/index.test.ts`:
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import { TemplateParam, TemplateQuery, outputFormatsFor } from './index';
 
 describe('TemplateQuery', () => {
   it('принимает корректный ключ', () => {
-    expect(TemplateQuery.parse({ key: 'orders', sql: 'select 1', mode: 'list' }).key).toBe('orders');
+    expect(TemplateQuery.parse({ key: 'orders', sql: 'select 1', mode: 'list' }).key).toBe(
+      'orders',
+    );
   });
   it('отклоняет зарезервированный ключ params', () => {
-    expect(TemplateQuery.safeParse({ key: 'params', sql: 'select 1', mode: 'list' }).success).toBe(false);
+    expect(TemplateQuery.safeParse({ key: 'params', sql: 'select 1', mode: 'list' }).success).toBe(
+      false,
+    );
   });
   it('отклоняет ключ с пробелом и ключ, начинающийся с цифры', () => {
     expect(TemplateQuery.safeParse({ key: 'my key', sql: 'x', mode: 'list' }).success).toBe(false);
@@ -246,13 +263,23 @@ describe('TemplateQuery', () => {
 describe('TemplateParam', () => {
   it('требует options для select', () => {
     const r = TemplateParam.safeParse({
-      name: 'status', label: 'Статус', type: 'select', required: true, defaultValue: null, options: null,
+      name: 'status',
+      label: 'Статус',
+      type: 'select',
+      required: true,
+      defaultValue: null,
+      options: null,
     });
     expect(r.success).toBe(false);
   });
   it('принимает date-параметр без options', () => {
     const r = TemplateParam.safeParse({
-      name: 'dateFrom', label: 'С', type: 'date', required: true, defaultValue: null, options: null,
+      name: 'dateFrom',
+      label: 'С',
+      type: 'date',
+      required: true,
+      defaultValue: null,
+      options: null,
     });
     expect(r.success).toBe(true);
   });
@@ -277,11 +304,13 @@ describe('outputFormatsFor', () => {
 pnpm install
 pnpm --filter @carbone-reports/shared test
 ```
+
 Expected: FAIL — `Failed to resolve import "./index"` (файла ещё нет).
 
 - [ ] **Step 5: Реализовать `shared`**
 
 `packages/shared/src/index.ts`:
+
 ```ts
 import { z } from 'zod';
 
@@ -481,11 +510,13 @@ export type ApiError = z.infer<typeof ApiError>;
 ```bash
 pnpm --filter @carbone-reports/shared test && pnpm --filter @carbone-reports/shared typecheck
 ```
+
 Expected: PASS (8 тестов), typecheck без ошибок.
 
 - [ ] **Step 7: Каркас `api` — тест**
 
 `apps/api/package.json`:
+
 ```json
 {
   "name": "@carbone-reports/api",
@@ -530,11 +561,13 @@ Expected: PASS (8 тестов), typecheck без ошибок.
 ```
 
 `apps/api/tsconfig.json`:
+
 ```json
 { "extends": "../../tsconfig.base.json", "include": ["src", "test", "*.ts"] }
 ```
 
 `apps/api/tsup.config.ts` (пакет `shared` вшивается в сборку, остальные зависимости остаются внешними):
+
 ```ts
 import { defineConfig } from 'tsup';
 
@@ -548,6 +581,7 @@ export default defineConfig({
 ```
 
 `apps/api/vitest.config.ts`:
+
 ```ts
 import { defineConfig } from 'vitest/config';
 
@@ -557,6 +591,7 @@ export default defineConfig({
 ```
 
 `apps/api/src/app.test.ts`:
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import { buildApp } from './app';
@@ -577,11 +612,13 @@ describe('buildApp', () => {
 ```bash
 pnpm install && pnpm --filter @carbone-reports/api test
 ```
+
 Expected: FAIL — `Failed to resolve import "./app"`.
 
 - [ ] **Step 9: Реализовать `app.ts`**
 
 `apps/api/src/app.ts`:
+
 ```ts
 import Fastify from 'fastify';
 import {
@@ -618,6 +655,7 @@ export async function buildApp(_deps: AppDeps): Promise<App> {
 ```bash
 pnpm --filter @carbone-reports/api test && pnpm -r typecheck && pnpm lint
 ```
+
 Expected: PASS; tsc и eslint без ошибок.
 
 - [ ] **Step 11: Commit**
@@ -632,11 +670,13 @@ git commit -m "chore: monorepo scaffold, shared schemas, api skeleton"
 ### Task 2: Конфиг, ошибки, файловое хранилище, шифрование
 
 **Files:**
+
 - Create: `apps/api/src/config.ts`, `apps/api/src/lib/errors.ts`, `apps/api/src/lib/storage.ts`, `apps/api/src/lib/crypto.ts`
 - Test: `apps/api/src/config.test.ts`, `apps/api/src/lib/errors.test.ts`, `apps/api/src/lib/storage.test.ts`, `apps/api/src/lib/crypto.test.ts`
 - Modify: `apps/api/src/app.ts` (подключить обработчик ошибок)
 
 **Interfaces:**
+
 - Produces:
   - `loadConfig(env: NodeJS.ProcessEnv): Config`; `interface Config { databaseUrl; appSecret: Uint8Array; encryptionKey: Buffer; onlyofficeJwtSecret: Uint8Array; onlyofficeInternalUrl; apiInternalUrl; carboneUrl; adminLogin?: string; adminPassword?: string; storageDir; queryTimeoutMs; queryMaxRows; renderTimeoutMs; reportRetentionDays; tz; port; cookieSecure: boolean }`
   - `class AppError(code: string, status: number, message: string, details?: unknown)`; фабрики `badRequest(msg, details?)`, `unauthorized()`, `forbidden()`, `notFound(what)`, `conflict(msg)`; `registerErrorHandler(app: App)`
@@ -646,6 +686,7 @@ git commit -m "chore: monorepo scaffold, shared schemas, api skeleton"
 - [ ] **Step 1: Тесты**
 
 `apps/api/src/config.test.ts`:
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from './config';
@@ -683,6 +724,7 @@ describe('loadConfig', () => {
 ```
 
 `apps/api/src/lib/crypto.test.ts`:
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import { decryptSecret, encryptSecret } from './crypto';
@@ -710,6 +752,7 @@ describe('crypto', () => {
 ```
 
 `apps/api/src/lib/storage.test.ts`:
+
 ```ts
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -745,6 +788,7 @@ describe('Storage', () => {
 ```
 
 `apps/api/src/lib/errors.test.ts`:
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -766,7 +810,9 @@ describe('registerErrorHandler', () => {
     });
     const res = await app.inject({ method: 'POST', url: '/t', payload: { n: 1 } });
     expect(res.statusCode).toBe(400);
-    expect(res.json()).toEqual({ error: { code: 'SQL_ERROR', message: 'запрос "a": ошибка', details: { key: 'a' } } });
+    expect(res.json()).toEqual({
+      error: { code: 'SQL_ERROR', message: 'запрос "a": ошибка', details: { key: 'a' } },
+    });
   });
   it('ошибка валидации zod → 400 VALIDATION', async () => {
     const app = await appWith(() => 'ok');
@@ -780,7 +826,9 @@ describe('registerErrorHandler', () => {
     });
     const res = await app.inject({ method: 'POST', url: '/t', payload: { n: 1 } });
     expect(res.statusCode).toBe(500);
-    expect(res.json()).toEqual({ error: { code: 'INTERNAL', message: 'внутренняя ошибка сервера' } });
+    expect(res.json()).toEqual({
+      error: { code: 'INTERNAL', message: 'внутренняя ошибка сервера' },
+    });
   });
 });
 ```
@@ -790,11 +838,13 @@ describe('registerErrorHandler', () => {
 ```bash
 pnpm --filter @carbone-reports/api test
 ```
+
 Expected: FAIL — не найдены модули `./config`, `./crypto`, `./storage`, `./errors`.
 
 - [ ] **Step 3: Реализация**
 
 `apps/api/src/config.ts`:
+
 ```ts
 import { z } from 'zod';
 
@@ -871,6 +921,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
 ```
 
 `apps/api/src/lib/crypto.ts`:
+
 ```ts
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
@@ -891,6 +942,7 @@ export function decryptSecret(enc: string, key: Buffer): string {
 ```
 
 `apps/api/src/lib/storage.ts`:
+
 ```ts
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
@@ -937,6 +989,7 @@ export class Storage {
 ```
 
 `apps/api/src/lib/errors.ts`:
+
 ```ts
 import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
 import type { App } from '../app';
@@ -985,17 +1038,20 @@ export function registerErrorHandler(app: App): void {
       });
     }
     req.log.error(err);
-    return reply.status(500).send({ error: { code: 'INTERNAL', message: 'внутренняя ошибка сервера' } });
+    return reply
+      .status(500)
+      .send({ error: { code: 'INTERNAL', message: 'внутренняя ошибка сервера' } });
   });
 }
 ```
 
 В `apps/api/src/app.ts` в `buildApp` перед регистрацией маршрутов добавить:
+
 ```ts
 import { registerErrorHandler } from './lib/errors';
 // ...
-  const app = createFastify();
-  registerErrorHandler(app);
+const app = createFastify();
+registerErrorHandler(app);
 ```
 
 - [ ] **Step 4: Тесты проходят**
@@ -1003,6 +1059,7 @@ import { registerErrorHandler } from './lib/errors';
 ```bash
 pnpm --filter @carbone-reports/api test && pnpm --filter @carbone-reports/api typecheck
 ```
+
 Expected: PASS (все тесты Task 1–2).
 
 - [ ] **Step 5: Commit**
@@ -1017,6 +1074,7 @@ git commit -m "feat(api): config, error handling, storage, secret encryption"
 ### Task 3: Схема БД, миграции, `AppDeps`, интеграционная тестовая обвязка
 
 **Files:**
+
 - Create: `apps/api/src/db/schema.ts`, `apps/api/src/db/client.ts`, `apps/api/drizzle.config.ts`, `apps/api/drizzle/*` (генерируется)
 - Create: `apps/api/src/deps.ts`
 - Create: `apps/api/vitest.int.config.ts`, `apps/api/test/global-setup.ts`, `apps/api/test/helpers.ts`
@@ -1024,28 +1082,73 @@ git commit -m "feat(api): config, error handling, storage, secret encryption"
 - Modify: `apps/api/src/app.ts` (использовать `AppDeps` из `deps.ts`), `apps/api/src/app.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Config`, `Storage` (Task 2).
 - Produces:
   - Таблицы drizzle: `users`, `datasources`, `templates`, `templateQueries`, `templateParams`, `reportRuns`; типы строк `UserRow`, `DatasourceRow`, `TemplateRow`, `RunRow` (`typeof t.$inferSelect`).
   - `createDb(url: string): { db: Db; pool: pg.Pool }`, `type Db`, `migrateDb(db: Db): Promise<void>`
   - `src/deps.ts`:
     ```ts
-    interface TemplateFileRef { id: string; version: number; ext: TemplateExt; read(): Promise<Buffer> }
-    interface RenderOptions { convertTo: OutputFormat; lang: string; timezone: string; timeoutMs: number }
-    interface CarboneRenderer { render(tpl: TemplateFileRef, data: unknown, opts: RenderOptions): Promise<Buffer> }
-    interface OnlyOfficeCommands { forceSave(key: string): Promise<void> }
-    type FileFetcher = (url: string) => Promise<Buffer>
-    interface SourcePools { get(datasourceId: string): Promise<{ pool: pg.Pool; name: string }>; invalidate(id: string): Promise<void>; closeAll(): Promise<void> }
-    interface AppDeps { config: Config; db: Db; storage: Storage; sources: SourcePools; carbone: CarboneRenderer; onlyoffice: OnlyOfficeCommands; fetchFile: FileFetcher }
+    interface TemplateFileRef {
+      id: string;
+      version: number;
+      ext: TemplateExt;
+      read(): Promise<Buffer>;
+    }
+    interface RenderOptions {
+      convertTo: OutputFormat;
+      lang: string;
+      timezone: string;
+      timeoutMs: number;
+    }
+    interface CarboneRenderer {
+      render(tpl: TemplateFileRef, data: unknown, opts: RenderOptions): Promise<Buffer>;
+    }
+    interface OnlyOfficeCommands {
+      forceSave(key: string): Promise<void>;
+    }
+    type FileFetcher = (url: string) => Promise<Buffer>;
+    interface SourcePools {
+      get(datasourceId: string): Promise<{ pool: pg.Pool; name: string }>;
+      invalidate(id: string): Promise<void>;
+      closeAll(): Promise<void>;
+    }
+    interface AppDeps {
+      config: Config;
+      db: Db;
+      storage: Storage;
+      sources: SourcePools;
+      carbone: CarboneRenderer;
+      onlyoffice: OnlyOfficeCommands;
+      fetchFile: FileFetcher;
+    }
     ```
   - Тестовые хелперы: `createTestDatabase(): Promise<string>`, `testConfig(databaseUrl, storageDir): Config`, `createTestApp(overrides?: Partial<Omit<AppDeps,'config'|'db'|'storage'>>): Promise<TestApp>`, где `TestApp = { app: App; deps: AppDeps; close(): Promise<void> }`.
 
 - [ ] **Step 1: Схема**
 
 `apps/api/src/db/schema.ts`:
+
 ```ts
-import type { OutputFormat, ParamType, ParamValue, QueryMode, Role, SelectOption, TemplateExt } from '@carbone-reports/shared';
-import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import type {
+  OutputFormat,
+  ParamType,
+  ParamValue,
+  QueryMode,
+  Role,
+  SelectOption,
+  TemplateExt,
+} from '@carbone-reports/shared';
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
@@ -1149,6 +1252,7 @@ export type RunRow = typeof reportRuns.$inferSelect;
 > Отличия от спецификации §3: `report_runs.template_name` хранит название на момент запуска (запись остаётся читаемой после удаления шаблона), `templates.last_save_error` — источник поля `lastSaveError` (§5.2).
 
 `apps/api/drizzle.config.ts`:
+
 ```ts
 import { defineConfig } from 'drizzle-kit';
 
@@ -1160,6 +1264,7 @@ export default defineConfig({
 ```
 
 `apps/api/src/db/client.ts`:
+
 ```ts
 import { resolve } from 'node:path';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -1186,11 +1291,13 @@ export async function migrateDb(db: Db): Promise<void> {
 ```bash
 cd apps/api && pnpm db:generate && ls drizzle && cd ../..
 ```
+
 Expected: в `apps/api/drizzle/` появились `0000_*.sql` и `meta/`. В SQL есть `CREATE TABLE "users"` … `"report_runs"`.
 
 - [ ] **Step 3: `deps.ts` и переключение `app.ts`**
 
 `apps/api/src/deps.ts`:
+
 ```ts
 import type { OutputFormat, TemplateExt } from '@carbone-reports/shared';
 import type pg from 'pg';
@@ -1240,6 +1347,7 @@ export interface AppDeps {
 ```
 
 В `apps/api/src/app.ts` удалить временный `export type AppDeps = Record<string, never>;` и добавить:
+
 ```ts
 import type { AppDeps } from './deps';
 export type { AppDeps };
@@ -1250,6 +1358,7 @@ export type { AppDeps };
 - [ ] **Step 4: Интеграционная обвязка**
 
 `apps/api/vitest.int.config.ts`:
+
 ```ts
 import { defineConfig } from 'vitest/config';
 
@@ -1265,6 +1374,7 @@ export default defineConfig({
 ```
 
 `apps/api/test/global-setup.ts`:
+
 ```ts
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { TestProject } from 'vitest/node';
@@ -1287,6 +1397,7 @@ export default async function setup(project: TestProject) {
 ```
 
 `apps/api/test/helpers.ts`:
+
 ```ts
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -1383,6 +1494,7 @@ export async function createTestApp(
 - [ ] **Step 5: Интеграционный тест (падает, пока Docker не запущен или миграция не применяется)**
 
 `apps/api/test/db.int.test.ts`:
+
 ```ts
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -1400,7 +1512,14 @@ describe('база данных', () => {
       sql`select table_name from information_schema.tables where table_schema = 'public' order by 1`,
     );
     expect(r.rows.map((x) => x.table_name)).toEqual(
-      expect.arrayContaining(['datasources', 'report_runs', 'template_params', 'template_queries', 'templates', 'users']),
+      expect.arrayContaining([
+        'datasources',
+        'report_runs',
+        'template_params',
+        'template_queries',
+        'templates',
+        'users',
+      ]),
     );
   });
   it('GET /api/health работает', async () => {
@@ -1417,6 +1536,7 @@ Docker Desktop должен быть запущен (`docker info` без оши
 ```bash
 pnpm --filter @carbone-reports/api test:int
 ```
+
 Expected: PASS (2 теста). Если ошибка `Could not find a working container runtime strategy` — не запущен Docker.
 
 - [ ] **Step 7: typecheck и commit**
@@ -1432,11 +1552,13 @@ git commit -m "feat(api): db schema, migrations, deps contract, integration test
 ### Task 4: Аутентификация, сессии, первый админ
 
 **Files:**
+
 - Create: `apps/api/src/modules/auth/password.ts`, `apps/api/src/modules/auth/session.ts`, `apps/api/src/modules/auth/guards.ts`, `apps/api/src/modules/auth/routes.ts`, `apps/api/src/modules/auth/bootstrap.ts`
 - Test: `apps/api/src/modules/auth/session.test.ts`, `apps/api/test/auth.int.test.ts`
 - Modify: `apps/api/src/app.ts` (cookie-плагин, маршруты auth), `apps/api/test/helpers.ts` (`loginAs`)
 
 **Interfaces:**
+
 - Consumes: `AppDeps`, `users`, `AppError`-фабрики.
 - Produces:
   - `hashPassword(p): Promise<string>`, `verifyPassword(hash, p): Promise<boolean>`
@@ -1450,6 +1572,7 @@ git commit -m "feat(api): db schema, migrations, deps contract, integration test
 - [ ] **Step 1: Юнит-тест сессии**
 
 `apps/api/src/modules/auth/session.test.ts`:
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import { signSession, verifySession } from './session';
@@ -1474,6 +1597,7 @@ describe('session', () => {
 - [ ] **Step 2: Интеграционный тест**
 
 `apps/api/test/auth.int.test.ts`:
+
 ```ts
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -1500,7 +1624,9 @@ describe('auth', () => {
 
   it('вход с верным паролем ставит httpOnly cookie, /me возвращает пользователя', async () => {
     const res = await t.app.inject({
-      method: 'POST', url: '/api/auth/login', payload: { login: 'root', password: 'rootpass123' },
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: 'root', password: 'rootpass123' },
     });
     expect(res.statusCode).toBe(200);
     const setCookie = String(res.headers['set-cookie']);
@@ -1512,8 +1638,16 @@ describe('auth', () => {
   });
 
   it('неверный пароль → 401 без подсказки, существует ли логин', async () => {
-    const a = await t.app.inject({ method: 'POST', url: '/api/auth/login', payload: { login: 'root', password: 'bad' } });
-    const b = await t.app.inject({ method: 'POST', url: '/api/auth/login', payload: { login: 'nobody', password: 'bad' } });
+    const a = await t.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: 'root', password: 'bad' },
+    });
+    const b = await t.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: 'nobody', password: 'bad' },
+    });
     expect(a.statusCode).toBe(401);
     expect(b.statusCode).toBe(401);
     expect(a.json()).toEqual(b.json());
@@ -1533,7 +1667,11 @@ describe('auth', () => {
 
   it('logout очищает cookie', async () => {
     const { cookie } = await loginAs(t, 'user');
-    const res = await t.app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } });
+    const res = await t.app.inject({
+      method: 'POST',
+      url: '/api/auth/logout',
+      headers: { cookie },
+    });
     expect(res.statusCode).toBe(204);
     expect(String(res.headers['set-cookie'])).toMatch(/session=;/);
   });
@@ -1541,6 +1679,7 @@ describe('auth', () => {
 ```
 
 Добавить в `apps/api/test/helpers.ts`:
+
 ```ts
 import type { Role } from '@carbone-reports/shared';
 import { users, type UserRow } from '../src/db/schema';
@@ -1553,7 +1692,9 @@ export async function loginAs(t: TestApp, role: Role): Promise<{ cookie: string;
     .values({ login, passwordHash: await hashPassword('password123'), role })
     .returning();
   const res = await t.app.inject({
-    method: 'POST', url: '/api/auth/login', payload: { login, password: 'password123' },
+    method: 'POST',
+    url: '/api/auth/login',
+    payload: { login, password: 'password123' },
   });
   if (res.statusCode !== 200) throw new Error(`login failed: ${res.body}`);
   const cookie = String(res.headers['set-cookie']).split(';')[0]!;
@@ -1566,11 +1707,13 @@ export async function loginAs(t: TestApp, role: Role): Promise<{ cookie: string;
 ```bash
 pnpm --filter @carbone-reports/api test && pnpm --filter @carbone-reports/api test:int
 ```
+
 Expected: FAIL — нет модулей `./session`, `../src/modules/auth/*`.
 
 - [ ] **Step 4: Реализация**
 
 `apps/api/src/modules/auth/password.ts`:
+
 ```ts
 import argon2 from 'argon2';
 
@@ -1589,6 +1732,7 @@ export const DUMMY_HASH_PROMISE = hashPassword('dummy-password-for-timing');
 ```
 
 `apps/api/src/modules/auth/session.ts`:
+
 ```ts
 import { Role } from '@carbone-reports/shared';
 import { jwtVerify, SignJWT } from 'jose';
@@ -1611,7 +1755,10 @@ export function signSession(user: SessionUser, secret: Uint8Array): Promise<stri
     .sign(secret);
 }
 
-export async function verifySession(token: string, secret: Uint8Array): Promise<SessionUser | null> {
+export async function verifySession(
+  token: string,
+  secret: Uint8Array,
+): Promise<SessionUser | null> {
   try {
     const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] });
     const role = Role.safeParse(payload.role);
@@ -1624,6 +1771,7 @@ export async function verifySession(token: string, secret: Uint8Array): Promise<
 ```
 
 `apps/api/src/modules/auth/guards.ts`:
+
 ```ts
 import { eq } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
@@ -1666,6 +1814,7 @@ export type Guards = ReturnType<typeof makeGuards>;
 ```
 
 `apps/api/src/modules/auth/routes.ts`:
+
 ```ts
 import { LoginBody } from '@carbone-reports/shared';
 import { eq } from 'drizzle-orm';
@@ -1680,7 +1829,10 @@ import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession } from './session';
 export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): void {
   app.post('/api/auth/login', { schema: { body: LoginBody } }, async (req, reply) => {
     const [row] = await deps.db.select().from(users).where(eq(users.login, req.body.login));
-    const ok = await verifyPassword(row?.passwordHash ?? (await DUMMY_HASH_PROMISE), req.body.password);
+    const ok = await verifyPassword(
+      row?.passwordHash ?? (await DUMMY_HASH_PROMISE),
+      req.body.password,
+    );
     if (!row || !ok || row.blocked) {
       throw new AppError('INVALID_CREDENTIALS', 401, 'неверный логин или пароль');
     }
@@ -1705,6 +1857,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
 ```
 
 `apps/api/src/modules/auth/bootstrap.ts`:
+
 ```ts
 import { count } from 'drizzle-orm';
 import { users } from '../../db/schema';
@@ -1724,6 +1877,7 @@ export async function ensureAdmin(deps: AppDeps): Promise<void> {
 ```
 
 Изменить `apps/api/src/app.ts` — итоговый `buildApp`:
+
 ```ts
 import cookie from '@fastify/cookie';
 import { makeGuards } from './modules/auth/guards';
@@ -1748,6 +1902,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
 ```bash
 pnpm --filter @carbone-reports/api test && pnpm --filter @carbone-reports/api test:int && pnpm -r typecheck
 ```
+
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -1762,17 +1917,20 @@ git commit -m "feat(api): login/logout/me with JWT cookie sessions, role guards,
 ### Task 5: Пользователи (CRUD для админа)
 
 **Files:**
+
 - Create: `apps/api/src/modules/users/routes.ts`
 - Test: `apps/api/test/users.int.test.ts`
 - Modify: `apps/api/src/app.ts` (регистрация)
 
 **Interfaces:**
+
 - Consumes: `Guards`, `hashPassword`, `CreateUserBody`, `UpdateUserBody`, `UserDto`.
 - Produces: `GET /api/users`, `POST /api/users`, `PATCH /api/users/:id`, `DELETE /api/users/:id`; `toUserDto(row: UserRow): UserDto`.
 
 - [ ] **Step 1: Тест**
 
 `apps/api/test/users.int.test.ts`:
+
 ```ts
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp, loginAs, type TestApp } from './helpers';
@@ -1789,65 +1947,105 @@ afterAll(() => t.close());
 
 describe('users', () => {
   it('user получает 403', async () => {
-    const res = await t.app.inject({ method: 'GET', url: '/api/users', headers: { cookie: user.cookie } });
+    const res = await t.app.inject({
+      method: 'GET',
+      url: '/api/users',
+      headers: { cookie: user.cookie },
+    });
     expect(res.statusCode).toBe(403);
   });
 
   it('создание, список без хешей паролей, дубликат логина → 409', async () => {
     const create = await t.app.inject({
-      method: 'POST', url: '/api/users', headers: { cookie: admin.cookie },
+      method: 'POST',
+      url: '/api/users',
+      headers: { cookie: admin.cookie },
       payload: { login: 'ivanov', password: 'password1', role: 'user' },
     });
     expect(create.statusCode).toBe(201);
     expect(create.json()).not.toHaveProperty('passwordHash');
 
     const dup = await t.app.inject({
-      method: 'POST', url: '/api/users', headers: { cookie: admin.cookie },
+      method: 'POST',
+      url: '/api/users',
+      headers: { cookie: admin.cookie },
       payload: { login: 'ivanov', password: 'password1', role: 'user' },
     });
     expect(dup.statusCode).toBe(409);
 
-    const list = await t.app.inject({ method: 'GET', url: '/api/users', headers: { cookie: admin.cookie } });
+    const list = await t.app.inject({
+      method: 'GET',
+      url: '/api/users',
+      headers: { cookie: admin.cookie },
+    });
     expect(list.json().map((u: { login: string }) => u.login)).toContain('ivanov');
     expect(JSON.stringify(list.json())).not.toMatch(/argon2/);
   });
 
   it('смена пароля и блокировка', async () => {
     const created = await t.app.inject({
-      method: 'POST', url: '/api/users', headers: { cookie: admin.cookie },
+      method: 'POST',
+      url: '/api/users',
+      headers: { cookie: admin.cookie },
       payload: { login: 'petrov', password: 'password1', role: 'user' },
     });
     const id = created.json().id;
     await t.app.inject({
-      method: 'PATCH', url: `/api/users/${id}`, headers: { cookie: admin.cookie },
+      method: 'PATCH',
+      url: `/api/users/${id}`,
+      headers: { cookie: admin.cookie },
       payload: { password: 'newpassword' },
     });
     const login = await t.app.inject({
-      method: 'POST', url: '/api/auth/login', payload: { login: 'petrov', password: 'newpassword' },
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: 'petrov', password: 'newpassword' },
     });
     expect(login.statusCode).toBe(200);
 
     const blocked = await t.app.inject({
-      method: 'PATCH', url: `/api/users/${id}`, headers: { cookie: admin.cookie }, payload: { blocked: true },
+      method: 'PATCH',
+      url: `/api/users/${id}`,
+      headers: { cookie: admin.cookie },
+      payload: { blocked: true },
     });
     expect(blocked.json().blocked).toBe(true);
   });
 
   it('админ не может заблокировать, понизить или удалить сам себя', async () => {
     const self = `/api/users/${admin.user.id}`;
-    const block = await t.app.inject({ method: 'PATCH', url: self, headers: { cookie: admin.cookie }, payload: { blocked: true } });
-    const demote = await t.app.inject({ method: 'PATCH', url: self, headers: { cookie: admin.cookie }, payload: { role: 'user' } });
-    const del = await t.app.inject({ method: 'DELETE', url: self, headers: { cookie: admin.cookie } });
+    const block = await t.app.inject({
+      method: 'PATCH',
+      url: self,
+      headers: { cookie: admin.cookie },
+      payload: { blocked: true },
+    });
+    const demote = await t.app.inject({
+      method: 'PATCH',
+      url: self,
+      headers: { cookie: admin.cookie },
+      payload: { role: 'user' },
+    });
+    const del = await t.app.inject({
+      method: 'DELETE',
+      url: self,
+      headers: { cookie: admin.cookie },
+    });
     expect([block.statusCode, demote.statusCode, del.statusCode]).toEqual([400, 400, 400]);
   });
 
   it('несуществующий id → 404, невалидный uuid → 400', async () => {
     const r404 = await t.app.inject({
-      method: 'PATCH', url: '/api/users/00000000-0000-0000-0000-000000000000',
-      headers: { cookie: admin.cookie }, payload: { blocked: true },
+      method: 'PATCH',
+      url: '/api/users/00000000-0000-0000-0000-000000000000',
+      headers: { cookie: admin.cookie },
+      payload: { blocked: true },
     });
     const r400 = await t.app.inject({
-      method: 'PATCH', url: '/api/users/not-a-uuid', headers: { cookie: admin.cookie }, payload: { blocked: true },
+      method: 'PATCH',
+      url: '/api/users/not-a-uuid',
+      headers: { cookie: admin.cookie },
+      payload: { blocked: true },
     });
     expect(r404.statusCode).toBe(404);
     expect(r400.statusCode).toBe(400);
@@ -1864,12 +2062,14 @@ pnpm --filter @carbone-reports/api test:int -- users
 - [ ] **Step 3: Реализация**
 
 Добавить в `packages/shared/src/index.ts`:
+
 ```ts
 export const IdParams = z.object({ id: z.uuid('неверный идентификатор') });
 export type IdParams = z.infer<typeof IdParams>;
 ```
 
 `apps/api/src/modules/users/routes.ts`:
+
 ```ts
 import { CreateUserBody, IdParams, UpdateUserBody, type UserDto } from '@carbone-reports/shared';
 import { asc, eq } from 'drizzle-orm';
@@ -1888,8 +2088,9 @@ export const toUserDto = (r: UserRow): UserDto => ({
   createdAt: r.createdAt.toISOString(),
 });
 
-const isUniqueViolation = (e: unknown) => (e as { code?: string })?.code === '23505'
-  || (e as { cause?: { code?: string } })?.cause?.code === '23505';
+const isUniqueViolation = (e: unknown) =>
+  (e as { code?: string })?.code === '23505' ||
+  (e as { cause?: { code?: string } })?.cause?.code === '23505';
 
 export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): void {
   const pre = { preHandler: guards.requireAdmin };
@@ -1903,7 +2104,11 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
     try {
       const [row] = await deps.db
         .insert(users)
-        .values({ login: req.body.login, role: req.body.role, passwordHash: await hashPassword(req.body.password) })
+        .values({
+          login: req.body.login,
+          role: req.body.role,
+          passwordHash: await hashPassword(req.body.password),
+        })
         .returning();
       return reply.status(201).send(toUserDto(row!));
     } catch (e) {
@@ -1912,24 +2117,33 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
     }
   });
 
-  app.patch('/api/users/:id', { ...pre, schema: { params: IdParams, body: UpdateUserBody } }, async (req) => {
-    const me = currentUser(req);
-    const { password, role, blocked } = req.body;
-    if (req.params.id === me.id && (blocked === true || role === 'user')) {
-      throw badRequest('нельзя заблокировать или понизить собственную учётную запись');
-    }
-    const patch: Partial<UserRow> = {};
-    if (password !== undefined) patch.passwordHash = await hashPassword(password);
-    if (role !== undefined) patch.role = role;
-    if (blocked !== undefined) patch.blocked = blocked;
-    if (Object.keys(patch).length === 0) throw badRequest('нет изменений');
-    const [row] = await deps.db.update(users).set(patch).where(eq(users.id, req.params.id)).returning();
-    if (!row) throw notFound('пользователь');
-    return toUserDto(row);
-  });
+  app.patch(
+    '/api/users/:id',
+    { ...pre, schema: { params: IdParams, body: UpdateUserBody } },
+    async (req) => {
+      const me = currentUser(req);
+      const { password, role, blocked } = req.body;
+      if (req.params.id === me.id && (blocked === true || role === 'user')) {
+        throw badRequest('нельзя заблокировать или понизить собственную учётную запись');
+      }
+      const patch: Partial<UserRow> = {};
+      if (password !== undefined) patch.passwordHash = await hashPassword(password);
+      if (role !== undefined) patch.role = role;
+      if (blocked !== undefined) patch.blocked = blocked;
+      if (Object.keys(patch).length === 0) throw badRequest('нет изменений');
+      const [row] = await deps.db
+        .update(users)
+        .set(patch)
+        .where(eq(users.id, req.params.id))
+        .returning();
+      if (!row) throw notFound('пользователь');
+      return toUserDto(row);
+    },
+  );
 
   app.delete('/api/users/:id', { ...pre, schema: { params: IdParams } }, async (req, reply) => {
-    if (req.params.id === currentUser(req).id) throw badRequest('нельзя удалить собственную учётную запись');
+    if (req.params.id === currentUser(req).id)
+      throw badRequest('нельзя удалить собственную учётную запись');
     const [row] = await deps.db.delete(users).where(eq(users.id, req.params.id)).returning();
     if (!row) throw notFound('пользователь');
     return reply.status(204).send();
@@ -1938,10 +2152,11 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
 ```
 
 В `apps/api/src/app.ts` после `registerAuthRoutes(...)`:
+
 ```ts
 import { registerUserRoutes } from './modules/users/routes';
 // ...
-  registerUserRoutes(app, deps, guards);
+registerUserRoutes(app, deps, guards);
 ```
 
 - [ ] **Step 4: Тесты проходят**
@@ -1949,6 +2164,7 @@ import { registerUserRoutes } from './modules/users/routes';
 ```bash
 pnpm --filter @carbone-reports/api test:int && pnpm -r typecheck
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1959,18 +2175,22 @@ git commit -m "feat(api): admin user management"
 ```
 
 ---
+
 ### Task 6: Парсер именованных SQL-параметров
 
 **Files:**
+
 - Create: `apps/api/src/modules/queries/sql-params.ts`
 - Test: `apps/api/src/modules/queries/sql-params.test.ts`
 
 **Interfaces:**
+
 - Produces: `parseSqlParams(sql: string): ParsedSql`, где `interface ParsedSql { text: string; names: string[] }` (`names[i]` соответствует `$${i+1}`); `class SqlParamError extends Error`.
 
 - [ ] **Step 1: Тест**
 
 `apps/api/src/modules/queries/sql-params.test.ts`:
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import { parseSqlParams, SqlParamError } from './sql-params';
@@ -1991,7 +2211,10 @@ describe('parseSqlParams', () => {
     });
   });
   it('не трогает приведения типов ::', () => {
-    expect(p('select :d::date, x::text')).toEqual({ text: 'select $1::date, x::text', names: ['d'] });
+    expect(p('select :d::date, x::text')).toEqual({
+      text: 'select $1::date, x::text',
+      names: ['d'],
+    });
   });
   it('не трогает строковые литералы, включая экранированные кавычки', () => {
     expect(p("select ':no', 'it''s :no', :yes")).toEqual({
@@ -2000,7 +2223,10 @@ describe('parseSqlParams', () => {
     });
   });
   it("не трогает E'...' со слешами", () => {
-    expect(p("select E'a\\' :no', :yes")).toEqual({ text: "select E'a\\' :no', $1", names: ['yes'] });
+    expect(p("select E'a\\' :no', :yes")).toEqual({
+      text: "select E'a\\' :no', $1",
+      names: ['yes'],
+    });
   });
   it('не трогает dollar-quoted строки', () => {
     expect(p('select $$ :no $$, $tag$ :no $tag$, :yes')).toEqual({
@@ -2043,11 +2269,13 @@ describe('parseSqlParams', () => {
 ```bash
 pnpm --filter @carbone-reports/api test -- sql-params
 ```
+
 Expected: FAIL — модуль не найден.
 
 - [ ] **Step 3: Реализация**
 
 `apps/api/src/modules/queries/sql-params.ts`:
+
 ```ts
 export interface ParsedSql {
   text: string;
@@ -2186,6 +2414,7 @@ export function parseSqlParams(sql: string): ParsedSql {
 ```bash
 pnpm --filter @carbone-reports/api test -- sql-params
 ```
+
 Expected: PASS (13 тестов).
 
 - [ ] **Step 5: Commit**
@@ -2200,10 +2429,12 @@ git commit -m "feat(api): named SQL parameter parser"
 ### Task 7: Валидация параметров отчёта и сборка данных
 
 **Files:**
+
 - Create: `apps/api/src/modules/queries/params.ts`, `apps/api/src/modules/queries/build-data.ts`
 - Test: `apps/api/src/modules/queries/params.test.ts`, `apps/api/src/modules/queries/build-data.test.ts`
 
 **Interfaces:**
+
 - Consumes: `TemplateParam`, `ParamValue`, `ParamsInput`, `QueryMode`, `AppError`.
 - Produces:
   - `resolveParams(defs: TemplateParam[], input: ParamsInput): Record<string, ParamValue>` — бросает `AppError('VALIDATION', 400, 'неверные параметры', { fields: Record<string,string> })`
@@ -2214,14 +2445,21 @@ git commit -m "feat(api): named SQL parameter parser"
 - [ ] **Step 1: Тесты**
 
 `apps/api/src/modules/queries/params.test.ts`:
+
 ```ts
 import type { TemplateParam } from '@carbone-reports/shared';
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../../lib/errors';
 import { checkParamDefaults, resolveParams } from './params';
 
-const def = (over: Partial<TemplateParam> & Pick<TemplateParam, 'name' | 'type'>): TemplateParam => ({
-  label: over.name, required: false, defaultValue: null, options: null, ...over,
+const def = (
+  over: Partial<TemplateParam> & Pick<TemplateParam, 'name' | 'type'>,
+): TemplateParam => ({
+  label: over.name,
+  required: false,
+  defaultValue: null,
+  options: null,
+  ...over,
 });
 
 function fieldsOf(fn: () => unknown): Record<string, string> {
@@ -2244,21 +2482,32 @@ describe('resolveParams', () => {
       def({ name: 'sel', type: 'select', options: [{ value: 'new', label: 'Новый' }] }),
     ];
     expect(resolveParams(defs, { s: 'x', n: 1.5, d: '2026-01-31', b: false, sel: 'new' })).toEqual({
-      s: 'x', n: 1.5, d: '2026-01-31', b: false, sel: 'new',
+      s: 'x',
+      n: 1.5,
+      d: '2026-01-31',
+      b: false,
+      sel: 'new',
     });
   });
 
   it('подставляет default, затем null для необязательных', () => {
-    const defs = [def({ name: 'a', type: 'number', defaultValue: 10 }), def({ name: 'b', type: 'string' })];
+    const defs = [
+      def({ name: 'a', type: 'number', defaultValue: 10 }),
+      def({ name: 'b', type: 'string' }),
+    ];
     expect(resolveParams(defs, {})).toEqual({ a: 10, b: null });
   });
 
   it('пустая строка считается отсутствующим значением', () => {
-    expect(resolveParams([def({ name: 'a', type: 'string', defaultValue: 'x' })], { a: '' })).toEqual({ a: 'x' });
+    expect(
+      resolveParams([def({ name: 'a', type: 'string', defaultValue: 'x' })], { a: '' }),
+    ).toEqual({ a: 'x' });
   });
 
   it('обязательный без значения и без default → ошибка поля', () => {
-    expect(fieldsOf(() => resolveParams([def({ name: 'a', type: 'date', required: true })], {}))).toEqual({
+    expect(
+      fieldsOf(() => resolveParams([def({ name: 'a', type: 'date', required: true })], {})),
+    ).toEqual({
       a: 'обязательный параметр',
     });
   });
@@ -2291,7 +2540,9 @@ describe('resolveParams', () => {
 
 describe('checkParamDefaults', () => {
   it('отклоняет default неверного типа', () => {
-    expect(fieldsOf(() => checkParamDefaults([def({ name: 'n', type: 'number', defaultValue: 'abc' })]))).toEqual({
+    expect(
+      fieldsOf(() => checkParamDefaults([def({ name: 'n', type: 'number', defaultValue: 'abc' })])),
+    ).toEqual({
       n: 'значение по умолчанию: ожидается число',
     });
   });
@@ -2302,6 +2553,7 @@ describe('checkParamDefaults', () => {
 ```
 
 `apps/api/src/modules/queries/build-data.test.ts`:
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import { buildReportData } from './build-data';
@@ -2340,13 +2592,20 @@ describe('buildReportData', () => {
 ```bash
 pnpm --filter @carbone-reports/api test -- params build-data
 ```
+
 Expected: FAIL — модули не найдены.
 
 - [ ] **Step 3: Реализация**
 
 `apps/api/src/modules/queries/params.ts`:
+
 ```ts
-import { DATE_RE, type ParamValue, type ParamsInput, type TemplateParam } from '@carbone-reports/shared';
+import {
+  DATE_RE,
+  type ParamValue,
+  type ParamsInput,
+  type TemplateParam,
+} from '@carbone-reports/shared';
 import { AppError } from '../../lib/errors';
 
 function isValidDate(v: string): boolean {
@@ -2380,7 +2639,10 @@ function fail(fields: Record<string, string>): never {
   throw new AppError('VALIDATION', 400, 'неверные параметры', { fields });
 }
 
-export function resolveParams(defs: TemplateParam[], input: ParamsInput): Record<string, ParamValue> {
+export function resolveParams(
+  defs: TemplateParam[],
+  input: ParamsInput,
+): Record<string, ParamValue> {
   const out: Record<string, ParamValue> = {};
   const fields: Record<string, string> = {};
   for (const def of defs) {
@@ -2411,6 +2673,7 @@ export function checkParamDefaults(defs: TemplateParam[]): void {
 ```
 
 `apps/api/src/modules/queries/build-data.ts`:
+
 ```ts
 import type { ParamValue, QueryMode } from '@carbone-reports/shared';
 
@@ -2439,6 +2702,7 @@ export function buildReportData(
 ```bash
 pnpm --filter @carbone-reports/api test
 ```
+
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -2453,11 +2717,13 @@ git commit -m "feat(api): report parameter validation and data assembly"
 ### Task 8: Источники данных — CRUD, пулы соединений, проверка соединения
 
 **Files:**
+
 - Create: `apps/api/src/modules/datasources/pools.ts`, `apps/api/src/modules/datasources/routes.ts`
 - Test: `apps/api/test/datasources.int.test.ts`
 - Modify: `apps/api/src/app.ts`, `apps/api/test/helpers.ts`
 
 **Interfaces:**
+
 - Consumes: `SourcePools` (`deps.ts`), `encryptSecret`/`decryptSecret`, `DatasourceBody`, `DatasourceDto`, `IdParams`.
 - Produces:
   - `createSourcePools(deps: { db: Db; config: Config }): SourcePools`
@@ -2470,6 +2736,7 @@ git commit -m "feat(api): report parameter validation and data assembly"
 В `apps/api/test/helpers.ts`:
 
 Добавить импорт и функцию:
+
 ```ts
 import { createSourcePools } from '../src/modules/datasources/pools';
 
@@ -2498,6 +2765,7 @@ export async function createSourceDatabase(seedSql: string): Promise<SourceConn>
 ```
 
 В `createTestApp` заменить заглушку `sources` на реальные пулы:
+
 ```ts
     sources: createSourcePools({ db, config }),
 ```
@@ -2505,9 +2773,16 @@ export async function createSourceDatabase(seedSql: string): Promise<SourceConn>
 - [ ] **Step 2: Тест**
 
 `apps/api/test/datasources.int.test.ts`:
+
 ```ts
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createSourceDatabase, createTestApp, loginAs, type SourceConn, type TestApp } from './helpers';
+import {
+  createSourceDatabase,
+  createTestApp,
+  loginAs,
+  type SourceConn,
+  type TestApp,
+} from './helpers';
 
 let t: TestApp;
 let admin: string;
@@ -2517,7 +2792,9 @@ beforeAll(async () => {
   t = await createTestApp();
   admin = (await loginAs(t, 'admin')).cookie;
   user = (await loginAs(t, 'user')).cookie;
-  src = await createSourceDatabase('create table items(id int, price numeric, d date); insert into items values (1, 9.5, \'2026-01-31\');');
+  src = await createSourceDatabase(
+    "create table items(id int, price numeric, d date); insert into items values (1, 9.5, '2026-01-31');",
+  );
 });
 afterAll(() => t.close());
 
@@ -2525,75 +2802,143 @@ const body = () => ({ name: 'Склад', ...src, ssl: false });
 
 describe('datasources', () => {
   it('user → 403', async () => {
-    const r = await t.app.inject({ method: 'GET', url: '/api/datasources', headers: { cookie: user } });
+    const r = await t.app.inject({
+      method: 'GET',
+      url: '/api/datasources',
+      headers: { cookie: user },
+    });
     expect(r.statusCode).toBe(403);
   });
 
   it('создание без пароля → 400', async () => {
     const { password: _, ...noPass } = body();
-    const r = await t.app.inject({ method: 'POST', url: '/api/datasources', headers: { cookie: admin }, payload: noPass });
+    const r = await t.app.inject({
+      method: 'POST',
+      url: '/api/datasources',
+      headers: { cookie: admin },
+      payload: noPass,
+    });
     expect(r.statusCode).toBe(400);
   });
 
   it('создание, пароль не возвращается и хранится зашифрованным', async () => {
-    const r = await t.app.inject({ method: 'POST', url: '/api/datasources', headers: { cookie: admin }, payload: body() });
+    const r = await t.app.inject({
+      method: 'POST',
+      url: '/api/datasources',
+      headers: { cookie: admin },
+      payload: body(),
+    });
     expect(r.statusCode).toBe(201);
     expect(r.json()).not.toHaveProperty('password');
     expect(r.json()).not.toHaveProperty('passwordEnc');
-    const list = await t.app.inject({ method: 'GET', url: '/api/datasources', headers: { cookie: admin } });
+    const list = await t.app.inject({
+      method: 'GET',
+      url: '/api/datasources',
+      headers: { cookie: admin },
+    });
     expect(JSON.stringify(list.json())).not.toContain(src.password);
   });
 
   it('проверка соединения: успешная и с неверным паролем', async () => {
-    const ok = await t.app.inject({ method: 'POST', url: '/api/datasources/test', headers: { cookie: admin }, payload: body() });
+    const ok = await t.app.inject({
+      method: 'POST',
+      url: '/api/datasources/test',
+      headers: { cookie: admin },
+      payload: body(),
+    });
     expect(ok.json()).toEqual({ ok: true });
     const bad = await t.app.inject({
-      method: 'POST', url: '/api/datasources/test', headers: { cookie: admin }, payload: { ...body(), password: 'wrong' },
+      method: 'POST',
+      url: '/api/datasources/test',
+      headers: { cookie: admin },
+      payload: { ...body(), password: 'wrong' },
     });
     expect(bad.json().ok).toBe(false);
     expect(bad.json().message).toMatch(/password|парол/i);
   });
 
   it('пул применяет парсеры типов: numeric → number, date → строка', async () => {
-    const created = await t.app.inject({ method: 'POST', url: '/api/datasources', headers: { cookie: admin }, payload: body() });
+    const created = await t.app.inject({
+      method: 'POST',
+      url: '/api/datasources',
+      headers: { cookie: admin },
+      payload: body(),
+    });
     const { pool } = await t.deps.sources.get(created.json().id);
     const r = await pool.query('select price, d from items');
     expect(r.rows[0]).toEqual({ price: 9.5, d: '2026-01-31' });
   });
 
   it('bigint за пределами 2^53 остаётся строкой без потери точности', async () => {
-    const created = await t.app.inject({ method: 'POST', url: '/api/datasources', headers: { cookie: admin }, payload: body() });
+    const created = await t.app.inject({
+      method: 'POST',
+      url: '/api/datasources',
+      headers: { cookie: admin },
+      payload: body(),
+    });
     const { pool } = await t.deps.sources.get(created.json().id);
-    const r = await pool.query("select 9007199254740993::int8 as big, 42::int8 as small, 12345678901234567890.5::numeric as huge");
-    expect(r.rows[0]).toEqual({ big: '9007199254740993', small: 42, huge: '12345678901234567890.5' });
+    const r = await pool.query(
+      'select 9007199254740993::int8 as big, 42::int8 as small, 12345678901234567890.5::numeric as huge',
+    );
+    expect(r.rows[0]).toEqual({
+      big: '9007199254740993',
+      small: 42,
+      huge: '12345678901234567890.5',
+    });
   });
 
   it('PATCH без пароля сохраняет старый пароль, проверка по id проходит', async () => {
-    const created = await t.app.inject({ method: 'POST', url: '/api/datasources', headers: { cookie: admin }, payload: body() });
+    const created = await t.app.inject({
+      method: 'POST',
+      url: '/api/datasources',
+      headers: { cookie: admin },
+      payload: body(),
+    });
     const id = created.json().id;
     const { password: _, ...noPass } = body();
     const upd = await t.app.inject({
-      method: 'PATCH', url: `/api/datasources/${id}`, headers: { cookie: admin }, payload: { ...noPass, name: 'Склад 2' },
+      method: 'PATCH',
+      url: `/api/datasources/${id}`,
+      headers: { cookie: admin },
+      payload: { ...noPass, name: 'Склад 2' },
     });
     expect(upd.json().name).toBe('Склад 2');
-    const test = await t.app.inject({ method: 'POST', url: `/api/datasources/${id}/test`, headers: { cookie: admin } });
+    const test = await t.app.inject({
+      method: 'POST',
+      url: `/api/datasources/${id}/test`,
+      headers: { cookie: admin },
+    });
     expect(test.json()).toEqual({ ok: true });
   });
 
   it('PATCH с новым паролем сбрасывает закэшированный пул', async () => {
-    const created = await t.app.inject({ method: 'POST', url: '/api/datasources', headers: { cookie: admin }, payload: body() });
+    const created = await t.app.inject({
+      method: 'POST',
+      url: '/api/datasources',
+      headers: { cookie: admin },
+      payload: body(),
+    });
     const id = created.json().id;
     await t.deps.sources.get(id);
     await t.app.inject({
-      method: 'PATCH', url: `/api/datasources/${id}`, headers: { cookie: admin }, payload: { ...body(), password: 'wrong' },
+      method: 'PATCH',
+      url: `/api/datasources/${id}`,
+      headers: { cookie: admin },
+      payload: { ...body(), password: 'wrong' },
     });
-    const test = await t.app.inject({ method: 'POST', url: `/api/datasources/${id}/test`, headers: { cookie: admin } });
+    const test = await t.app.inject({
+      method: 'POST',
+      url: `/api/datasources/${id}/test`,
+      headers: { cookie: admin },
+    });
     expect(test.json().ok).toBe(false);
   });
 
   it('удаление несуществующего → 404', async () => {
     const r = await t.app.inject({
-      method: 'DELETE', url: '/api/datasources/00000000-0000-0000-0000-000000000000', headers: { cookie: admin },
+      method: 'DELETE',
+      url: '/api/datasources/00000000-0000-0000-0000-000000000000',
+      headers: { cookie: admin },
     });
     expect(r.statusCode).toBe(404);
   });
@@ -2605,11 +2950,13 @@ describe('datasources', () => {
 ```bash
 pnpm --filter @carbone-reports/api test:int -- datasources
 ```
+
 Expected: FAIL — `Cannot find module '../src/modules/datasources/pools'`.
 
 - [ ] **Step 4: Реализация**
 
 `apps/api/src/modules/datasources/pools.ts`:
+
 ```ts
 import { eq } from 'drizzle-orm';
 import pg from 'pg';
@@ -2673,7 +3020,9 @@ export function connParamsFromRow(row: DatasourceRow, key: Buffer): ConnParams {
   };
 }
 
-export async function testConnection(c: ConnParams): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function testConnection(
+  c: ConnParams,
+): Promise<{ ok: true } | { ok: false; message: string }> {
   const { max: _max, idleTimeoutMillis: _idle, ...cfg } = poolConfig(c);
   const client = new pg.Client(cfg);
   try {
@@ -2723,6 +3072,7 @@ export function createSourcePools(deps: { db: Db; config: Config }): SourcePools
 ```
 
 `apps/api/src/modules/datasources/routes.ts`:
+
 ```ts
 import { DatasourceBody, IdParams, type DatasourceDto } from '@carbone-reports/shared';
 import { asc, eq } from 'drizzle-orm';
@@ -2782,18 +3132,25 @@ export function registerDatasourceRoutes(app: App, deps: AppDeps, guards: Guards
     },
   );
 
-  app.delete('/api/datasources/:id', { ...pre, schema: { params: IdParams } }, async (req, reply) => {
-    const used = await deps.db
-      .select({ id: templates.id })
-      .from(templates)
-      .where(eq(templates.datasourceId, req.params.id))
-      .limit(1);
-    if (used.length > 0) throw conflict('источник используется шаблонами');
-    const [row] = await deps.db.delete(datasources).where(eq(datasources.id, req.params.id)).returning();
-    if (!row) throw notFound('источник данных');
-    await deps.sources.invalidate(row.id);
-    return reply.status(204).send();
-  });
+  app.delete(
+    '/api/datasources/:id',
+    { ...pre, schema: { params: IdParams } },
+    async (req, reply) => {
+      const used = await deps.db
+        .select({ id: templates.id })
+        .from(templates)
+        .where(eq(templates.datasourceId, req.params.id))
+        .limit(1);
+      if (used.length > 0) throw conflict('источник используется шаблонами');
+      const [row] = await deps.db
+        .delete(datasources)
+        .where(eq(datasources.id, req.params.id))
+        .returning();
+      if (!row) throw notFound('источник данных');
+      await deps.sources.invalidate(row.id);
+      return reply.status(204).send();
+    },
+  );
 
   app.post('/api/datasources/test', { ...pre, schema: { body: DatasourceBody } }, async (req) => {
     if (!req.body.password) throw badRequest('пароль обязателен');
@@ -2809,10 +3166,11 @@ export function registerDatasourceRoutes(app: App, deps: AppDeps, guards: Guards
 ```
 
 В `apps/api/src/app.ts`:
+
 ```ts
 import { registerDatasourceRoutes } from './modules/datasources/routes';
 // ...
-  registerDatasourceRoutes(app, deps, guards);
+registerDatasourceRoutes(app, deps, guards);
 ```
 
 - [ ] **Step 5: Тесты проходят**
@@ -2820,6 +3178,7 @@ import { registerDatasourceRoutes } from './modules/datasources/routes';
 ```bash
 pnpm --filter @carbone-reports/api test:int && pnpm -r typecheck
 ```
+
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -2834,10 +3193,12 @@ git commit -m "feat(api): datasources CRUD, connection pools with type parsers, 
 ### Task 9: Выполнение запросов в read-only транзакции
 
 **Files:**
+
 - Create: `apps/api/src/modules/queries/executor.ts`
 - Test: `apps/api/test/executor.int.test.ts`
 
 **Interfaces:**
+
 - Consumes: `parseSqlParams`, `SqlParamError` (Task 6), `QueryResult` (Task 7), `TemplateQuery`, `ParamValue`, `RunQueryResult`, `SOURCE_TYPES`/`poolConfig` (Task 8), `AppError`.
 - Produces:
   - `interface QueryLimits { timeoutMs: number; maxRows: number }`
@@ -2848,6 +3209,7 @@ git commit -m "feat(api): datasources CRUD, connection pools with type parsers, 
 - [ ] **Step 1: Тест**
 
 `apps/api/test/executor.int.test.ts`:
+
 ```ts
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -2884,27 +3246,54 @@ async function err(p: Promise<unknown>): Promise<AppError> {
 describe('runQueries', () => {
   it('выполняет несколько запросов с параметрами', async () => {
     const r = await runQueries(
-      pool, 'src',
+      pool,
+      'src',
       [
-        { key: 'orders', mode: 'list', sql: 'select id, total from orders where created >= :from order by id' },
+        {
+          key: 'orders',
+          mode: 'list',
+          sql: 'select id, total from orders where created >= :from order by id',
+        },
         { key: 'company', mode: 'single', sql: 'select name from company' },
       ],
       { from: '2026-01-03' },
       limits,
     );
     expect(r).toEqual([
-      { key: 'orders', mode: 'list', columns: ['id', 'total'], rows: [{ id: 2, total: 20 }, { id: 3, total: 30 }] },
+      {
+        key: 'orders',
+        mode: 'list',
+        columns: ['id', 'total'],
+        rows: [
+          { id: 2, total: 20 },
+          { id: 3, total: 30 },
+        ],
+      },
       { key: 'company', mode: 'single', columns: ['name'], rows: [{ name: 'ООО Ромашка' }] },
     ]);
   });
 
   it('колонки возвращаются и для пустого результата', async () => {
-    const [r] = await runQueries(pool, 'src', [{ key: 'o', mode: 'list', sql: 'select id from orders where false' }], {}, limits);
+    const [r] = await runQueries(
+      pool,
+      'src',
+      [{ key: 'o', mode: 'list', sql: 'select id from orders where false' }],
+      {},
+      limits,
+    );
     expect(r).toMatchObject({ columns: ['id'], rows: [] });
   });
 
   it('запрет записи: INSERT падает с понятной ошибкой', async () => {
-    const e = await err(runQueries(pool, 'src', [{ key: 'w', mode: 'list', sql: 'insert into company values (\'x\') returning *' }], {}, limits));
+    const e = await err(
+      runQueries(
+        pool,
+        'src',
+        [{ key: 'w', mode: 'list', sql: "insert into company values ('x') returning *" }],
+        {},
+        limits,
+      ),
+    );
     expect(e.code).toBe('SQL_ERROR');
     expect(e.message).toMatch(/^запрос "w": .*только на чтение/);
     const { rows } = await pool.query('select count(*)::int as n from company');
@@ -2912,35 +3301,55 @@ describe('runQueries', () => {
   });
 
   it('statement_timeout → TIMEOUT 504', async () => {
-    const e = await err(runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select pg_sleep(3)' }], {}, limits));
+    const e = await err(
+      runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select pg_sleep(3)' }], {}, limits),
+    );
     expect([e.code, e.status]).toEqual(['TIMEOUT', 504]);
   });
 
   it('превышение maxRows в list → TOO_MANY_ROWS', async () => {
-    const e = await err(runQueries(pool, 'src', [{ key: 'big', mode: 'list', sql: 'select n from big' }], {}, limits));
+    const e = await err(
+      runQueries(pool, 'src', [{ key: 'big', mode: 'list', sql: 'select n from big' }], {}, limits),
+    );
     expect(e.code).toBe('TOO_MANY_ROWS');
     expect(e.message).toBe('запрос "big" вернул больше 5 строк');
   });
 
   it('single читает только первую строку и не упирается в лимит', async () => {
-    const [r] = await runQueries(pool, 'src', [{ key: 'b', mode: 'single', sql: 'select n from big order by n' }], {}, limits);
+    const [r] = await runQueries(
+      pool,
+      'src',
+      [{ key: 'b', mode: 'single', sql: 'select n from big order by n' }],
+      {},
+      limits,
+    );
     expect(r!.rows).toEqual([{ n: 1 }]);
   });
 
   it('синтаксическая ошибка → SQL_ERROR с ключом запроса', async () => {
-    const e = await err(runQueries(pool, 'src', [{ key: 'bad', mode: 'list', sql: 'selec 1' }], {}, limits));
+    const e = await err(
+      runQueries(pool, 'src', [{ key: 'bad', mode: 'list', sql: 'selec 1' }], {}, limits),
+    );
     expect(e.code).toBe('SQL_ERROR');
     expect(e.message).toMatch(/^запрос "bad": /);
   });
 
   it('неизвестный параметр → CONFIG', async () => {
-    const e = await err(runQueries(pool, 'src', [{ key: 'q', mode: 'list', sql: 'select :nope' }], {}, limits));
+    const e = await err(
+      runQueries(pool, 'src', [{ key: 'q', mode: 'list', sql: 'select :nope' }], {}, limits),
+    );
     expect(e.code).toBe('CONFIG');
     expect(e.message).toBe('запрос "q": неизвестный параметр :nope');
   });
 
   it('значение параметра не интерпретируется как SQL', async () => {
-    const [r] = await runQueries(pool, 'src', [{ key: 'q', mode: 'single', sql: 'select :v::text as v' }], { v: "'; drop table orders; --" }, limits);
+    const [r] = await runQueries(
+      pool,
+      'src',
+      [{ key: 'q', mode: 'single', sql: 'select :v::text as v' }],
+      { v: "'; drop table orders; --" },
+      limits,
+    );
     expect(r!.rows[0]).toEqual({ v: "'; drop table orders; --" });
     const { rows } = await pool.query('select count(*)::int as n from orders');
     expect(rows[0].n).toBe(3);
@@ -2948,21 +3357,39 @@ describe('runQueries', () => {
 
   it('недоступный источник → DATASOURCE_UNAVAILABLE 502', async () => {
     const dead = new pg.Pool({ host: '127.0.0.1', port: 1, connectionTimeoutMillis: 500 });
-    const e = await err(runQueries(dead, 'Склад', [{ key: 'q', mode: 'list', sql: 'select 1' }], {}, limits));
-    expect([e.code, e.status, e.message]).toEqual(['DATASOURCE_UNAVAILABLE', 502, 'не удалось подключиться к источнику "Склад"']);
+    const e = await err(
+      runQueries(dead, 'Склад', [{ key: 'q', mode: 'list', sql: 'select 1' }], {}, limits),
+    );
+    expect([e.code, e.status, e.message]).toEqual([
+      'DATASOURCE_UNAVAILABLE',
+      502,
+      'не удалось подключиться к источнику "Склад"',
+    ]);
     await dead.end();
   });
 
   it('после ошибки соединение возвращается в пул исправным', async () => {
     await err(runQueries(pool, 'src', [{ key: 'bad', mode: 'list', sql: 'selec 1' }], {}, limits));
-    const [r] = await runQueries(pool, 'src', [{ key: 'ok', mode: 'single', sql: 'select 1 as x' }], {}, limits);
+    const [r] = await runQueries(
+      pool,
+      'src',
+      [{ key: 'ok', mode: 'single', sql: 'select 1 as x' }],
+      {},
+      limits,
+    );
     expect(r!.rows).toEqual([{ x: 1 }]);
   });
 });
 
 describe('previewQuery', () => {
   it('возвращает не больше previewRows строк и флаг truncated', async () => {
-    const r = await previewQuery(pool, 'src', 'select n from big order by n', {}, { ...limits, previewRows: 3 });
+    const r = await previewQuery(
+      pool,
+      'src',
+      'select n from big order by n',
+      {},
+      { ...limits, previewRows: 3 },
+    );
     expect(r).toEqual({ columns: ['n'], rows: [{ n: 1 }, { n: 2 }, { n: 3 }], truncated: true });
   });
   it('truncated=false, если строк меньше лимита', async () => {
@@ -2977,11 +3404,13 @@ describe('previewQuery', () => {
 ```bash
 pnpm --filter @carbone-reports/api test:int -- executor
 ```
+
 Expected: FAIL — модуль `executor` не найден.
 
 - [ ] **Step 3: Реализация**
 
 `apps/api/src/modules/queries/executor.ts`:
+
 ```ts
 import type { ParamValue, RunQueryResult, TemplateQuery } from '@carbone-reports/shared';
 import type pg from 'pg';
@@ -3001,7 +3430,11 @@ function mapPgError(key: string, e: unknown): unknown {
   const code = (e as { code?: string }).code;
   if (code === '57014') return new AppError('TIMEOUT', 504, 'превышено время ожидания');
   if (code === '25006') {
-    return new AppError('SQL_ERROR', 400, `запрос "${key}": запись запрещена — запросы выполняются только на чтение`);
+    return new AppError(
+      'SQL_ERROR',
+      400,
+      `запрос "${key}": запись запрещена — запросы выполняются только на чтение`,
+    );
   }
   if (code) return new AppError('SQL_ERROR', 400, `запрос "${key}": ${(e as Error).message}`);
   return e;
@@ -3017,9 +3450,14 @@ async function withReadOnly<T>(
   try {
     client = await pool.connect();
   } catch (e) {
-    throw new AppError('DATASOURCE_UNAVAILABLE', 502, `не удалось подключиться к источнику "${sourceName}"`, {
-      reason: (e as Error).message,
-    });
+    throw new AppError(
+      'DATASOURCE_UNAVAILABLE',
+      502,
+      `не удалось подключиться к источнику "${sourceName}"`,
+      {
+        reason: (e as Error).message,
+      },
+    );
   }
   let broken = false;
   try {
@@ -3039,9 +3477,14 @@ async function withReadOnly<T>(
   }
 }
 
-function readBatch(cursor: Cursor, n: number): Promise<{ rows: Row[]; fields?: { name: string }[] }> {
+function readBatch(
+  cursor: Cursor,
+  n: number,
+): Promise<{ rows: Row[]; fields?: { name: string }[] }> {
   return new Promise((resolve, reject) => {
-    cursor.read(n, (err, rows, result) => (err ? reject(err) : resolve({ rows, fields: result?.fields })));
+    cursor.read(n, (err, rows, result) =>
+      err ? reject(err) : resolve({ rows, fields: result?.fields }),
+    );
   });
 }
 
@@ -3056,11 +3499,13 @@ async function readQuery(
   try {
     parsed = parseSqlParams(sql);
   } catch (e) {
-    if (e instanceof SqlParamError) throw new AppError('SQL_ERROR', 400, `запрос "${key}": ${e.message}`);
+    if (e instanceof SqlParamError)
+      throw new AppError('SQL_ERROR', 400, `запрос "${key}": ${e.message}`);
     throw e;
   }
   const values = parsed.names.map((name) => {
-    if (!(name in params)) throw new AppError('CONFIG', 400, `запрос "${key}": неизвестный параметр :${name}`);
+    if (!(name in params))
+      throw new AppError('CONFIG', 400, `запрос "${key}": неизвестный параметр :${name}`);
     return params[name];
   });
 
@@ -3099,7 +3544,11 @@ export function runQueries(
       const limit = q.mode === 'single' ? 1 : limits.maxRows;
       const r = await readQuery(client, q.key, q.sql, params, limit);
       if (q.mode === 'list' && r.truncated) {
-        throw new AppError('TOO_MANY_ROWS', 400, `запрос "${q.key}" вернул больше ${limits.maxRows} строк`);
+        throw new AppError(
+          'TOO_MANY_ROWS',
+          400,
+          `запрос "${q.key}" вернул больше ${limits.maxRows} строк`,
+        );
       }
       results.push({ key: q.key, mode: q.mode, columns: r.columns, rows: r.rows });
     }
@@ -3127,6 +3576,7 @@ export function previewQuery(
 ```bash
 pnpm --filter @carbone-reports/api test:int -- executor && pnpm -r typecheck
 ```
+
 Expected: PASS (13 тестов).
 
 - [ ] **Step 5: Commit**
@@ -3141,11 +3591,13 @@ git commit -m "feat(api): read-only query executor with timeout, row limit and e
 ### Task 10: Шаблоны — CRUD, файлы, пустые заготовки, запросы и параметры
 
 **Files:**
+
 - Create: `apps/api/src/modules/templates/blank.ts`, `apps/api/src/modules/templates/service.ts`, `apps/api/src/modules/templates/routes.ts`, `apps/api/src/lib/http.ts`
 - Test: `apps/api/src/modules/templates/blank.test.ts`, `apps/api/test/templates.int.test.ts`
 - Modify: `apps/api/src/app.ts` (multipart, регистрация), `apps/api/test/helpers.ts` (`createTemplate`)
 
 **Interfaces:**
+
 - Consumes: `templates`, `templateQueries`, `templateParams`, `Storage`, `Guards`, `checkParamDefaults`, DTO из `shared`.
 - Produces:
   - `createBlankDocument(ext: 'docx' | 'xlsx'): Promise<Buffer>`
@@ -3162,6 +3614,7 @@ git commit -m "feat(api): read-only query executor with timeout, row limit and e
 - [ ] **Step 1: Юнит-тест пустых документов**
 
 `apps/api/src/modules/templates/blank.test.ts`:
+
 ```ts
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
@@ -3178,7 +3631,12 @@ describe('createBlankDocument', () => {
   it('xlsx содержит книгу и лист', async () => {
     const zip = await JSZip.loadAsync(await createBlankDocument('xlsx'));
     expect(Object.keys(zip.files)).toEqual(
-      expect.arrayContaining(['[Content_Types].xml', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels', 'xl/worksheets/sheet1.xml']),
+      expect.arrayContaining([
+        '[Content_Types].xml',
+        'xl/workbook.xml',
+        'xl/_rels/workbook.xml.rels',
+        'xl/worksheets/sheet1.xml',
+      ]),
     );
   });
 });
@@ -3187,10 +3645,17 @@ describe('createBlankDocument', () => {
 - [ ] **Step 2: Интеграционный тест**
 
 `apps/api/test/templates.int.test.ts`:
+
 ```ts
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createBlankDocument } from '../src/modules/templates/blank';
-import { createSourceDatabase, createTemplate, createTestApp, loginAs, type TestApp } from './helpers';
+import {
+  createSourceDatabase,
+  createTemplate,
+  createTestApp,
+  loginAs,
+  type TestApp,
+} from './helpers';
 
 let t: TestApp;
 let admin: string;
@@ -3201,14 +3666,23 @@ function multipart(fields: Record<string, string>, file?: { name: string; data: 
   const boundary = '----cr' + Math.random().toString(16).slice(2);
   const parts: Buffer[] = [];
   for (const [k, v] of Object.entries(fields)) {
-    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`));
+    parts.push(
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`),
+    );
   }
   if (file) {
-    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\nContent-Type: application/octet-stream\r\n\r\n`));
+    parts.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+      ),
+    );
     parts.push(file.data, Buffer.from('\r\n'));
   }
   parts.push(Buffer.from(`--${boundary}--\r\n`));
-  return { payload: Buffer.concat(parts), headers: { 'content-type': `multipart/form-data; boundary=${boundary}` } };
+  return {
+    payload: Buffer.concat(parts),
+    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+  };
 }
 
 beforeAll(async () => {
@@ -3217,7 +3691,10 @@ beforeAll(async () => {
   user = (await loginAs(t, 'user')).cookie;
   const src = await createSourceDatabase('select 1');
   const ds = await t.app.inject({
-    method: 'POST', url: '/api/datasources', headers: { cookie: admin }, payload: { name: 'src', ...src, ssl: false },
+    method: 'POST',
+    url: '/api/datasources',
+    headers: { cookie: admin },
+    payload: { name: 'src', ...src, ssl: false },
   });
   dsId = ds.json().id;
 });
@@ -3226,14 +3703,25 @@ afterAll(() => t.close());
 describe('templates', () => {
   it('создание пустого docx: файл на диске, version=1, outputFormats', async () => {
     const r = await t.app.inject({
-      method: 'POST', url: '/api/templates', headers: { cookie: admin },
+      method: 'POST',
+      url: '/api/templates',
+      headers: { cookie: admin },
       payload: { name: 'Счёт', datasourceId: dsId, blank: 'docx' },
     });
     expect(r.statusCode).toBe(201);
     const id = r.json().id;
-    const d = await t.app.inject({ method: 'GET', url: `/api/templates/${id}`, headers: { cookie: admin } });
+    const d = await t.app.inject({
+      method: 'GET',
+      url: `/api/templates/${id}`,
+      headers: { cookie: admin },
+    });
     expect(d.json()).toMatchObject({
-      name: 'Счёт', fileExt: 'docx', version: 1, queries: [], params: [], outputFormats: ['pdf', 'docx', 'odt'],
+      name: 'Счёт',
+      fileExt: 'docx',
+      version: 1,
+      queries: [],
+      params: [],
+      outputFormats: ['pdf', 'docx', 'odt'],
     });
     expect(await t.deps.storage.exists(`templates/${id}.docx`)).toBe(true);
   });
@@ -3242,9 +3730,17 @@ describe('templates', () => {
     const id = await createTemplate(t, admin, dsId, {
       queries: [{ key: 'q', mode: 'list', sql: 'select secret from t' }],
     });
-    const list = await t.app.inject({ method: 'GET', url: '/api/templates', headers: { cookie: user } });
+    const list = await t.app.inject({
+      method: 'GET',
+      url: '/api/templates',
+      headers: { cookie: user },
+    });
     expect(list.json().some((x: { id: string }) => x.id === id)).toBe(true);
-    const d = await t.app.inject({ method: 'GET', url: `/api/templates/${id}`, headers: { cookie: user } });
+    const d = await t.app.inject({
+      method: 'GET',
+      url: `/api/templates/${id}`,
+      headers: { cookie: user },
+    });
     expect(d.statusCode).toBe(200);
     expect(d.json()).not.toHaveProperty('queries');
     expect(JSON.stringify(d.json())).not.toContain('secret');
@@ -3252,53 +3748,105 @@ describe('templates', () => {
 
   it('user не может создавать и менять шаблоны', async () => {
     const r = await t.app.inject({
-      method: 'POST', url: '/api/templates', headers: { cookie: user }, payload: { name: 'x', datasourceId: dsId, blank: 'docx' },
+      method: 'POST',
+      url: '/api/templates',
+      headers: { cookie: user },
+      payload: { name: 'x', datasourceId: dsId, blank: 'docx' },
     });
     expect(r.statusCode).toBe(403);
   });
 
   it('загрузка файла: xlsx принимается, текстовый файл с расширением .docx — 400', async () => {
     const xlsx = await createBlankDocument('xlsx');
-    const good = multipart({ name: 'Таблица', description: '', datasourceId: dsId }, { name: 'Отчёт.xlsx', data: xlsx });
+    const good = multipart(
+      { name: 'Таблица', description: '', datasourceId: dsId },
+      { name: 'Отчёт.xlsx', data: xlsx },
+    );
     const ok = await t.app.inject({
-      method: 'POST', url: '/api/templates/upload', headers: { cookie: admin, ...good.headers }, payload: good.payload,
+      method: 'POST',
+      url: '/api/templates/upload',
+      headers: { cookie: admin, ...good.headers },
+      payload: good.payload,
     });
     expect(ok.statusCode).toBe(201);
     expect(ok.json().fileExt).toBe('xlsx');
 
-    const fake = multipart({ name: 'Фейк', description: '', datasourceId: dsId }, { name: 'a.docx', data: Buffer.from('hello') });
-    const bad = await t.app.inject({ method: 'POST', url: '/api/templates/upload', headers: { cookie: admin, ...fake.headers }, payload: fake.payload });
+    const fake = multipart(
+      { name: 'Фейк', description: '', datasourceId: dsId },
+      { name: 'a.docx', data: Buffer.from('hello') },
+    );
+    const bad = await t.app.inject({
+      method: 'POST',
+      url: '/api/templates/upload',
+      headers: { cookie: admin, ...fake.headers },
+      payload: fake.payload,
+    });
     expect(bad.statusCode).toBe(400);
 
-    const exe = multipart({ name: 'Exe', description: '', datasourceId: dsId }, { name: 'a.exe', data: xlsx });
-    const badExt = await t.app.inject({ method: 'POST', url: '/api/templates/upload', headers: { cookie: admin, ...exe.headers }, payload: exe.payload });
+    const exe = multipart(
+      { name: 'Exe', description: '', datasourceId: dsId },
+      { name: 'a.exe', data: xlsx },
+    );
+    const badExt = await t.app.inject({
+      method: 'POST',
+      url: '/api/templates/upload',
+      headers: { cookie: admin, ...exe.headers },
+      payload: exe.payload,
+    });
     expect(badExt.statusCode).toBe(400);
   });
 
   it('PUT queries: дубликаты ключей → 400, повторное сохранение заменяет список', async () => {
     const id = await createTemplate(t, admin, dsId);
     const dup = await t.app.inject({
-      method: 'PUT', url: `/api/templates/${id}/queries`, headers: { cookie: admin },
-      payload: [{ key: 'a', mode: 'list', sql: 'select 1' }, { key: 'a', mode: 'single', sql: 'select 2' }],
+      method: 'PUT',
+      url: `/api/templates/${id}/queries`,
+      headers: { cookie: admin },
+      payload: [
+        { key: 'a', mode: 'list', sql: 'select 1' },
+        { key: 'a', mode: 'single', sql: 'select 2' },
+      ],
     });
     expect(dup.statusCode).toBe(400);
     await t.app.inject({
-      method: 'PUT', url: `/api/templates/${id}/queries`, headers: { cookie: admin },
-      payload: [{ key: 'a', mode: 'list', sql: 'select 1' }, { key: 'b', mode: 'single', sql: 'select 2' }],
+      method: 'PUT',
+      url: `/api/templates/${id}/queries`,
+      headers: { cookie: admin },
+      payload: [
+        { key: 'a', mode: 'list', sql: 'select 1' },
+        { key: 'b', mode: 'single', sql: 'select 2' },
+      ],
     });
     await t.app.inject({
-      method: 'PUT', url: `/api/templates/${id}/queries`, headers: { cookie: admin },
+      method: 'PUT',
+      url: `/api/templates/${id}/queries`,
+      headers: { cookie: admin },
       payload: [{ key: 'b', mode: 'single', sql: 'select 3' }],
     });
-    const d = await t.app.inject({ method: 'GET', url: `/api/templates/${id}`, headers: { cookie: admin } });
+    const d = await t.app.inject({
+      method: 'GET',
+      url: `/api/templates/${id}`,
+      headers: { cookie: admin },
+    });
     expect(d.json().queries).toEqual([{ key: 'b', mode: 'single', sql: 'select 3' }]);
   });
 
   it('PUT params: default неверного типа → 400 с полем', async () => {
     const id = await createTemplate(t, admin, dsId);
     const r = await t.app.inject({
-      method: 'PUT', url: `/api/templates/${id}/params`, headers: { cookie: admin },
-      payload: [{ name: 'n', label: 'N', type: 'number', required: false, defaultValue: 'abc', options: null }],
+      method: 'PUT',
+      url: `/api/templates/${id}/params`,
+      headers: { cookie: admin },
+      payload: [
+        {
+          name: 'n',
+          label: 'N',
+          type: 'number',
+          required: false,
+          defaultValue: 'abc',
+          options: null,
+        },
+      ],
     });
     expect(r.statusCode).toBe(400);
     expect(r.json().error.details.fields).toHaveProperty('n');
@@ -3307,7 +3855,10 @@ describe('templates', () => {
   it('PATCH defaultOutput, недопустимый для расширения → 400', async () => {
     const id = await createTemplate(t, admin, dsId);
     const r = await t.app.inject({
-      method: 'PATCH', url: `/api/templates/${id}`, headers: { cookie: admin }, payload: { defaultOutput: 'xlsx' },
+      method: 'PATCH',
+      url: `/api/templates/${id}`,
+      headers: { cookie: admin },
+      payload: { defaultOutput: 'xlsx' },
     });
     expect(r.statusCode).toBe(400);
   });
@@ -3315,11 +3866,28 @@ describe('templates', () => {
   it('дублирование копирует файл, запросы и параметры, но с новым doc key', async () => {
     const id = await createTemplate(t, admin, dsId, {
       queries: [{ key: 'q', mode: 'list', sql: 'select 1' }],
-      params: [{ name: 'p', label: 'P', type: 'string', required: false, defaultValue: null, options: null }],
+      params: [
+        {
+          name: 'p',
+          label: 'P',
+          type: 'string',
+          required: false,
+          defaultValue: null,
+          options: null,
+        },
+      ],
     });
-    const r = await t.app.inject({ method: 'POST', url: `/api/templates/${id}/duplicate`, headers: { cookie: admin } });
+    const r = await t.app.inject({
+      method: 'POST',
+      url: `/api/templates/${id}/duplicate`,
+      headers: { cookie: admin },
+    });
     expect(r.statusCode).toBe(201);
-    const copy = await t.app.inject({ method: 'GET', url: `/api/templates/${r.json().id}`, headers: { cookie: admin } });
+    const copy = await t.app.inject({
+      method: 'GET',
+      url: `/api/templates/${r.json().id}`,
+      headers: { cookie: admin },
+    });
     expect(copy.json()).toMatchObject({ queries: [{ key: 'q' }], params: [{ name: 'p' }] });
     expect(copy.json().name).toMatch(/\(копия\)$/);
     expect(await t.deps.storage.exists(`templates/${r.json().id}.docx`)).toBe(true);
@@ -3327,24 +3895,43 @@ describe('templates', () => {
 
   it('скачивание: правильный MIME и кириллица в имени файла', async () => {
     const id = await createTemplate(t, admin, dsId);
-    const r = await t.app.inject({ method: 'GET', url: `/api/templates/${id}/download`, headers: { cookie: admin } });
-    expect(r.headers['content-type']).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    const r = await t.app.inject({
+      method: 'GET',
+      url: `/api/templates/${id}/download`,
+      headers: { cookie: admin },
+    });
+    expect(r.headers['content-type']).toBe(
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
     expect(r.headers['content-disposition']).toContain("filename*=UTF-8''");
   });
 
   it('удаление убирает файл', async () => {
     const id = await createTemplate(t, admin, dsId);
-    const r = await t.app.inject({ method: 'DELETE', url: `/api/templates/${id}`, headers: { cookie: admin } });
+    const r = await t.app.inject({
+      method: 'DELETE',
+      url: `/api/templates/${id}`,
+      headers: { cookie: admin },
+    });
     expect(r.statusCode).toBe(204);
     expect(await t.deps.storage.exists(`templates/${id}.docx`)).toBe(false);
   });
 
   it('замена файла через PUT /file увеличивает version и меняет doc key', async () => {
     const id = await createTemplate(t, admin, dsId);
-    const before = await t.app.inject({ method: 'GET', url: `/api/templates/${id}`, headers: { cookie: admin } });
+    const before = await t.app.inject({
+      method: 'GET',
+      url: `/api/templates/${id}`,
+      headers: { cookie: admin },
+    });
     const docx = await createBlankDocument('docx');
     const mp = multipart({}, { name: 'new.docx', data: docx });
-    const r = await t.app.inject({ method: 'PUT', url: `/api/templates/${id}/file`, headers: { cookie: admin, ...mp.headers }, payload: mp.payload });
+    const r = await t.app.inject({
+      method: 'PUT',
+      url: `/api/templates/${id}/file`,
+      headers: { cookie: admin, ...mp.headers },
+      payload: mp.payload,
+    });
     expect(r.statusCode).toBe(200);
     expect(r.json().version).toBe(before.json().version + 1);
   });
@@ -3352,6 +3939,7 @@ describe('templates', () => {
 ```
 
 Добавить в `apps/api/test/helpers.ts`:
+
 ```ts
 import type { TemplateParam, TemplateQuery } from '@carbone-reports/shared';
 
@@ -3362,16 +3950,28 @@ export async function createTemplate(
   opts: { queries?: TemplateQuery[]; params?: TemplateParam[] } = {},
 ): Promise<string> {
   const r = await t.app.inject({
-    method: 'POST', url: '/api/templates', headers: { cookie },
+    method: 'POST',
+    url: '/api/templates',
+    headers: { cookie },
     payload: { name: `Шаблон ${randomUUID().slice(0, 4)}`, datasourceId, blank: 'docx' },
   });
   if (r.statusCode !== 201) throw new Error(r.body);
   const id = r.json().id as string;
   if (opts.queries) {
-    await t.app.inject({ method: 'PUT', url: `/api/templates/${id}/queries`, headers: { cookie }, payload: opts.queries });
+    await t.app.inject({
+      method: 'PUT',
+      url: `/api/templates/${id}/queries`,
+      headers: { cookie },
+      payload: opts.queries,
+    });
   }
   if (opts.params) {
-    await t.app.inject({ method: 'PUT', url: `/api/templates/${id}/params`, headers: { cookie }, payload: opts.params });
+    await t.app.inject({
+      method: 'PUT',
+      url: `/api/templates/${id}/params`,
+      headers: { cookie },
+      payload: opts.params,
+    });
   }
   return id;
 }
@@ -3382,16 +3982,19 @@ export async function createTemplate(
 ```bash
 pnpm --filter @carbone-reports/api test -- blank; pnpm --filter @carbone-reports/api test:int -- templates
 ```
+
 Expected: FAIL — модули не найдены / 404.
 
 - [ ] **Step 4: Реализация**
 
 `apps/api/src/modules/templates/blank.ts`:
+
 ```ts
 import JSZip from 'jszip';
 
 const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
-const REL_DOC = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
+const REL_DOC =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
 
 async function zip(files: Record<string, string>): Promise<Buffer> {
   const z = new JSZip();
@@ -3423,6 +4026,7 @@ export function createBlankDocument(ext: 'docx' | 'xlsx'): Promise<Buffer> {
 ```
 
 `apps/api/src/lib/http.ts`:
+
 ```ts
 import type { OutputFormat, TemplateExt } from '@carbone-reports/shared';
 
@@ -3447,6 +4051,7 @@ export function isZip(buf: Buffer): boolean {
 ```
 
 `apps/api/src/modules/templates/service.ts`:
+
 ```ts
 import {
   outputFormatsFor,
@@ -3480,8 +4085,16 @@ export async function loadTemplate(db: Db, id: string): Promise<TemplateRow> {
 export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull> {
   const row = await loadTemplate(db, id);
   const [qs, ps] = await Promise.all([
-    db.select().from(templateQueries).where(eq(templateQueries.templateId, id)).orderBy(asc(templateQueries.sortOrder)),
-    db.select().from(templateParams).where(eq(templateParams.templateId, id)).orderBy(asc(templateParams.sortOrder)),
+    db
+      .select()
+      .from(templateQueries)
+      .where(eq(templateQueries.templateId, id))
+      .orderBy(asc(templateQueries.sortOrder)),
+    db
+      .select()
+      .from(templateParams)
+      .where(eq(templateParams.templateId, id))
+      .orderBy(asc(templateParams.sortOrder)),
   ]);
   return {
     row,
@@ -3531,6 +4144,7 @@ export function templateFileRef(deps: AppDeps, row: TemplateRow): TemplateFileRe
 ```
 
 `apps/api/src/modules/templates/routes.ts`:
+
 ```ts
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
@@ -3554,7 +4168,14 @@ import { contentDisposition, isZip, MIME } from '../../lib/http';
 import { currentUser, type Guards } from '../auth/guards';
 import { checkParamDefaults } from '../queries/params';
 import { createBlankDocument } from './blank';
-import { loadTemplate, loadTemplateFull, templateFilePath, toAdminDetails, toDetails, toSummary } from './service';
+import {
+  loadTemplate,
+  loadTemplateFull,
+  templateFilePath,
+  toAdminDetails,
+  toDetails,
+  toSummary,
+} from './service';
 
 const MAX_FILE = 20 * 1024 * 1024;
 
@@ -3572,7 +4193,10 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
   const { db, storage } = deps;
 
   async function ensureDatasource(id: string) {
-    const [ds] = await db.select({ id: datasources.id }).from(datasources).where(eq(datasources.id, id));
+    const [ds] = await db
+      .select({ id: datasources.id })
+      .from(datasources)
+      .where(eq(datasources.id, id));
     if (!ds) throw badRequest('источник данных не найден');
   }
 
@@ -3595,7 +4219,14 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     return { fields, ext: ext.data, data: file.data };
   }
 
-  async function insertTemplate(v: { name: string; description: string; datasourceId: string; ext: TemplateExt; data: Buffer; userId: string }) {
+  async function insertTemplate(v: {
+    name: string;
+    description: string;
+    datasourceId: string;
+    ext: TemplateExt;
+    data: Buffer;
+    userId: string;
+  }) {
     await ensureDatasource(v.datasourceId);
     const id = randomUUID();
     const filePath = templateFilePath(id, v.ext);
@@ -3626,20 +4257,28 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     return currentUser(req).role === 'admin' ? toAdminDetails(full) : toDetails(full);
   });
 
-  app.post('/api/templates', { ...admin, schema: { body: CreateTemplateBody } }, async (req, reply) => {
-    const row = await insertTemplate({
-      ...req.body,
-      ext: req.body.blank,
-      data: await createBlankDocument(req.body.blank),
-      userId: currentUser(req).id,
-    });
-    return reply.status(201).send(toSummary(row));
-  });
+  app.post(
+    '/api/templates',
+    { ...admin, schema: { body: CreateTemplateBody } },
+    async (req, reply) => {
+      const row = await insertTemplate({
+        ...req.body,
+        ext: req.body.blank,
+        data: await createBlankDocument(req.body.blank),
+        userId: currentUser(req).id,
+      });
+      return reply.status(201).send(toSummary(row));
+    },
+  );
 
   app.post('/api/templates/upload', admin, async (req, reply) => {
     const { fields, ext, data } = await readUpload(req);
     const meta = z
-      .object({ name: z.string().trim().min(1), description: z.string().default(''), datasourceId: z.uuid() })
+      .object({
+        name: z.string().trim().min(1),
+        description: z.string().default(''),
+        datasourceId: z.uuid(),
+      })
       .safeParse(fields);
     if (!meta.success) throw badRequest('укажите название и источник данных');
     const row = await insertTemplate({ ...meta.data, ext, data, userId: currentUser(req).id });
@@ -3665,67 +4304,101 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     return toAdminDetails(await loadTemplateFull(db, updated!.id));
   });
 
-  app.patch('/api/templates/:id', { ...admin, schema: { params: IdParams, body: UpdateTemplateBody } }, async (req) => {
-    const row = await loadTemplate(db, req.params.id);
-    if (req.body.defaultOutput && !outputFormatsFor(row.fileExt).includes(req.body.defaultOutput)) {
-      throw badRequest(`формат ${req.body.defaultOutput} недоступен для .${row.fileExt}`);
-    }
-    if (req.body.datasourceId) await ensureDatasource(req.body.datasourceId);
-    await db
-      .update(templates)
-      .set({ ...req.body, updatedAt: new Date(), updatedBy: currentUser(req).id })
-      .where(eq(templates.id, row.id));
-    return toAdminDetails(await loadTemplateFull(db, row.id));
-  });
+  app.patch(
+    '/api/templates/:id',
+    { ...admin, schema: { params: IdParams, body: UpdateTemplateBody } },
+    async (req) => {
+      const row = await loadTemplate(db, req.params.id);
+      if (
+        req.body.defaultOutput &&
+        !outputFormatsFor(row.fileExt).includes(req.body.defaultOutput)
+      ) {
+        throw badRequest(`формат ${req.body.defaultOutput} недоступен для .${row.fileExt}`);
+      }
+      if (req.body.datasourceId) await ensureDatasource(req.body.datasourceId);
+      await db
+        .update(templates)
+        .set({ ...req.body, updatedAt: new Date(), updatedBy: currentUser(req).id })
+        .where(eq(templates.id, row.id));
+      return toAdminDetails(await loadTemplateFull(db, row.id));
+    },
+  );
 
-  app.delete('/api/templates/:id', { ...admin, schema: { params: IdParams } }, async (req, reply) => {
-    const row = await loadTemplate(db, req.params.id);
-    await db.delete(templates).where(eq(templates.id, row.id));
-    await storage.remove(row.filePath);
-    return reply.status(204).send();
-  });
+  app.delete(
+    '/api/templates/:id',
+    { ...admin, schema: { params: IdParams } },
+    async (req, reply) => {
+      const row = await loadTemplate(db, req.params.id);
+      await db.delete(templates).where(eq(templates.id, row.id));
+      await storage.remove(row.filePath);
+      return reply.status(204).send();
+    },
+  );
 
-  app.post('/api/templates/:id/duplicate', { ...admin, schema: { params: IdParams } }, async (req, reply) => {
-    const src = await loadTemplateFull(db, req.params.id);
-    const row = await insertTemplate({
-      name: `${src.row.name} (копия)`,
-      description: src.row.description,
-      datasourceId: src.row.datasourceId,
-      ext: src.row.fileExt,
-      data: await storage.read(src.row.filePath),
-      userId: currentUser(req).id,
-    });
-    await db.update(templates).set({ defaultOutput: src.row.defaultOutput }).where(eq(templates.id, row.id));
-    if (src.queries.length) {
-      await db.insert(templateQueries).values(src.queries.map((q, i) => ({ ...q, templateId: row.id, sortOrder: i })));
-    }
-    if (src.params.length) {
-      await db.insert(templateParams).values(src.params.map((p, i) => ({ ...p, templateId: row.id, sortOrder: i })));
-    }
-    return reply.status(201).send(toSummary(row));
-  });
+  app.post(
+    '/api/templates/:id/duplicate',
+    { ...admin, schema: { params: IdParams } },
+    async (req, reply) => {
+      const src = await loadTemplateFull(db, req.params.id);
+      const row = await insertTemplate({
+        name: `${src.row.name} (копия)`,
+        description: src.row.description,
+        datasourceId: src.row.datasourceId,
+        ext: src.row.fileExt,
+        data: await storage.read(src.row.filePath),
+        userId: currentUser(req).id,
+      });
+      await db
+        .update(templates)
+        .set({ defaultOutput: src.row.defaultOutput })
+        .where(eq(templates.id, row.id));
+      if (src.queries.length) {
+        await db
+          .insert(templateQueries)
+          .values(src.queries.map((q, i) => ({ ...q, templateId: row.id, sortOrder: i })));
+      }
+      if (src.params.length) {
+        await db
+          .insert(templateParams)
+          .values(src.params.map((p, i) => ({ ...p, templateId: row.id, sortOrder: i })));
+      }
+      return reply.status(201).send(toSummary(row));
+    },
+  );
 
-  app.get('/api/templates/:id/download', { ...admin, schema: { params: IdParams } }, async (req, reply) => {
-    const row = await loadTemplate(db, req.params.id);
-    const data = await storage.read(row.filePath);
-    return reply
-      .header('content-type', MIME[row.fileExt])
-      .header('content-disposition', contentDisposition(`${row.name}.${row.fileExt}`))
-      .send(data);
-  });
+  app.get(
+    '/api/templates/:id/download',
+    { ...admin, schema: { params: IdParams } },
+    async (req, reply) => {
+      const row = await loadTemplate(db, req.params.id);
+      const data = await storage.read(row.filePath);
+      return reply
+        .header('content-type', MIME[row.fileExt])
+        .header('content-disposition', contentDisposition(`${row.name}.${row.fileExt}`))
+        .send(data);
+    },
+  );
 
   app.put(
     '/api/templates/:id/queries',
     { ...admin, schema: { params: IdParams, body: z.array(TemplateQuery) } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
-      uniqueOrFail(req.body.map((q) => q.key), 'ключ запроса');
+      uniqueOrFail(
+        req.body.map((q) => q.key),
+        'ключ запроса',
+      );
       await db.transaction(async (tx) => {
         await tx.delete(templateQueries).where(eq(templateQueries.templateId, row.id));
         if (req.body.length) {
-          await tx.insert(templateQueries).values(req.body.map((q, i) => ({ ...q, templateId: row.id, sortOrder: i })));
+          await tx
+            .insert(templateQueries)
+            .values(req.body.map((q, i) => ({ ...q, templateId: row.id, sortOrder: i })));
         }
-        await tx.update(templates).set({ updatedAt: new Date(), updatedBy: currentUser(req).id }).where(eq(templates.id, row.id));
+        await tx
+          .update(templates)
+          .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
+          .where(eq(templates.id, row.id));
       });
       return toAdminDetails(await loadTemplateFull(db, row.id));
     },
@@ -3736,14 +4409,22 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     { ...admin, schema: { params: IdParams, body: z.array(TemplateParam) } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
-      uniqueOrFail(req.body.map((p) => p.name), 'параметр');
+      uniqueOrFail(
+        req.body.map((p) => p.name),
+        'параметр',
+      );
       checkParamDefaults(req.body);
       await db.transaction(async (tx) => {
         await tx.delete(templateParams).where(eq(templateParams.templateId, row.id));
         if (req.body.length) {
-          await tx.insert(templateParams).values(req.body.map((p, i) => ({ ...p, templateId: row.id, sortOrder: i })));
+          await tx
+            .insert(templateParams)
+            .values(req.body.map((p, i) => ({ ...p, templateId: row.id, sortOrder: i })));
         }
-        await tx.update(templates).set({ updatedAt: new Date(), updatedBy: currentUser(req).id }).where(eq(templates.id, row.id));
+        await tx
+          .update(templates)
+          .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
+          .where(eq(templates.id, row.id));
       });
       return toAdminDetails(await loadTemplateFull(db, row.id));
     },
@@ -3752,13 +4433,14 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
 ```
 
 В `apps/api/src/app.ts`:
+
 ```ts
 import multipart from '@fastify/multipart';
 import { registerTemplateRoutes } from './modules/templates/routes';
 // ... после регистрации cookie:
-  await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
+await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
 // ... после registerDatasourceRoutes:
-  registerTemplateRoutes(app, deps, guards);
+registerTemplateRoutes(app, deps, guards);
 ```
 
 - [ ] **Step 5: Тесты проходят**
@@ -3766,6 +4448,7 @@ import { registerTemplateRoutes } from './modules/templates/routes';
 ```bash
 pnpm --filter @carbone-reports/api test && pnpm --filter @carbone-reports/api test:int && pnpm -r typecheck && pnpm lint
 ```
+
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -3776,17 +4459,21 @@ git commit -m "feat(api): templates CRUD, uploads, blank documents, queries and 
 ```
 
 ---
+
 ### Task 11: Клиент Carbone
 
 **Files:**
+
 - Create: `apps/api/src/modules/carbone/client.ts`
 - Test: `apps/api/src/modules/carbone/client.test.ts`
 
 **Interfaces:**
+
 - Consumes: `CarboneRenderer`, `TemplateFileRef`, `RenderOptions` (`deps.ts`), `AppError`.
 - Produces: `class CarboneClient implements CarboneRenderer`, конструктор `new CarboneClient({ baseUrl: string; fetch?: typeof fetch })`.
 
 Протокол Carbone 5 (образ `carbone/carbone-ee`, Community Edition без лицензии):
+
 - все запросы с заголовком `carbone-version: 5`;
 - `POST /template` (multipart, поле `template`) → `{"success":true,"data":{"templateId":"…"}}`;
 - `POST /render/:templateId?download=true` с JSON `{ data, convertTo, lang, timezone }` → сразу бинарный файл; при ошибке JSON `{"success":false,"error":"…"}`;
@@ -3795,6 +4482,7 @@ git commit -m "feat(api): templates CRUD, uploads, blank documents, queries and 
 - [ ] **Step 1: Тест (на поддельном `fetch`)**
 
 `apps/api/src/modules/carbone/client.test.ts`:
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../../lib/errors';
@@ -3819,15 +4507,31 @@ function fakeFetch(handler: (call: Call, n: number) => Response | Promise<Respon
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-const pdf = () => new Response(Buffer.from('%PDF-1.7 test'), { status: 200, headers: { 'content-type': 'application/pdf' } });
+const pdf = () =>
+  new Response(Buffer.from('%PDF-1.7 test'), {
+    status: 200,
+    headers: { 'content-type': 'application/pdf' },
+  });
 
-const tpl = (version = 1) => ({ id: 'tpl-1', version, ext: 'docx' as const, read: async () => Buffer.from('PK\x03\x04docx') });
-const opts = { convertTo: 'pdf' as const, lang: 'ru-ru', timezone: 'Europe/Moscow', timeoutMs: 1000 };
+const tpl = (version = 1) => ({
+  id: 'tpl-1',
+  version,
+  ext: 'docx' as const,
+  read: async () => Buffer.from('PK\x03\x04docx'),
+});
+const opts = {
+  convertTo: 'pdf' as const,
+  lang: 'ru-ru',
+  timezone: 'Europe/Moscow',
+  timeoutMs: 1000,
+};
 
 describe('CarboneClient', () => {
   it('загружает шаблон, затем рендерит с download=true и заголовком версии', async () => {
     const { fn, calls } = fakeFetch((c) =>
-      c.url.endsWith('/template') ? json(200, { success: true, data: { templateId: 'abc' } }) : pdf(),
+      c.url.endsWith('/template')
+        ? json(200, { success: true, data: { templateId: 'abc' } })
+        : pdf(),
     );
     const client = new CarboneClient({ baseUrl: 'http://carbone:4000', fetch: fn });
     const out = await client.render(tpl(), { a: 1 }, opts);
@@ -3839,14 +4543,18 @@ describe('CarboneClient', () => {
     expect(calls.every((c) => c.headers['carbone-version'] === '5')).toBe(true);
     expect(calls[0]!.body).toBeInstanceOf(FormData);
     expect(JSON.parse(String(calls[1]!.body))).toEqual({
-      data: { a: 1 }, convertTo: 'pdf', lang: 'ru-ru', timezone: 'Europe/Moscow',
+      data: { a: 1 },
+      convertTo: 'pdf',
+      lang: 'ru-ru',
+      timezone: 'Europe/Moscow',
     });
   });
 
   it('кэширует templateId для той же версии и перезагружает для новой', async () => {
     let uploads = 0;
     const { fn } = fakeFetch((c) => {
-      if (c.url.endsWith('/template')) return json(200, { success: true, data: { templateId: `id${++uploads}` } });
+      if (c.url.endsWith('/template'))
+        return json(200, { success: true, data: { templateId: `id${++uploads}` } });
       return pdf();
     });
     const client = new CarboneClient({ baseUrl: 'http://c', fetch: fn });
@@ -3860,7 +4568,8 @@ describe('CarboneClient', () => {
   it('если Carbone потерял шаблон — загружает заново и повторяет один раз', async () => {
     let renders = 0;
     const { fn, calls } = fakeFetch((c) => {
-      if (c.url.endsWith('/template')) return json(200, { success: true, data: { templateId: 'new' } });
+      if (c.url.endsWith('/template'))
+        return json(200, { success: true, data: { templateId: 'new' } });
       renders++;
       return renders === 2 ? json(404, { success: false, error: 'Template not found' }) : pdf();
     });
@@ -3887,7 +4596,9 @@ describe('CarboneClient', () => {
     const fn = (async () => {
       throw new TypeError('fetch failed');
     }) as typeof fetch;
-    const e = await new CarboneClient({ baseUrl: 'http://c', fetch: fn }).render(tpl(), {}, opts).catch((x) => x);
+    const e = await new CarboneClient({ baseUrl: 'http://c', fetch: fn })
+      .render(tpl(), {}, opts)
+      .catch((x) => x);
     expect([e.code, e.status]).toEqual(['CARBONE_ERROR', 502]);
     expect(e.message).toBe('сервис генерации недоступен');
   });
@@ -3910,11 +4621,13 @@ describe('CarboneClient', () => {
 ```bash
 pnpm --filter @carbone-reports/api test -- carbone
 ```
+
 Expected: FAIL — модуль не найден.
 
 - [ ] **Step 3: Реализация**
 
 `apps/api/src/modules/carbone/client.ts`:
+
 ```ts
 import type { CarboneRenderer, RenderOptions, TemplateFileRef } from '../../deps';
 import { AppError } from '../../lib/errors';
@@ -3938,7 +4651,8 @@ export class CarboneClient implements CarboneRenderer {
     const signal = AbortSignal.timeout(opts.timeoutMs);
     try {
       const cached = this.ids.get(tpl.id);
-      let carboneId = cached?.version === tpl.version ? cached.carboneId : await this.upload(tpl, signal);
+      let carboneId =
+        cached?.version === tpl.version ? cached.carboneId : await this.upload(tpl, signal);
       try {
         return await this.renderWith(carboneId, data, opts, signal);
       } catch (e) {
@@ -3948,7 +4662,8 @@ export class CarboneClient implements CarboneRenderer {
       }
     } catch (e) {
       if (e instanceof AppError) throw e;
-      if (e instanceof TemplateMissing) throw new AppError('CARBONE_ERROR', 502, 'ошибка генерации: шаблон не найден');
+      if (e instanceof TemplateMissing)
+        throw new AppError('CARBONE_ERROR', 502, 'ошибка генерации: шаблон не найден');
       if (signal.aborted) throw new AppError('TIMEOUT', 504, 'превышено время ожидания');
       throw new AppError('CARBONE_ERROR', 502, 'сервис генерации недоступен');
     }
@@ -3963,12 +4678,18 @@ export class CarboneClient implements CarboneRenderer {
       body: form,
       signal,
     });
-    const body = (await res.json().catch(() => null)) as
-      | { success?: boolean; error?: string; data?: { templateId?: string } }
-      | null;
+    const body = (await res.json().catch(() => null)) as {
+      success?: boolean;
+      error?: string;
+      data?: { templateId?: string };
+    } | null;
     const id = body?.data?.templateId;
     if (!res.ok || !body?.success || !id) {
-      throw new AppError('CARBONE_ERROR', 502, `ошибка загрузки шаблона: ${body?.error ?? res.status}`);
+      throw new AppError(
+        'CARBONE_ERROR',
+        502,
+        `ошибка загрузки шаблона: ${body?.error ?? res.status}`,
+      );
     }
     this.ids.set(tpl.id, { version: tpl.version, carboneId: id });
     return id;
@@ -3980,12 +4701,20 @@ export class CarboneClient implements CarboneRenderer {
     opts: RenderOptions,
     signal: AbortSignal,
   ): Promise<Buffer> {
-    const res = await this.fetch(`${this.baseUrl}/render/${encodeURIComponent(carboneId)}?download=true`, {
-      method: 'POST',
-      headers: { ...VERSION_HEADER, 'content-type': 'application/json' },
-      body: JSON.stringify({ data, convertTo: opts.convertTo, lang: opts.lang, timezone: opts.timezone }),
-      signal,
-    });
+    const res = await this.fetch(
+      `${this.baseUrl}/render/${encodeURIComponent(carboneId)}?download=true`,
+      {
+        method: 'POST',
+        headers: { ...VERSION_HEADER, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          data,
+          convertTo: opts.convertTo,
+          lang: opts.lang,
+          timezone: opts.timezone,
+        }),
+        signal,
+      },
+    );
     const isJson = (res.headers.get('content-type') ?? '').includes('application/json');
     if (res.ok && !isJson) return Buffer.from(await res.arrayBuffer());
 
@@ -4002,6 +4731,7 @@ export class CarboneClient implements CarboneRenderer {
 ```bash
 pnpm --filter @carbone-reports/api test -- carbone && pnpm -r typecheck
 ```
+
 Expected: PASS (6 тестов).
 
 - [ ] **Step 5: Commit**
@@ -4016,11 +4746,13 @@ git commit -m "feat(api): Carbone 5 HTTP client with template cache and re-uploa
 ### Task 12: Генерация отчётов, история запусков, предпросмотр для админа
 
 **Files:**
+
 - Create: `apps/api/src/modules/reports/service.ts`, `apps/api/src/modules/reports/routes.ts`
 - Test: `apps/api/test/reports.int.test.ts`
 - Modify: `apps/api/src/app.ts`, `packages/shared/src/index.ts` (`RunsQuery`, `RunsPage`)
 
 **Interfaces:**
+
 - Consumes: `loadTemplateFull`, `templateFileRef`, `TemplateFull` (Task 10); `resolveParams` (Task 7); `buildReportData` (Task 7); `runQueries`, `previewQuery` (Task 9); `deps.sources`, `deps.carbone`; `MIME`, `contentDisposition`.
 - Produces:
   - `collectReportData(deps, full: TemplateFull, input: ParamsInput): Promise<{ data: Record<string, unknown>; params: Record<string, ParamValue> }>`
@@ -4031,6 +4763,7 @@ git commit -m "feat(api): Carbone 5 HTTP client with template cache and re-uploa
 - [ ] **Step 1: Схемы в `shared`**
 
 Добавить в `packages/shared/src/index.ts`:
+
 ```ts
 export const RunsQuery = z.object({
   templateId: z.uuid().optional(),
@@ -4054,11 +4787,18 @@ export type RunsPage = z.infer<typeof RunsPage>;
 - [ ] **Step 2: Интеграционный тест**
 
 `apps/api/test/reports.int.test.ts`:
+
 ```ts
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppError } from '../src/lib/errors';
 import type { CarboneRenderer } from '../src/deps';
-import { createSourceDatabase, createTemplate, createTestApp, loginAs, type TestApp } from './helpers';
+import {
+  createSourceDatabase,
+  createTemplate,
+  createTestApp,
+  loginAs,
+  type TestApp,
+} from './helpers';
 
 let t: TestApp;
 let admin: string;
@@ -4072,7 +4812,9 @@ let carboneFails = false;
 const carbone: CarboneRenderer = {
   async render(tpl, data, opts) {
     if (carboneFails) throw new AppError('CARBONE_ERROR', 502, 'ошибка генерации: boom');
-    return Buffer.from(JSON.stringify({ version: tpl.version, data, convertTo: opts.convertTo, tz: opts.timezone }));
+    return Buffer.from(
+      JSON.stringify({ version: tpl.version, data, convertTo: opts.convertTo, tz: opts.timezone }),
+    );
   },
 };
 
@@ -4090,15 +4832,31 @@ beforeAll(async () => {
     create table company(name text); insert into company values ('ООО Ромашка');
   `);
   const ds = await t.app.inject({
-    method: 'POST', url: '/api/datasources', headers: { cookie: admin }, payload: { name: 'src', ...src, ssl: false },
+    method: 'POST',
+    url: '/api/datasources',
+    headers: { cookie: admin },
+    payload: { name: 'src', ...src, ssl: false },
   });
   dsId = ds.json().id;
   tplId = await createTemplate(t, admin, dsId, {
     queries: [
-      { key: 'orders', mode: 'list', sql: 'select id, total from orders where created >= :from order by id' },
+      {
+        key: 'orders',
+        mode: 'list',
+        sql: 'select id, total from orders where created >= :from order by id',
+      },
       { key: 'company', mode: 'single', sql: 'select name from company' },
     ],
-    params: [{ name: 'from', label: 'С даты', type: 'date', required: true, defaultValue: null, options: null }],
+    params: [
+      {
+        name: 'from',
+        label: 'С даты',
+        type: 'date',
+        required: true,
+        defaultValue: null,
+        options: null,
+      },
+    ],
   });
 });
 afterAll(() => t.close());
@@ -4107,12 +4865,20 @@ describe('генерация', () => {
   it('user генерирует отчёт; данные собраны из SQL и параметров; файл скачивается', async () => {
     const r = await render(userA, tplId, { params: { from: '2026-02-01' }, format: 'pdf' });
     expect(r.statusCode).toBe(201);
-    const file = await t.app.inject({ method: 'GET', url: `/api/runs/${r.json().runId}/file`, headers: { cookie: userA } });
+    const file = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${r.json().runId}/file`,
+      headers: { cookie: userA },
+    });
     expect(file.statusCode).toBe(200);
     expect(file.headers['content-type']).toBe('application/pdf');
     expect(JSON.parse(file.body)).toEqual({
       version: 1,
-      data: { orders: [{ id: 2, total: 250.5 }], company: { name: 'ООО Ромашка' }, params: { from: '2026-02-01' } },
+      data: {
+        orders: [{ id: 2, total: 250.5 }],
+        company: { name: 'ООО Ромашка' },
+        params: { from: '2026-02-01' },
+      },
       convertTo: 'pdf',
       tz: 'Europe/Moscow',
     });
@@ -4120,16 +4886,28 @@ describe('генерация', () => {
 
   it('inline=1 отдаёт inline для предпросмотра PDF', async () => {
     const r = await render(userA, tplId, { params: { from: '2026-01-01' }, format: 'pdf' });
-    const file = await t.app.inject({ method: 'GET', url: `/api/runs/${r.json().runId}/file?inline=1`, headers: { cookie: userA } });
+    const file = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${r.json().runId}/file?inline=1`,
+      headers: { cookie: userA },
+    });
     expect(file.headers['content-disposition']).toMatch(/^inline;/);
   });
 
   it('неверные параметры → 400 с полями и без записи в историю', async () => {
-    const before = await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie: admin } });
+    const before = await t.app.inject({
+      method: 'GET',
+      url: '/api/runs',
+      headers: { cookie: admin },
+    });
     const r = await render(userA, tplId, { params: {}, format: 'pdf' });
     expect(r.statusCode).toBe(400);
     expect(r.json().error.details.fields).toEqual({ from: 'обязательный параметр' });
-    const after = await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie: admin } });
+    const after = await t.app.inject({
+      method: 'GET',
+      url: '/api/runs',
+      headers: { cookie: admin },
+    });
     expect(after.json().total).toBe(before.json().total);
   });
 
@@ -4143,12 +4921,22 @@ describe('генерация', () => {
     const r = await render(userA, tplId, { params: { from: '2026-01-01' }, format: 'pdf' });
     carboneFails = false;
     expect(r.statusCode).toBe(502);
-    const runs = await t.app.inject({ method: 'GET', url: '/api/runs?status=error', headers: { cookie: userA } });
-    expect(runs.json().items[0]).toMatchObject({ status: 'error', error: 'ошибка генерации: boom', fileAvailable: false });
+    const runs = await t.app.inject({
+      method: 'GET',
+      url: '/api/runs?status=error',
+      headers: { cookie: userA },
+    });
+    expect(runs.json().items[0]).toMatchObject({
+      status: 'error',
+      error: 'ошибка генерации: boom',
+      fileAvailable: false,
+    });
   });
 
   it('ошибка SQL → 400 и запись со status=error', async () => {
-    const bad = await createTemplate(t, admin, dsId, { queries: [{ key: 'x', mode: 'list', sql: 'select nope from orders' }] });
+    const bad = await createTemplate(t, admin, dsId, {
+      queries: [{ key: 'x', mode: 'list', sql: 'select nope from orders' }],
+    });
     const r = await render(userA, bad, { params: {}, format: 'pdf' });
     expect(r.statusCode).toBe(400);
     expect(r.json().error.message).toMatch(/^запрос "x": /);
@@ -4157,7 +4945,11 @@ describe('генерация', () => {
   it('шаблон без запросов генерируется только с params', async () => {
     const empty = await createTemplate(t, admin, dsId);
     const r = await render(userA, empty, { params: {}, format: 'pdf' });
-    const file = await t.app.inject({ method: 'GET', url: `/api/runs/${r.json().runId}/file`, headers: { cookie: userA } });
+    const file = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${r.json().runId}/file`,
+      headers: { cookie: userA },
+    });
     expect(JSON.parse(file.body).data).toEqual({ params: {} });
   });
 });
@@ -4166,43 +4958,89 @@ describe('история', () => {
   it('user видит только свои запуски и не может скачать чужой файл', async () => {
     const r = await render(userB, tplId, { params: { from: '2026-01-01' }, format: 'pdf' });
     const runId = r.json().runId;
-    const listA = await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie: userA } });
+    const listA = await t.app.inject({
+      method: 'GET',
+      url: '/api/runs',
+      headers: { cookie: userA },
+    });
     expect(listA.json().items.some((x: { id: string }) => x.id === runId)).toBe(false);
-    const steal = await t.app.inject({ method: 'GET', url: `/api/runs/${runId}/file`, headers: { cookie: userA } });
+    const steal = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${runId}/file`,
+      headers: { cookie: userA },
+    });
     expect(steal.statusCode).toBe(404);
-    const asAdmin = await t.app.inject({ method: 'GET', url: `/api/runs/${runId}/file`, headers: { cookie: admin } });
+    const asAdmin = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${runId}/file`,
+      headers: { cookie: admin },
+    });
     expect(asAdmin.statusCode).toBe(200);
   });
 
   it('user не может подсмотреть чужие запуски через ?userId', async () => {
-    const listB = await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie: userB } });
+    const listB = await t.app.inject({
+      method: 'GET',
+      url: '/api/runs',
+      headers: { cookie: userB },
+    });
     const otherUserId = listB.json().items[0].userId;
-    const listA = await t.app.inject({ method: 'GET', url: `/api/runs?userId=${otherUserId}`, headers: { cookie: userA } });
-    expect(listA.json().items.every((x: { userId: string }) => x.userId !== otherUserId)).toBe(true);
+    const listA = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs?userId=${otherUserId}`,
+      headers: { cookie: userA },
+    });
+    expect(listA.json().items.every((x: { userId: string }) => x.userId !== otherUserId)).toBe(
+      true,
+    );
   });
 
   it('admin фильтрует по пользователю; в записи есть логин и название шаблона', async () => {
-    const listB = await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie: userB } });
+    const listB = await t.app.inject({
+      method: 'GET',
+      url: '/api/runs',
+      headers: { cookie: userB },
+    });
     const uid = listB.json().items[0].userId;
-    const r = await t.app.inject({ method: 'GET', url: `/api/runs?userId=${uid}`, headers: { cookie: admin } });
+    const r = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs?userId=${uid}`,
+      headers: { cookie: admin },
+    });
     expect(r.json().items.every((x: { userId: string }) => x.userId === uid)).toBe(true);
-    expect(r.json().items[0]).toMatchObject({ userLogin: expect.stringMatching(/^user_/), templateName: expect.any(String) });
+    expect(r.json().items[0]).toMatchObject({
+      userLogin: expect.stringMatching(/^user_/),
+      templateName: expect.any(String),
+    });
   });
 
   it('после удаления шаблона история остаётся читаемой', async () => {
     const tmp = await createTemplate(t, admin, dsId);
     const r = await render(userA, tmp, { params: {}, format: 'pdf' });
-    await t.app.inject({ method: 'DELETE', url: `/api/templates/${tmp}`, headers: { cookie: admin } });
-    const runs = await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie: userA } });
+    await t.app.inject({
+      method: 'DELETE',
+      url: `/api/templates/${tmp}`,
+      headers: { cookie: admin },
+    });
+    const runs = await t.app.inject({
+      method: 'GET',
+      url: '/api/runs',
+      headers: { cookie: userA },
+    });
     const run = runs.json().items.find((x: { id: string }) => x.id === r.json().runId);
-    expect(run).toMatchObject({ templateId: null, templateName: expect.stringMatching(/^Шаблон /) });
+    expect(run).toMatchObject({
+      templateId: null,
+      templateName: expect.stringMatching(/^Шаблон /),
+    });
   });
 });
 
 describe('инструменты админа', () => {
   it('queries/run выполняет произвольный SQL с параметрами и обрезает до 50 строк', async () => {
     const r = await t.app.inject({
-      method: 'POST', url: `/api/templates/${tplId}/queries/run`, headers: { cookie: admin },
+      method: 'POST',
+      url: `/api/templates/${tplId}/queries/run`,
+      headers: { cookie: admin },
       payload: { sql: 'select g from generate_series(1, :n) g', params: { n: 60 } },
     });
     expect(r.json()).toMatchObject({ columns: ['g'], truncated: true });
@@ -4211,26 +5049,39 @@ describe('инструменты админа', () => {
 
   it('queries/run и preview недоступны user', async () => {
     const r = await t.app.inject({
-      method: 'POST', url: `/api/templates/${tplId}/queries/run`, headers: { cookie: userA },
+      method: 'POST',
+      url: `/api/templates/${tplId}/queries/run`,
+      headers: { cookie: userA },
       payload: { sql: 'select 1', params: {} },
     });
     expect(r.statusCode).toBe(403);
   });
 
   it('preview mode=data возвращает собранный JSON и не пишет историю', async () => {
-    const before = (await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie: admin } })).json().total;
+    const before = (
+      await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie: admin } })
+    ).json().total;
     const r = await t.app.inject({
-      method: 'POST', url: `/api/templates/${tplId}/preview`, headers: { cookie: admin },
+      method: 'POST',
+      url: `/api/templates/${tplId}/preview`,
+      headers: { cookie: admin },
       payload: { params: { from: '2026-01-01' }, mode: 'data' },
     });
-    expect(r.json()).toMatchObject({ orders: [{ id: 1 }, { id: 2 }], company: { name: 'ООО Ромашка' } });
-    const after = (await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie: admin } })).json().total;
+    expect(r.json()).toMatchObject({
+      orders: [{ id: 1 }, { id: 2 }],
+      company: { name: 'ООО Ромашка' },
+    });
+    const after = (
+      await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie: admin } })
+    ).json().total;
     expect(after).toBe(before);
   });
 
   it('preview mode=pdf отдаёт application/pdf inline', async () => {
     const r = await t.app.inject({
-      method: 'POST', url: `/api/templates/${tplId}/preview`, headers: { cookie: admin },
+      method: 'POST',
+      url: `/api/templates/${tplId}/preview`,
+      headers: { cookie: admin },
       payload: { params: { from: '2026-01-01' }, mode: 'pdf' },
     });
     expect(r.headers['content-type']).toBe('application/pdf');
@@ -4244,13 +5095,20 @@ describe('инструменты админа', () => {
 ```bash
 pnpm --filter @carbone-reports/api test:int -- reports
 ```
+
 Expected: FAIL — 404 на `/api/reports/...`.
 
 - [ ] **Step 4: Реализация**
 
 `apps/api/src/modules/reports/service.ts`:
+
 ```ts
-import { outputFormatsFor, type OutputFormat, type ParamValue, type ParamsInput } from '@carbone-reports/shared';
+import {
+  outputFormatsFor,
+  type OutputFormat,
+  type ParamValue,
+  type ParamsInput,
+} from '@carbone-reports/shared';
 import type { AppDeps } from '../../deps';
 import { badRequest } from '../../lib/errors';
 import { buildReportData } from '../queries/build-data';
@@ -4279,7 +5137,12 @@ export function assertFormat(full: TemplateFull, format: OutputFormat): void {
   }
 }
 
-export function renderReport(deps: AppDeps, full: TemplateFull, data: unknown, format: OutputFormat): Promise<Buffer> {
+export function renderReport(
+  deps: AppDeps,
+  full: TemplateFull,
+  data: unknown,
+  format: OutputFormat,
+): Promise<Buffer> {
   return deps.carbone.render(templateFileRef(deps, full.row), data, {
     convertTo: format,
     lang: 'ru-ru',
@@ -4290,6 +5153,7 @@ export function renderReport(deps: AppDeps, full: TemplateFull, data: unknown, f
 ```
 
 `apps/api/src/modules/reports/routes.ts`:
+
 ```ts
 import { randomUUID } from 'node:crypto';
 import {
@@ -4341,7 +5205,9 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         const file = await renderReport(deps, full, data, req.body.format);
         const filePath = `reports/${runId}.${req.body.format}`;
         await storage.write(filePath, file);
-        await db.insert(reportRuns).values({ ...base, params, status: 'ok', filePath, durationMs: Date.now() - started });
+        await db
+          .insert(reportRuns)
+          .values({ ...base, params, status: 'ok', filePath, durationMs: Date.now() - started });
         return reply.status(201).send({ runId });
       } catch (e) {
         // Ошибки ввода пользователя историю не засоряют.
@@ -4359,52 +5225,59 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
     },
   );
 
-  app.get('/api/runs', { preHandler: guards.requireUser, schema: { querystring: RunsQuery } }, async (req): Promise<RunsPage> => {
-    const me = currentUser(req);
-    const q = req.query;
-    const where: SQL[] = [];
-    // Обычный пользователь всегда видит только свои запуски, фильтр userId игнорируется.
-    if (me.role !== 'admin') where.push(eq(reportRuns.userId, me.id));
-    else if (q.userId) where.push(eq(reportRuns.userId, q.userId));
-    if (q.templateId) where.push(eq(reportRuns.templateId, q.templateId));
-    if (q.status) where.push(eq(reportRuns.status, q.status));
-    const cond = where.length ? and(...where) : undefined;
+  app.get(
+    '/api/runs',
+    { preHandler: guards.requireUser, schema: { querystring: RunsQuery } },
+    async (req): Promise<RunsPage> => {
+      const me = currentUser(req);
+      const q = req.query;
+      const where: SQL[] = [];
+      // Обычный пользователь всегда видит только свои запуски, фильтр userId игнорируется.
+      if (me.role !== 'admin') where.push(eq(reportRuns.userId, me.id));
+      else if (q.userId) where.push(eq(reportRuns.userId, q.userId));
+      if (q.templateId) where.push(eq(reportRuns.templateId, q.templateId));
+      if (q.status) where.push(eq(reportRuns.status, q.status));
+      const cond = where.length ? and(...where) : undefined;
 
-    const [rows, [totalRow]] = await Promise.all([
-      db
-        .select({ run: reportRuns, login: users.login })
-        .from(reportRuns)
-        .innerJoin(users, eq(users.id, reportRuns.userId))
-        .where(cond)
-        .orderBy(desc(reportRuns.createdAt))
-        .limit(RUNS_PAGE_SIZE)
-        .offset((q.page - 1) * RUNS_PAGE_SIZE),
-      db.select({ n: count() }).from(reportRuns).where(cond),
-    ]);
+      const [rows, [totalRow]] = await Promise.all([
+        db
+          .select({ run: reportRuns, login: users.login })
+          .from(reportRuns)
+          .innerJoin(users, eq(users.id, reportRuns.userId))
+          .where(cond)
+          .orderBy(desc(reportRuns.createdAt))
+          .limit(RUNS_PAGE_SIZE)
+          .offset((q.page - 1) * RUNS_PAGE_SIZE),
+        db.select({ n: count() }).from(reportRuns).where(cond),
+      ]);
 
-    const items: RunDto[] = rows.map(({ run, login }) => ({
-      id: run.id,
-      templateId: run.templateId,
-      templateName: run.templateName,
-      templateVersion: run.templateVersion,
-      userId: run.userId,
-      userLogin: login,
-      params: run.params,
-      outputFormat: run.outputFormat,
-      status: run.status,
-      error: run.error,
-      fileAvailable: run.status === 'ok' && !!run.filePath && !run.fileDeleted,
-      durationMs: run.durationMs,
-      createdAt: run.createdAt.toISOString(),
-    }));
-    return { items, total: totalRow?.n ?? 0, page: q.page, pageSize: RUNS_PAGE_SIZE };
-  });
+      const items: RunDto[] = rows.map(({ run, login }) => ({
+        id: run.id,
+        templateId: run.templateId,
+        templateName: run.templateName,
+        templateVersion: run.templateVersion,
+        userId: run.userId,
+        userLogin: login,
+        params: run.params,
+        outputFormat: run.outputFormat,
+        status: run.status,
+        error: run.error,
+        fileAvailable: run.status === 'ok' && !!run.filePath && !run.fileDeleted,
+        durationMs: run.durationMs,
+        createdAt: run.createdAt.toISOString(),
+      }));
+      return { items, total: totalRow?.n ?? 0, page: q.page, pageSize: RUNS_PAGE_SIZE };
+    },
+  );
 
   app.get(
     '/api/runs/:id/file',
     {
       preHandler: guards.requireUser,
-      schema: { params: IdParams, querystring: z.object({ inline: z.enum(['0', '1']).optional() }) },
+      schema: {
+        params: IdParams,
+        querystring: z.object({ inline: z.enum(['0', '1']).optional() }),
+      },
     },
     async (req, reply) => {
       const me = currentUser(req);
@@ -4418,7 +5291,10 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         .header('content-type', MIME[run.outputFormat])
         .header(
           'content-disposition',
-          contentDisposition(`${run.templateName} ${date}.${run.outputFormat}`, req.query.inline === '1'),
+          contentDisposition(
+            `${run.templateName} ${date}.${run.outputFormat}`,
+            req.query.inline === '1',
+          ),
         )
         .send(await storage.read(run.filePath));
     },
@@ -4456,10 +5332,11 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
 ```
 
 В `apps/api/src/app.ts`:
+
 ```ts
 import { registerReportRoutes } from './modules/reports/routes';
 // ...
-  registerReportRoutes(app, deps, guards);
+registerReportRoutes(app, deps, guards);
 ```
 
 - [ ] **Step 5: Тесты проходят**
@@ -4467,6 +5344,7 @@ import { registerReportRoutes } from './modules/reports/routes';
 ```bash
 pnpm --filter @carbone-reports/api test:int && pnpm -r typecheck && pnpm lint
 ```
+
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -4481,11 +5359,13 @@ git commit -m "feat(api): report rendering, run history, admin query/preview too
 ### Task 13: Интеграция с OnlyOffice — конфиг редактора, выдача файла, callback, forcesave
 
 **Files:**
+
 - Create: `apps/api/src/modules/onlyoffice/jwt.ts`, `apps/api/src/modules/onlyoffice/editor-config.ts`, `apps/api/src/modules/onlyoffice/callback.ts`, `apps/api/src/modules/onlyoffice/commands.ts`, `apps/api/src/modules/onlyoffice/routes.ts`
 - Test: `apps/api/src/modules/onlyoffice/commands.test.ts`, `apps/api/test/onlyoffice.int.test.ts`
 - Modify: `apps/api/src/app.ts`
 
 **Interfaces:**
+
 - Consumes: `OnlyOfficeCommands`, `FileFetcher` (`deps.ts`), `loadTemplate` (Task 10), `isZip`, `MIME`, `SessionUser`.
 - Produces:
   - `signOnlyOffice(payload: Record<string, unknown>, secret: Uint8Array): Promise<string>`, `verifyOnlyOffice(token: string, secret: Uint8Array): Promise<Record<string, unknown>>`
@@ -4496,12 +5376,14 @@ git commit -m "feat(api): report rendering, run history, admin query/preview too
   - Маршруты: `GET /api/templates/:id/editor-config`, `POST /api/templates/:id/save` (204), `GET /internal/templates/:id/file?t=`, `POST /internal/onlyoffice/callback/:id` → `{"error":0}`
 
 Протокол OnlyOffice (Document Server 9.x):
+
 - Callback: `status` 1 — редактируется, 2 — готов к сохранению (все закрыли), 3 — ошибка сохранения, 4 — закрыт без изменений, 6 — forcesave, 7 — ошибка forcesave. Для 2/3/6/7 есть `url`. JWT приходит в поле `token` тела (claims = тело) и/или в `Authorization: Bearer` (claims обёрнуты в `{ payload: {...} }`). Ответ — `{"error":0}`.
 - Command Service: `POST {DS}/command`, тело `{"c":"forcesave","key":"…","token":"<jwt тела>"}`. Ответ `{"error":0}`; `error:4` — нет изменений (не ошибка).
 
 - [ ] **Step 1: Юнит-тест команд**
 
 `apps/api/src/modules/onlyoffice/commands.test.ts`:
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../../lib/errors';
@@ -4513,8 +5395,14 @@ const secret = new TextEncoder().encode('o'.repeat(32));
 function fake(response: unknown) {
   const calls: { url: string; body: Record<string, unknown>; auth: string | null }[] = [];
   const fn = (async (url: RequestInfo | URL, init?: RequestInit) => {
-    calls.push({ url: String(url), body: JSON.parse(String(init?.body)), auth: new Headers(init?.headers).get('authorization') });
-    return new Response(JSON.stringify(response), { headers: { 'content-type': 'application/json' } });
+    calls.push({
+      url: String(url),
+      body: JSON.parse(String(init?.body)),
+      auth: new Headers(init?.headers).get('authorization'),
+    });
+    return new Response(JSON.stringify(response), {
+      headers: { 'content-type': 'application/json' },
+    });
   }) as typeof fetch;
   return { fn, calls };
 }
@@ -4525,23 +5413,32 @@ describe('createOnlyOfficeCommands.forceSave', () => {
     await createOnlyOfficeCommands({ baseUrl: 'http://oo', secret, fetch: fn }).forceSave('k1');
     expect(calls[0]!.url).toBe('http://oo/command');
     expect(calls[0]!.body).toMatchObject({ c: 'forcesave', key: 'k1' });
-    expect(await verifyOnlyOffice(calls[0]!.body.token as string, secret)).toMatchObject({ c: 'forcesave', key: 'k1' });
+    expect(await verifyOnlyOffice(calls[0]!.body.token as string, secret)).toMatchObject({
+      c: 'forcesave',
+      key: 'k1',
+    });
     const header = await verifyOnlyOffice(calls[0]!.auth!.replace('Bearer ', ''), secret);
     expect(header.payload).toMatchObject({ c: 'forcesave', key: 'k1' });
   });
   it('error 4 (нет изменений) — не ошибка', async () => {
     const { fn } = fake({ error: 4 });
-    await expect(createOnlyOfficeCommands({ baseUrl: 'http://oo', secret, fetch: fn }).forceSave('k')).resolves.toBeUndefined();
+    await expect(
+      createOnlyOfficeCommands({ baseUrl: 'http://oo', secret, fetch: fn }).forceSave('k'),
+    ).resolves.toBeUndefined();
   });
   it('error 1 (документ не открыт) → понятная ошибка 409', async () => {
     const { fn } = fake({ error: 1 });
-    const e = await createOnlyOfficeCommands({ baseUrl: 'http://oo', secret, fetch: fn }).forceSave('k').catch((x) => x);
+    const e = await createOnlyOfficeCommands({ baseUrl: 'http://oo', secret, fetch: fn })
+      .forceSave('k')
+      .catch((x) => x);
     expect(e).toBeInstanceOf(AppError);
     expect([e.code, e.status]).toEqual(['NOT_OPEN', 409]);
   });
   it('другая ошибка → 502', async () => {
     const { fn } = fake({ error: 6 });
-    const e = await createOnlyOfficeCommands({ baseUrl: 'http://oo', secret, fetch: fn }).forceSave('k').catch((x) => x);
+    const e = await createOnlyOfficeCommands({ baseUrl: 'http://oo', secret, fetch: fn })
+      .forceSave('k')
+      .catch((x) => x);
     expect([e.code, e.status]).toEqual(['ONLYOFFICE_ERROR', 502]);
   });
 });
@@ -4550,13 +5447,20 @@ describe('createOnlyOfficeCommands.forceSave', () => {
 - [ ] **Step 2: Интеграционный тест**
 
 `apps/api/test/onlyoffice.int.test.ts`:
+
 ```ts
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { templates } from '../src/db/schema';
 import { signOnlyOffice, verifyOnlyOffice } from '../src/modules/onlyoffice/jwt';
 import { createBlankDocument } from '../src/modules/templates/blank';
-import { createSourceDatabase, createTemplate, createTestApp, loginAs, type TestApp } from './helpers';
+import {
+  createSourceDatabase,
+  createTemplate,
+  createTestApp,
+  loginAs,
+  type TestApp,
+} from './helpers';
 
 let t: TestApp;
 let admin: string;
@@ -4577,9 +5481,14 @@ beforeAll(async () => {
   adminId = a.user.id;
   user = (await loginAs(t, 'user')).cookie;
   const src = await createSourceDatabase('select 1');
-  dsId = (await t.app.inject({
-    method: 'POST', url: '/api/datasources', headers: { cookie: admin }, payload: { name: 's', ...src, ssl: false },
-  })).json().id;
+  dsId = (
+    await t.app.inject({
+      method: 'POST',
+      url: '/api/datasources',
+      headers: { cookie: admin },
+      payload: { name: 's', ...src, ssl: false },
+    })
+  ).json().id;
 });
 beforeEach(async () => {
   tplId = await createTemplate(t, admin, dsId);
@@ -4588,19 +5497,29 @@ beforeEach(async () => {
 afterAll(() => t.close());
 
 const secret = () => t.deps.config.onlyofficeJwtSecret;
-const row = async () => (await t.deps.db.select().from(templates).where(eq(templates.id, tplId)))[0]!;
+const row = async () =>
+  (await t.deps.db.select().from(templates).where(eq(templates.id, tplId)))[0]!;
 
 async function callback(body: Record<string, unknown>, via: 'body' | 'header' = 'body') {
   const headers: Record<string, string> = {};
   let payload: Record<string, unknown> = body;
   if (via === 'body') payload = { ...body, token: await signOnlyOffice(body, secret()) };
   else headers.authorization = `Bearer ${await signOnlyOffice({ payload: body }, secret())}`;
-  return t.app.inject({ method: 'POST', url: `/internal/onlyoffice/callback/${tplId}`, headers, payload });
+  return t.app.inject({
+    method: 'POST',
+    url: `/internal/onlyoffice/callback/${tplId}`,
+    headers,
+    payload,
+  });
 }
 
 describe('editor-config', () => {
   it('подписанный конфиг с внутренними URL; user → 403', async () => {
-    const r = await t.app.inject({ method: 'GET', url: `/api/templates/${tplId}/editor-config`, headers: { cookie: admin } });
+    const r = await t.app.inject({
+      method: 'GET',
+      url: `/api/templates/${tplId}/editor-config`,
+      headers: { cookie: admin },
+    });
     const cfg = r.json();
     expect(cfg).toMatchObject({
       documentType: 'word',
@@ -4612,16 +5531,28 @@ describe('editor-config', () => {
         user: { id: adminId },
       },
     });
-    expect(cfg.document.url).toMatch(new RegExp(`^http://api:3000/internal/templates/${tplId}/file\\?t=`));
+    expect(cfg.document.url).toMatch(
+      new RegExp(`^http://api:3000/internal/templates/${tplId}/file\\?t=`),
+    );
     const claims = await verifyOnlyOffice(cfg.token, secret());
     expect(claims).toMatchObject({ document: { key: cfg.document.key } });
 
-    const forbidden = await t.app.inject({ method: 'GET', url: `/api/templates/${tplId}/editor-config`, headers: { cookie: user } });
+    const forbidden = await t.app.inject({
+      method: 'GET',
+      url: `/api/templates/${tplId}/editor-config`,
+      headers: { cookie: user },
+    });
     expect(forbidden.statusCode).toBe(403);
   });
 
   it('файл отдаётся по токену из конфига и не отдаётся без него или с токеном другого шаблона', async () => {
-    const cfg = (await t.app.inject({ method: 'GET', url: `/api/templates/${tplId}/editor-config`, headers: { cookie: admin } })).json();
+    const cfg = (
+      await t.app.inject({
+        method: 'GET',
+        url: `/api/templates/${tplId}/editor-config`,
+        headers: { cookie: admin },
+      })
+    ).json();
     const path = new URL(cfg.document.url).pathname + new URL(cfg.document.url).search;
     const ok = await t.app.inject({ method: 'GET', url: path });
     expect(ok.statusCode).toBe(200);
@@ -4636,7 +5567,9 @@ describe('editor-config', () => {
 describe('callback', () => {
   it('без подписи → 403, файл не меняется', async () => {
     const r = await t.app.inject({
-      method: 'POST', url: `/internal/onlyoffice/callback/${tplId}`, payload: { key: (await row()).docKey, status: 2, url: 'http://x' },
+      method: 'POST',
+      url: `/internal/onlyoffice/callback/${tplId}`,
+      payload: { key: (await row()).docKey, status: 2, url: 'http://x' },
     });
     expect(r.statusCode).toBe(403);
     expect((await row()).version).toBe(1);
@@ -4652,7 +5585,12 @@ describe('callback', () => {
   it('status 6 (forcesave, JWT в теле) — сохраняет файл, version++, ключ не меняется', async () => {
     const before = await row();
     fetched = Buffer.concat([await createBlankDocument('docx'), Buffer.from('changed')]);
-    const r = await callback({ key: before.docKey, status: 6, url: 'http://oo/cache/file.docx', users: [adminId] });
+    const r = await callback({
+      key: before.docKey,
+      status: 6,
+      url: 'http://oo/cache/file.docx',
+      users: [adminId],
+    });
     expect(r.json()).toEqual({ error: 0 });
     const after = await row();
     expect(after.version).toBe(2);
@@ -4663,7 +5601,10 @@ describe('callback', () => {
 
   it('status 2 (JWT в заголовке) — сохраняет и выдаёт новый ключ', async () => {
     const before = await row();
-    const r = await callback({ key: before.docKey, status: 2, url: 'http://oo/f.docx', users: [adminId] }, 'header');
+    const r = await callback(
+      { key: before.docKey, status: 2, url: 'http://oo/f.docx', users: [adminId] },
+      'header',
+    );
     expect(r.json()).toEqual({ error: 0 });
     const after = await row();
     expect(after.version).toBe(2);
@@ -4693,7 +5634,11 @@ describe('callback', () => {
   it('status 3 — lastSaveError виден админу в деталях шаблона, следующее сохранение его сбрасывает', async () => {
     const key = (await row()).docKey;
     await callback({ key, status: 3, url: 'http://oo/f' });
-    const d = await t.app.inject({ method: 'GET', url: `/api/templates/${tplId}`, headers: { cookie: admin } });
+    const d = await t.app.inject({
+      method: 'GET',
+      url: `/api/templates/${tplId}`,
+      headers: { cookie: admin },
+    });
     expect(d.json().lastSaveError).toBe('OnlyOffice не смог сохранить документ');
     await callback({ key, status: 6, url: 'http://oo/f.docx' });
     expect((await row()).lastSaveError).toBeNull();
@@ -4702,7 +5647,11 @@ describe('callback', () => {
 
 describe('save', () => {
   it('POST /save отправляет forcesave с текущим ключом', async () => {
-    const r = await t.app.inject({ method: 'POST', url: `/api/templates/${tplId}/save`, headers: { cookie: admin } });
+    const r = await t.app.inject({
+      method: 'POST',
+      url: `/api/templates/${tplId}/save`,
+      headers: { cookie: admin },
+    });
     expect(r.statusCode).toBe(204);
     expect(forceSaved.at(-1)).toBe((await row()).docKey);
   });
@@ -4714,19 +5663,29 @@ describe('save', () => {
 ```bash
 pnpm --filter @carbone-reports/api test -- commands; pnpm --filter @carbone-reports/api test:int -- onlyoffice
 ```
+
 Expected: FAIL — модули не найдены.
 
 - [ ] **Step 4: Реализация**
 
 `apps/api/src/modules/onlyoffice/jwt.ts`:
+
 ```ts
 import { jwtVerify, SignJWT, type JWTPayload } from 'jose';
 
-export function signOnlyOffice(payload: Record<string, unknown>, secret: Uint8Array): Promise<string> {
-  return new SignJWT(payload as JWTPayload).setProtectedHeader({ alg: 'HS256', typ: 'JWT' }).sign(secret);
+export function signOnlyOffice(
+  payload: Record<string, unknown>,
+  secret: Uint8Array,
+): Promise<string> {
+  return new SignJWT(payload as JWTPayload)
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .sign(secret);
 }
 
-export async function verifyOnlyOffice(token: string, secret: Uint8Array): Promise<Record<string, unknown>> {
+export async function verifyOnlyOffice(
+  token: string,
+  secret: Uint8Array,
+): Promise<Record<string, unknown>> {
   const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] });
   return payload as Record<string, unknown>;
 }
@@ -4739,9 +5698,16 @@ export function signFileToken(templateId: string, secret: Uint8Array): Promise<s
     .sign(secret);
 }
 
-export async function verifyFileToken(token: string, templateId: string, secret: Uint8Array): Promise<boolean> {
+export async function verifyFileToken(
+  token: string,
+  templateId: string,
+  secret: Uint8Array,
+): Promise<boolean> {
   try {
-    const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'], subject: templateId });
+    const { payload } = await jwtVerify(token, secret, {
+      algorithms: ['HS256'],
+      subject: templateId,
+    });
     return payload.purpose === 'oo-file';
   } catch {
     return false;
@@ -4750,6 +5716,7 @@ export async function verifyFileToken(token: string, templateId: string, secret:
 ```
 
 `apps/api/src/modules/onlyoffice/editor-config.ts`:
+
 ```ts
 import type { TemplateExt } from '@carbone-reports/shared';
 import type { TemplateRow } from '../../db/schema';
@@ -4792,6 +5759,7 @@ export type EditorConfig = Awaited<ReturnType<typeof buildEditorConfig>>;
 ```
 
 `apps/api/src/modules/onlyoffice/callback.ts`:
+
 ```ts
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
@@ -4815,7 +5783,11 @@ const SAVE_ERRORS: Record<number, string> = {
   7: 'ошибка принудительного сохранения OnlyOffice',
 };
 
-async function verifiedPayload(deps: AppDeps, body: unknown, authorization?: string): Promise<unknown> {
+async function verifiedPayload(
+  deps: AppDeps,
+  body: unknown,
+  authorization?: string,
+): Promise<unknown> {
   const secret = deps.config.onlyofficeJwtSecret;
   const bodyToken = (body as { token?: unknown } | null)?.token;
   try {
@@ -4848,13 +5820,19 @@ export async function handleCallback(
   if (cb.key !== row.docKey) return;
 
   if (cb.status === 3 || cb.status === 7) {
-    await deps.db.update(templates).set({ lastSaveError: SAVE_ERRORS[cb.status]! }).where(eq(templates.id, row.id));
+    await deps.db
+      .update(templates)
+      .set({ lastSaveError: SAVE_ERRORS[cb.status]! })
+      .where(eq(templates.id, row.id));
     return;
   }
   if (cb.status !== 2 && cb.status !== 6) return;
 
   if (!cb.url) {
-    await deps.db.update(templates).set({ lastSaveError: 'OnlyOffice не передал ссылку на файл' }).where(eq(templates.id, row.id));
+    await deps.db
+      .update(templates)
+      .set({ lastSaveError: 'OnlyOffice не передал ссылку на файл' })
+      .where(eq(templates.id, row.id));
     return;
   }
   const file = await deps.fetchFile(cb.url);
@@ -4880,6 +5858,7 @@ export async function handleCallback(
 ```
 
 `apps/api/src/modules/onlyoffice/commands.ts`:
+
 ```ts
 import type { OnlyOfficeCommands } from '../../deps';
 import { AppError } from '../../lib/errors';
@@ -4918,6 +5897,7 @@ export function createOnlyOfficeCommands(opts: {
 ```
 
 `apps/api/src/modules/onlyoffice/routes.ts`:
+
 ```ts
 import { IdParams } from '@carbone-reports/shared';
 import { z } from 'zod';
@@ -4935,7 +5915,8 @@ export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards
   app.get(
     '/api/templates/:id/editor-config',
     { preHandler: guards.requireAdmin, schema: { params: IdParams } },
-    async (req) => buildEditorConfig(deps, await loadTemplate(deps.db, req.params.id), currentUser(req)),
+    async (req) =>
+      buildEditorConfig(deps, await loadTemplate(deps.db, req.params.id), currentUser(req)),
   );
 
   app.post(
@@ -4953,10 +5934,13 @@ export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards
     '/internal/templates/:id/file',
     { schema: { params: IdParams, querystring: z.object({ t: z.string().optional() }) } },
     async (req, reply) => {
-      const ok = req.query.t && (await verifyFileToken(req.query.t, req.params.id, deps.config.appSecret));
+      const ok =
+        req.query.t && (await verifyFileToken(req.query.t, req.params.id, deps.config.appSecret));
       if (!ok) throw new AppError('FORBIDDEN', 403, 'неверный токен файла');
       const row = await loadTemplate(deps.db, req.params.id);
-      return reply.header('content-type', MIME[row.fileExt]).send(await deps.storage.read(row.filePath));
+      return reply
+        .header('content-type', MIME[row.fileExt])
+        .send(await deps.storage.read(row.filePath));
     },
   );
 
@@ -4968,10 +5952,11 @@ export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards
 ```
 
 В `apps/api/src/app.ts`:
+
 ```ts
 import { registerOnlyOfficeRoutes } from './modules/onlyoffice/routes';
 // ...
-  registerOnlyOfficeRoutes(app, deps, guards);
+registerOnlyOfficeRoutes(app, deps, guards);
 ```
 
 - [ ] **Step 5: Тесты проходят**
@@ -4979,6 +5964,7 @@ import { registerOnlyOfficeRoutes } from './modules/onlyoffice/routes';
 ```bash
 pnpm --filter @carbone-reports/api test && pnpm --filter @carbone-reports/api test:int && pnpm -r typecheck && pnpm lint
 ```
+
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -4993,10 +5979,12 @@ git commit -m "feat(api): OnlyOffice editor config, signed file access, save cal
 ### Task 14: Очистка старых отчётов, точка входа сервера, сборка и smoke-проверка
 
 **Files:**
+
 - Create: `apps/api/src/modules/reports/cleanup.ts`, `apps/api/src/lib/fetch-file.ts`, `apps/api/src/server.ts`, `.env.example`, `README.md`
 - Test: `apps/api/test/cleanup.int.test.ts`
 
 **Interfaces:**
+
 - Consumes: всё вышеперечисленное.
 - Produces:
   - `cleanupOldReports(deps: AppDeps, now?: Date): Promise<number>` (сколько файлов удалено)
@@ -5007,6 +5995,7 @@ git commit -m "feat(api): OnlyOffice editor config, signed file access, save cal
 - [ ] **Step 1: Тест очистки**
 
 `apps/api/test/cleanup.int.test.ts`:
+
 ```ts
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -5027,8 +6016,17 @@ async function run(daysAgo: number) {
   const filePath = `reports/${id}.pdf`;
   await t.deps.storage.write(filePath, Buffer.from('pdf'));
   await t.deps.db.insert(reportRuns).values({
-    id, templateId: null, templateName: 'x', templateVersion: 1, userId, params: {}, outputFormat: 'pdf',
-    status: 'ok', filePath, durationMs: 1, createdAt: new Date(Date.now() - daysAgo * 86_400_000),
+    id,
+    templateId: null,
+    templateName: 'x',
+    templateVersion: 1,
+    userId,
+    params: {},
+    outputFormat: 'pdf',
+    status: 'ok',
+    filePath,
+    durationMs: 1,
+    createdAt: new Date(Date.now() - daysAgo * 86_400_000),
   });
   return { id, filePath };
 }
@@ -5050,7 +6048,11 @@ describe('cleanupOldReports', () => {
     const old = await run(40);
     await cleanupOldReports(t.deps);
     const cookie = (await loginAs(t, 'admin')).cookie;
-    const r = await t.app.inject({ method: 'GET', url: `/api/runs/${old.id}/file`, headers: { cookie } });
+    const r = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${old.id}/file`,
+      headers: { cookie },
+    });
     expect(r.statusCode).toBe(410);
   });
 });
@@ -5061,11 +6063,13 @@ describe('cleanupOldReports', () => {
 ```bash
 pnpm --filter @carbone-reports/api test:int -- cleanup
 ```
+
 Expected: FAIL — модуль `cleanup` не найден.
 
 - [ ] **Step 3: Реализация очистки и `fetchFile`**
 
 `apps/api/src/modules/reports/cleanup.ts`:
+
 ```ts
 import { and, eq, isNotNull, lt } from 'drizzle-orm';
 import { reportRuns } from '../../db/schema';
@@ -5076,7 +6080,13 @@ export async function cleanupOldReports(deps: AppDeps, now = new Date()): Promis
   const rows = await deps.db
     .select({ id: reportRuns.id, filePath: reportRuns.filePath })
     .from(reportRuns)
-    .where(and(eq(reportRuns.fileDeleted, false), isNotNull(reportRuns.filePath), lt(reportRuns.createdAt, threshold)));
+    .where(
+      and(
+        eq(reportRuns.fileDeleted, false),
+        isNotNull(reportRuns.filePath),
+        lt(reportRuns.createdAt, threshold),
+      ),
+    );
   for (const r of rows) {
     await deps.storage.remove(r.filePath!);
     await deps.db.update(reportRuns).set({ fileDeleted: true }).where(eq(reportRuns.id, r.id));
@@ -5088,7 +6098,8 @@ export function startCleanupTimer(
   deps: AppDeps,
   log: { error(o: unknown, msg?: string): void },
 ): () => void {
-  const tick = () => cleanupOldReports(deps).catch((e) => log.error(e, 'очистка отчётов не удалась'));
+  const tick = () =>
+    cleanupOldReports(deps).catch((e) => log.error(e, 'очистка отчётов не удалась'));
   void tick();
   const timer = setInterval(tick, 60 * 60 * 1000);
   timer.unref();
@@ -5097,6 +6108,7 @@ export function startCleanupTimer(
 ```
 
 `apps/api/src/lib/fetch-file.ts`:
+
 ```ts
 import type { FileFetcher } from '../deps';
 
@@ -5112,11 +6124,13 @@ export const fetchFile: FileFetcher = async (url) => {
 ```bash
 pnpm --filter @carbone-reports/api test:int -- cleanup
 ```
+
 Expected: PASS (3 теста).
 
 - [ ] **Step 5: Точка входа**
 
 `apps/api/src/server.ts`:
+
 ```ts
 import { buildApp } from './app';
 import { loadConfig } from './config';
@@ -5140,7 +6154,10 @@ const deps: AppDeps = {
   storage: new Storage(config.storageDir),
   sources: createSourcePools({ db, config }),
   carbone: new CarboneClient({ baseUrl: config.carboneUrl }),
-  onlyoffice: createOnlyOfficeCommands({ baseUrl: config.onlyofficeInternalUrl, secret: config.onlyofficeJwtSecret }),
+  onlyoffice: createOnlyOfficeCommands({
+    baseUrl: config.onlyofficeInternalUrl,
+    secret: config.onlyofficeJwtSecret,
+  }),
   fetchFile,
 };
 
@@ -5163,6 +6180,7 @@ await app.listen({ host: '0.0.0.0', port: config.port });
 ```
 
 `.env.example`:
+
 ```dotenv
 # БД приложения
 DATABASE_URL=postgres://app:app@localhost:5432/app
@@ -5188,6 +6206,7 @@ COOKIE_SECURE=false
 ```
 
 `README.md`:
+
 ````markdown
 # Carbone Reports
 
@@ -5239,6 +6258,7 @@ curl -s -c /tmp/cr.cookies -H 'content-type: application/json' -d '{"login":"adm
 curl -s -b /tmp/cr.cookies localhost:3999/api/auth/me
 kill $SERVER_PID; cd ../..; docker stop cr-smoke-pg
 ```
+
 Expected: `{"status":"ok"}`, затем дважды `{"id":"…","login":"admin","role":"admin"}`. Сервер завершается по `kill` без ошибок.
 
 - [ ] **Step 7: Полный прогон и commit**

@@ -21,15 +21,31 @@ function fakeFetch(handler: (call: Call, n: number) => Response | Promise<Respon
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-const pdf = () => new Response(Buffer.from('%PDF-1.7 test'), { status: 200, headers: { 'content-type': 'application/pdf' } });
+const pdf = () =>
+  new Response(Buffer.from('%PDF-1.7 test'), {
+    status: 200,
+    headers: { 'content-type': 'application/pdf' },
+  });
 
-const tpl = (version = 1) => ({ id: 'tpl-1', version, ext: 'docx' as const, read: async () => Buffer.from('PK\x03\x04docx') });
-const opts = { convertTo: 'pdf' as const, lang: 'ru-ru', timezone: 'Europe/Moscow', timeoutMs: 1000 };
+const tpl = (version = 1) => ({
+  id: 'tpl-1',
+  version,
+  ext: 'docx' as const,
+  read: async () => Buffer.from('PK\x03\x04docx'),
+});
+const opts = {
+  convertTo: 'pdf' as const,
+  lang: 'ru-ru',
+  timezone: 'Europe/Moscow',
+  timeoutMs: 1000,
+};
 
 describe('CarboneClient', () => {
   it('загружает шаблон, затем рендерит с download=true и заголовком версии', async () => {
     const { fn, calls } = fakeFetch((c) =>
-      c.url.endsWith('/template') ? json(200, { success: true, data: { templateId: 'abc' } }) : pdf(),
+      c.url.endsWith('/template')
+        ? json(200, { success: true, data: { templateId: 'abc' } })
+        : pdf(),
     );
     const client = new CarboneClient({ baseUrl: 'http://carbone:4000', fetch: fn });
     const out = await client.render(tpl(), { a: 1 }, opts);
@@ -41,14 +57,18 @@ describe('CarboneClient', () => {
     expect(calls.every((c) => c.headers['carbone-version'] === '5')).toBe(true);
     expect(calls[0]!.body).toBeInstanceOf(FormData);
     expect(JSON.parse(String(calls[1]!.body))).toEqual({
-      data: { a: 1 }, convertTo: 'pdf', lang: 'ru-ru', timezone: 'Europe/Moscow',
+      data: { a: 1 },
+      convertTo: 'pdf',
+      lang: 'ru-ru',
+      timezone: 'Europe/Moscow',
     });
   });
 
   it('кэширует templateId для той же версии и перезагружает для новой', async () => {
     let uploads = 0;
     const { fn } = fakeFetch((c) => {
-      if (c.url.endsWith('/template')) return json(200, { success: true, data: { templateId: `id${++uploads}` } });
+      if (c.url.endsWith('/template'))
+        return json(200, { success: true, data: { templateId: `id${++uploads}` } });
       return pdf();
     });
     const client = new CarboneClient({ baseUrl: 'http://c', fetch: fn });
@@ -62,7 +82,8 @@ describe('CarboneClient', () => {
   it('если Carbone потерял шаблон — загружает заново и повторяет один раз', async () => {
     let renders = 0;
     const { fn, calls } = fakeFetch((c) => {
-      if (c.url.endsWith('/template')) return json(200, { success: true, data: { templateId: 'new' } });
+      if (c.url.endsWith('/template'))
+        return json(200, { success: true, data: { templateId: 'new' } });
       renders++;
       return renders === 2 ? json(404, { success: false, error: 'Template not found' }) : pdf();
     });
@@ -89,7 +110,9 @@ describe('CarboneClient', () => {
     const fn = (async () => {
       throw new TypeError('fetch failed');
     }) as typeof fetch;
-    const e = await new CarboneClient({ baseUrl: 'http://c', fetch: fn }).render(tpl(), {}, opts).catch((x) => x);
+    const e = await new CarboneClient({ baseUrl: 'http://c', fetch: fn })
+      .render(tpl(), {}, opts)
+      .catch((x) => x);
     expect([e.code, e.status]).toEqual(['CARBONE_ERROR', 502]);
     expect(e.message).toBe('сервис генерации недоступен');
   });

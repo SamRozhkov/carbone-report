@@ -19,7 +19,10 @@ export function signSession(user: SessionUser, secret: Uint8Array): Promise<stri
     .sign(secret);
 }
 
-export async function verifySession(token: string, secret: Uint8Array): Promise<SessionUser | null> {
+export async function verifySession(
+  token: string,
+  secret: Uint8Array,
+): Promise<SessionUser | null> {
   try {
     const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] });
     const role = Role.safeParse(payload.role);

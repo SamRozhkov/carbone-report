@@ -56,18 +56,25 @@ export function registerDatasourceRoutes(app: App, deps: AppDeps, guards: Guards
     },
   );
 
-  app.delete('/api/datasources/:id', { ...pre, schema: { params: IdParams } }, async (req, reply) => {
-    const used = await deps.db
-      .select({ id: templates.id })
-      .from(templates)
-      .where(eq(templates.datasourceId, req.params.id))
-      .limit(1);
-    if (used.length > 0) throw conflict('источник используется шаблонами');
-    const [row] = await deps.db.delete(datasources).where(eq(datasources.id, req.params.id)).returning();
-    if (!row) throw notFound('источник данных');
-    await deps.sources.invalidate(row.id);
-    return reply.status(204).send();
-  });
+  app.delete(
+    '/api/datasources/:id',
+    { ...pre, schema: { params: IdParams } },
+    async (req, reply) => {
+      const used = await deps.db
+        .select({ id: templates.id })
+        .from(templates)
+        .where(eq(templates.datasourceId, req.params.id))
+        .limit(1);
+      if (used.length > 0) throw conflict('источник используется шаблонами');
+      const [row] = await deps.db
+        .delete(datasources)
+        .where(eq(datasources.id, req.params.id))
+        .returning();
+      if (!row) throw notFound('источник данных');
+      await deps.sources.invalidate(row.id);
+      return reply.status(204).send();
+    },
+  );
 
   app.post('/api/datasources/test', { ...pre, schema: { body: DatasourceBody } }, async (req) => {
     if (!req.body.password) throw badRequest('пароль обязателен');

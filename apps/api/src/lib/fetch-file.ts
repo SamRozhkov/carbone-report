@@ -2,7 +2,9 @@ import type { FileFetcher } from '../deps';
 
 export const MAX_FETCH_BYTES = 20 * 1024 * 1024;
 
-export function createFileFetcher(opts: { maxBytes?: number; timeoutMs?: number } = {}): FileFetcher {
+export function createFileFetcher(
+  opts: { maxBytes?: number; timeoutMs?: number } = {},
+): FileFetcher {
   const maxBytes = opts.maxBytes ?? MAX_FETCH_BYTES;
   const timeoutMs = opts.timeoutMs ?? 60_000;
   return async (url) => {

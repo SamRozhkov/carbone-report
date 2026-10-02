@@ -18,7 +18,9 @@ describe('registerErrorHandler', () => {
     });
     const res = await app.inject({ method: 'POST', url: '/t', payload: { n: 1 } });
     expect(res.statusCode).toBe(400);
-    expect(res.json()).toEqual({ error: { code: 'SQL_ERROR', message: 'запрос "a": ошибка', details: { key: 'a' } } });
+    expect(res.json()).toEqual({
+      error: { code: 'SQL_ERROR', message: 'запрос "a": ошибка', details: { key: 'a' } },
+    });
   });
   it('ошибка валидации zod → 400 VALIDATION', async () => {
     const app = await appWith(() => 'ok');
@@ -32,6 +34,8 @@ describe('registerErrorHandler', () => {
     });
     const res = await app.inject({ method: 'POST', url: '/t', payload: { n: 1 } });
     expect(res.statusCode).toBe(500);
-    expect(res.json()).toEqual({ error: { code: 'INTERNAL', message: 'внутренняя ошибка сервера' } });
+    expect(res.json()).toEqual({
+      error: { code: 'INTERNAL', message: 'внутренняя ошибка сервера' },
+    });
   });
 });

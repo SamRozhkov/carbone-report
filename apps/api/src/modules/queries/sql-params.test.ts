@@ -17,7 +17,10 @@ describe('parseSqlParams', () => {
     });
   });
   it('не трогает приведения типов ::', () => {
-    expect(p('select :d::date, x::text')).toEqual({ text: 'select $1::date, x::text', names: ['d'] });
+    expect(p('select :d::date, x::text')).toEqual({
+      text: 'select $1::date, x::text',
+      names: ['d'],
+    });
   });
   it('не трогает строковые литералы, включая экранированные кавычки', () => {
     expect(p("select ':no', 'it''s :no', :yes")).toEqual({
@@ -26,7 +29,10 @@ describe('parseSqlParams', () => {
     });
   });
   it("не трогает E'...' со слешами", () => {
-    expect(p("select E'a\\' :no', :yes")).toEqual({ text: "select E'a\\' :no', $1", names: ['yes'] });
+    expect(p("select E'a\\' :no', :yes")).toEqual({
+      text: "select E'a\\' :no', $1",
+      names: ['yes'],
+    });
   });
   it('не трогает dollar-quoted строки', () => {
     expect(p('select $$ :no $$, $tag$ :no $tag$, :yes')).toEqual({

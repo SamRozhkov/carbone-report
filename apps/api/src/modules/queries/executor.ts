@@ -12,21 +12,40 @@ export interface QueryLimits {
 
 type Row = Record<string, unknown>;
 
+const TX_FORBIDDEN = 'управление транзакциями запрещено';
+
+// Ошибки уровня соединения (класс 08, остановка сервера) — не вина запроса.
+function isConnectionError(e: unknown): boolean {
+  const code = (e as { code?: string }).code;
+  return !code || code.startsWith('08') || ['57P01', '57P02', '57P03'].includes(code);
+}
+
 function mapPgError(key: string, e: unknown): unknown {
+  if (isConnectionError(e)) return e;
   const code = (e as { code?: string }).code;
   if (code === '57014') return new AppError('TIMEOUT', 504, 'превышено время ожидания');
   if (code === '25006') {
     return new AppError('SQL_ERROR', 400, `запрос "${key}": запись запрещена — запросы выполняются только на чтение`);
   }
-  if (code) return new AppError('SQL_ERROR', 400, `запрос "${key}": ${(e as Error).message}`);
-  return e;
+  return new AppError('SQL_ERROR', 400, `запрос "${key}": ${(e as Error).message}`);
+}
+
+interface TxState {
+  ts: string;
+  st: string;
+}
+
+interface Tx {
+  client: pg.PoolClient;
+  /** Проверяет, что запрос пользователя не вышел из READ ONLY транзакции (COMMIT/ROLLBACK/END [AND CHAIN]). */
+  guard(key: string): Promise<void>;
 }
 
 async function withReadOnly<T>(
   pool: pg.Pool,
   sourceName: string,
   timeoutMs: number,
-  fn: (client: pg.PoolClient) => Promise<T>,
+  fn: (tx: Tx) => Promise<T>,
 ): Promise<T> {
   let client: pg.PoolClient;
   try {
@@ -37,19 +56,45 @@ async function withReadOnly<T>(
     });
   }
   let broken = false;
+  // pg-pool снимает свой обработчик 'error' на время аренды; без своего процесс упадёт при обрыве соединения.
+  const onError = () => {
+    broken = true;
+  };
+  client.on('error', onError);
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await client.query(`SET LOCAL statement_timeout = ${Math.floor(timeoutMs)}`);
-    return await fn(client);
+    const base = (
+      await client.query<TxState>(
+        "select transaction_timestamp()::text as ts, current_setting('statement_timeout') as st",
+      )
+    ).rows[0]!;
+    return await fn({
+      client,
+      guard: async (key) => {
+        const { rows } = await client.query<TxState & { ro: string }>(
+          "select transaction_timestamp()::text as ts, current_setting('transaction_read_only') as ro, current_setting('statement_timeout') as st",
+        );
+        const cur = rows[0]!;
+        if (cur.ts !== base.ts || cur.ro !== 'on' || cur.st !== base.st) {
+          broken = true; // сессия могла быть изменена — в пул не возвращаем
+          throw new AppError('SQL_ERROR', 400, `запрос "${key}": ${TX_FORBIDDEN}`);
+        }
+      },
+    });
   } catch (e) {
-    broken = !(e instanceof AppError);
-    throw e;
+    if (e instanceof AppError) throw e;
+    broken = true;
+    throw new AppError('DATASOURCE_UNAVAILABLE', 502, `соединение с источником "${sourceName}" прервано`, {
+      reason: (e as Error).message,
+    });
   } finally {
     try {
       await client.query('ROLLBACK');
     } catch {
       broken = true;
     }
+    client.removeListener('error', onError);
     client.release(broken);
   }
 }
@@ -80,24 +125,30 @@ async function readQuery(
   });
 
   const cursor = client.query(new Cursor(parsed.text, values));
+  let result: { columns: string[]; rows: Row[]; truncated: boolean };
   try {
-    const rows: Row[] = [];
-    let columns: string[] = [];
-    for (;;) {
-      const size = Math.min(1000, limit + 1 - rows.length);
-      const batch = await readBatch(cursor, size);
-      if (columns.length === 0 && batch.fields) columns = batch.fields.map((f) => f.name);
-      rows.push(...batch.rows);
-      if (rows.length > limit) return { columns, rows: rows.slice(0, limit), truncated: true };
-      if (batch.rows.length < size) {
-        if (columns.length === 0 && rows[0]) columns = Object.keys(rows[0]);
-        return { columns, rows, truncated: false };
-      }
-    }
+    result = await readAll(cursor, limit);
   } catch (e) {
+    // cursor.close() после ошибки читает ReadyForQuery и на оборванном соединении не завершится никогда.
     throw mapPgError(key, e);
-  } finally {
-    await cursor.close().catch(() => {});
+  }
+  await cursor.close().catch(() => {});
+  return result;
+}
+
+async function readAll(cursor: Cursor, limit: number): Promise<{ columns: string[]; rows: Row[]; truncated: boolean }> {
+  const rows: Row[] = [];
+  let columns: string[] = [];
+  for (;;) {
+    const size = Math.min(1000, limit + 1 - rows.length);
+    const batch = await readBatch(cursor, size);
+    if (columns.length === 0 && batch.fields) columns = batch.fields.map((f) => f.name);
+    rows.push(...batch.rows);
+    if (rows.length > limit) return { columns, rows: rows.slice(0, limit), truncated: true };
+    if (batch.rows.length < size) {
+      if (columns.length === 0 && rows[0]) columns = Object.keys(rows[0]);
+      return { columns, rows, truncated: false };
+    }
   }
 }
 
@@ -108,11 +159,12 @@ export function runQueries(
   params: Record<string, ParamValue>,
   limits: QueryLimits,
 ): Promise<QueryResult[]> {
-  return withReadOnly(pool, sourceName, limits.timeoutMs, async (client) => {
+  return withReadOnly(pool, sourceName, limits.timeoutMs, async (tx) => {
     const results: QueryResult[] = [];
     for (const q of queries) {
       const limit = q.mode === 'single' ? 1 : limits.maxRows;
-      const r = await readQuery(client, q.key, q.sql, params, limit);
+      const r = await readQuery(tx.client, q.key, q.sql, params, limit);
+      await tx.guard(q.key);
       if (q.mode === 'list' && r.truncated) {
         throw new AppError('TOO_MANY_ROWS', 400, `запрос "${q.key}" вернул больше ${limits.maxRows} строк`);
       }
@@ -129,7 +181,9 @@ export function previewQuery(
   params: Record<string, ParamValue>,
   limits: QueryLimits & { previewRows: number },
 ): Promise<RunQueryResult> {
-  return withReadOnly(pool, sourceName, limits.timeoutMs, (client) =>
-    readQuery(client, 'preview', sql, params, limits.previewRows),
-  );
+  return withReadOnly(pool, sourceName, limits.timeoutMs, async (tx) => {
+    const r = await readQuery(tx.client, 'preview', sql, params, limits.previewRows);
+    await tx.guard('preview');
+    return r;
+  });
 }

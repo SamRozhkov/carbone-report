@@ -6,6 +6,7 @@ import { previewQuery, runQueries } from '../src/modules/queries/executor';
 import { createSourceDatabase } from './helpers';
 
 let pool: pg.Pool;
+let srcConn: Awaited<ReturnType<typeof createSourceDatabase>>;
 const limits = { timeoutMs: 1000, maxRows: 5 };
 
 beforeAll(async () => {
@@ -16,6 +17,7 @@ beforeAll(async () => {
     insert into company values ('ООО Ромашка');
     create table big as select generate_series(1, 20) as n;
   `);
+  srcConn = src;
   pool = new pg.Pool(poolConfig({ ...src, ssl: false }));
 });
 afterAll(() => pool.end());
@@ -107,6 +109,67 @@ describe('runQueries', () => {
     const [r] = await runQueries(pool, 'src', [{ key: 'ok', mode: 'single', sql: 'select 1 as x' }], {}, limits);
     expect(r!.rows).toEqual([{ x: 1 }]);
   });
+});
+
+describe('целостность транзакции', () => {
+  const insert = { key: 'w', mode: 'list' as const, sql: "insert into company values ('x') returning *" };
+  const companyCount = async () => (await pool.query('select count(*)::int as n from company')).rows[0].n as number;
+
+  it.each(['commit', 'rollback', 'end', 'abort', 'commit and chain', 'rollback and chain'])(
+    '%s как первый запрос → SQL_ERROR, запись не проходит',
+    async (sql) => {
+      const before = await companyCount();
+      const e = await err(runQueries(pool, 'src', [{ key: 'c', mode: 'list', sql }, insert], {}, limits));
+      expect([e.code, e.status, e.message]).toEqual(['SQL_ERROR', 400, 'запрос "c": управление транзакциями запрещено']);
+      expect(await companyCount()).toBe(before);
+    },
+    10_000,
+  );
+
+  it('commit + set_config не протекает в пул', async () => {
+    const e = await err(
+      runQueries(pool, 'src', [
+        { key: 'c', mode: 'list', sql: 'commit' },
+        { key: 's', mode: 'single', sql: "select set_config('search_path','evil',false)" },
+      ], {}, limits),
+    );
+    expect(e.code).toBe('SQL_ERROR');
+    const [r] = await runQueries(pool, 'src', [{ key: 'p', mode: 'single', sql: "select current_setting('search_path') as sp" }], {}, limits);
+    expect(r!.rows[0]).not.toEqual({ sp: 'evil' });
+  }, 10_000);
+
+  it('previewQuery: commit → SQL_ERROR', async () => {
+    const e = await err(previewQuery(pool, 'src', 'commit', {}, { ...limits, previewRows: 3 }));
+    expect([e.code, e.message]).toEqual(['SQL_ERROR', 'запрос "preview": управление транзакциями запрещено']);
+  }, 10_000);
+});
+
+describe('устойчивость', () => {
+  const ok = () => runQueries(pool, 'src', [{ key: 'ok', mode: 'single', sql: 'select 1 as x' }], {}, limits);
+
+  it('после TIMEOUT следующий запрос проходит', async () => {
+    await err(runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select pg_sleep(3)' }], {}, limits));
+    expect((await ok())[0]!.rows).toEqual([{ x: 1 }]);
+  }, 10_000);
+
+  it('после TOO_MANY_ROWS следующий запрос проходит', async () => {
+    await err(runQueries(pool, 'src', [{ key: 'big', mode: 'list', sql: 'select n from big' }], {}, limits));
+    expect((await ok())[0]!.rows).toEqual([{ x: 1 }]);
+  }, 10_000);
+
+  it('обрыв соединения посреди запроса → DATASOURCE_UNAVAILABLE, пул жив', async () => {
+    const running = runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select pg_sleep(5)' }], {}, { timeoutMs: 10_000, maxRows: 5 });
+    const settled = running.then(() => undefined, (e: unknown) => e);
+    await new Promise((r) => setTimeout(r, 300));
+    const admin = new pg.Client({ host: srcConn.host, port: srcConn.port, database: srcConn.database, user: srcConn.username, password: srcConn.password });
+    await admin.connect();
+    await admin.query("select pg_terminate_backend(pid) from pg_stat_activity where query like '%pg_sleep(5)%' and pid <> pg_backend_pid()");
+    await admin.end();
+    const e = (await settled) as AppError;
+    expect(e).toBeInstanceOf(AppError);
+    expect([e.code, e.status]).toEqual(['DATASOURCE_UNAVAILABLE', 502]);
+    expect((await ok())[0]!.rows).toEqual([{ x: 1 }]);
+  }, 10_000);
 });
 
 describe('previewQuery', () => {

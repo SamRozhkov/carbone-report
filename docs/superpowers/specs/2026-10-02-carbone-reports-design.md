@@ -330,3 +330,83 @@ carbone-reports/
 - Carbone вызывается через `POST /render/:id?download=true` (Carbone 5, заголовок `carbone-version: 5`).
 - OnlyOffice Command Service доступен по пути `/command`. В Document Server нужно задать `ALLOW_PRIVATE_IP_ADDRESS=true`, чтобы он мог обращаться к `api` во внутренней сети.
 - `bigint`/`numeric` больше 2^53−1 по модулю передаются строкой.
+
+## 13. Развёртывание: Docker Compose для разработки и прода
+
+Утверждено 2026-10-02. Заменяет часть «docker-compose» Плана 3. Демо-профиль и E2E на Playwright остаются за Планом 3 и делаются после фронтенда.
+
+### 13.1 Файлы и запуск
+
+```
+docker-compose.yml          базовый файл = прод
+docker-compose.dev.yml      override для разработки
+docker/api.Dockerfile       multi-stage: target dev / target prod
+docker/web.Dockerfile       nginx + конфиг + статика (сейчас заглушка; в Плане 2 — сборка React)
+docker/nginx/common.conf    общие location
+docker/nginx/prod.conf      80 → 301 на 443, TLS, HSTS, include common.conf
+docker/nginx/dev.conf       HTTP, include common.conf
+docker/web/placeholder/index.html
+scripts/dev-cert.sh         самоподписанный сертификат в ./certs для локальной проверки прода
+scripts/smoke.ts            сквозная проверка работающего стека
+```
+
+- Прод: `docker compose up -d --build`, короткая команда `pnpm stack:prod`.
+- Разработка: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`, короткая команда `pnpm stack:dev`.
+- Проверка: `pnpm stack:smoke` (переменная `BASE_URL`).
+
+### 13.2 Сервисы
+
+| Сервис | Прод | Разработка (override) |
+|---|---|---|
+| `web` (nginx) | Порты `${WEB_HTTP_PORT:-80}` и `${WEB_HTTPS_PORT:-443}`, сертификаты `./certs/fullchain.pem` и `./certs/privkey.pem` (read-only) | Только HTTP, `${WEB_DEV_PORT:-8080}`, `dev.conf` |
+| `api` | Target `prod`: собранный `dist/server.js`, prod-зависимости, `drizzle/`, пользователь `node`, `WORKDIR` с `drizzle/`, healthcheck `GET /api/health`, `COOKIE_SECURE=true` | Target `dev`: исходники смонтированы, `tsx watch`, `node_modules` в именованных томах (нативный argon2 собирается под Linux), порт 3000 открыт, `COOKIE_SECURE=false` |
+| `postgres` | `postgres:17-alpine`, том `pgdata`, healthcheck `pg_isready` | Порт `${POSTGRES_DEV_PORT:-55433}` открыт |
+| `carbone` | `carbone/carbone-ee` с закреплённым тегом, healthcheck `GET /status`, том для шаблонов | Без изменений |
+| `onlyoffice` | `onlyoffice/documentserver` с закреплённым тегом. `JWT_ENABLED=true`, `JWT_SECRET=${ONLYOFFICE_JWT_SECRET}`, `ALLOW_PRIVATE_IP_ADDRESS=true`. Тома для данных и логов | Без изменений |
+
+- В проде наружу открыт только `web`.
+- `api` ждёт, пока `postgres` станет healthy.
+- Том `storage` монтируется в `/data` сервиса `api`.
+- Все сервисы перезапускаются с политикой `unless-stopped`.
+
+### 13.3 nginx (common.conf)
+
+- `/api/` → `http://api:3000`:
+  - `client_max_body_size 25m`;
+  - `proxy_read_timeout 180s`;
+  - заголовки `X-Forwarded-For` и `X-Forwarded-Proto`.
+- `/onlyoffice/` → `http://onlyoffice/` (префикс срезается):
+  - поддержка WebSocket (`Upgrade`/`Connection`);
+  - `X-Forwarded-Host $http_host/onlyoffice`, `X-Forwarded-Proto`;
+  - `proxy_set_header Cookie ""`;
+  - `client_max_body_size 100m`.
+- `/internal/` → `return 404`.
+- Остальные пути отдаются как статика из `/usr/share/nginx/html` с `try_files $uri /index.html`.
+
+### 13.4 Конфигурация
+
+`.env` в корне. `.env.example` описывает все переменные.
+
+- **Обязательные:** `APP_SECRET`, `ENCRYPTION_KEY`, `ONLYOFFICE_JWT_SECRET`, `POSTGRES_PASSWORD`, `ADMIN_LOGIN`, `ADMIN_PASSWORD`. В compose они задаются через `${VAR:?сообщение}`.
+- **Собираются в compose:**
+  - `DATABASE_URL=postgres://app:${POSTGRES_PASSWORD}@postgres:5432/app`
+  - `CARBONE_URL=http://carbone:4000`
+  - `ONLYOFFICE_INTERNAL_URL=http://onlyoffice`
+  - `API_INTERNAL_URL=http://api:3000`
+  - `STORAGE_DIR=/data`
+- **Необязательные:** порты, `TZ` и лимиты из §10, значения по умолчанию оттуда же.
+
+### 13.5 Smoke-проверка (`scripts/smoke.ts`)
+
+Скрипт запускается против поднятого стека. Для самоподписанного сертификата есть флаг `--insecure`.
+
+1. `GET /api/health` через `web` → `{"status":"ok"}`. `GET /internal/templates/x/file` через `web` → 404.
+2. Вход админа (`ADMIN_LOGIN`/`ADMIN_PASSWORD`).
+3. Генерация отчёта на реальном Carbone:
+   - создаётся источник данных на сервис `postgres` (база `app`);
+   - загружается DOCX с текстом `{d.company.name}`, который скрипт собирает через jszip;
+   - сохраняется запрос `company` (single) `select 'ООО Ромашка' as name`;
+   - `POST /api/reports/:id/render` в формате `pdf` → скачанный файл начинается с `%PDF`.
+4. `GET /onlyoffice/healthcheck` → `true`. `GET /onlyoffice/web-apps/apps/api/documents/api.js` → 200.
+5. Цепочка OnlyOffice → api: из `GET /api/templates/:id/editor-config` берётся `document.url`. Затем `POST /onlyoffice/converter`, подписанный `ONLYOFFICE_JWT_SECRET`, с `url` = `document.url` и `outputtype: pdf`. Ожидается `endConvert: true` и `fileUrl`. Это проверяет сеть между сервисами, разрешение приватных IP и общий JWT.
+6. Скрипт удаляет созданные им шаблон и источник данных.

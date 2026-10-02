@@ -1,0 +1,21 @@
+{
+  "name": "carbone-reports",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.6",
+  "engines": { "node": ">=22.12" },
+  "scripts": {
+    "test": "pnpm -r test",
+    "test:int": "pnpm -r test:int",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.71.0"
+  }
+}

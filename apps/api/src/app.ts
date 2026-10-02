@@ -4,10 +4,10 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
+import type { AppDeps } from './deps';
 import { registerErrorHandler } from './lib/errors';
 
-// Временный вид; финальный AppDeps появится в src/deps.ts (Task 3).
-export type AppDeps = Record<string, never>;
+export type { AppDeps };
 
 export function createFastify() {
   const app = Fastify({

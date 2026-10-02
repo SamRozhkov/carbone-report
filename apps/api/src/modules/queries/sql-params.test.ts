@@ -49,6 +49,12 @@ describe('parseSqlParams', () => {
   it('не трогает срезы массивов с числами', () => {
     expect(p('select arr[1:2] from t')).toEqual({ text: 'select arr[1:2] from t', names: [] });
   });
+  it('не трогает срезы массивов с идентификаторами', () => {
+    expect(p('select a[1:n], b[lo:hi] from t where x = :p')).toEqual({
+      text: 'select a[1:n], b[lo:hi] from t where x = $1',
+      names: ['p'],
+    });
+  });
   it('параметр в конце строки и рядом со скобками', () => {
     expect(p('where id in (:a,:b)')).toEqual({ text: 'where id in ($1,$2)', names: ['a', 'b'] });
   });

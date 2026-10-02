@@ -36,7 +36,7 @@ export function resolveParams(defs: TemplateParam[], input: ParamsInput): Record
   const out: Record<string, ParamValue> = {};
   const fields: Record<string, string> = {};
   for (const def of defs) {
-    const raw = input[def.name];
+    const raw = Object.hasOwn(input, def.name) ? input[def.name] : undefined;
     const value = isEmpty(raw) ? def.defaultValue : raw;
     if (isEmpty(value)) {
       if (def.required) fields[def.name] = 'обязательный параметр';

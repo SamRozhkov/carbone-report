@@ -9,7 +9,10 @@ const IDENT_START = /[A-Za-z_]/;
 const IDENT_PART = /[A-Za-z0-9_]/;
 const DOLLAR_TAG = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/;
 
-/** Заменяет :name на $n, пропуская строки, идентификаторы в кавычках, комментарии и ::cast. */
+/**
+ * Заменяет :name на $n, пропуская строки, идентификаторы в кавычках, комментарии и ::cast.
+ * `:name` — параметр, только если перед `:` не идентификатор/цифра (иначе это срез массива a[1:n]).
+ */
 export function parseSqlParams(sql: string): ParsedSql {
   const names: string[] = [];
   const n = sql.length;
@@ -110,7 +113,7 @@ export function parseSqlParams(sql: string): ParsedSql {
         i += 2;
         continue;
       }
-      if (next !== undefined && IDENT_START.test(next)) {
+      if (next !== undefined && IDENT_START.test(next) && !prevIsIdent(i)) {
         let j = i + 1;
         while (j < n && IDENT_PART.test(sql[j]!)) j++;
         const name = sql.slice(i + 1, j);

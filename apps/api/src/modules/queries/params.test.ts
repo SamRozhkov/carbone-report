@@ -67,6 +67,10 @@ describe('resolveParams', () => {
     });
   });
 
+  it('унаследованные свойства не считаются значениями', () => {
+    expect(resolveParams([def({ name: 'toString', type: 'string' })], {})).toEqual({ toString: null });
+  });
+
   it('лишние ключи во входе игнорируются', () => {
     expect(resolveParams([], { hacker: "'; drop table x; --" })).toEqual({});
   });

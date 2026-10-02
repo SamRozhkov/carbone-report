@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 export const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+const RESERVED_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
+const notReserved = (s: string) => !RESERVED_NAMES.has(s);
 export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const Role = z.enum(['admin', 'user']);
@@ -35,7 +37,7 @@ export type ParamValue = z.infer<typeof ParamValue>;
 
 export const TemplateParam = z
   .object({
-    name: z.string().regex(IDENT_RE, 'имя: латиница, цифры и _'),
+    name: z.string().regex(IDENT_RE, 'имя: латиница, цифры и _').refine(notReserved, 'зарезервированное имя'),
     label: z.string().min(1),
     type: ParamType,
     required: z.boolean(),
@@ -55,7 +57,8 @@ export const TemplateQuery = z.object({
   key: z
     .string()
     .regex(IDENT_RE, 'ключ: латиница, цифры и _')
-    .refine((k) => k !== 'params', 'ключ "params" зарезервирован'),
+    .refine((k) => k !== 'params', 'ключ "params" зарезервирован')
+    .refine(notReserved, 'зарезервированное имя'),
   sql: z.string().trim().min(1),
   mode: QueryMode,
 });

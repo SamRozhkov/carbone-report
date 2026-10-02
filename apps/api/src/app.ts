@@ -4,6 +4,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
+import { registerErrorHandler } from './lib/errors';
 
 // Временный вид; финальный AppDeps появится в src/deps.ts (Task 3).
 export type AppDeps = Record<string, never>;
@@ -22,6 +23,7 @@ export type App = ReturnType<typeof createFastify>;
 
 export async function buildApp(_deps: AppDeps): Promise<App> {
   const app = createFastify();
+  registerErrorHandler(app);
   app.get('/api/health', async () => ({ status: 'ok' }));
   await app.ready();
   return app;

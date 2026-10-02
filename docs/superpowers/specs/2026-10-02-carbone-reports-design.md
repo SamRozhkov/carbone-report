@@ -1,7 +1,7 @@
 # Carbone Reports — дизайн-спецификация
 
 Дата: 2026-10-02
-Статус: на ревью
+Статус: утверждена
 
 ## 1. Цель
 
@@ -313,3 +313,17 @@ carbone-reports/
 **web:** форма параметров по описанию (типы, required, default), дерево тегов из JSON (вложенные объекты, массивы → `[i]`).
 
 **E2E smoke** (Playwright, `docker compose --profile demo`): вход админом → открытие редактора демо-шаблона, iframe OnlyOffice загрузился → вход пользователем → генерация «Счёта» в PDF → PDF скачивается и содержит название компании из демо-данных.
+
+## 12. Уточнения после планирования
+
+Детали зафиксированы в `docs/superpowers/plans/2026-10-02-carbone-reports-backend.md`, раздел «Уточнения спецификации». Кратко:
+
+- Пустой шаблон создаётся только как docx или xlsx. Остальные форматы добавляются загрузкой файла.
+- Новые маршруты: `POST /api/templates/upload`, `PUT /api/templates/:id/file`, `POST /api/datasources/test`.
+- `report_runs.template_name`, `templates.last_save_error`.
+- `queries/run` возвращает `truncated` вместо `rowCount`.
+- Неизвестные `:param` проверяются при выполнении запроса.
+- Ошибки валидации параметров не пишутся в историю.
+- Carbone вызывается через `POST /render/:id?download=true` (Carbone 5, заголовок `carbone-version: 5`).
+- OnlyOffice Command Service доступен по пути `/command`. В Document Server нужно задать `ALLOW_PRIVATE_IP_ADDRESS=true`, чтобы он мог обращаться к `api` во внутренней сети.
+- `bigint`/`numeric` больше 2^53−1 по модулю передаются строкой.

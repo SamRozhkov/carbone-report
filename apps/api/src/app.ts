@@ -10,6 +10,7 @@ import type { AppDeps } from './deps';
 import { registerErrorHandler } from './lib/errors';
 import { makeGuards } from './modules/auth/guards';
 import { registerAuthRoutes } from './modules/auth/routes';
+import { registerUserRoutes } from './modules/users/routes';
 
 export type { AppDeps };
 
@@ -34,6 +35,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
 
   app.get('/api/health', async () => ({ status: 'ok' }));
   registerAuthRoutes(app, deps, guards);
+  registerUserRoutes(app, deps, guards);
 
   await app.ready();
   return app;

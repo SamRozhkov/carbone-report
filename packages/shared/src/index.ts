@@ -187,3 +187,6 @@ export const ApiError = z.object({
   error: z.object({ code: z.string(), message: z.string(), details: z.unknown().optional() }),
 });
 export type ApiError = z.infer<typeof ApiError>;
+
+export const IdParams = z.object({ id: z.uuid('неверный идентификатор') });
+export type IdParams = z.infer<typeof IdParams>;

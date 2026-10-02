@@ -11,6 +11,7 @@ import { createDb, migrateDb } from '../src/db/client';
 import { users, type UserRow } from '../src/db/schema';
 import type { AppDeps } from '../src/deps';
 import { Storage } from '../src/lib/storage';
+import { createSourcePools } from '../src/modules/datasources/pools';
 import { hashPassword } from '../src/modules/auth/password';
 
 const enc = new TextEncoder();
@@ -51,6 +52,29 @@ const notConfigured = (what: string) => () => {
   throw new Error(`${what} не настроен в тесте`);
 };
 
+export interface SourceConn {
+  host: string;
+  port: number;
+  database: string;
+  username: string;
+  password: string;
+}
+
+export async function createSourceDatabase(seedSql: string): Promise<SourceConn> {
+  const url = new URL(await createTestDatabase());
+  const client = new pg.Client({ connectionString: url.toString() });
+  await client.connect();
+  await client.query(seedSql);
+  await client.end();
+  return {
+    host: url.hostname,
+    port: Number(url.port),
+    database: url.pathname.slice(1),
+    username: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+  };
+}
+
 export interface TestApp {
   app: App;
   deps: AppDeps;
@@ -69,11 +93,7 @@ export async function createTestApp(
     config,
     db,
     storage: new Storage(storageDir),
-    sources: {
-      get: notConfigured('sources'),
-      invalidate: async () => {},
-      closeAll: async () => {},
-    },
+    sources: createSourcePools({ db, config }),
     carbone: { render: notConfigured('carbone') },
     onlyoffice: { forceSave: notConfigured('onlyoffice') },
     fetchFile: notConfigured('fetchFile'),

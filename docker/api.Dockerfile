@@ -27,6 +27,7 @@ RUN pnpm --filter @carbone-reports/api build
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm --filter @carbone-reports/api deploy --prod --legacy /out
 RUN cp -r apps/api/dist apps/api/drizzle /out/
+RUN rm -rf /out/src /out/test
 
 # --- Прод ---
 FROM node:22-bookworm-slim AS prod

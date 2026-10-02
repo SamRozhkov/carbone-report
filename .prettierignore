@@ -3,3 +3,4 @@ apps/api/drizzle/
 .superpowers/
 dist/
 node_modules/
+docs/

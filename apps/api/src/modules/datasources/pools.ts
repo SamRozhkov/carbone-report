@@ -86,24 +86,28 @@ export function createSourcePools(deps: { db: Db; config: Config }): SourcePools
     return { pool, name: row.name };
   }
 
+  async function invalidate(id: string): Promise<void> {
+    const entry = cache.get(id);
+    cache.delete(id);
+    if (entry) await entry.then((e) => e.pool.end()).catch(() => {});
+  }
+
   return {
     get(id) {
       let entry = cache.get(id);
       if (!entry) {
         entry = open(id);
         cache.set(id, entry);
-        entry.catch(() => cache.delete(id));
+        const current = entry;
+        current.catch(() => {
+          if (cache.get(id) === current) cache.delete(id);
+        });
       }
       return entry;
     },
-    async invalidate(id) {
-      const entry = cache.get(id);
-      cache.delete(id);
-      if (entry) await entry.then((e) => e.pool.end()).catch(() => {});
-    },
+    invalidate,
     async closeAll() {
-      const ids = [...cache.keys()];
-      await Promise.all(ids.map((id) => this.invalidate(id)));
+      await Promise.all([...cache.keys()].map((id) => invalidate(id)));
     },
   };
 }

@@ -1,4 +1,7 @@
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { datasources, templates } from '../src/db/schema';
+import { decryptSecret } from '../src/lib/crypto';
 import { createSourceDatabase, createTestApp, loginAs, type SourceConn, type TestApp } from './helpers';
 
 let t: TestApp;
@@ -38,6 +41,9 @@ describe('datasources', () => {
       expect(item).not.toHaveProperty('password');
       expect(item).not.toHaveProperty('passwordEnc');
     }
+    const [row] = await t.deps.db.select().from(datasources).where(eq(datasources.id, r.json().id));
+    expect(row!.passwordEnc).not.toBe(src.password);
+    expect(decryptSecret(row!.passwordEnc, t.deps.config.encryptionKey)).toBe(src.password);
   });
 
   it('проверка соединения: успешная и с неверным паролем', async () => {
@@ -79,12 +85,33 @@ describe('datasources', () => {
   it('PATCH с новым паролем сбрасывает закэшированный пул', async () => {
     const created = await t.app.inject({ method: 'POST', url: '/api/datasources', headers: { cookie: admin }, payload: body() });
     const id = created.json().id;
-    await t.deps.sources.get(id);
+    const first = await t.deps.sources.get(id);
+    await first.pool.query('select 1');
     await t.app.inject({
       method: 'PATCH', url: `/api/datasources/${id}`, headers: { cookie: admin }, payload: { ...body(), password: 'wrong' },
     });
-    const test = await t.app.inject({ method: 'POST', url: `/api/datasources/${id}/test`, headers: { cookie: admin } });
-    expect(test.json().ok).toBe(false);
+    const second = await t.deps.sources.get(id);
+    expect(second.pool).not.toBe(first.pool);
+    await expect(second.pool.query('select 1')).rejects.toThrow();
+  });
+
+  it('удаление: 204, затем пул недоступен (404)', async () => {
+    const created = await t.app.inject({ method: 'POST', url: '/api/datasources', headers: { cookie: admin }, payload: body() });
+    const id = created.json().id;
+    await t.deps.sources.get(id);
+    const del = await t.app.inject({ method: 'DELETE', url: `/api/datasources/${id}`, headers: { cookie: admin } });
+    expect(del.statusCode).toBe(204);
+    await expect(t.deps.sources.get(id)).rejects.toMatchObject({ code: 'NOT_FOUND', status: 404 });
+  });
+
+  it('удаление источника, используемого шаблоном → 409', async () => {
+    const created = await t.app.inject({ method: 'POST', url: '/api/datasources', headers: { cookie: admin }, payload: body() });
+    const id = created.json().id;
+    await t.deps.db.insert(templates).values({
+      name: 'T', datasourceId: id, fileExt: 'docx', filePath: 'templates/x.docx', docKey: 'k1',
+    });
+    const del = await t.app.inject({ method: 'DELETE', url: `/api/datasources/${id}`, headers: { cookie: admin } });
+    expect(del.statusCode).toBe(409);
   });
 
   it('удаление несуществующего → 404', async () => {

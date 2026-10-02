@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import {
   IdParams,
+  type ParamsInput,
+  type ParamValue,
   PreviewBody,
   RenderBody,
   RunQueryBody,
@@ -18,10 +20,24 @@ import { AppError, notFound } from '../../lib/errors';
 import { contentDisposition, MIME } from '../../lib/http';
 import { currentUser, type Guards } from '../auth/guards';
 import { previewQuery } from '../queries/executor';
-import { loadTemplateFull } from '../templates/service';
+import { resolveParams } from '../queries/params';
+import { loadTemplateFull, type TemplateFull } from '../templates/service';
 import { assertFormat, collectReportData, renderReport } from './service';
 
 const PREVIEW_ROWS = 50;
+
+/** В запись об ошибке: разрешённые параметры, а если не получилось — только известные шаблону ключи. */
+function paramsForErrorRun(full: TemplateFull, input: ParamsInput): Record<string, ParamValue> {
+  try {
+    return resolveParams(full.params, input);
+  } catch {
+    const out: Record<string, ParamValue> = {};
+    for (const p of full.params) {
+      if (Object.hasOwn(input, p.name)) out[p.name] = input[p.name]!;
+    }
+    return out;
+  }
+}
 
 export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): void {
   const { db, storage } = deps;
@@ -61,7 +77,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
           try {
             await db.insert(reportRuns).values({
               ...base,
-              params: req.body.params,
+              params: paramsForErrorRun(full, req.body.params),
               status: 'error',
               error: e instanceof AppError ? e.message : 'внутренняя ошибка сервера',
               durationMs: Date.now() - started,

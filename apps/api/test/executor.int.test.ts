@@ -89,6 +89,11 @@ describe('runQueries', () => {
     expect(e.message).toMatch(/^запрос "bad": /);
   });
 
+  it('имя из прототипа (:toString) не считается параметром → CONFIG', async () => {
+    const e = await err(runQueries(pool, 'src', [{ key: 'q', mode: 'list', sql: 'select :toString' }], {}, limits));
+    expect(e.code).toBe('CONFIG');
+  });
+
   it('неизвестный параметр → CONFIG', async () => {
     const e = await err(runQueries(pool, 'src', [{ key: 'q', mode: 'list', sql: 'select :nope' }], {}, limits));
     expect(e.code).toBe('CONFIG');

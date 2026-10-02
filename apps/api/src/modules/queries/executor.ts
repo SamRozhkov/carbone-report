@@ -118,7 +118,7 @@ async function readQuery(
     throw e;
   }
   const values = parsed.names.map((name) => {
-    if (!(name in params)) throw new AppError('CONFIG', 400, `запрос "${key}": неизвестный параметр :${name}`);
+    if (!Object.hasOwn(params, name)) throw new AppError('CONFIG', 400, `запрос "${key}": неизвестный параметр :${name}`);
     return params[name];
   });
 

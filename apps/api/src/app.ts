@@ -19,10 +19,24 @@ import { registerUserRoutes } from './modules/users/routes';
 
 export type { AppDeps };
 
+/** Токен файлового доступа передаётся в query-параметре t: в логи он не попадает. */
+export const redactToken = (url?: string) => url?.replace(/([?&])t=[^&]*/g, '$1t=***');
+
 export function createFastify() {
   const app = Fastify({
-    logger: process.env.NODE_ENV === 'test' || process.env.VITEST ? false : { level: 'info' },
-    bodyLimit: 25 * 1024 * 1024,
+    logger:
+      process.env.NODE_ENV === 'test' || process.env.VITEST
+        ? false
+        : {
+            level: 'info',
+            serializers: {
+              req: (req: { method?: string; url?: string }) => ({
+                method: req.method,
+                url: redactToken(req.url),
+              }),
+            },
+          },
+    bodyLimit: 1024 * 1024,
   }).withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);

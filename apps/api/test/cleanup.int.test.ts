@@ -33,6 +33,27 @@ describe('cleanupOldReports', () => {
     const [row] = await t.deps.db.select().from(reportRuns).where(eq(reportRuns.id, old.id));
     expect(row!.fileDeleted).toBe(true);
   });
+  it('сбой удаления одного файла не прерывает пакет', async () => {
+    const bad = await run(50);
+    const good = await run(50);
+    const orig = t.deps.storage.remove.bind(t.deps.storage);
+    t.deps.storage.remove = async (p: string) => {
+      if (p === bad.filePath) throw new Error('disk');
+      return orig(p);
+    };
+    try {
+      const warns: unknown[] = [];
+      expect(await cleanupOldReports(t.deps, new Date(), { warn: (o) => void warns.push(o) })).toBe(1);
+      expect(warns).toHaveLength(1);
+    } finally {
+      t.deps.storage.remove = orig;
+    }
+    const [g] = await t.deps.db.select().from(reportRuns).where(eq(reportRuns.id, good.id));
+    const [b] = await t.deps.db.select().from(reportRuns).where(eq(reportRuns.id, bad.id));
+    expect(g!.fileDeleted).toBe(true);
+    expect(b!.fileDeleted).toBe(false);
+    expect(await cleanupOldReports(t.deps)).toBe(1); // повторная попытка для проблемного файла
+  });
   it('повторный запуск ничего не делает', async () => {
     expect(await cleanupOldReports(t.deps)).toBe(0);
   });

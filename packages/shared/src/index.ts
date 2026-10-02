@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+z.config(z.locales.ru());
+
 export const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const RESERVED_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
 const notReserved = (s: string) => !RESERVED_NAMES.has(s);

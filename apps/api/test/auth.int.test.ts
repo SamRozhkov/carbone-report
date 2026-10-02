@@ -14,11 +14,23 @@ describe('auth', () => {
   it('ensureAdmin создаёт админа при пустой таблице и не дублирует', async () => {
     t.deps.config.adminLogin = 'root';
     t.deps.config.adminPassword = 'rootpass123';
-    await ensureAdmin(t.deps);
-    await ensureAdmin(t.deps);
+    await ensureAdmin(t.deps, { warn: () => {} });
+    await ensureAdmin(t.deps, { warn: () => {} });
     const rows = await t.deps.db.select().from(users).where(eq(users.login, 'root'));
     expect(rows).toHaveLength(1);
     expect(rows[0]!.role).toBe('admin');
+  });
+
+  it('ensureAdmin предупреждает, если пользователей нет и админ не задан', async () => {
+    const t2 = await createTestApp();
+    try {
+      const warns: string[] = [];
+      await ensureAdmin(t2.deps, { warn: (m) => void warns.push(m) });
+      expect(warns).toHaveLength(1);
+      expect(warns[0]).toMatch(/ADMIN_LOGIN/);
+    } finally {
+      await t2.close();
+    }
   });
 
   it('вход с верным паролем ставит httpOnly cookie, /me возвращает пользователя', async () => {

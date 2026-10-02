@@ -40,7 +40,7 @@ export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards
   );
 
   app.post('/internal/onlyoffice/callback/:id', { schema: { params: IdParams } }, async (req) => {
-    await handleCallback(deps, req.params.id, req.body, req.headers.authorization);
+    await handleCallback(deps, req.params.id, req.body, req.headers.authorization, req.log);
     return { error: 0 };
   });
 }

@@ -1,7 +1,7 @@
 import { CreateUserBody, IdParams, UpdateUserBody, type UserDto } from '@carbone-reports/shared';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNotNull } from 'drizzle-orm';
 import type { App } from '../../app';
-import { users, type UserRow } from '../../db/schema';
+import { reportRuns, users, type UserRow } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { badRequest, conflict, notFound } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
@@ -57,8 +57,18 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
 
   app.delete('/api/users/:id', { ...pre, schema: { params: IdParams } }, async (req, reply) => {
     if (req.params.id === currentUser(req).id) throw badRequest('нельзя удалить собственную учётную запись');
+    // Запуски удаляются каскадом, поэтому пути файлов нужно собрать до удаления пользователя.
+    const files = await deps.db
+      .select({ filePath: reportRuns.filePath })
+      .from(reportRuns)
+      .where(and(eq(reportRuns.userId, req.params.id), isNotNull(reportRuns.filePath), eq(reportRuns.fileDeleted, false)));
     const [row] = await deps.db.delete(users).where(eq(users.id, req.params.id)).returning();
     if (!row) throw notFound('пользователь');
+    for (const f of files) {
+      await deps.storage
+        .remove(f.filePath!)
+        .catch((err) => req.log.warn({ err, filePath: f.filePath }, 'не удалось удалить файл отчёта'));
+    }
     return reply.status(204).send();
   });
 }

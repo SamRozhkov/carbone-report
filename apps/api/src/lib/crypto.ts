@@ -10,7 +10,7 @@ export function encryptSecret(plain: string, key: Buffer): string {
 
 export function decryptSecret(enc: string, key: Buffer): string {
   const buf = Buffer.from(enc, 'base64');
-  const decipher = createDecipheriv('aes-256-gcm', key, buf.subarray(0, 12));
+  const decipher = createDecipheriv('aes-256-gcm', key, buf.subarray(0, 12), { authTagLength: 16 });
   decipher.setAuthTag(buf.subarray(12, 28));
   return Buffer.concat([decipher.update(buf.subarray(28)), decipher.final()]).toString('utf8');
 }

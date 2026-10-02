@@ -53,6 +53,17 @@ async function callback(body: Record<string, unknown>, via: 'body' | 'header' = 
   return t.app.inject({ method: 'POST', url: `/internal/onlyoffice/callback/${tplId}`, headers, payload });
 }
 
+describe('callback: прочее', () => {
+  it('callback для удалённого шаблона подтверждается {error:0}', async () => {
+    const r1 = await callback({ key: 'k', status: 2, url: 'http://oo/final' });
+    expect(r1.statusCode).toBe(200);
+    await t.app.inject({ method: 'DELETE', url: `/api/templates/${tplId}`, headers: { cookie: admin } });
+    const r = await callback({ key: 'k', status: 2, url: 'http://oo/final' });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toEqual({ error: 0 });
+  });
+});
+
 describe('editor-config', () => {
   it('подписанный конфиг с внутренними URL; user → 403', async () => {
     const r = await t.app.inject({ method: 'GET', url: `/api/templates/${tplId}/editor-config`, headers: { cookie: admin } });

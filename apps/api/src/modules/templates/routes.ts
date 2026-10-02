@@ -48,8 +48,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     let file: { filename: string; data: Buffer } | undefined;
     for await (const part of req.parts({ limits: { fileSize: MAX_FILE } })) {
       if (part.type === 'file') {
-        const data = await part.toBuffer();
-        if (part.file.truncated) throw badRequest('файл больше 20 МБ');
+        const data = await part.toBuffer(); // при превышении лимита бросает FST_REQ_FILE_TOO_LARGE (413)
         file = { filename: part.filename, data };
       } else {
         fields[part.fieldname] = String(part.value);

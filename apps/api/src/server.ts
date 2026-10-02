@@ -24,7 +24,7 @@ const deps: AppDeps = {
   fetchFile,
 };
 
-await ensureAdmin(deps);
+await ensureAdmin(deps, console);
 const app = await buildApp(deps);
 const stopCleanup = startCleanupTimer(deps, app.log);
 

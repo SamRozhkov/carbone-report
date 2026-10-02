@@ -26,6 +26,11 @@ describe('loadConfig', () => {
   it('падает с понятной ошибкой на коротком ENCRYPTION_KEY', () => {
     expect(() => loadConfig({ ...base, ENCRYPTION_KEY: 'abc' })).toThrow(/ENCRYPTION_KEY/);
   });
+  it('требует ADMIN_PASSWORD не короче 8 символов', () => {
+    expect(() => loadConfig({ ...base, ADMIN_PASSWORD: 'short' })).toThrow(/ADMIN_PASSWORD/);
+    expect(loadConfig({ ...base, ADMIN_PASSWORD: 'longenough' }).adminPassword).toBe('longenough');
+    expect(() => loadConfig({ ...base, ADMIN_PASSWORD: '' })).not.toThrow();
+  });
   it('падает, если нет DATABASE_URL', () => {
     const { DATABASE_URL: _, ...rest } = base;
     expect(() => loadConfig(rest)).toThrow(/DATABASE_URL/);

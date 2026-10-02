@@ -11,7 +11,10 @@ const Env = z.object({
   API_INTERNAL_URL: z.url().default('http://api:3000'),
   CARBONE_URL: z.url().default('http://carbone:4000'),
   ADMIN_LOGIN: z.string().optional(),
-  ADMIN_PASSWORD: z.string().optional(),
+  ADMIN_PASSWORD: z
+    .string()
+    .refine((v) => v === '' || v.length >= 8, 'ADMIN_PASSWORD: минимум 8 символов')
+    .optional(),
   STORAGE_DIR: z.string().default('/data'),
   QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
   QUERY_MAX_ROWS: z.coerce.number().int().positive().default(100000),

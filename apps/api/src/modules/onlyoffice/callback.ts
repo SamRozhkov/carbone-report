@@ -5,7 +5,6 @@ import { templates, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { AppError } from '../../lib/errors';
 import { isZip } from '../../lib/http';
-import { loadTemplate } from '../templates/service';
 import { verifyOnlyOffice } from './jwt';
 
 const Callback = z.object({
@@ -46,11 +45,14 @@ export async function handleCallback(
   templateId: string,
   body: unknown,
   authorization: string | undefined,
+  log?: { warn(o: unknown, msg?: string): void },
 ): Promise<void> {
   const parsed = Callback.safeParse(await verifiedPayload(deps, body, authorization));
   if (!parsed.success) throw new AppError('BAD_CALLBACK', 400, 'неверный формат callback OnlyOffice');
   const cb = parsed.data;
-  await loadTemplate(deps.db, templateId); // 404 для неизвестного шаблона
+  if (![2, 3, 6, 7].includes(cb.status)) return; // остальные статусы не требуют действий и блокировок
+  const [exists] = await deps.db.select({ id: templates.id }).from(templates).where(eq(templates.id, templateId));
+  if (!exists) return; // шаблон удалён: подтверждаем, чтобы Document Server не повторял callback
 
   let downloadFailed = false;
   try {
@@ -62,6 +64,7 @@ export async function handleCallback(
       const setError = (msg: string) => tx.update(templates).set({ lastSaveError: msg }).where(eq(templates.id, row.id));
 
       if (cb.status === 3 || cb.status === 7) {
+        log?.warn({ templateId, status: cb.status }, SAVE_ERRORS[cb.status]);
         await setError(SAVE_ERRORS[cb.status]!);
         return;
       }

@@ -12,6 +12,7 @@ import { registerErrorHandler } from './lib/errors';
 import { makeGuards } from './modules/auth/guards';
 import { registerAuthRoutes } from './modules/auth/routes';
 import { registerDatasourceRoutes } from './modules/datasources/routes';
+import { registerOnlyOfficeRoutes } from './modules/onlyoffice/routes';
 import { registerReportRoutes } from './modules/reports/routes';
 import { registerTemplateRoutes } from './modules/templates/routes';
 import { registerUserRoutes } from './modules/users/routes';
@@ -44,6 +45,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   registerDatasourceRoutes(app, deps, guards);
   registerTemplateRoutes(app, deps, guards);
   registerReportRoutes(app, deps, guards);
+  registerOnlyOfficeRoutes(app, deps, guards);
 
   await app.ready();
   return app;

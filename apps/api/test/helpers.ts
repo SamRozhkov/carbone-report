@@ -2,13 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { Role } from '@carbone-reports/shared';
 import pg from 'pg';
 import { inject } from 'vitest';
 import { buildApp, type App } from '../src/app';
 import type { Config } from '../src/config';
 import { createDb, migrateDb } from '../src/db/client';
+import { users, type UserRow } from '../src/db/schema';
 import type { AppDeps } from '../src/deps';
 import { Storage } from '../src/lib/storage';
+import { hashPassword } from '../src/modules/auth/password';
 
 const enc = new TextEncoder();
 
@@ -87,4 +90,18 @@ export async function createTestApp(
       await rm(storageDir, { recursive: true, force: true });
     },
   };
+}
+
+export async function loginAs(t: TestApp, role: Role): Promise<{ cookie: string; user: UserRow }> {
+  const login = `${role}_${randomUUID().slice(0, 8)}`;
+  const [user] = await t.deps.db
+    .insert(users)
+    .values({ login, passwordHash: await hashPassword('password123'), role })
+    .returning();
+  const res = await t.app.inject({
+    method: 'POST', url: '/api/auth/login', payload: { login, password: 'password123' },
+  });
+  if (res.statusCode !== 200) throw new Error(`login failed: ${res.body}`);
+  const cookie = String(res.headers['set-cookie']).split(';')[0]!;
+  return { cookie, user: user! };
 }

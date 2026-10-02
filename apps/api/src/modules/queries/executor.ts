@@ -51,9 +51,7 @@ async function withReadOnly<T>(
   try {
     client = await pool.connect();
   } catch (e) {
-    throw new AppError('DATASOURCE_UNAVAILABLE', 502, `не удалось подключиться к источнику "${sourceName}"`, {
-      reason: (e as Error).message,
-    });
+    throw new AppError('DATASOURCE_UNAVAILABLE', 502, `не удалось подключиться к источнику "${sourceName}"`, undefined, (e as Error).message);
   }
   let broken = false;
   // pg-pool снимает свой обработчик 'error' на время аренды; без своего процесс упадёт при обрыве соединения.
@@ -85,9 +83,7 @@ async function withReadOnly<T>(
   } catch (e) {
     if (e instanceof AppError) throw e;
     broken = true;
-    throw new AppError('DATASOURCE_UNAVAILABLE', 502, `соединение с источником "${sourceName}" прервано`, {
-      reason: (e as Error).message,
-    });
+    throw new AppError('DATASOURCE_UNAVAILABLE', 502, `соединение с источником "${sourceName}" прервано`, undefined, (e as Error).message);
   } finally {
     try {
       await client.query('ROLLBACK');

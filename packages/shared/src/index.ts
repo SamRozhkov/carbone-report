@@ -190,7 +190,7 @@ export const RunsQuery = z.object({
   templateId: z.uuid().optional(),
   userId: z.uuid().optional(),
   status: z.enum(['ok', 'error']).optional(),
-  page: z.coerce.number().int().min(1).default(1),
+  page: z.coerce.number().int().min(1).max(10000).default(1),
 });
 export type RunsQuery = z.infer<typeof RunsQuery>;
 

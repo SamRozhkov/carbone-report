@@ -48,18 +48,27 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         const file = await renderReport(deps, full, data, req.body.format);
         const filePath = `reports/${runId}.${req.body.format}`;
         await storage.write(filePath, file);
-        await db.insert(reportRuns).values({ ...base, params, status: 'ok', filePath, durationMs: Date.now() - started });
+        try {
+          await db.insert(reportRuns).values({ ...base, params, status: 'ok', filePath, durationMs: Date.now() - started });
+        } catch (insertErr) {
+          await storage.remove(filePath).catch(() => undefined);
+          throw insertErr;
+        }
         return reply.status(201).send({ runId });
       } catch (e) {
         // Ошибки ввода пользователя историю не засоряют.
         if (!(e instanceof AppError && e.code === 'VALIDATION')) {
-          await db.insert(reportRuns).values({
-            ...base,
-            params: req.body.params,
-            status: 'error',
-            error: e instanceof AppError ? e.message : 'внутренняя ошибка сервера',
-            durationMs: Date.now() - started,
-          });
+          try {
+            await db.insert(reportRuns).values({
+              ...base,
+              params: req.body.params,
+              status: 'error',
+              error: e instanceof AppError ? e.message : 'внутренняя ошибка сервера',
+              durationMs: Date.now() - started,
+            });
+          } catch (insertErr) {
+            req.log.error(insertErr);
+          }
         }
         throw e;
       }
@@ -83,7 +92,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         .from(reportRuns)
         .innerJoin(users, eq(users.id, reportRuns.userId))
         .where(cond)
-        .orderBy(desc(reportRuns.createdAt))
+        .orderBy(desc(reportRuns.createdAt), desc(reportRuns.id))
         .limit(RUNS_PAGE_SIZE)
         .offset((q.page - 1) * RUNS_PAGE_SIZE),
       db.select({ n: count() }).from(reportRuns).where(cond),
@@ -120,6 +129,13 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
       if (!run || (me.role !== 'admin' && run.userId !== me.id)) throw notFound('запуск');
       if (run.status !== 'ok' || !run.filePath) throw notFound('файл');
       if (run.fileDeleted) throw new AppError('GONE', 410, 'файл удалён по сроку хранения');
+      let content: Buffer;
+      try {
+        content = await storage.read(run.filePath);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') throw new AppError('GONE', 410, 'файл удалён по сроку хранения');
+        throw e;
+      }
       const date = run.createdAt.toISOString().slice(0, 10);
       return reply
         .header('content-type', MIME[run.outputFormat])
@@ -127,7 +143,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
           'content-disposition',
           contentDisposition(`${run.templateName} ${date}.${run.outputFormat}`, req.query.inline === '1'),
         )
-        .send(await storage.read(run.filePath));
+        .send(content);
     },
   );
 

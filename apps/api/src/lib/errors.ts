@@ -7,6 +7,8 @@ export class AppError extends Error {
     public readonly status: number,
     message: string,
     public readonly details?: unknown,
+    /** Внутренняя причина: только в лог, никогда в ответ. */
+    public readonly internal?: unknown,
   ) {
     super(message);
   }
@@ -22,6 +24,7 @@ export const conflict = (message: string) => new AppError('CONFLICT', 409, messa
 export function registerErrorHandler(app: App): void {
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof AppError) {
+      if (err.internal !== undefined) req.log.warn({ err: err.internal, code: err.code }, err.message);
       const body: { code: string; message: string; details?: unknown } = {
         code: err.code,
         message: err.message,

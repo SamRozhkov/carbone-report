@@ -95,6 +95,10 @@ describe('генерация', () => {
     const r = await render(userA, bad, { params: {}, format: 'pdf' });
     expect(r.statusCode).toBe(400);
     expect(r.json().error.message).toMatch(/^запрос "x": /);
+    const runs = await t.app.inject({ method: 'GET', url: '/api/runs?status=error', headers: { cookie: userA } });
+    const row = runs.json().items.find((x: { error: string }) => x.error.startsWith('запрос "x": '));
+    expect(row).toBeDefined();
+    expect(row.error).not.toMatch(/\n/);
   });
 
   it('шаблон без запросов генерируется только с params', async () => {
@@ -118,9 +122,14 @@ describe('история', () => {
   });
 
   it('user не может подсмотреть чужие запуски через ?userId', async () => {
+    const rb = await render(userB, tplId, { params: { from: '2026-01-01' }, format: 'pdf' });
+    const ra = await render(userA, tplId, { params: { from: '2026-01-01' }, format: 'pdf' });
     const listB = await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie: userB } });
     const otherUserId = listB.json().items[0].userId;
     const listA = await t.app.inject({ method: 'GET', url: `/api/runs?userId=${otherUserId}`, headers: { cookie: userA } });
+    const ids = listA.json().items.map((x: { id: string }) => x.id);
+    expect(ids).toContain(ra.json().runId);
+    expect(ids).not.toContain(rb.json().runId);
     expect(listA.json().items.every((x: { userId: string }) => x.userId !== otherUserId)).toBe(true);
   });
 
@@ -140,6 +149,20 @@ describe('история', () => {
     const runs = await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie: userA } });
     const run = runs.json().items.find((x: { id: string }) => x.id === runId);
     expect(run).toMatchObject({ templateId: null, templateName: expect.stringMatching(/^Шаблон /) });
+  });
+});
+
+describe('недоступный источник', () => {
+  it('502 без details и без сырого текста ошибки сети', async () => {
+    const ds = await t.app.inject({
+      method: 'POST', url: '/api/datasources', headers: { cookie: admin },
+      payload: { name: 'dead', host: '127.0.0.1', port: 1, database: 'x', username: 'x', password: 'x', ssl: false },
+    });
+    const dead = await createTemplate(t, admin, ds.json().id, { queries: [{ key: 'q', mode: 'list', sql: 'select 1 as a' }] });
+    const r = await render(userA, dead, { params: {}, format: 'pdf' });
+    expect(r.statusCode).toBe(502);
+    expect(r.json().error.details).toBeUndefined();
+    expect(r.body).not.toMatch(/ECONNREFUSED/);
   });
 });
 

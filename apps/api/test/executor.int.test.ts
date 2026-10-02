@@ -6,6 +6,7 @@ import { previewQuery, runQueries } from '../src/modules/queries/executor';
 import { createSourceDatabase } from './helpers';
 
 let pool: pg.Pool;
+let onePool: pg.Pool;
 let srcConn: Awaited<ReturnType<typeof createSourceDatabase>>;
 const limits = { timeoutMs: 1000, maxRows: 5 };
 
@@ -19,8 +20,12 @@ beforeAll(async () => {
   `);
   srcConn = src;
   pool = new pg.Pool(poolConfig({ ...src, ssl: false }));
+  onePool = new pg.Pool({ ...poolConfig({ ...src, ssl: false }), max: 1 });
 });
-afterAll(() => pool.end());
+afterAll(async () => {
+  await pool.end();
+  await onePool.end();
+});
 
 async function err(p: Promise<unknown>): Promise<AppError> {
   try {
@@ -128,14 +133,26 @@ describe('целостность транзакции', () => {
 
   it('commit + set_config не протекает в пул', async () => {
     const e = await err(
-      runQueries(pool, 'src', [
+      runQueries(onePool, 'src', [
         { key: 'c', mode: 'list', sql: 'commit' },
         { key: 's', mode: 'single', sql: "select set_config('search_path','evil',false)" },
       ], {}, limits),
     );
     expect(e.code).toBe('SQL_ERROR');
-    const [r] = await runQueries(pool, 'src', [{ key: 'p', mode: 'single', sql: "select current_setting('search_path') as sp" }], {}, limits);
+    const [r] = await runQueries(onePool, 'src', [{ key: 'p', mode: 'single', sql: "select current_setting('search_path') as sp" }], {}, limits);
     expect(r!.rows[0]).not.toEqual({ sp: 'evil' });
+  }, 10_000);
+
+  it('advisory-лок не переживает запрос', async () => {
+    await runQueries(onePool, 'src', [{ key: 'l', mode: 'single', sql: 'select pg_advisory_lock(42)' }], {}, limits);
+    const [r] = await runQueries(onePool, 'src', [{ key: 'n', mode: 'single', sql: "select count(*)::int as n from pg_locks where locktype = 'advisory' and pid = pg_backend_pid()" }], {}, limits);
+    expect(r!.rows).toEqual([{ n: 0 }]);
+  }, 10_000);
+
+  it('prepared statement не переживает запрос', async () => {
+    await runQueries(onePool, 'src', [{ key: 'p', mode: 'single', sql: 'prepare zz as select 1' }], {}, limits).catch(() => {});
+    const e = await err(runQueries(onePool, 'src', [{ key: 'x', mode: 'single', sql: 'execute zz' }], {}, limits));
+    expect(e.code).toBe('SQL_ERROR');
   }, 10_000);
 
   it('previewQuery: commit → SQL_ERROR', async () => {

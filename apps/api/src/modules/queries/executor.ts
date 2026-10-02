@@ -66,14 +66,14 @@ async function withReadOnly<T>(
     await client.query(`SET LOCAL statement_timeout = ${Math.floor(timeoutMs)}`);
     const base = (
       await client.query<TxState>(
-        "select transaction_timestamp()::text as ts, current_setting('statement_timeout') as st",
+        "select pg_catalog.transaction_timestamp()::text as ts, pg_catalog.current_setting('statement_timeout') as st",
       )
     ).rows[0]!;
     return await fn({
       client,
       guard: async (key) => {
         const { rows } = await client.query<TxState & { ro: string }>(
-          "select transaction_timestamp()::text as ts, current_setting('transaction_read_only') as ro, current_setting('statement_timeout') as st",
+          "select pg_catalog.transaction_timestamp()::text as ts, pg_catalog.current_setting('transaction_read_only') as ro, pg_catalog.current_setting('statement_timeout') as st",
         );
         const cur = rows[0]!;
         if (cur.ts !== base.ts || cur.ro !== 'on' || cur.st !== base.st) {
@@ -91,6 +91,8 @@ async function withReadOnly<T>(
   } finally {
     try {
       await client.query('ROLLBACK');
+      // Сессионное состояние (advisory-локи, prepared statements, SET) переживает ROLLBACK.
+      await client.query('DISCARD ALL');
     } catch {
       broken = true;
     }

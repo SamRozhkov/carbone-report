@@ -1,0 +1,315 @@
+# Carbone Reports — дизайн-спецификация
+
+Дата: 2026-10-02
+Статус: на ревью
+
+## 1. Цель
+
+Веб-приложение для генерации отчётов на базе [Carbone](https://carbone.io) с интерфейсом на GravityUI.
+
+- Администратор создаёт и редактирует шаблоны (DOCX/XLSX/ODT/PPTX) прямо в браузере через встроенный OnlyOffice, описывает SQL-запросы к PostgreSQL и параметры отчёта.
+- Пользователь выбирает отчёт, заполняет параметры и получает готовый файл (PDF, DOCX, XLSX…).
+
+**Критерий успеха:** админ создаёт шаблон в браузере, вставляет теги, пишет SQL. Пользователь без админских прав получает готовый PDF за пару кликов. Всё разворачивается одним `docker compose up`.
+
+### Не входит в MVP
+
+SSO/LDAP, СУБД-источники кроме PostgreSQL, история версий шаблонов с откатом, очередь фоновых генераций, рассылки по расписанию, права на отдельные шаблоны.
+
+## 2. Архитектура
+
+### 2.1 Сервисы (`docker-compose.yml`)
+
+| Сервис | Роль |
+|---|---|
+| `web` | nginx: раздаёт SPA (React + GravityUI), проксирует `/api/*` → `api:3000`, `/onlyoffice/*` → `onlyoffice:80` |
+| `api` | Node.js 22 + Fastify + TypeScript. Бизнес-логика, авторизация, выполнение SQL, интеграции |
+| `carbone` | Официальный Docker-образ Carbone (HTTP API), рендер шаблонов |
+| `onlyoffice` | OnlyOffice Document Server, редактирование шаблонов |
+| `postgres` | Метаданные приложения |
+| `demo-db` (profile `demo`) | Демо-БД с данными для отчётов |
+| volume `storage` | `/data/templates`, `/data/reports` (смонтирован в `api`) |
+
+Браузер обращается только к `web`. Document Server обращается к `api` по внутренней сети через `API_INTERNAL_URL` (`http://api:3000`). Все запросы между `api` и Document Server подписаны `ONLYOFFICE_JWT_SECRET`.
+
+### 2.2 Модули `api`
+
+| Модуль | Ответственность |
+|---|---|
+| `auth` | Вход по логину и паролю (argon2), сессия — JWT в httpOnly cookie, guard'ы `requireUser` / `requireAdmin` |
+| `users` | CRUD пользователей (admin), блокировка |
+| `datasources` | CRUD подключений к PostgreSQL, пул `pg.Pool` на каждый источник (lazy, сбрасывается при изменении), проверка соединения |
+| `queries` | Разбор `:param` → `$n`, выполнение запросов в read-only транзакции, сборка JSON |
+| `templates` | Метаданные и файлы шаблонов, запросы и параметры шаблона |
+| `onlyoffice` | Конфиг редактора, подпись JWT, callback сохранения, forcesave через Command Service |
+| `carbone` | Адаптер `CarboneClient.render(file, data, opts): Promise<Buffer>`. Единственное место, которое знает про API Carbone |
+| `reports` | Запуск генерации, история, выдача файлов, очистка старых файлов |
+
+Общие библиотеки: `lib/crypto` (AES-256-GCM), `lib/storage` (атомарная запись: tmp → rename), `lib/config` (env через zod).
+
+## 3. Модель данных (БД приложения)
+
+ORM — Drizzle, миграции применяются при старте `api`.
+
+```
+users             id uuid pk, login text unique, password_hash text,
+                  role text check (admin|user), blocked bool default false,
+                  created_at timestamptz
+
+datasources       id uuid pk, name text, host text, port int, database text,
+                  username text, password_enc text, ssl bool, created_at
+
+templates         id uuid pk, name text, description text,
+                  datasource_id uuid fk → datasources,
+                  file_ext text check (docx|xlsx|odt|ods|pptx),
+                  file_path text, version int default 1,
+                  doc_key text,                -- ключ документа OnlyOffice
+                  default_output text,         -- pdf|docx|xlsx|odt|ods
+                  updated_at timestamptz, updated_by uuid fk → users
+
+template_queries  id uuid pk, template_id uuid fk (cascade), key text,
+                  sql text, mode text check (list|single), sort_order int,
+                  unique (template_id, key)
+
+template_params   id uuid pk, template_id uuid fk (cascade), name text,
+                  label text, type text check (string|number|date|boolean|select),
+                  required bool, default_value jsonb, options jsonb,
+                  sort_order int, unique (template_id, name)
+
+report_runs       id uuid pk, template_id uuid fk (set null), template_version int,
+                  user_id uuid fk, params jsonb, output_format text,
+                  status text check (ok|error), error text, file_path text null,
+                  file_deleted bool default false, duration_ms int,
+                  created_at timestamptz
+```
+
+Ключ запроса (`key`) и имя параметра (`name`) должны соответствовать `^[a-zA-Z_][a-zA-Z0-9_]*$`. Ключ `params` зарезервирован.
+
+## 4. Данные для Carbone
+
+Результаты запросов шаблона собираются в один объект:
+
+- `mode=list` → `{ [key]: Row[] }`
+- `mode=single` → `{ [key]: Row | null }` (первая строка)
+- всегда добавляется `{ params: { ...значения параметров } }`
+
+В шаблоне: `{d.orders[i].total}`, `{d.company.name}`, `{d.params.dateFrom}`.
+
+Преобразование типов: `numeric`/`bigint` → number (через type parser `pg`), `date`/`timestamp` → ISO-строка, `json`/`jsonb` → объект как есть.
+
+### 4.1 Разбор параметров SQL
+
+`:name` заменяется на `$n` (одинаковые имена получают один номер). Не трогаются:
+- приведения типов `::type`;
+- содержимое строковых литералов `'...'` (включая `''`), `E'...'` и dollar-quoted строк `$tag$...$tag$`;
+- идентификаторы в кавычках `"..."`;
+- комментарии `-- ...` и `/* ... */`.
+
+Если в SQL встречается параметр, которого нет в `template_params`, это ошибка конфигурации: `400` при сохранении запроса или при запуске.
+
+### 4.2 Безопасность выполнения
+
+- Значения передаются только через bind-параметры. Подстановки строк в SQL нет.
+- Все запросы одного запуска выполняются на одном соединении в транзакции `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY` с `SET LOCAL statement_timeout = QUERY_TIMEOUT_MS`. После выполнения всегда `ROLLBACK`.
+- Лимит строк `QUERY_MAX_ROWS` на запрос. Строки читаются курсором (`pg-cursor`) порциями. При превышении — ошибка «запрос `X` вернул больше N строк».
+- Писать SQL могут только админы. Пользователь передаёт только значения параметров, которые проверяются по типам.
+- Пароли источников хранятся зашифрованными AES-256-GCM (`ENCRYPTION_KEY`) и никогда не отдаются в API.
+- В README будет рекомендация подключать источники под read-only пользователем БД.
+
+### 4.3 Валидация параметров
+
+На основе `template_params` строится zod-схема:
+
+| type | Принимается | Значение в SQL и данных |
+|---|---|---|
+| string | строка | string |
+| number | число | number |
+| date | `YYYY-MM-DD` | string `YYYY-MM-DD` |
+| boolean | boolean | boolean |
+| select | одно из `options[].value` | value |
+
+Если параметр отсутствует, подставляется `default_value`. Если его нет и параметр `required`, возвращается ошибка поля. Отсутствующий необязательный параметр передаётся как `null`.
+
+## 5. Интеграция с OnlyOffice
+
+### 5.1 Открытие
+
+`GET /api/templates/:id/editor-config` (admin) возвращает конфиг, подписанный `ONLYOFFICE_JWT_SECRET` (поле `token`):
+
+```jsonc
+{
+  "document": {
+    "fileType": "docx",
+    "key": "<templates.doc_key>",
+    "title": "<name>.docx",
+    "url": "<API_INTERNAL_URL>/internal/templates/:id/file?t=<JWT 10 мин>"
+  },
+  "documentType": "word",          // word | cell | slide по расширению
+  "editorConfig": {
+    "callbackUrl": "<API_INTERNAL_URL>/internal/onlyoffice/callback/:id",
+    "user": { "id": "<userId>", "name": "<login>" },
+    "lang": "ru",
+    "customization": { "forcesave": true }
+  }
+}
+```
+
+На фронте используется `<DocumentEditor>` из `@onlyoffice/document-editor-react`, `documentServerUrl = /onlyoffice/`.
+
+### 5.2 Сохранение
+
+- Кнопка «Сохранить» в UI вызывает `POST /api/templates/:id/save`. `api` отправляет `{"c":"forcesave","key":doc_key}` (с JWT) в Command Service Document Server.
+- `POST /internal/onlyoffice/callback/:id`:
+  - JWT проверяется из `Authorization` или поля `token` тела. Если подпись неверна — `403`;
+  - `status 2` (документ закрыт всеми) и `status 6` (forcesave): файл скачивается по `url`, записывается атомарно, `version++`, обновляются `updated_at` и `updated_by` (по `users[0]`);
+  - только при `status 2` дополнительно генерируется новый `doc_key`. Во время активной сессии ключ не меняется;
+  - `status 3`/`7` (ошибка сохранения): запись в лог, событие доступно фронту через `GET /api/templates/:id` (`lastSaveError`);
+  - остальные статусы: только подтверждение;
+  - ответ всегда `{"error":0}`, кроме ошибки подписи.
+- `GET /internal/templates/:id/file?t=` отдаёт файл после проверки токена.
+- Маршруты `/internal/*` не проксируются через nginx `web`: они доступны только во внутренней сети.
+
+### 5.3 Создание шаблона
+
+При создании «пустого» шаблона копируется встроенная пустая заготовка (`assets/blank.docx|xlsx|pptx`). При загрузке файла проверяются расширение и размер (≤ 20 МБ). `doc_key` — случайный uuid.
+
+## 6. Генерация отчёта
+
+`POST /api/reports/:templateId/render` `{ params, format }` (user/admin):
+
+1. Валидация параметров и формата. При ошибке — `400 { fields: {...} }`.
+2. Выполнение запросов (§4.2) и сборка данных (§4).
+3. `CarboneClient.render(file, data, { convertTo: format, lang: "ru-ru", timezone: TZ })`:
+   - `POST /template` загружает файл. Полученный `templateId` кэшируется в памяти по ключу `(template.id, version)`;
+   - `POST /render/:templateId` с `{ data, convertTo, lang, timezone }` → `renderId`;
+   - `GET /render/:renderId` → Buffer.
+4. Файл записывается в `/data/reports/{runId}.{format}`, в `report_runs` добавляется запись. Ответ — `{ runId }`.
+5. Фронт скачивает файл через `GET /api/runs/:id/file`. Доступ есть у владельца запуска и у админа.
+
+Общий таймаут — `RENDER_TIMEOUT_MS`. Неудачные запуски записываются со `status=error`.
+
+Очистка: раз в час удаляются файлы запусков старше `REPORT_RETENTION_DAYS`, у записей выставляется `file_deleted=true`.
+
+### 6.1 Предпросмотр для админа (без записи в историю)
+
+- `POST /api/templates/:id/queries/run` `{ sql, params }` → `{ columns, rows (≤50), rowCount }`
+- `POST /api/templates/:id/preview` `{ params, mode: "data" | "pdf" }` → JSON данных или PDF
+
+### 6.2 Ошибки
+
+| Ситуация | HTTP | Сообщение |
+|---|---|---|
+| Неверные параметры | 400 | ошибки по полям |
+| Ошибка SQL | 400 | `запрос "<key>": <сообщение PostgreSQL>` |
+| Источник недоступен | 502 | `не удалось подключиться к источнику "<name>"` |
+| Ошибка Carbone | 502 | текст ошибки Carbone |
+| Таймаут SQL или рендера | 504 | `превышено время ожидания` |
+
+Формат ответа об ошибке: `{ error: { code, message, details? } }`.
+
+## 7. API (сводка)
+
+```
+POST   /api/auth/login | /api/auth/logout      GET /api/auth/me
+GET/POST/PATCH/DELETE /api/users[/:id]                         admin
+GET/POST/PATCH/DELETE /api/datasources[/:id]                   admin
+POST   /api/datasources/:id/test                               admin
+GET    /api/templates                                          user (краткий список)
+GET    /api/templates/:id                                      user: name, description, params, formats
+                                                               admin: + queries, datasource, lastSaveError
+POST   /api/templates            (multipart или {blank: ext})  admin
+PATCH/DELETE /api/templates/:id                                admin
+POST   /api/templates/:id/duplicate                            admin
+PUT    /api/templates/:id/queries      (весь список)           admin
+PUT    /api/templates/:id/params       (весь список)           admin
+POST   /api/templates/:id/queries/run                          admin
+POST   /api/templates/:id/preview                              admin
+GET    /api/templates/:id/editor-config                        admin
+POST   /api/templates/:id/save                                 admin
+GET    /api/templates/:id/download                             admin
+POST   /api/reports/:templateId/render                         user
+GET    /api/runs?templateId&userId&status&page                 user (свои) / admin (все)
+GET    /api/runs/:id/file                                      владелец / admin
+GET    /internal/templates/:id/file                            OnlyOffice
+POST   /internal/onlyoffice/callback/:id                       OnlyOffice
+```
+
+## 8. Интерфейс (GravityUI)
+
+Пакеты: `@gravity-ui/uikit`, `@gravity-ui/navigation`, `@gravity-ui/date-components`, `@gravity-ui/icons`, `@monaco-editor/react`, `@onlyoffice/document-editor-react`, `react-router`, `@tanstack/react-query`.
+
+Основа: `ThemeProvider` (светлая и тёмная тема с переключателем в футере `AsideHeader`), `AsideHeader` с навигацией по роли, `Toaster`. Интерфейс на русском.
+
+| Экран | Маршрут | Роль | Содержимое |
+|---|---|---|---|
+| Вход | `/login` | все | `Card`, `TextInput` ×2, `Button` |
+| Отчёты | `/reports` | user | Сетка `Card` (название, описание, `Label` формата), поиск |
+| Генерация | `/reports/:id` | user | Форма параметров (string → `TextInput`, number → `NumberInput`, date → `DatePicker`, boolean → `Checkbox`, select → `Select`), `SegmentedRadioGroup` формата, `Button loading`. Ошибки в `Alert`. Справа предпросмотр PDF (`<iframe>`) и кнопка скачивания |
+| История | `/history` | user | `Table` + `withTableSorting`: шаблон, параметры, формат, статус (`Label`), время, длительность, «Скачать». Админ видит всех и может фильтровать по пользователю |
+| Шаблоны | `/admin/templates` | admin | `Table` + `withTableActions` (открыть / дублировать / скачать / удалить), `Dialog` создания (имя, источник, пустой docx/xlsx/pptx или загрузка файла) |
+| Редактор шаблона | `/admin/templates/:id` | admin | `Tabs`: **Документ** (OnlyOffice + сворачиваемая панель «Теги»: дерево из последнего preview-JSON, клик копирует тег, для массивов предлагается `[i]` и строка `[i+1]`), **Данные** (список запросов, Monaco SQL, режим list/single, «Выполнить», `Table` с результатом), **Параметры** (редактируемая `Table`), **Предпросмотр** (форма тестовых параметров, Monaco JSON только для чтения, «Сгенерировать PDF»), **Настройки** |
+| Источники | `/admin/datasources` | admin | `Table`, `Dialog` с полями подключения, «Проверить соединение» → `Alert` |
+| Пользователи | `/admin/users` | admin | `Table`, `Dialog` (логин, пароль, роль), блокировка |
+
+Тестовые параметры редактора и последний preview-JSON хранятся в `localStorage` отдельно для каждого шаблона.
+
+## 9. Репозиторий
+
+```
+carbone-reports/
+├── apps/
+│   ├── web/src/{app,pages,features,api}
+│   └── api/src/{modules,db,lib}, api/assets/blank.*
+├── packages/shared/          zod-схемы и DTO
+├── docker/                   nginx.conf, Dockerfile.web, Dockerfile.api
+├── demo/                     invoice.docx, seed.sql
+├── e2e/                      Playwright
+├── docker-compose.yml
+├── .env.example
+└── README.md
+```
+
+Монорепо на pnpm workspaces, TypeScript strict, ESLint + Prettier.
+
+## 10. Конфигурация (env `api`)
+
+| Переменная | По умолчанию | Назначение |
+|---|---|---|
+| `DATABASE_URL` | — | БД приложения |
+| `APP_SECRET` | — | подпись сессий |
+| `ENCRYPTION_KEY` | — | 32 байта base64, шифрование паролей источников |
+| `ONLYOFFICE_JWT_SECRET` | — | общий секрет с Document Server |
+| `ONLYOFFICE_INTERNAL_URL` | `http://onlyoffice` | Command Service |
+| `API_INTERNAL_URL` | `http://api:3000` | адрес `api` для Document Server |
+| `CARBONE_URL` | `http://carbone:4000` | Carbone |
+| `ADMIN_LOGIN` / `ADMIN_PASSWORD` | — | первый админ, если пользователей нет |
+| `STORAGE_DIR` | `/data` | хранилище файлов |
+| `QUERY_TIMEOUT_MS` | `30000` | |
+| `QUERY_MAX_ROWS` | `100000` | |
+| `RENDER_TIMEOUT_MS` | `120000` | |
+| `REPORT_RETENTION_DAYS` | `30` | |
+| `TZ` | `Europe/Moscow` | таймзона рендера |
+
+`docker compose --profile demo up` дополнительно поднимает `demo-db` и при пустой БД приложения создаёт демо-источник и шаблон «Счёт» с запросами `company` (single) и `items` (list) и параметром `invoiceId`.
+
+## 11. Тестирование
+
+Инструменты: Vitest, Testing Library, testcontainers, Playwright.
+
+**api, юнит-тесты:**
+- парсер параметров SQL: `::cast`, строки, `E''`, dollar-quoting, `"идентификаторы"`, оба вида комментариев, повторяющиеся параметры, неизвестный параметр;
+- сборка данных (`list`/`single`/`params`, пустой результат для `single` → `null`);
+- построение zod-схемы параметров и значения по умолчанию;
+- callback OnlyOffice: неверный JWT → 403; статусы 2/6 → сохранение и `version++`; новый `doc_key` только при статусе 2; статусы 3/7 → `lastSaveError`;
+- crypto: шифрование, расшифровка, подмена шифротекста → ошибка;
+- `CarboneClient` на `undici MockAgent`: успешный процесс, кэш `templateId`, ошибки и таймаут.
+
+**api, интеграционные тесты** (testcontainers PostgreSQL):
+- read-only: `INSERT` в запросе падает;
+- `statement_timeout` срабатывает (`pg_sleep`);
+- `QUERY_MAX_ROWS` работает;
+- права: user получает 403 на `/api/users`, `/api/datasources`, `/queries/run`; user не может скачать чужой запуск.
+
+**web:** форма параметров по описанию (типы, required, default), дерево тегов из JSON (вложенные объекты, массивы → `[i]`).
+
+**E2E smoke** (Playwright, `docker compose --profile demo`): вход админом → открытие редактора демо-шаблона, iframe OnlyOffice загрузился → вход пользователем → генерация «Счёта» в PDF → PDF скачивается и содержит название компании из демо-данных.

@@ -137,7 +137,7 @@ export type TemplateAdminDetails = z.infer<typeof TemplateAdminDetails>;
 export const CreateTemplateBody = z.object({
   name: z.string().trim().min(1),
   description: z.string().default(''),
-  datasourceId: z.string(),
+  datasourceId: z.uuid(),
   blank: z.enum(['docx', 'xlsx']),
 });
 export type CreateTemplateBody = z.infer<typeof CreateTemplateBody>;
@@ -145,7 +145,7 @@ export type CreateTemplateBody = z.infer<typeof CreateTemplateBody>;
 export const UpdateTemplateBody = z.object({
   name: z.string().trim().min(1).optional(),
   description: z.string().optional(),
-  datasourceId: z.string().optional(),
+  datasourceId: z.uuid().optional(),
   defaultOutput: OutputFormat.optional(),
 });
 export type UpdateTemplateBody = z.infer<typeof UpdateTemplateBody>;

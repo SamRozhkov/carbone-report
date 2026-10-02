@@ -60,6 +60,13 @@ describe('templates', () => {
     expect(JSON.stringify(d.json())).not.toContain('secret');
   });
 
+  it('datasourceId не UUID → 400', async () => {
+    const r = await t.app.inject({
+      method: 'POST', url: '/api/templates', headers: { cookie: admin }, payload: { name: 'x', datasourceId: 'nope', blank: 'docx' },
+    });
+    expect(r.statusCode).toBe(400);
+  });
+
   it('user не может создавать и менять шаблоны', async () => {
     const r = await t.app.inject({
       method: 'POST', url: '/api/templates', headers: { cookie: user }, payload: { name: 'x', datasourceId: dsId, blank: 'docx' },

@@ -3,6 +3,7 @@ import { extname } from 'node:path';
 import {
   CreateTemplateBody,
   IdParams,
+  type OutputFormat,
   outputFormatsFor,
   TemplateExt,
   TemplateParam,
@@ -61,25 +62,46 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     return { fields, ext: ext.data, data: file.data };
   }
 
-  async function insertTemplate(v: { name: string; description: string; datasourceId: string; ext: TemplateExt; data: Buffer; userId: string }) {
+  async function insertTemplate(
+    v: { name: string; description: string; datasourceId: string; ext: TemplateExt; data: Buffer; userId: string },
+    extra?: {
+      defaultOutput?: OutputFormat;
+      queries?: TemplateQuery[];
+      params?: TemplateParam[];
+    },
+  ) {
     await ensureDatasource(v.datasourceId);
     const id = randomUUID();
     const filePath = templateFilePath(id, v.ext);
     await storage.write(filePath, v.data);
-    const [row] = await db
-      .insert(templates)
-      .values({
-        id,
-        name: v.name,
-        description: v.description,
-        datasourceId: v.datasourceId,
-        fileExt: v.ext,
-        filePath,
-        docKey: randomUUID(),
-        updatedBy: v.userId,
-      })
-      .returning();
-    return row!;
+    try {
+      return await db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(templates)
+          .values({
+            id,
+            name: v.name,
+            description: v.description,
+            datasourceId: v.datasourceId,
+            fileExt: v.ext,
+            filePath,
+            docKey: randomUUID(),
+            updatedBy: v.userId,
+            ...(extra?.defaultOutput ? { defaultOutput: extra.defaultOutput } : {}),
+          })
+          .returning();
+        if (extra?.queries?.length) {
+          await tx.insert(templateQueries).values(extra.queries.map((q, i) => ({ ...q, templateId: id, sortOrder: i })));
+        }
+        if (extra?.params?.length) {
+          await tx.insert(templateParams).values(extra.params.map((p, i) => ({ ...p, templateId: id, sortOrder: i })));
+        }
+        return row!;
+      });
+    } catch (err) {
+      await storage.remove(filePath).catch(() => undefined);
+      throw err;
+    }
   }
 
   app.get('/api/templates', anyUser, async () => {
@@ -153,21 +175,17 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
 
   app.post('/api/templates/:id/duplicate', { ...admin, schema: { params: IdParams } }, async (req, reply) => {
     const src = await loadTemplateFull(db, req.params.id);
-    const row = await insertTemplate({
-      name: `${src.row.name} (копия)`,
-      description: src.row.description,
-      datasourceId: src.row.datasourceId,
-      ext: src.row.fileExt,
-      data: await storage.read(src.row.filePath),
-      userId: currentUser(req).id,
-    });
-    await db.update(templates).set({ defaultOutput: src.row.defaultOutput }).where(eq(templates.id, row.id));
-    if (src.queries.length) {
-      await db.insert(templateQueries).values(src.queries.map((q, i) => ({ ...q, templateId: row.id, sortOrder: i })));
-    }
-    if (src.params.length) {
-      await db.insert(templateParams).values(src.params.map((p, i) => ({ ...p, templateId: row.id, sortOrder: i })));
-    }
+    const row = await insertTemplate(
+      {
+        name: `${src.row.name} (копия)`,
+        description: src.row.description,
+        datasourceId: src.row.datasourceId,
+        ext: src.row.fileExt,
+        data: await storage.read(src.row.filePath),
+        userId: currentUser(req).id,
+      },
+      { defaultOutput: src.row.defaultOutput, queries: src.queries, params: src.params },
+    );
     return reply.status(201).send(toSummary(row));
   });
 

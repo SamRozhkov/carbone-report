@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Role } from '@carbone-reports/shared';
+import type { Role, TemplateParam, TemplateQuery } from '@carbone-reports/shared';
 import pg from 'pg';
 import { inject } from 'vitest';
 import { buildApp, type App } from '../src/app';
@@ -124,4 +124,25 @@ export async function loginAs(t: TestApp, role: Role): Promise<{ cookie: string;
   if (res.statusCode !== 200) throw new Error(`login failed: ${res.body}`);
   const cookie = String(res.headers['set-cookie']).split(';')[0]!;
   return { cookie, user: user! };
+}
+
+export async function createTemplate(
+  t: TestApp,
+  cookie: string,
+  datasourceId: string,
+  opts: { queries?: TemplateQuery[]; params?: TemplateParam[] } = {},
+): Promise<string> {
+  const r = await t.app.inject({
+    method: 'POST', url: '/api/templates', headers: { cookie },
+    payload: { name: `Шаблон ${randomUUID().slice(0, 4)}`, datasourceId, blank: 'docx' },
+  });
+  if (r.statusCode !== 201) throw new Error(r.body);
+  const id = r.json().id as string;
+  if (opts.queries) {
+    await t.app.inject({ method: 'PUT', url: `/api/templates/${id}/queries`, headers: { cookie }, payload: opts.queries });
+  }
+  if (opts.params) {
+    await t.app.inject({ method: 'PUT', url: `/api/templates/${id}/params`, headers: { cookie }, payload: opts.params });
+  }
+  return id;
 }

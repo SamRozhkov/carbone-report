@@ -1,4 +1,5 @@
 import cookie from '@fastify/cookie';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import {
@@ -11,6 +12,7 @@ import { registerErrorHandler } from './lib/errors';
 import { makeGuards } from './modules/auth/guards';
 import { registerAuthRoutes } from './modules/auth/routes';
 import { registerDatasourceRoutes } from './modules/datasources/routes';
+import { registerTemplateRoutes } from './modules/templates/routes';
 import { registerUserRoutes } from './modules/users/routes';
 
 export type { AppDeps };
@@ -32,12 +34,14 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   registerErrorHandler(app);
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
+  await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
   const guards = makeGuards(deps);
 
   app.get('/api/health', async () => ({ status: 'ok' }));
   registerAuthRoutes(app, deps, guards);
   registerUserRoutes(app, deps, guards);
   registerDatasourceRoutes(app, deps, guards);
+  registerTemplateRoutes(app, deps, guards);
 
   await app.ready();
   return app;

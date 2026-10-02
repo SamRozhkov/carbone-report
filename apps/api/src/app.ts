@@ -1,4 +1,5 @@
 import cookie from '@fastify/cookie';
+import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import {
   serializerCompiler,
@@ -28,6 +29,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   const app = createFastify();
   registerErrorHandler(app);
   await app.register(cookie);
+  await app.register(rateLimit, { global: false });
   const guards = makeGuards(deps);
 
   app.get('/api/health', async () => ({ status: 'ok' }));

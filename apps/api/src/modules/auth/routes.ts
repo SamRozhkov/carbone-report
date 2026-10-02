@@ -1,5 +1,6 @@
 import { LoginBody } from '@carbone-reports/shared';
 import { eq } from 'drizzle-orm';
+import type { FastifyRequest } from 'fastify';
 import type { App } from '../../app';
 import { users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
@@ -9,7 +10,18 @@ import { DUMMY_HASH_PROMISE, verifyPassword } from './password';
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession } from './session';
 
 export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): void {
-  app.post('/api/auth/login', { schema: { body: LoginBody } }, async (req, reply) => {
+  const loginRateLimit = {
+    max: 10,
+    timeWindow: '1 minute',
+    hook: 'preHandler' as const,
+    // Ключ — логин, а не IP: за nginx все запросы приходят с одного адреса.
+    keyGenerator: (req: FastifyRequest) =>
+      String((req.body as { login?: unknown } | undefined)?.login ?? '').trim().toLowerCase(),
+    errorResponseBuilder: () =>
+      new AppError('TOO_MANY_ATTEMPTS', 429, 'слишком много попыток входа, повторите через минуту'),
+  };
+
+  app.post('/api/auth/login', { schema: { body: LoginBody }, config: { rateLimit: loginRateLimit } }, async (req, reply) => {
     const [row] = await deps.db.select().from(users).where(eq(users.login, req.body.login));
     const ok = await verifyPassword(row?.passwordHash ?? (await DUMMY_HASH_PROMISE), req.body.password);
     if (!row || !ok || row.blocked) {

@@ -60,4 +60,27 @@ describe('auth', () => {
     expect(res.statusCode).toBe(204);
     expect(String(res.headers['set-cookie'])).toMatch(/session=;/);
   });
+
+  it('11-я неудачная попытка входа за минуту для одного логина → 429, другие логины не затронуты', async () => {
+    const { user } = await loginAs(t, 'user');
+    const attempt = (login: string, password: string) =>
+      t.app.inject({ method: 'POST', url: '/api/auth/login', payload: { login, password } });
+    // loginAs уже сделал 1 запрос; добиваем до лимита (10) неверными паролями.
+    for (let i = 0; i < 9; i++) expect((await attempt(user.login, 'bad')).statusCode).toBe(401);
+    const blocked = await attempt(user.login.toUpperCase(), 'bad');
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.json()).toEqual({
+      error: { code: 'TOO_MANY_ATTEMPTS', message: 'слишком много попыток входа, повторите через минуту' },
+    });
+    const other = await loginAs(t, 'user');
+    expect((await attempt(other.user.login, 'bad')).statusCode).toBe(401);
+    expect((await attempt(other.user.login, 'password123')).statusCode).toBe(200);
+  });
+
+  it('пароль длиннее 1024 символов при входе → 400', async () => {
+    const res = await t.app.inject({
+      method: 'POST', url: '/api/auth/login', payload: { login: 'root', password: 'x'.repeat(1025) },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });

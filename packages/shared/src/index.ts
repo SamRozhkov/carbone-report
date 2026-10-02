@@ -63,7 +63,7 @@ export type TemplateQuery = z.infer<typeof TemplateQuery>;
 
 // ---- DTO ----
 
-export const LoginBody = z.object({ login: z.string().min(1), password: z.string().min(1) });
+export const LoginBody = z.object({ login: z.string().min(1), password: z.string().min(1).max(1024) });
 export type LoginBody = z.infer<typeof LoginBody>;
 
 export const UserDto = z.object({
@@ -77,13 +77,13 @@ export type UserDto = z.infer<typeof UserDto>;
 
 export const CreateUserBody = z.object({
   login: z.string().trim().min(3).max(64),
-  password: z.string().min(8),
+  password: z.string().min(8).max(1024),
   role: Role,
 });
 export type CreateUserBody = z.infer<typeof CreateUserBody>;
 
 export const UpdateUserBody = z.object({
-  password: z.string().min(8).optional(),
+  password: z.string().min(8).max(1024).optional(),
   role: Role.optional(),
   blocked: z.boolean().optional(),
 });

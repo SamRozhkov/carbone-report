@@ -138,18 +138,23 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     const row = await loadTemplate(db, req.params.id);
     const { ext, data } = await readUpload(req);
     if (ext !== row.fileExt) throw badRequest(`ожидается файл .${row.fileExt}`);
-    await storage.write(row.filePath, data);
-    const [updated] = await db
-      .update(templates)
-      .set({
-        version: sql`${templates.version} + 1`,
-        docKey: randomUUID(),
-        updatedAt: new Date(),
-        updatedBy: currentUser(req).id,
-        lastSaveError: null,
-      })
-      .where(eq(templates.id, row.id))
-      .returning();
+    const updated = await db.transaction(async (tx) => {
+      // Блокировка строки: ручная замена не должна пересекаться с callback OnlyOffice.
+      await tx.select({ id: templates.id }).from(templates).where(eq(templates.id, row.id)).for('update');
+      await storage.write(row.filePath, data);
+      const [u] = await tx
+        .update(templates)
+        .set({
+          version: sql`${templates.version} + 1`,
+          docKey: randomUUID(),
+          updatedAt: new Date(),
+          updatedBy: currentUser(req).id,
+          lastSaveError: null,
+        })
+        .where(eq(templates.id, row.id))
+        .returning();
+      return u;
+    });
     return toAdminDetails(await loadTemplateFull(db, updated!.id));
   });
 

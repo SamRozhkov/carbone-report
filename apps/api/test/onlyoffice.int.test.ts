@@ -16,7 +16,15 @@ const forceSaved: string[] = [];
 
 beforeAll(async () => {
   t = await createTestApp({
-    fetchFile: async () => fetched,
+    fetchFile: async (url) => {
+      if (url === 'http://oo/slow') {
+        await new Promise((r) => setTimeout(r, 300));
+        return Buffer.concat([await createBlankDocument('docx'), Buffer.from('old')]);
+      }
+      if (url === 'http://oo/final') return Buffer.concat([await createBlankDocument('docx'), Buffer.from('final')]);
+      if (url === 'http://oo/boom') throw new Error('network');
+      return fetched;
+    },
     onlyoffice: { forceSave: async (key) => void forceSaved.push(key) },
   });
   const a = await loginAs(t, 'admin');
@@ -144,6 +152,38 @@ describe('callback', () => {
     expect(d.json().lastSaveError).toBe('OnlyOffice не смог сохранить документ');
     await callback({ key, status: 6, url: 'http://oo/f.docx' });
     expect((await row()).lastSaveError).toBeNull();
+  });
+});
+
+describe('callback hardening', () => {
+  it('конкурентные callback-и: итоговый файл — последний (final), ключ сменён', async () => {
+    const before = await row();
+    const slow = callback({ key: before.docKey, status: 6, url: 'http://oo/slow' });
+    await new Promise((r) => setTimeout(r, 50));
+    const fin = callback({ key: before.docKey, status: 2, url: 'http://oo/final' });
+    await Promise.all([slow, fin]);
+    const after = await row();
+    const stored = await t.deps.storage.read(after.filePath);
+    expect(stored.subarray(-5).toString()).toBe('final');
+    expect(after.docKey).not.toBe(before.docKey);
+  });
+
+  it('callback без status → 400', async () => {
+    const r = await callback({ key: (await row()).docKey });
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error.code).toBe('BAD_CALLBACK');
+  });
+
+  it('fetchFile упал → 5xx и lastSaveError', async () => {
+    const r = await callback({ key: (await row()).docKey, status: 6, url: 'http://oo/boom' });
+    expect(r.statusCode).toBeGreaterThanOrEqual(500);
+    expect((await row()).lastSaveError).toBe('не удалось скачать файл из OnlyOffice');
+  });
+
+  it('токен сессии в ?t= не открывает файл', async () => {
+    const session = admin.split('=')[1]!;
+    const r = await t.app.inject({ method: 'GET', url: `/internal/templates/${tplId}/file?t=${session}` });
+    expect(r.statusCode).toBe(403);
   });
 });
 

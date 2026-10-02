@@ -13,13 +13,14 @@ export function signFileToken(templateId: string, secret: Uint8Array): Promise<s
   return new SignJWT({ purpose: 'oo-file' })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(templateId)
+    .setAudience('oo-file')
     .setExpirationTime('10m')
     .sign(secret);
 }
 
 export async function verifyFileToken(token: string, templateId: string, secret: Uint8Array): Promise<boolean> {
   try {
-    const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'], subject: templateId });
+    const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'], subject: templateId, audience: 'oo-file' });
     return payload.purpose === 'oo-file';
   } catch {
     return false;

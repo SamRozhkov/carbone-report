@@ -35,9 +35,9 @@ async function verifiedPayload(deps: AppDeps, body: unknown, authorization?: str
   throw new AppError('FORBIDDEN', 403, 'неверная подпись OnlyOffice');
 }
 
-async function existingUserId(deps: AppDeps, id: string | undefined): Promise<string | null> {
+async function existingUserId(db: Pick<AppDeps['db'], 'select'>, id: string | undefined): Promise<string | null> {
   if (!id || !z.uuid().safeParse(id).success) return null;
-  const [u] = await deps.db.select({ id: users.id }).from(users).where(eq(users.id, id));
+  const [u] = await db.select({ id: users.id }).from(users).where(eq(users.id, id));
   return u?.id ?? null;
 }
 
@@ -47,38 +47,59 @@ export async function handleCallback(
   body: unknown,
   authorization: string | undefined,
 ): Promise<void> {
-  const cb = Callback.parse(await verifiedPayload(deps, body, authorization));
-  const row = await loadTemplate(deps.db, templateId);
-  // Колбэк от закрытой сессии (ключ уже сменился) не должен затирать новую версию.
-  if (cb.key !== row.docKey) return;
+  const parsed = Callback.safeParse(await verifiedPayload(deps, body, authorization));
+  if (!parsed.success) throw new AppError('BAD_CALLBACK', 400, 'неверный формат callback OnlyOffice');
+  const cb = parsed.data;
+  await loadTemplate(deps.db, templateId); // 404 для неизвестного шаблона
 
-  if (cb.status === 3 || cb.status === 7) {
-    await deps.db.update(templates).set({ lastSaveError: SAVE_ERRORS[cb.status]! }).where(eq(templates.id, row.id));
-    return;
-  }
-  if (cb.status !== 2 && cb.status !== 6) return;
+  let downloadFailed = false;
+  try {
+    await deps.db.transaction(async (tx) => {
+      // Блокировка строки сериализует параллельные callback-и и ручную замену файла.
+      const [row] = await tx.select().from(templates).where(eq(templates.id, templateId)).for('update');
+      // Колбэк от закрытой сессии (ключ уже сменился) не должен затирать новую версию.
+      if (!row || cb.key !== row.docKey) return;
+      const setError = (msg: string) => tx.update(templates).set({ lastSaveError: msg }).where(eq(templates.id, row.id));
 
-  if (!cb.url) {
-    await deps.db.update(templates).set({ lastSaveError: 'OnlyOffice не передал ссылку на файл' }).where(eq(templates.id, row.id));
-    return;
+      if (cb.status === 3 || cb.status === 7) {
+        await setError(SAVE_ERRORS[cb.status]!);
+        return;
+      }
+      if (cb.status !== 2 && cb.status !== 6) return;
+      if (!cb.url) {
+        await setError('OnlyOffice не передал ссылку на файл');
+        return;
+      }
+      let file: Buffer;
+      try {
+        file = await deps.fetchFile(cb.url);
+      } catch (err) {
+        downloadFailed = true;
+        throw err;
+      }
+      if (!isZip(file)) {
+        await setError('полученный от OnlyOffice файл не является документом');
+        return;
+      }
+      await deps.storage.write(row.filePath, file);
+      await tx
+        .update(templates)
+        .set({
+          version: sql`${templates.version} + 1`,
+          updatedAt: new Date(),
+          updatedBy: await existingUserId(tx, cb.users?.[0]),
+          lastSaveError: null,
+          ...(cb.status === 2 ? { docKey: randomUUID() } : {}),
+        })
+        .where(eq(templates.id, row.id));
+    });
+  } catch (err) {
+    if (downloadFailed) {
+      await deps.db
+        .update(templates)
+        .set({ lastSaveError: 'не удалось скачать файл из OnlyOffice' })
+        .where(eq(templates.id, templateId));
+    }
+    throw err;
   }
-  const file = await deps.fetchFile(cb.url);
-  if (!isZip(file)) {
-    await deps.db
-      .update(templates)
-      .set({ lastSaveError: 'полученный от OnlyOffice файл не является документом' })
-      .where(eq(templates.id, row.id));
-    return;
-  }
-  await deps.storage.write(row.filePath, file);
-  await deps.db
-    .update(templates)
-    .set({
-      version: sql`${templates.version} + 1`,
-      updatedAt: new Date(),
-      updatedBy: await existingUserId(deps, cb.users?.[0]),
-      lastSaveError: null,
-      ...(cb.status === 2 ? { docKey: randomUUID() } : {}),
-    })
-    .where(eq(templates.id, row.id));
 }

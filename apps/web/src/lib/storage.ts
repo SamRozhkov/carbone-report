@@ -18,13 +18,16 @@ export function writeStored(key: string, value: unknown): void {
 }
 
 export function useStoredState<T>(key: string, fallback: T): [T, (v: T) => void] {
-  const [value, setValue] = useState<T>(() => readStored(key, fallback));
+  const [state, setState] = useState(() => ({ key, value: readStored(key, fallback) }));
+  // ключ сменился без перемонтирования — перечитываем значение для нового ключа
+  const current = state.key === key ? state : { key, value: readStored(key, fallback) };
+  if (state.key !== key) setState(current);
   const set = useCallback(
     (v: T) => {
-      setValue(v);
+      setState({ key, value: v });
       writeStored(key, v);
     },
     [key],
   );
-  return [value, set];
+  return [current.value, set];
 }

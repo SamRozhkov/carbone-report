@@ -9,5 +9,7 @@ describe('format', () => {
     expect(formatDuration(850)).toBe('850 мс');
     expect(formatDuration(12_340)).toBe('12,3 с');
     expect(formatDuration(125_000)).toBe('2 мин 05 с');
+    expect(formatDuration(59_950)).toBe('1 мин 00 с');
+    expect(formatDuration(119_600)).toBe('2 мин 00 с');
   });
 });

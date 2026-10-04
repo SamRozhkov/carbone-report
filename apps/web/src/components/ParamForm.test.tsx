@@ -96,5 +96,10 @@ describe('ParamForm', () => {
       <Harness onChange={() => {}} errors={{ company: 'обязательный параметр' }} />,
     );
     expect(await screen.findByText('обязательный параметр')).toBeInTheDocument();
+    expect(screen.getAllByText('обязательный параметр')).toHaveLength(1);
+    expect(screen.getByRole('textbox', { name: 'Компания *' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
   });
 });

@@ -14,10 +14,10 @@ export const formatDate = (iso: string) => df.format(new Date(iso));
 
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms} мс`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1).replace('.', ',')} с`;
-  const min = Math.floor(ms / 60_000);
-  const sec = Math.round((ms % 60_000) / 1000);
-  return `${min} мин ${String(sec).padStart(2, '0')} с`;
+  const tenths = Math.round(ms / 100);
+  if (tenths < 600) return `${(tenths / 10).toFixed(1).replace('.', ',')} с`;
+  const total = Math.round(ms / 1000);
+  return `${Math.floor(total / 60)} мин ${String(total % 60).padStart(2, '0')} с`;
 }
 
 export const FORMAT_LABEL: Record<OutputFormat | TemplateExt, string> = {

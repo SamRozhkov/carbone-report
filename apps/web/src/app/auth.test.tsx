@@ -162,6 +162,8 @@ describe('safeNext', () => {
     ['/\t/evil.com', '/reports'],
     ['/\n/evil.com', '/reports'],
     ['/\t\\evil.com', '/reports'],
+    ['/./..//evil.com', '/reports'],
+    ['/a/../..//evil.com', '/reports'],
     ['/%2F%2Fevil.com', '/%2F%2Fevil.com'],
   ])('%s → %s', (input, expected) => expect(safeNext(input)).toBe(expected));
 });

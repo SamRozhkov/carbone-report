@@ -13,7 +13,9 @@ export function safeNext(next: string | null): string {
     const base = window.location.origin;
     const u = new URL(next, base);
     if (u.origin !== base) return '/reports';
-    return u.pathname + u.search + u.hash;
+    const out = u.pathname + u.search + u.hash;
+    if (out.startsWith('//') || out.startsWith('/\\')) return '/reports';
+    return out;
   } catch {
     return '/reports';
   }

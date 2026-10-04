@@ -39,3 +39,18 @@ if (!('ResizeObserver' in window)) {
 if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
 if (!URL.createObjectURL) URL.createObjectURL = () => 'blob:mock';
 if (!URL.revokeObjectURL) URL.revokeObjectURL = () => {};
+
+// Monaco в jsdom не загружается: любой тест, который тянет редактор, получает textarea.
+vi.mock('../components/CodeEditor', () => ({
+  CodeEditor: ({
+    value,
+    onChange,
+    ariaLabel,
+  }: {
+    value: string;
+    onChange?: (v: string) => void;
+    ariaLabel: string;
+  }) => (
+    <textarea aria-label={ariaLabel} value={value} onChange={(e) => onChange?.(e.target.value)} />
+  ),
+}));

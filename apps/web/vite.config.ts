@@ -26,7 +26,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: ['./src/test/setup.ts'],
+    setupFiles: ['./src/test/setup.tsx'],
     // Пакеты Gravity UI импортируют .css — пропускаем их через Vite (Справка §10).
     server: { deps: { inline: [/@gravity-ui\//] } },
     alias: [

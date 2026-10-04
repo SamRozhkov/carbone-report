@@ -15,16 +15,37 @@ export function SettingsTab({ template }: { template: TemplateAdminDetails }) {
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const datasources = useQuery({ queryKey: ['datasources'], queryFn: api.datasources.list });
+  const pick = (t: TemplateAdminDetails) => ({
+    name: t.name,
+    description: t.description,
+    datasourceId: t.datasourceId,
+    defaultOutput: t.defaultOutput,
+  });
+  const [baseline, setBaseline] = useState(template);
   const [name, setName] = useState(template.name);
   const [description, setDescription] = useState(template.description);
   const [datasourceId, setDatasourceId] = useState(template.datasourceId);
   const [defaultOutput, setDefaultOutput] = useState<OutputFormat>(template.defaultOutput);
+  const dirty =
+    JSON.stringify({ name, description, datasourceId, defaultOutput }) !==
+    JSON.stringify(pick(baseline));
+  const reseed = (t: TemplateAdminDetails) => {
+    setBaseline(t);
+    setName(t.name);
+    setDescription(t.description);
+    setDatasourceId(t.datasourceId);
+    setDefaultOutput(t.defaultOutput);
+  };
+  // Шаблон обновился на сервере: без несохранённых правок подхватываем, иначе сохраняем черновик.
+  const stale = template.updatedAt !== baseline.updatedAt;
+  if (stale && !dirty) reseed(template);
 
   const save = useMutation({
     mutationFn: () =>
       api.templates.update(template.id, { name, description, datasourceId, defaultOutput }),
     onSuccess: (t) => {
       applyTemplate(queryClient, t);
+      reseed(t);
       add({ name: `tpl-settings-${Date.now()}`, title: 'Настройки сохранены', theme: 'success' });
     },
   });
@@ -83,6 +104,9 @@ export function SettingsTab({ template }: { template: TemplateAdminDetails }) {
       </Field>
       {datasources.error && (
         <ErrorAlert error={datasources.error} title="Не удалось загрузить источники данных" />
+      )}
+      {dirty && stale && (
+        <Text color="warning">Шаблон изменился на сервере — сохранение перезапишет изменения</Text>
       )}
       <GeneralError error={save.error} errors={errors} shown={SHOWN} />
       <div>

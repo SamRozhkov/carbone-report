@@ -17,8 +17,9 @@ export function useTestParams(
 ): [ParamsInput, (v: ParamsInput) => void] {
   const [stored, setStored] = useStoredState<ParamsInput>(`cr-test-params-${templateId}`, {});
   const values: ParamsInput = { ...initialValues(params) };
-  for (const p of params)
-    if (Object.hasOwn(stored, p.name)) values[p.name] = stored[p.name] ?? null;
+  const safe: ParamsInput =
+    stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
+  for (const p of params) if (Object.hasOwn(safe, p.name)) values[p.name] = safe[p.name] ?? null;
   return [values, setStored];
 }
 

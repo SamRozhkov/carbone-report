@@ -32,6 +32,7 @@ export function TemplateEditorPage() {
   const raw = sp.get('tab');
   const tab: TabId = (TABS as readonly string[]).includes(raw ?? '') ? (raw as TabId) : 'document';
   const [documentVisited, setDocumentVisited] = useState(tab === 'document');
+  if (tab === 'document' && !documentVisited) setDocumentVisited(true);
 
   const template = useQuery({
     queryKey: templateKey(id),
@@ -45,7 +46,6 @@ export function TemplateEditorPage() {
   if (!t) return <ErrorAlert error={template.error} title="Не удалось открыть шаблон" />;
 
   const selectTab = (value: string) => {
-    if (value === 'document') setDocumentVisited(true);
     const next = new URLSearchParams(sp);
     next.set('tab', value);
     setSp(next, { replace: true });
@@ -102,9 +102,9 @@ export function TemplateEditorPage() {
           </div>
         )}
         {tab === 'data' && <DataTab {...tabProps} />}
-        {tab === 'params' && <ParamsTab key={t.updatedAt} template={t} />}
+        {tab === 'params' && <ParamsTab template={t} />}
         {tab === 'preview' && <PreviewTab {...tabProps} />}
-        {tab === 'settings' && <SettingsTab key={t.updatedAt} template={t} />}
+        {tab === 'settings' && <SettingsTab template={t} />}
       </div>
     </>
   );

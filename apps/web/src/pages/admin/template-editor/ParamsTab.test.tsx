@@ -1,4 +1,5 @@
 import type { TemplateAdminDetails } from '@carbone-reports/shared';
+import { useState } from 'react';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -27,6 +28,22 @@ const t = {
     },
   ],
 } as TemplateAdminDetails;
+
+const newer = {
+  ...t,
+  updatedAt: '2026-02-01T00:00:00Z',
+  params: [{ ...t.params[0]!, name: 'other' }],
+} as TemplateAdminDetails;
+
+function Harness({ initial, next }: { initial: TemplateAdminDetails; next: TemplateAdminDetails }) {
+  const [tpl, setTpl] = useState(initial);
+  return (
+    <>
+      <button onClick={() => setTpl(next)}>refresh</button>
+      <ParamsTab template={tpl} />
+    </>
+  );
+}
 
 describe('ParamsTab', () => {
   it('добавление параметра и варианты списка → PUT массива', async () => {
@@ -153,11 +170,30 @@ describe('ParamsTab', () => {
     expect(msg).not.toHaveAttribute('data-testid', 'field-error');
   });
 
-  it('после удаления строки поля не переиспользуются (стабильные ключи)', async () => {
+  it('после удаления строки DOM-узлы строк не переиспользуются (стабильные ключи)', async () => {
     mockApi([]);
     renderWithProviders(<ParamsTab template={t} />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Удалить параметр 1' }));
-    expect(screen.getByLabelText('Имя параметра 1')).toHaveValue('status');
+    const row2Input = await screen.findByLabelText('Имя параметра 2');
+    await userEvent.click(screen.getByRole('button', { name: 'Удалить параметр 1' }));
+    expect(screen.getByLabelText('Имя параметра 1')).toBe(row2Input);
+  });
+
+  it('грязный черновик сохраняется при обновлении шаблона, показывается предупреждение', async () => {
+    mockApi([]);
+    renderWithProviders(<Harness initial={t} next={newer} />);
+    await userEvent.type(await screen.findByLabelText('Имя параметра 1'), 'X');
+    await userEvent.click(screen.getByRole('button', { name: 'refresh' }));
+    expect(screen.getByLabelText('Имя параметра 1')).toHaveValue('fromX');
+    expect(screen.getByText(/Шаблон изменился на сервере/)).toBeInTheDocument();
+  });
+
+  it('чистый черновик подхватывает новый шаблон', async () => {
+    mockApi([]);
+    renderWithProviders(<Harness initial={t} next={newer} />);
+    await screen.findByLabelText('Имя параметра 1');
+    await userEvent.click(screen.getByRole('button', { name: 'refresh' }));
+    expect(screen.getByLabelText('Имя параметра 1')).toHaveValue('other');
     expect(screen.queryByLabelText('Имя параметра 2')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Шаблон изменился на сервере/)).not.toBeInTheDocument();
   });
 });

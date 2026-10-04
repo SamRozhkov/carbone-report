@@ -1,4 +1,5 @@
 import type { TemplateAdminDetails } from '@carbone-reports/shared';
+import { useState } from 'react';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -61,5 +62,24 @@ describe('SettingsTab', () => {
       ((calls.find((c) => c.method === 'PUT')!.body as FormData).get('file') as File).name,
     ).toBe('new.docx');
     expect(await screen.findByText(/версия 4/)).toBeInTheDocument();
+  });
+
+  it('грязное название сохраняется при обновлении шаблона', async () => {
+    mockApi([{ path: '/api/datasources', body: [] }]);
+    const next = { ...t, name: 'Новое', updatedAt: '2026-02-01T00:00:00Z' };
+    function Harness() {
+      const [tpl, setTpl] = useState(t);
+      return (
+        <>
+          <button onClick={() => setTpl(next)}>refresh</button>
+          <SettingsTab template={tpl} />
+        </>
+      );
+    }
+    renderWithProviders(<Harness />);
+    await userEvent.type(await screen.findByLabelText('Название шаблона'), '!');
+    await userEvent.click(screen.getByRole('button', { name: 'refresh' }));
+    expect(screen.getByLabelText('Название шаблона')).toHaveValue('Счёт!');
+    expect(screen.getByText(/Шаблон изменился на сервере/)).toBeInTheDocument();
   });
 });

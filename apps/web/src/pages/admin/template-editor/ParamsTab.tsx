@@ -67,15 +67,24 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const nextId = useRef(0);
-  const makeDrafts = () => template.params.map((p) => toDraft(p, nextId.current++));
-  const [drafts, setDrafts] = useState<Draft[]>(makeDrafts);
+  const makeDrafts = (t: TemplateAdminDetails) => t.params.map((p) => toDraft(p, nextId.current++));
+  const [baseline, setBaseline] = useState(template);
+  const [drafts, setDrafts] = useState<Draft[]>(() => makeDrafts(template));
   const strip = (ds: Draft[]) => JSON.stringify(ds.map(({ id: _id, ...rest }) => rest));
-  const dirty = strip(drafts) !== strip(template.params.map((p) => toDraft(p, 0)));
+  const dirty = strip(drafts) !== strip(baseline.params.map((p) => toDraft(p, 0)));
+  const reseed = (t: TemplateAdminDetails) => {
+    setBaseline(t);
+    setDrafts(makeDrafts(t));
+  };
+  // Шаблон обновился на сервере: без несохранённых правок подхватываем, иначе сохраняем черновик.
+  const stale = template.updatedAt !== baseline.updatedAt;
+  if (stale && !dirty) reseed(template);
 
   const save = useMutation({
     mutationFn: () => api.templates.saveParams(template.id, drafts.map(toParam)),
     onSuccess: (t) => {
       applyTemplate(queryClient, t);
+      reseed(t);
       add({ name: `tpl-params-${Date.now()}`, title: 'Параметры сохранены', theme: 'success' });
     },
   });
@@ -101,10 +110,14 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
     return found;
   };
 
+  const edit = (fn: (ds: Draft[]) => Draft[]) => {
+    save.reset();
+    setDrafts(fn);
+  };
   const update = (i: number, patch: Partial<Draft>) =>
     setDrafts((ds) => ds.map((d, j) => (j === i ? { ...d, ...patch } : d)));
   const move = (i: number, delta: -1 | 1) =>
-    setDrafts((ds) => {
+    edit((ds) => {
       const next = [...ds];
       const j = i + delta;
       if (j < 0 || j >= next.length) return ds;
@@ -112,7 +125,7 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
       return next;
     });
   const addParam = () =>
-    setDrafts((ds) => {
+    edit((ds) => {
       let n = ds.length + 1;
       while (ds.some((d) => d.name === `param${n}`)) n++;
       return [
@@ -197,7 +210,7 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
                   view="flat-danger"
                   size="s"
                   aria-label={`Удалить параметр ${n}`}
-                  onClick={() => setDrafts((ds) => ds.filter((_, j) => j !== i))}
+                  onClick={() => edit((ds) => ds.filter((_, j) => j !== i))}
                 >
                   <Icon data={TrashBin} />
                 </Button>
@@ -239,10 +252,21 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
         <Button view="action" onClick={() => save.mutate()} loading={save.isPending}>
           Сохранить параметры
         </Button>
+        {dirty && stale && (
+          <Text color="warning">
+            Шаблон изменился на сервере — сохранение перезапишет изменения
+          </Text>
+        )}
         {dirty && (
           <>
             <Text color="warning">Есть несохранённые изменения</Text>
-            <Button view="flat" onClick={() => setDrafts(makeDrafts())}>
+            <Button
+              view="flat"
+              onClick={() => {
+                save.reset();
+                reseed(template);
+              }}
+            >
               Отменить
             </Button>
           </>

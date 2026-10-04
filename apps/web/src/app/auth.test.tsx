@@ -1,3 +1,4 @@
+import { settings } from '@gravity-ui/date-utils';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -144,6 +145,52 @@ describe('вход и защита маршрутов', () => {
     expect(router.state.location.pathname).toBe('/login');
     expect(queryClient.getQueryData(['templates'])).toBeUndefined();
     expect(queryClient.getQueryData(meKey)).toBeNull();
+  });
+
+  it('выход удаляет черновики превью и параметры теста из localStorage', async () => {
+    mockApi([
+      userMe,
+      { method: 'POST', path: '/api/auth/logout', status: 204 },
+      { path: '/api/templates', body: [] },
+    ]);
+    localStorage.setItem('cr-preview-t1', '{}');
+    localStorage.setItem('cr-test-params-t1', '{}');
+    localStorage.setItem('other-key', 'keep');
+    const { router } = renderRoute('/reports');
+    await userEvent.click(await screen.findByText('Выйти'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    expect(localStorage.getItem('cr-preview-t1')).toBeNull();
+    expect(localStorage.getItem('cr-test-params-t1')).toBeNull();
+    expect(localStorage.getItem('other-key')).toBe('keep');
+  });
+
+  it('вход очищает кэш запросов предыдущего пользователя', async () => {
+    let loggedIn = false;
+    mockApi([
+      { path: '/api/auth/me', handler: () => (loggedIn ? userMe : anon) },
+      {
+        method: 'POST',
+        path: '/api/auth/login',
+        handler: () => ((loggedIn = true), { body: userMe.body }),
+      },
+      { path: '/api/templates', body: [] },
+    ]);
+    const { router, queryClient } = renderRoute('/login');
+    queryClient.setQueryData(['users'], [{ id: 'u1', login: 'secret' }]);
+    queryClient.setQueryData(['runs', { page: 1 }], { items: [], total: 0 });
+    await userEvent.type(await screen.findByLabelText('Логин'), 'ivanov');
+    await userEvent.type(screen.getByLabelText('Пароль'), 'password123');
+    await userEvent.click(screen.getByRole('button', { name: 'Войти' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reports'));
+    expect(queryClient.getQueryData(['users'])).toBeUndefined();
+    expect(queryClient.getQueryData(['runs', { page: 1 }])).toBeUndefined();
+  });
+
+  it('интерфейс навигации и даты на русском', async () => {
+    mockApi([userMe, { path: '/api/templates', body: [] }]);
+    renderRoute('/reports');
+    expect(await screen.findByTitle('Свернуть')).toBeInTheDocument();
+    expect(settings.getLocale()).toBe('ru');
   });
 
   it('сбой выхода на сервере → локально выходим, показываем предупреждение', async () => {

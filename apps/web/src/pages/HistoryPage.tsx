@@ -133,6 +133,7 @@ export function HistoryPage() {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
         <Select
           placeholder="Все отчёты"
+          aria-label="Отчёт"
           value={templateId ? [templateId] : []}
           onUpdate={([v]) => setFilter('templateId', v)}
           options={(templates.data ?? []).map((t) => ({ value: t.id, content: t.name }))}
@@ -142,6 +143,7 @@ export function HistoryPage() {
         />
         <Select
           placeholder="Любой результат"
+          aria-label="Результат"
           value={status ? [status] : []}
           onUpdate={([v]) => setFilter('status', v)}
           options={[
@@ -154,6 +156,7 @@ export function HistoryPage() {
         {isAdmin && (
           <Select
             placeholder="Все пользователи"
+            aria-label="Пользователь"
             value={userId ? [userId] : []}
             onUpdate={([v]) => setFilter('userId', v)}
             options={(users.data ?? []).map((u) => ({ value: u.id, content: u.login }))}

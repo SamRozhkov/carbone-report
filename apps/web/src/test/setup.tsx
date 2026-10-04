@@ -1,8 +1,14 @@
 import '@testing-library/jest-dom/vitest';
+import { settings } from '@gravity-ui/date-utils';
+import { configure } from '@gravity-ui/uikit';
 import { cleanup } from '@testing-library/react';
 import type { ChangeEvent } from 'react';
 import { afterEach, vi } from 'vitest';
 import type { CodeEditorProps } from '../components/CodeEditor';
+
+configure({ lang: 'ru' });
+await settings.loadLocale('ru');
+settings.setLocale('ru');
 
 afterEach(() => {
   cleanup();

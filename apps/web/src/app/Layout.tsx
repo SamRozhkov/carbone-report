@@ -19,6 +19,20 @@ import { api } from '../api/endpoints';
 import { meKey, useMe } from '../api/session';
 import { ThemeContext } from './theme';
 
+/** Черновики превью и параметры тестового прогона не должны достаться следующему пользователю. */
+function purgeUserStorage() {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('cr-preview-') || k.startsWith('cr-test-params-'))) keys.push(k);
+    }
+    keys.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    // localStorage недоступен
+  }
+}
+
 export function Layout() {
   const me = useMe().data;
   const navigate = useNavigate();
@@ -60,6 +74,7 @@ export function Layout() {
       failed = true;
     });
     queryClient.clear();
+    purgeUserStorage();
     queryClient.setQueryData(meKey, null);
     navigate('/login', { replace: true });
     if (failed) {

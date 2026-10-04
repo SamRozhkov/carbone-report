@@ -33,6 +33,8 @@ export function LoginPage() {
   const mutation = useMutation({
     mutationFn: () => api.login({ login, password }),
     onSuccess: (user) => {
+      // Кэш предыдущего пользователя (админские списки) не должен пережить смену сессии.
+      queryClient.clear();
       queryClient.setQueryData(meKey, user);
       navigate(next, { replace: true });
     },

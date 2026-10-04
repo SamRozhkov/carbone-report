@@ -45,7 +45,9 @@ export function TemplatesPage() {
   });
   const remove = useMutation({
     mutationFn: (t: TemplateSummary) => api.templates.remove(t.id),
-    onSuccess: async () => {
+    onSuccess: async (_, t) => {
+      queryClient.removeQueries({ queryKey: ['template', t.id] });
+      queryClient.removeQueries({ queryKey: ['template-admin', t.id] });
       await refresh();
       setDeleting(null);
     },

@@ -1,6 +1,6 @@
 import type { OutputFormat, ParamsInput } from '@carbone-reports/shared';
 import { Alert, Button, Loader, SegmentedRadioGroup, Text } from '@gravity-ui/uikit';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { api, runFileUrl } from '../api/endpoints';
@@ -20,6 +20,7 @@ export function ReportRunRoute() {
 export function ReportRunPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const template = useQuery({ queryKey: ['template', id], queryFn: () => api.templates.get(id) });
   const t = template.data;
 
@@ -42,6 +43,7 @@ export function ReportRunPage() {
       setRun({ id: runId, format });
       if (format !== 'pdf') triggerDownload(runFileUrl(runId));
     },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ['runs'] }),
     onError: (e) => {
       if (e instanceof ApiRequestError && e.code === 'VALIDATION') void template.refetch();
     },
@@ -101,7 +103,7 @@ export function ReportRunPage() {
             <Alert
               theme="danger"
               title={paramLike ? 'Параметры отчёта изменились — форма обновлена' : undefined}
-              message={unmatched.map(([k, m]) => (k === '_' ? m : `${k}: ${m}`)).join('\n')}
+              message={unmatched.map(([k, m]) => (k === '_' ? m : `${k}: ${m}`)).join('; ')}
             />
           )}
           <div>

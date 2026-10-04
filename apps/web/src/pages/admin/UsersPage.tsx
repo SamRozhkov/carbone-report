@@ -41,6 +41,7 @@ export function UsersPage() {
     mutationFn: (u: UserDto) => api.users.remove(u.id),
     onSuccess: async () => {
       await refresh();
+      void queryClient.invalidateQueries({ queryKey: ['runs'] });
       setDeleting(null);
     },
     onError: fail,

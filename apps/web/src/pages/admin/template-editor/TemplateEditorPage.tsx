@@ -11,7 +11,7 @@ import {
   Text,
 } from '@gravity-ui/uikit';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { api, templateDownloadUrl } from '../../../api/endpoints';
 import { ErrorAlert } from '../../../components/ErrorAlert';
@@ -33,6 +33,11 @@ export function TemplateEditorPage() {
   const tab: TabId = (TABS as readonly string[]).includes(raw ?? '') ? (raw as TabId) : 'document';
   const [documentVisited, setDocumentVisited] = useState(tab === 'document');
   if (tab === 'document' && !documentVisited) setDocumentVisited(true);
+
+  // После display:none iframe OnlyOffice не знает свой размер: просим пересчитать раскладку, когда вкладка снова видна.
+  useEffect(() => {
+    if (tab === 'document') window.dispatchEvent(new Event('resize'));
+  }, [tab]);
 
   const template = useQuery({
     queryKey: templateKey(id),

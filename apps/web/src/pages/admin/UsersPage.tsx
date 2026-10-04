@@ -21,9 +21,15 @@ export function UsersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<UserDto | null>(null);
   const [deleting, setDeleting] = useState<UserDto | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserDto | null>(null);
 
   const fail = (e: unknown) =>
-    add({ name: 'users-error', title: 'Ошибка', content: errorMessage(e), theme: 'danger' });
+    add({
+      name: `users-error-${Date.now()}`,
+      title: 'Ошибка',
+      content: errorMessage(e),
+      theme: 'danger',
+    });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['users'] });
 
   const toggleBlock = useMutation({
@@ -102,7 +108,10 @@ export function UsersPage() {
                 size="s"
                 aria-label="Удалить"
                 title="Удалить"
-                onClick={() => setDeleting(u)}
+                onClick={() => {
+                  setDeleteTarget(u);
+                  setDeleting(u);
+                }}
               >
                 <Icon data={TrashBin} />
               </Button>
@@ -149,8 +158,8 @@ export function UsersPage() {
         title="Удалить пользователя?"
         text={
           <>
-            Пользователь «{deleting?.login}» будет удалён вместе с историей его запусков и файлами
-            отчётов.
+            Пользователь «{deleteTarget?.login}» будет удалён вместе с историей его запусков и
+            файлами отчётов.
             <br />
             Если историю нужно сохранить, заблокируйте пользователя вместо удаления.
           </>

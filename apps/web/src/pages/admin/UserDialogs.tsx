@@ -70,7 +70,7 @@ export function CreateUserDialog({ open, onClose }: { open: boolean; onClose: ()
               controlProps={{ 'aria-label': 'Логин' }}
             />
           </Field>
-          <Field label="Пароль" error={errors.password ?? 'не короче 8 символов'}>
+          <Field label="Пароль" hint="не короче 8 символов" error={errors.password}>
             <TextInput
               type="password"
               value={password}
@@ -115,16 +115,21 @@ export function EditUserDialog({
   const [role, setRole] = useState<Role>(user?.role ?? 'user');
   const [password, setPassword] = useState('');
   const [blocked, setBlocked] = useState(user?.blocked ?? false);
+  const buildBody = (): UpdateUserBody => {
+    const body: UpdateUserBody = {};
+    if (user && role !== user.role) body.role = role;
+    if (user && blocked !== user.blocked) body.blocked = blocked;
+    if (password) body.password = password;
+    return body;
+  };
+  const changed = Object.keys(buildBody()).length > 0;
   const save = useMutation({
     mutationFn: () => {
-      const body: UpdateUserBody = {};
-      if (user && role !== user.role) body.role = role;
-      if (user && blocked !== user.blocked) body.blocked = blocked;
-      if (password) body.password = password;
+      const body = buildBody();
       return Object.keys(body).length ? api.users.update(user!.id, body) : Promise.resolve(user!);
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      if (changed) await queryClient.invalidateQueries({ queryKey: ['users'] });
       onClose();
     },
   });

@@ -155,4 +155,96 @@ describe('UsersPage', () => {
       expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual({ blocked: true }),
     );
   });
+
+  it('пароль: нейтральная подсказка, затем ошибка валидации', async () => {
+    mockApi([
+      adminMe,
+      { path: '/api/users', body: users },
+      {
+        method: 'POST',
+        path: '/api/users',
+        status: 400,
+        body: {
+          error: {
+            code: 'VALIDATION',
+            message: 'x',
+            details: [{ path: '/password', message: 'слишком короткий пароль' }],
+          },
+        },
+      },
+    ]);
+    renderRoute('/admin/users');
+    await userEvent.click(await screen.findByRole('button', { name: 'Добавить пользователя' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('не короче 8 символов')).toHaveAttribute(
+      'data-testid',
+      'field-hint',
+    );
+    expect(within(dialog).queryByTestId('field-error')).not.toBeInTheDocument();
+    await userEvent.type(within(dialog).getByLabelText('Логин'), 'petrov');
+    await userEvent.type(within(dialog).getByLabelText('Пароль'), 'short');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Создать' }));
+    expect(await within(dialog).findByTestId('field-error')).toHaveTextContent(
+      'слишком короткий пароль',
+    );
+  });
+
+  it('редактирование себя: роль и блокировка недоступны', async () => {
+    mockApi([adminMe, { path: '/api/users', body: users }]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    await userEvent.click(within(row('admin (вы)')).getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText('Заблокирован')).toBeDisabled();
+    expect(within(dialog).getByRole('combobox')).toBeDisabled();
+  });
+
+  it('сохранение без изменений: нет PATCH, диалог закрывается', async () => {
+    const { calls } = mockApi([adminMe, { path: '/api/users', body: users }]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    await userEvent.click(within(row('ivanov')).getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+  });
+
+  it('смена только пароля: PATCH {password}', async () => {
+    const { calls } = mockApi([
+      adminMe,
+      { path: '/api/users', body: users },
+      { method: 'PATCH', path: '/api/users/u2', body: users[1] },
+    ]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    await userEvent.click(within(row('ivanov')).getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Новый пароль'), 'newpass123');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual({ password: 'newpass123' }),
+    );
+  });
+
+  it('ошибка блокировки показывается тостом', async () => {
+    mockApi([
+      adminMe,
+      { path: '/api/users', body: users },
+      {
+        method: 'PATCH',
+        path: '/api/users/u2',
+        status: 400,
+        body: {
+          error: { code: 'BAD_REQUEST', message: 'нельзя заблокировать последнего администратора' },
+        },
+      },
+    ]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    await userEvent.click(within(row('ivanov')).getByRole('button', { name: 'Заблокировать' }));
+    expect(
+      await screen.findByText('нельзя заблокировать последнего администратора'),
+    ).toBeInTheDocument();
+  });
 });

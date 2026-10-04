@@ -74,6 +74,25 @@ async function main() {
   let templateId = '';
   let datasourceId = '';
 
+  await step('интерфейс отдаётся с заголовками безопасности', async () => {
+    const r = await fetch(`${BASE}/some/spa/route`);
+    assert(r.status === 200, `HTTP ${r.status}`);
+    const html = await r.text();
+    assert(html.includes('<div id="root">'), 'нет корня SPA');
+    assert(r.headers.get('x-content-type-options') === 'nosniff', 'нет X-Content-Type-Options');
+    assert(
+      r.headers.get('content-security-policy-report-only')?.includes("default-src 'self'"),
+      'нет CSP',
+    );
+    const script = /src="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];
+    assert(script, 'не найден JS-бандл');
+    const js = await fetch(`${BASE}${script}`);
+    assert(
+      js.status === 200 && (js.headers.get('cache-control') ?? '').includes('immutable'),
+      'ассеты не кэшируются',
+    );
+  });
+
   await step('health через nginx', async () => {
     const b = await json<{ status: string }>(await api('/api/health'));
     assert(b.status === 'ok', `status=${b.status}`);

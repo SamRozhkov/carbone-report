@@ -73,6 +73,18 @@ docker run --rm -v carbone-reports_storage:/data -v "$PWD":/backup alpine tar cz
 
 Сессионная cookie в проде помечена `Secure`, поэтому интерфейс работает только по HTTPS.
 
+## Разработка интерфейса
+
+Интерфейс — `apps/web` (React 19, Gravity UI, Vite). Бэкенд, OnlyOffice и Carbone берутся из dev-стека:
+
+```bash
+pnpm stack:dev                               # API, OnlyOffice, Carbone, PostgreSQL (nginx на :8080)
+pnpm --filter @carbone-reports/web dev       # интерфейс с hot reload на http://localhost:5173
+```
+
+Vite проксирует `/api` и `/onlyoffice` (включая WebSocket) на `http://localhost:8080`; другой адрес стека — переменная `STACK_URL`.
+Тесты интерфейса: `pnpm --filter @carbone-reports/web test`. В прод-образе (`pnpm stack:prod`) интерфейс собирается в `docker/web.Dockerfile`.
+
 ## Безопасность источников данных
 
 Подключайте источники под отдельным пользователем PostgreSQL с правами только на чтение

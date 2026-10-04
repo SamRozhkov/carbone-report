@@ -14,6 +14,8 @@
 
 ## Для Плана 3 (Docker, nginx, E2E)
 
+Инфраструктурные пункты ниже выполнены в ветке docker (nginx, образ `api`, Document Server). В E2E остаётся живая проверка.
+
 - nginx:
   - не проксировать `/internal/*`;
   - убедиться, что пути вида `/api/../internal` не нормализуются в проксируемые;
@@ -24,7 +26,9 @@
   - у Document Server `ALLOW_PRIVATE_IP_ADDRESS=true` и общий `JWT_SECRET`.
 - В E2E проверить на живых контейнерах:
   - реальный формат ответов Carbone 5: текст «Template not found», `content-type` скачиваемого файла;
-  - поведение OnlyOffice при закрытии документа после forcesave: какой статус придёт, 2 или 4, и сменится ли `doc_key`.
+  - поведение OnlyOffice при закрытии документа после forcesave: какой статус придёт, 2 или 4, и сменится ли `doc_key`;
+  - повторная загрузка шаблона в Carbone после «Template not found». Обе проверки пока не выполнялись на живых контейнерах и войдут в Playwright E2E Плана 3.
+- Для Планов 2 и 3 добавить базовые заголовки безопасности: `server_tokens off`, `X-Content-Type-Options`, `Referrer-Policy`, `frame-ancestors` с разрешением same-origin для OnlyOffice.
 - `RENDER_TIMEOUT_MS` ограничивает только Carbone. Каждый SQL-запрос ограничен отдельно (`QUERY_TIMEOUT_MS`), общего дедлайна на запуск нет.
 
 ## Отложенные мелочи (не блокируют)

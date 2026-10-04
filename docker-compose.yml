@@ -1,5 +1,11 @@
 name: carbone-reports
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
 services:
   web:
     build:
@@ -12,10 +18,11 @@ services:
       - ./certs:/etc/nginx/certs:ro
     depends_on:
       api:
-        condition: service_healthy
+        condition: service_started
       onlyoffice:
         condition: service_started
     restart: unless-stopped
+    logging: *logging
 
   api:
     build:
@@ -59,6 +66,7 @@ services:
       carbone:
         condition: service_started
     restart: unless-stopped
+    logging: *logging
 
   postgres:
     image: postgres:17-alpine
@@ -74,12 +82,14 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
+    logging: *logging
 
   carbone:
     image: carbone/carbone-ee:full-5.15.3-fonts
     volumes:
       - carbone_templates:/app/template
     restart: unless-stopped
+    logging: *logging
 
   onlyoffice:
     image: onlyoffice/documentserver:9.4.0.1
@@ -92,7 +102,14 @@ services:
       - oo_data:/var/www/onlyoffice/Data
       - oo_lib:/var/lib/onlyoffice
       - oo_logs:/var/log/onlyoffice
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost/healthcheck | grep -q true']
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
     restart: unless-stopped
+    logging: *logging
 
 volumes:
   storage:

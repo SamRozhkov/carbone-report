@@ -361,7 +361,7 @@ scripts/smoke.ts            сквозная проверка работающе
 | `web` (nginx) | Порты `${WEB_HTTP_PORT:-80}` и `${WEB_HTTPS_PORT:-443}`, сертификаты `./certs/fullchain.pem` и `./certs/privkey.pem` (read-only) | Только HTTP, `${WEB_DEV_PORT:-8080}`, `dev.conf` |
 | `api` | Target `prod`: собранный `dist/server.js`, prod-зависимости, `drizzle/`, пользователь `node`, `WORKDIR` с `drizzle/`, healthcheck `GET /api/health`, `COOKIE_SECURE=true` | Target `dev`: исходники смонтированы, `tsx watch`, `node_modules` в именованных томах (нативный argon2 собирается под Linux), порт 3000 открыт, `COOKIE_SECURE=false` |
 | `postgres` | `postgres:17-alpine`, том `pgdata`, healthcheck `pg_isready` | Порт `${POSTGRES_DEV_PORT:-55433}` открыт |
-| `carbone` | `carbone/carbone-ee` с закреплённым тегом, healthcheck `GET /status`, том для шаблонов | Без изменений |
+| `carbone` | `carbone/carbone-ee` с закреплённым тегом, без healthcheck (в образе нет curl, wget и node; осознанное отступление), том для шаблонов | Без изменений |
 | `onlyoffice` | `onlyoffice/documentserver` с закреплённым тегом. `JWT_ENABLED=true`, `JWT_SECRET=${ONLYOFFICE_JWT_SECRET}`, `ALLOW_PRIVATE_IP_ADDRESS=true`. Тома для данных и логов | Без изменений |
 
 - В проде наружу открыт только `web`.

@@ -2,24 +2,10 @@ import type { TemplateAdminDetails } from '@carbone-reports/shared';
 import { screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { mockApi, renderWithProviders } from '../../../test/utils';
 import { DataTab } from './DataTab';
 import { adminTemplate } from '../../../test/fixtures';
-
-vi.mock('../../../components/CodeEditor', () => ({
-  CodeEditor: ({
-    value,
-    onChange,
-    ariaLabel,
-  }: {
-    value: string;
-    onChange?: (v: string) => void;
-    ariaLabel: string;
-  }) => (
-    <textarea aria-label={ariaLabel} value={value} onChange={(e) => onChange?.(e.target.value)} />
-  ),
-}));
 
 const t = {
   ...adminTemplate,

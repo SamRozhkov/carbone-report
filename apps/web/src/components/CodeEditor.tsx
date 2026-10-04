@@ -24,6 +24,7 @@ export function CodeEditor({
   const { theme } = useContext(ThemeContext);
   return (
     <div
+      role="group"
       aria-label={ariaLabel}
       style={{
         border: '1px solid var(--g-color-line-generic)',
@@ -40,6 +41,7 @@ export function CodeEditor({
         loading={<Loader />}
         options={{
           readOnly,
+          ariaLabel,
           minimap: { enabled: false },
           fontSize: 13,
           automaticLayout: true,

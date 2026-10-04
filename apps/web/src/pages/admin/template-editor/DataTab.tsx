@@ -217,6 +217,7 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
             </div>
             {own['mode'] && <Text color="danger">{own['mode']}</Text>}
             <CodeEditor
+              key={current.id}
               language="sql"
               value={current.sql}
               onChange={(v) => update({ sql: v })}

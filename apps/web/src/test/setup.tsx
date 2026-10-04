@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
+import type { ChangeEvent } from 'react';
 import { afterEach, vi } from 'vitest';
+import type { CodeEditorProps } from '../components/CodeEditor';
 
 afterEach(() => {
   cleanup();
@@ -41,16 +43,15 @@ if (!URL.createObjectURL) URL.createObjectURL = () => 'blob:mock';
 if (!URL.revokeObjectURL) URL.revokeObjectURL = () => {};
 
 // Monaco в jsdom не загружается: любой тест, который тянет редактор, получает textarea.
-vi.mock('../components/CodeEditor', () => ({
-  CodeEditor: ({
-    value,
-    onChange,
-    ariaLabel,
-  }: {
-    value: string;
-    onChange?: (v: string) => void;
-    ariaLabel: string;
-  }) => (
-    <textarea aria-label={ariaLabel} value={value} onChange={(e) => onChange?.(e.target.value)} />
-  ),
-}));
+vi.mock('../components/CodeEditor', async () => {
+  const { jsx } = await import('react/jsx-runtime');
+  return {
+    CodeEditor: ({ value, onChange, ariaLabel, readOnly }: CodeEditorProps) =>
+      jsx('textarea', {
+        'aria-label': ariaLabel,
+        value,
+        readOnly,
+        onChange: (e: ChangeEvent<HTMLTextAreaElement>) => onChange?.(e.target.value),
+      }),
+  };
+});

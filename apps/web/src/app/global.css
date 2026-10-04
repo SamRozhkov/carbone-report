@@ -1,0 +1,37 @@
+body {
+  margin: 0;
+}
+
+.cr-content {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 24px 32px 48px;
+}
+
+.cr-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.cr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 520px;
+}
+
+.cr-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cr-centered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}

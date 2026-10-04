@@ -1,5 +1,7 @@
 import type { RouteObject } from 'react-router';
 import { Navigate } from 'react-router';
+import { RequireAdmin, RequireUser } from './guards';
+import { Layout } from './Layout';
 import { DatasourcesPage } from '../pages/admin/DatasourcesPage';
 import { TemplatesPage } from '../pages/admin/TemplatesPage';
 import { UsersPage } from '../pages/admin/UsersPage';
@@ -12,27 +14,34 @@ import { ReportsPage } from '../pages/ReportsPage';
 export const routes: RouteObject[] = [
   { path: '/login', element: <LoginPage /> },
   {
-    path: '/',
+    element: <RequireUser />,
     children: [
-      { index: true, element: <Navigate to="/reports" replace /> },
-      { path: 'reports', element: <ReportsPage /> },
-      { path: 'reports/:id', element: <ReportRunPage /> },
-      { path: 'history', element: <HistoryPage /> },
       {
-        path: 'admin',
+        path: '/',
+        element: <Layout />,
         children: [
-          { index: true, element: <Navigate to="/admin/templates" replace /> },
-          { path: 'templates', element: <TemplatesPage /> },
+          { index: true, element: <Navigate to="/reports" replace /> },
+          { path: 'reports', element: <ReportsPage /> },
+          { path: 'reports/:id', element: <ReportRunPage /> },
+          { path: 'history', element: <HistoryPage /> },
           {
-            path: 'templates/:id',
-            // Редактор (Monaco, OnlyOffice) — отдельный чанк.
-            lazy: async () => ({
-              Component: (await import('../pages/admin/template-editor/TemplateEditorPage'))
-                .TemplateEditorPage,
-            }),
+            path: 'admin',
+            element: <RequireAdmin />,
+            children: [
+              { index: true, element: <Navigate to="/admin/templates" replace /> },
+              { path: 'templates', element: <TemplatesPage /> },
+              {
+                path: 'templates/:id',
+                // Редактор (Monaco, OnlyOffice) — отдельный чанк.
+                lazy: async () => ({
+                  Component: (await import('../pages/admin/template-editor/TemplateEditorPage'))
+                    .TemplateEditorPage,
+                }),
+              },
+              { path: 'datasources', element: <DatasourcesPage /> },
+              { path: 'users', element: <UsersPage /> },
+            ],
           },
-          { path: 'datasources', element: <DatasourcesPage /> },
-          { path: 'users', element: <UsersPage /> },
         ],
       },
     ],

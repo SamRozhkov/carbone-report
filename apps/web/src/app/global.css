@@ -69,3 +69,31 @@ body {
   border: 1px solid var(--g-color-line-generic);
   border-radius: 8px;
 }
+
+.cr-editor-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cr-param-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 160px 140px auto;
+  gap: 12px;
+  align-items: end;
+  padding: 16px;
+}
+
+.cr-param-extra {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.cr-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

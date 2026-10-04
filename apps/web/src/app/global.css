@@ -35,3 +35,37 @@ body {
   justify-content: center;
   min-height: 100vh;
 }
+
+.cr-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.cr-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+}
+
+.cr-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.cr-run {
+  display: grid;
+  grid-template-columns: minmax(320px, 480px) 1fr;
+  gap: 32px;
+  align-items: start;
+}
+
+.cr-pdf {
+  width: 100%;
+  height: calc(100vh - 220px);
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: 8px;
+}

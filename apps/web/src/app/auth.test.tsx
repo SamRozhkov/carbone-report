@@ -125,7 +125,19 @@ describe('вход и защита маршрутов', () => {
     ]);
     const { router, queryClient } = renderRoute('/reports');
     await screen.findAllByText('Отчёты');
-    queryClient.setQueryData(['templates'], [{ id: 't1' }]);
+    queryClient.setQueryData(
+      ['templates'],
+      [
+        {
+          id: 't1',
+          name: 'Счёт',
+          description: '',
+          fileExt: 'docx',
+          defaultOutput: 'pdf',
+          updatedAt: '2026-01-10T10:00:00Z',
+        },
+      ],
+    );
     await userEvent.click(await screen.findByText('Выйти'));
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
     await new Promise((r) => setTimeout(r, 100));

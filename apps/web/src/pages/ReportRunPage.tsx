@@ -1,15 +1,21 @@
 import type { OutputFormat, ParamsInput } from '@carbone-reports/shared';
-import { Button, Loader, SegmentedRadioGroup, Text } from '@gravity-ui/uikit';
+import { Alert, Button, Loader, SegmentedRadioGroup, Text } from '@gravity-ui/uikit';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { api, runFileUrl } from '../api/endpoints';
+import { ApiRequestError } from '../api/client';
 import { fieldErrors } from '../api/errors';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { PageHeader } from '../components/PageHeader';
 import { ParamForm } from '../components/ParamForm';
 import { triggerDownload } from '../lib/download';
 import { initialValues, pickParams } from '../lib/params';
+
+export function ReportRunRoute() {
+  const { id = '' } = useParams();
+  return <ReportRunPage key={id} />;
+}
 
 export function ReportRunPage() {
   const { id = '' } = useParams();
@@ -36,12 +42,18 @@ export function ReportRunPage() {
       setRun({ id: runId, format });
       if (format !== 'pdf') triggerDownload(runFileUrl(runId));
     },
+    onError: (e) => {
+      if (e instanceof ApiRequestError && e.code === 'VALIDATION') void template.refetch();
+    },
   });
 
   if (template.isPending) return <Loader />;
   if (!t) return <ErrorAlert error={template.error} title="Не удалось открыть отчёт" />;
 
   const errors = fieldErrors(render.error);
+  const declared = new Set(t.params.map((p) => p.name));
+  const unmatched = Object.entries(errors).filter(([k]) => !declared.has(k));
+  const paramLike = unmatched.some(([k]) => k !== '_');
   const generalError = render.error && Object.keys(errors).length === 0 ? render.error : null;
 
   return (
@@ -64,6 +76,7 @@ export function ReportRunPage() {
           className="cr-form"
           onSubmit={(e) => {
             e.preventDefault();
+            setRun(null);
             render.mutate();
           }}
         >
@@ -84,6 +97,13 @@ export function ReportRunPage() {
             />
           </div>
           <ErrorAlert error={generalError} />
+          {unmatched.length > 0 && (
+            <Alert
+              theme="danger"
+              title={paramLike ? 'Параметры отчёта изменились — форма обновлена' : undefined}
+              message={unmatched.map(([k, m]) => (k === '_' ? m : `${k}: ${m}`)).join('\n')}
+            />
+          )}
           <div>
             <Button view="action" size="l" type="submit" loading={render.isPending}>
               Сформировать

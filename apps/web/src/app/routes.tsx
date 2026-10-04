@@ -8,7 +8,7 @@ import { UsersPage } from '../pages/admin/UsersPage';
 import { HistoryPage } from '../pages/HistoryPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
-import { ReportRunPage } from '../pages/ReportRunPage';
+import { ReportRunRoute } from '../pages/ReportRunPage';
 import { ReportsPage } from '../pages/ReportsPage';
 
 export const routes: RouteObject[] = [
@@ -22,7 +22,7 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="/reports" replace /> },
           { path: 'reports', element: <ReportsPage /> },
-          { path: 'reports/:id', element: <ReportRunPage /> },
+          { path: 'reports/:id', element: <ReportRunRoute /> },
           { path: 'history', element: <HistoryPage /> },
           {
             path: 'admin',

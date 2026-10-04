@@ -50,6 +50,11 @@ function NodeView({ node, depth }: { node: TagNode; depth: number }) {
           </Text>
         )}
       </Text>
+      {node.hint && (
+        <Text variant="caption-2" color="danger" as="div">
+          {node.hint}
+        </Text>
+      )}
       {node.tag && <TagRow tag={node.tag} hint={node.nextRowTag ? 'строка цикла' : undefined} />}
       {node.children.map((c) => (
         <NodeView key={c.id} node={c} depth={depth + 1} />

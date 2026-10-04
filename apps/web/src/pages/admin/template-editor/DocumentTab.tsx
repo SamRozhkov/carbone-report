@@ -71,22 +71,47 @@ export function DocumentTab({
       };
     });
 
-  const waitForVersion = async (before: number) => {
+  const runSave = async () => {
     if (polling.current) return;
     polling.current = true;
     setWaiting(true);
     try {
-      const deadline = Date.now() + pollTimeoutMs;
-      while (Date.now() < deadline) {
-        await pause(pollMs);
-        if (!mounted.current) return;
-        const t = await queryClient.fetchQuery({
+      // Свежая база: версия и прошлая ошибка сохранения (бэкенд сбрасывает её только после успешного callback).
+      const fresh = () =>
+        queryClient.fetchQuery({
           queryKey: templateKey(template.id),
           queryFn: () => api.templates.getAdmin(template.id),
           staleTime: 0,
         });
+      const base = await fresh();
+      if (!mounted.current) return;
+      try {
+        await save.mutateAsync();
+      } catch (e) {
+        if (mounted.current) {
+          add({
+            name: toastName('doc-save'),
+            title: 'Не удалось сохранить',
+            content: errorMessage(e),
+            theme: 'danger',
+          });
+        }
+        return;
+      }
+      if (!mounted.current) return;
+      add({
+        name: toastName('doc-save'),
+        title: 'Сохранение запрошено…',
+        theme: 'info',
+        autoHiding: 3000,
+      });
+      const deadline = Date.now() + pollTimeoutMs;
+      while (Date.now() < deadline) {
+        await pause(pollMs);
         if (!mounted.current) return;
-        if (t.version > before) {
+        const t = await fresh();
+        if (!mounted.current) return;
+        if (t.version > base.version) {
           void queryClient.invalidateQueries({ queryKey: ['templates'] });
           add({
             name: toastName('doc-save'),
@@ -95,7 +120,7 @@ export function DocumentTab({
           });
           return;
         }
-        if (t.lastSaveError) {
+        if (t.lastSaveError && t.lastSaveError !== base.lastSaveError) {
           add({
             name: toastName('doc-save'),
             title: 'Сохранение не удалось',
@@ -126,28 +151,7 @@ export function DocumentTab({
     }
   };
 
-  const save = useMutation({
-    mutationFn: () => api.templates.save(template.id),
-    onSuccess: () => {
-      if (!mounted.current) return;
-      add({
-        name: toastName('doc-save'),
-        title: 'Сохранение запрошено…',
-        theme: 'info',
-        autoHiding: 3000,
-      });
-      void waitForVersion(template.version);
-    },
-    onError: (e) => {
-      if (!mounted.current) return;
-      add({
-        name: toastName('doc-save'),
-        title: 'Не удалось сохранить',
-        content: errorMessage(e),
-        theme: 'danger',
-      });
-    },
-  });
+  const save = useMutation({ mutationFn: () => api.templates.save(template.id) });
 
   const refresh = useMutation({
     mutationFn: () =>
@@ -164,19 +168,30 @@ export function DocumentTab({
     },
   });
 
-  const onSave = () => {
-    if (polling.current || save.isPending) return;
-    save.mutate();
-  };
+  const onSave = () => void runSave();
+
+  // Версия шаблона изменилась (сохранение, замена файла в «Настройках»): ключ документа мог смениться.
+  // Если ключ тот же, ссылка на конфиг не меняется и редактор не пересоздаётся.
+  const lastVersion = useRef(template.version);
+  const { refetch } = config;
+  useEffect(() => {
+    if (lastVersion.current === template.version) return;
+    lastVersion.current = template.version;
+    void refetch();
+  }, [template.version, refetch]);
 
   return (
     <div className="cr-stack">
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <Button view="action" onClick={onSave} loading={save.isPending || waiting}>
+        <Button view="action" onClick={onSave} loading={waiting}>
           <Icon data={FloppyDisk} />
           Сохранить
         </Button>
-        <Button view={showTags ? 'normal' : 'flat'} onClick={() => setShowTags((v) => !v)}>
+        <Button
+          view={showTags ? 'normal' : 'flat'}
+          aria-pressed={showTags}
+          onClick={() => setShowTags((v) => !v)}
+        >
           <Icon data={Tag} />
           Теги
         </Button>
@@ -193,6 +208,11 @@ export function DocumentTab({
         />
       )}
       <ErrorAlert error={config.error} />
+      {config.error && (
+        <div>
+          <Button onClick={() => void config.refetch()}>Повторить</Button>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
         <div style={{ flex: 1, height: 'calc(100vh - 260px)', minHeight: 480 }}>
           {stableConfig ? (

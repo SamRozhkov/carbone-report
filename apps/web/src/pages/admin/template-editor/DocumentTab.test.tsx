@@ -1,7 +1,7 @@
 import type { TemplateAdminDetails } from '@carbone-reports/shared';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { adminTemplate } from '../../../test/fixtures';
 import { mockApi, renderWithProviders } from '../../../test/utils';
@@ -68,6 +68,7 @@ describe('DocumentTab', () => {
   it('документ не открыт → понятное сообщение', async () => {
     mockApi([
       { path: '/api/templates/t1/editor-config', body: config },
+      { path: '/api/templates/t1', body: t },
       {
         method: 'POST',
         path: '/api/templates/t1/save',
@@ -134,5 +135,91 @@ describe('DocumentTab', () => {
     expect(
       calls.filter((c) => c.method === 'POST' && c.path === '/api/templates/t1/save'),
     ).toHaveLength(1);
+  });
+
+  it('устаревшая lastSaveError не считается провалом нового сохранения', async () => {
+    let gets = 0;
+    mockApi([
+      { path: '/api/templates/t1/editor-config', body: config },
+      { method: 'POST', path: '/api/templates/t1/save', status: 204 },
+      {
+        path: '/api/templates/t1',
+        handler: () => ({ body: { ...t, lastSaveError: 'old', version: ++gets >= 3 ? 4 : 3 } }),
+      },
+    ]);
+    renderWithProviders(<DocumentTab {...base} pollMs={5} pollTimeoutMs={2000} />);
+    await screen.findByTestId('oo');
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(await screen.findByText('Сохранено, версия 4')).toBeInTheDocument();
+    expect(screen.queryByText('Сохранение не удалось')).not.toBeInTheDocument();
+  });
+
+  it('новая ошибка сохранения (отличается от прежней) → тост об ошибке', async () => {
+    let gets = 0;
+    mockApi([
+      { path: '/api/templates/t1/editor-config', body: config },
+      { method: 'POST', path: '/api/templates/t1/save', status: 204 },
+      {
+        path: '/api/templates/t1',
+        handler: () => ({ body: { ...t, lastSaveError: ++gets >= 2 ? 'new' : 'old' } }),
+      },
+    ]);
+    renderWithProviders(<DocumentTab {...base} pollMs={5} pollTimeoutMs={2000} />);
+    await screen.findByTestId('oo');
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(await screen.findByText('Сохранение не удалось')).toBeInTheDocument();
+  });
+
+  function bumpHarness() {
+    return function H() {
+      const [v, setV] = useState(3);
+      return (
+        <>
+          <button onClick={() => setV(4)}>bump</button>
+          <DocumentTab {...base} template={{ ...t, version: v }} />
+        </>
+      );
+    };
+  }
+
+  it('версия выросла и ключ документа сменился → редактор получает новый ключ', async () => {
+    let key = 'k1';
+    mockApi([
+      {
+        path: '/api/templates/t1/editor-config',
+        handler: () => ({ body: { ...config, document: { ...config.document, key } } }),
+      },
+    ]);
+    const H = bumpHarness();
+    renderWithProviders(<H />);
+    expect(await screen.findByTestId('oo')).toHaveAttribute('data-key', 'k1');
+    key = 'k2';
+    await userEvent.click(screen.getByRole('button', { name: 'bump' }));
+    await waitFor(() => expect(screen.getByTestId('oo')).toHaveAttribute('data-key', 'k2'));
+  });
+
+  it('версия выросла, ключ тот же → редактор не пересоздаётся', async () => {
+    mounts.count = 0;
+    const { calls } = mockApi([{ path: '/api/templates/t1/editor-config', body: config }]);
+    const H = bumpHarness();
+    renderWithProviders(<H />);
+    await screen.findByTestId('oo');
+    await userEvent.click(screen.getByRole('button', { name: 'bump' }));
+    await waitFor(() =>
+      expect(calls.filter((c) => c.path.endsWith('editor-config'))).toHaveLength(2),
+    );
+    expect(mounts.count).toBe(1);
+  });
+
+  it('ошибка editor-config → кнопка «Повторить»', async () => {
+    mockApi([
+      {
+        path: '/api/templates/t1/editor-config',
+        status: 500,
+        body: { error: { code: 'X', message: 'сбой' } },
+      },
+    ]);
+    renderWithProviders(<DocumentTab {...base} />);
+    expect(await screen.findByRole('button', { name: 'Повторить' })).toBeInTheDocument();
   });
 });

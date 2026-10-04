@@ -8,9 +8,15 @@ import { ErrorAlert } from '../components/ErrorAlert';
 
 /** Разрешаем только внутренние пути: «/…», но не «//host» и не «/\host». */
 export function safeNext(next: string | null): string {
-  if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\'))
+  if (!next || !next.startsWith('/')) return '/reports';
+  try {
+    const base = window.location.origin;
+    const u = new URL(next, base);
+    if (u.origin !== base) return '/reports';
+    return u.pathname + u.search + u.hash;
+  } catch {
     return '/reports';
-  return next;
+  }
 }
 
 export function LoginPage() {

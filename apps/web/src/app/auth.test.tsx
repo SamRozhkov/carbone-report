@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { apiJson } from '../api/client';
 import { safeNext } from '../pages/LoginPage';
+import { meKey } from '../api/session';
 import { adminMe, mockApi, renderRoute, userMe } from '../test/utils';
 
 const anon = {
@@ -122,9 +123,32 @@ describe('вход и защита маршрутов', () => {
       },
       { path: '/api/templates', body: [] },
     ]);
+    const { router, queryClient } = renderRoute('/reports');
+    await screen.findAllByText('Отчёты');
+    queryClient.setQueryData(['templates'], [{ id: 't1' }]);
+    await userEvent.click(await screen.findByText('Выйти'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(router.state.location.pathname).toBe('/login');
+    expect(queryClient.getQueryData(['templates'])).toBeUndefined();
+    expect(queryClient.getQueryData(meKey)).toBeNull();
+  });
+
+  it('сбой выхода на сервере → локально выходим, показываем предупреждение', async () => {
+    mockApi([
+      userMe,
+      {
+        method: 'POST',
+        path: '/api/auth/logout',
+        status: 500,
+        body: { error: { code: 'INTERNAL', message: 'сбой' } },
+      },
+      { path: '/api/templates', body: [] },
+    ]);
     const { router } = renderRoute('/reports');
     await userEvent.click(await screen.findByText('Выйти'));
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    expect(await screen.findByText('Не удалось завершить сессию на сервере')).toBeInTheDocument();
   });
 });
 
@@ -135,5 +159,9 @@ describe('safeNext', () => {
     ['//evil.com', '/reports'],
     ['/\\evil.com', '/reports'],
     ['https://evil.com', '/reports'],
+    ['/\t/evil.com', '/reports'],
+    ['/\n/evil.com', '/reports'],
+    ['/\t\\evil.com', '/reports'],
+    ['/%2F%2Fevil.com', '/%2F%2Fevil.com'],
   ])('%s → %s', (input, expected) => expect(safeNext(input)).toBe(expected));
 });

@@ -11,6 +11,7 @@ import {
 } from '@gravity-ui/icons';
 import type { AsideHeaderItem } from '@gravity-ui/navigation';
 import { AsideHeader, FooterItem } from '@gravity-ui/navigation';
+import { useToaster } from '@gravity-ui/uikit';
 import { useQueryClient } from '@tanstack/react-query';
 import { useContext, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
@@ -23,6 +24,7 @@ export function Layout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const queryClient = useQueryClient();
+  const toaster = useToaster();
   const { theme, setTheme } = useContext(ThemeContext);
   const [compact, setCompact] = useState(false);
 
@@ -53,10 +55,21 @@ export function Layout() {
   }
 
   const logout = async () => {
-    await api.logout().catch(() => undefined);
+    let failed = false;
+    await api.logout().catch(() => {
+      failed = true;
+    });
     queryClient.clear();
     queryClient.setQueryData(meKey, null);
     navigate('/login', { replace: true });
+    if (failed) {
+      toaster.add({
+        name: 'logout-failed',
+        theme: 'warning',
+        title: 'Не удалось завершить сессию на сервере',
+        content: 'Закройте браузер, если компьютер общий.',
+      });
+    }
   };
 
   return (

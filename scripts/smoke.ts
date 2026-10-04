@@ -1,5 +1,7 @@
 // Сквозная проверка работающего стека через nginx. Запуск: pnpm stack:smoke [--insecure]
 import { randomUUID } from 'node:crypto';
+import http from 'node:http';
+import https from 'node:https';
 import JSZip from 'jszip';
 import { SignJWT } from 'jose';
 
@@ -80,6 +82,29 @@ async function main() {
   await step('/internal закрыт снаружи', async () => {
     const r = await api('/internal/templates/00000000-0000-0000-0000-000000000000/file');
     assert(r.status === 404, `HTTP ${r.status}`);
+  });
+
+  await step('/internal закрыт и для закодированных путей', async () => {
+    const u = new URL(BASE);
+    const rawPath = '/internal/templates/x%2F..%2F..%2F..%2Fapi%2F/file';
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = (u.protocol === 'https:' ? https : http).request(
+        {
+          hostname: u.hostname,
+          port: u.port || undefined,
+          path: rawPath,
+          method: 'GET',
+          rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0',
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+    assert(status === 404, `HTTP ${status}`);
   });
 
   await step('вход админа', async () => {

@@ -23,6 +23,41 @@ cp .env.example .env   # заполнить секреты
 cd apps/api && node --env-file=../../.env --import tsx src/server.ts
 ```
 
+## Запуск в Docker
+
+Нужен Docker с Compose v2.24+. Первый запуск скачивает образы OnlyOffice и Carbone (несколько ГБ).
+
+```bash
+cp .env.example .env      # заполнить обязательные переменные
+```
+
+**Разработка** (API с hot reload, интерфейс на http://localhost:8080, API напрямую на :3000, PostgreSQL на :55433):
+
+```bash
+pnpm stack:dev
+```
+
+**Прод** (HTTPS в nginx; положите сертификат и ключ в `certs/fullchain.pem` и `certs/privkey.pem`;
+для локальной проверки — `./scripts/dev-cert.sh`):
+
+```bash
+pnpm stack:prod
+```
+
+Редирект с HTTP на HTTPS ведёт на стандартный порт 443; если `WEB_HTTPS_PORT` другой, открывайте `https://host:<порт>` напрямую.
+
+**Проверка работающего стека:**
+
+```bash
+pnpm stack:smoke                                        # разработка, http://localhost:8080
+BASE_URL=https://localhost pnpm stack:smoke --insecure  # прод с самоподписанным сертификатом
+```
+
+Остановить: `pnpm stack:down` (данные сохраняются в томах; `docker compose down -v` удалит их).
+
+Наружу в проде открыт только nginx. Маршруты `/internal/*` закрыты: их вызывает только OnlyOffice внутри сети.
+Сессионная cookie в проде помечена `Secure`, поэтому интерфейс работает только по HTTPS.
+
 ## Безопасность источников данных
 
 Подключайте источники под отдельным пользователем PostgreSQL с правами только на чтение

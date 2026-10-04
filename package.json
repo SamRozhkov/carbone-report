@@ -11,7 +11,11 @@
     "test:int": "pnpm -r test:int",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "stack:prod": "docker compose up -d --build",
+    "stack:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
+    "stack:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml down",
+    "stack:smoke": "tsx scripts/smoke.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

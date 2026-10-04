@@ -1,0 +1,103 @@
+name: carbone-reports
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    ports:
+      - '${WEB_HTTP_PORT:-80}:80'
+      - '${WEB_HTTPS_PORT:-443}:443'
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      onlyoffice:
+        condition: service_started
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: prod
+    environment:
+      DATABASE_URL: postgres://app:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}@postgres:5432/app
+      APP_SECRET: ${APP_SECRET:?задайте APP_SECRET в .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?задайте ENCRYPTION_KEY в .env}
+      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:?задайте ONLYOFFICE_JWT_SECRET в .env}
+      ADMIN_LOGIN: ${ADMIN_LOGIN:?задайте ADMIN_LOGIN в .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?задайте ADMIN_PASSWORD в .env}
+      ONLYOFFICE_INTERNAL_URL: http://onlyoffice
+      API_INTERNAL_URL: http://api:3000
+      CARBONE_URL: http://carbone:4000
+      STORAGE_DIR: /data
+      COOKIE_SECURE: 'true'
+      TZ: ${TZ:-Europe/Moscow}
+      QUERY_TIMEOUT_MS: ${QUERY_TIMEOUT_MS:-30000}
+      QUERY_MAX_ROWS: ${QUERY_MAX_ROWS:-100000}
+      RENDER_TIMEOUT_MS: ${RENDER_TIMEOUT_MS:-120000}
+      REPORT_RETENTION_DAYS: ${REPORT_RETENTION_DAYS:-30}
+    volumes:
+      - storage:/data
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      carbone:
+        condition: service_started
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
+      POSTGRES_DB: app
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U app -d app']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  carbone:
+    image: carbone/carbone-ee:full-5.15.3-fonts
+    volumes:
+      - carbone_templates:/app/template
+    restart: unless-stopped
+
+  onlyoffice:
+    image: onlyoffice/documentserver:9.4.0.1
+    environment:
+      JWT_ENABLED: 'true'
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:?задайте ONLYOFFICE_JWT_SECRET в .env}
+      JWT_HEADER: Authorization
+      ALLOW_PRIVATE_IP_ADDRESS: 'true'
+    volumes:
+      - oo_data:/var/www/onlyoffice/Data
+      - oo_lib:/var/lib/onlyoffice
+      - oo_logs:/var/log/onlyoffice
+    restart: unless-stopped
+
+volumes:
+  storage:
+  pgdata:
+  carbone_templates:
+  oo_data:
+  oo_lib:
+  oo_logs:

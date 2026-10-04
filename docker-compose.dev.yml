@@ -1,0 +1,33 @@
+services:
+  web:
+    ports: !override
+      - '${WEB_DEV_PORT:-8080}:80'
+    volumes: !override
+      - ./docker/nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
+
+  api:
+    build:
+      target: dev
+    working_dir: /repo
+    environment:
+      COOKIE_SECURE: 'false'
+    ports:
+      - '3000:3000'
+    volumes:
+      - .:/repo
+      - dev_node_modules:/repo/node_modules
+      - dev_api_node_modules:/repo/apps/api/node_modules
+      - dev_shared_node_modules:/repo/packages/shared/node_modules
+      - dev_pnpm_store:/pnpm/store
+    healthcheck:
+      start_period: 240s
+
+  postgres:
+    ports:
+      - '${POSTGRES_DEV_PORT:-55433}:5432'
+
+volumes:
+  dev_node_modules:
+  dev_api_node_modules:
+  dev_shared_node_modules:
+  dev_pnpm_store:

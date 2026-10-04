@@ -137,4 +137,59 @@ describe('DatasourcesPage', () => {
     expect(await within(dialog).findByText('extra: лишнее поле')).toBeInTheDocument();
     expect(within(dialog).getByText('обязательно')).toBeInTheDocument();
   });
+
+  it('правка параметров без пароля блокирует проверку и подсказывает ввести пароль', async () => {
+    mockApi([adminMe, { path: '/api/datasources', body: [ds] }]);
+    renderRoute('/admin/datasources');
+    await screen.findByText('Склад');
+    await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Хост'), 'x');
+    expect(within(dialog).getByRole('button', { name: 'Проверить соединение' })).toBeDisabled();
+    expect(
+      within(dialog).getByText('Введите пароль, чтобы проверить изменённые параметры'),
+    ).toBeInTheDocument();
+  });
+
+  it('проверка без правок: результат и пометка о сохранённых параметрах видны вместе', async () => {
+    mockApi([
+      adminMe,
+      { path: '/api/datasources', body: [ds] },
+      { method: 'POST', path: '/api/datasources/d1/test', body: { ok: true } },
+    ]);
+    renderRoute('/admin/datasources');
+    await screen.findByText('Склад');
+    await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Проверить соединение' }));
+    expect(await within(dialog).findByText('Соединение установлено')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('Проверяются сохранённые параметры источника.'),
+    ).toBeInTheDocument();
+  });
+
+  it('изменённый хост и новый пароль: проверка отправляет полное тело', async () => {
+    const { calls } = mockApi([
+      adminMe,
+      { path: '/api/datasources', body: [ds] },
+      { method: 'POST', path: '/api/datasources/test', body: { ok: true } },
+    ]);
+    renderRoute('/admin/datasources');
+    await screen.findByText('Склад');
+    await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Хост'), '2');
+    await userEvent.type(within(dialog).getByLabelText('Пароль'), 'pw');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Проверить соединение' }));
+    expect(await within(dialog).findByText('Соединение установлено')).toBeInTheDocument();
+    expect(calls.find((c) => c.path === '/api/datasources/test')?.body).toEqual({
+      name: 'Склад',
+      host: 'db2',
+      port: 5432,
+      database: 'wh',
+      username: 'ro',
+      password: 'pw',
+      ssl: false,
+    });
+  });
 });

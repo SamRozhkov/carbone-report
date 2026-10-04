@@ -33,6 +33,14 @@ export function DatasourceDialog({
     return password ? { ...rest, password } : rest;
   };
 
+  const savedOnly = editing && !form.password;
+  const connDirty =
+    !!datasource &&
+    (form.host !== datasource.host ||
+      form.port !== datasource.port ||
+      form.database !== datasource.database ||
+      form.username !== datasource.username ||
+      form.ssl !== datasource.ssl);
   const test = useMutation({
     // Без нового пароля у существующего источника проверяем сохранённые параметры.
     mutationFn: () =>
@@ -40,12 +48,6 @@ export function DatasourceDialog({
         ? api.datasources.testSaved(datasource!.id)
         : api.datasources.test(body()),
   });
-  // Результат проверки относится к параметрам на момент запуска: любая правка делает его устаревшим.
-  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => {
-    test.reset();
-    setForm((f) => ({ ...f, [k]: v }));
-  };
-
   const save = useMutation({
     mutationFn: () =>
       editing ? api.datasources.update(datasource!.id, body()) : api.datasources.create(body()),
@@ -54,6 +56,12 @@ export function DatasourceDialog({
       onClose();
     },
   });
+  // Результат проверки относится к параметрам на момент запуска: любая правка делает его устаревшим.
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => {
+    test.reset();
+    save.reset();
+    setForm((f) => ({ ...f, [k]: v }));
+  };
   const errors = fieldErrors(save.error);
   const text = (k: 'name' | 'host' | 'database' | 'username', label: string) => (
     <Field label={label} error={errors[k]}>
@@ -101,15 +109,19 @@ export function DatasourceDialog({
             content="SSL (сертификат сервера не проверяется)"
           />
           <div>
-            <Button onClick={() => test.mutate()} loading={test.isPending}>
+            <Button
+              onClick={() => test.mutate()}
+              loading={test.isPending}
+              disabled={savedOnly && connDirty}
+            >
               Проверить соединение
             </Button>
           </div>
-          {editing && !form.password && test.isIdle && (
-            <Alert
-              theme="info"
-              message="Без нового пароля проверяются сохранённые параметры источника."
-            />
+          {savedOnly && !connDirty && (
+            <Alert theme="info" message="Проверяются сохранённые параметры источника." />
+          )}
+          {savedOnly && connDirty && (
+            <Alert theme="warning" message="Введите пароль, чтобы проверить изменённые параметры" />
           )}
           {test.data?.ok === true && <Alert theme="success" message="Соединение установлено" />}
           {test.data?.ok === false && <Alert theme="danger" message={test.data.message} />}

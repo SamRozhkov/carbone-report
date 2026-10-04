@@ -3,6 +3,7 @@ import { RUNS_PAGE_SIZE } from '@carbone-reports/shared';
 import { ArrowDownToLine } from '@gravity-ui/icons';
 import type { TableColumnConfig } from '@gravity-ui/uikit';
 import { Button, Icon, Label, Loader, Pagination, Select, Table, Text } from '@gravity-ui/uikit';
+import { useEffect } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
 import { api, runFileUrl } from '../api/endpoints';
@@ -10,6 +11,8 @@ import { useMe } from '../api/session';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { PageHeader } from '../components/PageHeader';
 import { formatDateTime, formatDuration } from '../lib/format';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function formatRunParams(params: ParamsInput): string {
   const parts = Object.entries(params)
@@ -22,17 +25,20 @@ export function HistoryPage() {
   const me = useMe().data;
   const isAdmin = me?.role === 'admin';
   const [sp, setSp] = useSearchParams();
-  const page = Math.max(1, Number(sp.get('page')) || 1);
-  const status = sp.get('status') ?? '';
-  const templateId = sp.get('templateId') ?? '';
-  const userId = isAdmin ? (sp.get('userId') ?? '') : '';
+  const page = Math.min(10000, Math.max(1, Math.floor(Number(sp.get('page'))) || 1));
+  const rawStatus = sp.get('status');
+  const status = rawStatus === 'ok' || rawStatus === 'error' ? rawStatus : '';
+  const rawTemplateId = sp.get('templateId') ?? '';
+  const templateId = UUID_RE.test(rawTemplateId) ? rawTemplateId : '';
+  const rawUserId = sp.get('userId') ?? '';
+  const userId = isAdmin && UUID_RE.test(rawUserId) ? rawUserId : '';
 
   const runs = useQuery({
     queryKey: ['runs', { page, status, templateId, userId }],
     queryFn: () =>
       api.runs.list({
         page,
-        status: status === 'ok' || status === 'error' ? status : undefined,
+        status: status || undefined,
         templateId: templateId || undefined,
         userId: userId || undefined,
       }),
@@ -40,6 +46,20 @@ export function HistoryPage() {
   });
   const templates = useQuery({ queryKey: ['templates'], queryFn: api.templates.list });
   const users = useQuery({ queryKey: ['users'], queryFn: api.users.list, enabled: isAdmin });
+
+  const total = runs.data?.total ?? 0;
+  const itemCount = runs.data?.items.length ?? 0;
+  const isStale = runs.isPlaceholderData;
+  useEffect(() => {
+    if (isStale || itemCount !== 0 || total <= 0 || page <= 1) return;
+    const last = Math.ceil(total / RUNS_PAGE_SIZE);
+    if (page <= last) return;
+    const next = new URLSearchParams(sp);
+    if (last > 1) next.set('page', String(last));
+    else next.delete('page');
+    setSp(next, { replace: true });
+  }, [isStale, itemCount, total, page, sp, setSp]);
+  const filtersActive = Boolean(status || templateId || userId);
 
   const setFilter = (key: string, value: string | undefined) => {
     const next = new URLSearchParams(sp);
@@ -144,28 +164,28 @@ export function HistoryPage() {
         )}
       </div>
       <ErrorAlert error={runs.error} />
-      {runs.isPending ? (
+      {runs.isError ? null : runs.isPending ? (
         <Loader />
       ) : (
-        <>
+        <div style={isStale ? { opacity: 0.5 } : undefined}>
           <Table
             data={runs.data?.items ?? []}
             columns={columns}
             getRowDescriptor={(r) => ({ id: r.id })}
-            emptyMessage="Запусков пока нет"
+            emptyMessage={filtersActive ? 'Ничего не найдено' : 'Запусков пока нет'}
             width="max"
           />
-          {(runs.data?.total ?? 0) > RUNS_PAGE_SIZE && (
+          {total > RUNS_PAGE_SIZE && (
             <div style={{ marginTop: 16 }}>
               <Pagination
                 page={page}
                 pageSize={RUNS_PAGE_SIZE}
-                total={runs.data?.total ?? 0}
+                total={total}
                 onUpdate={(p) => setFilter('page', String(p))}
               />
             </div>
           )}
-        </>
+        </div>
       )}
     </>
   );

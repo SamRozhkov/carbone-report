@@ -1,39 +1,16 @@
 import type { Role, UpdateUserBody, UserDto } from '@carbone-reports/shared';
-import { Alert, Dialog, Select, Switch, TextInput } from '@gravity-ui/uikit';
+import { Dialog, Select, Switch, TextInput } from '@gravity-ui/uikit';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/endpoints';
 import { fieldErrors } from '../../api/errors';
-import { ErrorAlert } from '../../components/ErrorAlert';
 import { Field } from '../../components/Field';
+import { GeneralError } from '../../components/GeneralError';
 
 const ROLE_OPTIONS = [
   { value: 'user', content: 'Пользователь' },
   { value: 'admin', content: 'Администратор' },
 ];
-
-/** Общая ошибка: всё, что не относится к показанным полям, должно оставаться видимым. */
-function GeneralError({
-  error,
-  errors,
-  shown,
-}: {
-  error: unknown;
-  errors: Record<string, string>;
-  shown: string[];
-}) {
-  if (!error) return null;
-  const keys = Object.keys(errors);
-  if (keys.length === 0) return <ErrorAlert error={error} />;
-  const unmatched = keys.filter((k) => !shown.includes(k));
-  if (unmatched.length === 0) return null;
-  return (
-    <Alert
-      theme="danger"
-      message={unmatched.map((k) => (k === '_' ? errors[k] : `${k}: ${errors[k]}`)).join('; ')}
-    />
-  );
-}
 
 export function CreateUserDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();

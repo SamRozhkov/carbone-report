@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api } from '../../api/endpoints';
 import { fieldErrors } from '../../api/errors';
+import { ErrorAlert } from '../../components/ErrorAlert';
 import { Field } from '../../components/Field';
 import { GeneralError } from '../../components/GeneralError';
 
@@ -58,7 +59,11 @@ export function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose
   const noDatasources = datasources.data?.length === 0;
 
   return (
-    <Dialog open={open} onClose={onClose} aria-labelledby="cr-tpl-create">
+    <Dialog
+      open={open}
+      onClose={create.isPending ? () => {} : onClose}
+      aria-labelledby="cr-tpl-create"
+    >
       <Dialog.Header caption="Новый шаблон" id="cr-tpl-create" />
       <Dialog.Body>
         {noDatasources ? (
@@ -73,6 +78,7 @@ export function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose
           />
         ) : (
           <div className="cr-form">
+            <ErrorAlert error={datasources.error} />
             <Field label="Название">
               <TextInput
                 value={name}
@@ -83,10 +89,17 @@ export function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose
               />
             </Field>
             <Field label="Описание">
-              <TextArea value={description} onUpdate={setDescription} minRows={2} />
+              <TextArea
+                controlProps={{ 'aria-label': 'Описание' }}
+                value={description}
+                onUpdate={setDescription}
+                minRows={2}
+              />
             </Field>
             <Field label="Источник данных">
               <Select
+                aria-label="Источник данных"
+                disabled={datasources.isPending}
                 value={datasourceId ? [datasourceId] : []}
                 onUpdate={([v]) => setDatasourceId(v ?? '')}
                 options={(datasources.data ?? []).map((d) => ({ value: d.id, content: d.name }))}
@@ -97,7 +110,10 @@ export function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose
               <Text variant="subheader-1">Файл</Text>
               <SegmentedRadioGroup
                 value={source}
-                onUpdate={(v) => setSource(v as Source)}
+                onUpdate={(v) => {
+                  setSource(v as Source);
+                  setFile(null);
+                }}
                 options={[
                   { value: 'docx', content: 'Пустой DOCX' },
                   { value: 'xlsx', content: 'Пустой XLSX' },
@@ -119,7 +135,7 @@ export function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose
       </Dialog.Body>
       <Dialog.Footer
         onClickButtonApply={() => create.mutate()}
-        onClickButtonCancel={onClose}
+        onClickButtonCancel={create.isPending ? () => {} : onClose}
         textButtonApply="Создать"
         textButtonCancel="Отмена"
         loading={create.isPending}

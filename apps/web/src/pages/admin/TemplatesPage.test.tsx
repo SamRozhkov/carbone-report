@@ -154,4 +154,41 @@ describe('TemplatesPage', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Создать' }));
     expect(await within(dialog).findByText(/Источник не найден/)).toBeInTheDocument();
   });
+
+  it('смена источника сбрасывает выбранный файл', async () => {
+    mockApi([
+      adminMe,
+      { path: '/api/templates', body: [] },
+      { path: '/api/datasources', body: ds },
+    ]);
+    renderRoute('/admin/templates');
+    await userEvent.click(await screen.findByRole('button', { name: 'Создать шаблон' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Название'), 'Отчёт');
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Загрузить файл' }));
+    await userEvent.upload(
+      within(dialog).getByLabelText('Файл шаблона'),
+      new File(['x'], 'a.docx'),
+    );
+    expect(within(dialog).getByRole('button', { name: 'Создать' })).toBeEnabled();
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Пустой DOCX' }));
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Загрузить файл' }));
+    expect(within(dialog).getByRole('button', { name: 'Создать' })).toBeDisabled();
+  });
+
+  it('ошибка загрузки источников видна в диалоге', async () => {
+    mockApi([
+      adminMe,
+      { path: '/api/templates', body: [] },
+      {
+        path: '/api/datasources',
+        status: 500,
+        body: { error: { code: 'INTERNAL', message: 'Сбой чтения источников' } },
+      },
+    ]);
+    renderRoute('/admin/templates');
+    await userEvent.click(await screen.findByRole('button', { name: 'Создать шаблон' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText(/Сбой чтения источников/)).toBeInTheDocument();
+  });
 });

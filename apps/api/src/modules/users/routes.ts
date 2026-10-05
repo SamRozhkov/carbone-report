@@ -1,31 +1,40 @@
 import { CreateUserBody, IdParams, UpdateUserBody, type UserDto } from '@carbone-reports/shared';
 import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
 import type { App } from '../../app';
-import { reportRuns, users, type UserRow } from '../../db/schema';
+import { reportRuns, userGroups, users, type UserRow } from '../../db/schema';
 import type { AppDeps } from '../../deps';
+import { isUniqueViolation } from '../../lib/db-errors';
 import { badRequest, conflict, notFound, unauthorized } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
 import { hashPassword } from '../auth/password';
 import { setSessionCookie } from '../auth/routes';
 
-export const toUserDto = (r: UserRow): UserDto => ({
+export const toUserDto = (r: UserRow, groupIds: string[] = []): UserDto => ({
   id: r.id,
   login: r.login,
   role: r.role,
   blocked: r.blocked,
+  groupIds,
   createdAt: r.createdAt.toISOString(),
 });
 
-const isUniqueViolation = (e: unknown) =>
-  (e as { code?: string })?.code === '23505' ||
-  (e as { cause?: { code?: string } })?.cause?.code === '23505';
+const userGroupIds = async (deps: AppDeps, userId: string) =>
+  (
+    await deps.db
+      .select({ id: userGroups.groupId })
+      .from(userGroups)
+      .where(eq(userGroups.userId, userId))
+  ).map((r) => r.id);
 
 export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): void {
   const pre = { preHandler: guards.requireAdmin };
 
   app.get('/api/users', pre, async () => {
     const rows = await deps.db.select().from(users).orderBy(asc(users.login));
-    return rows.map(toUserDto);
+    const links = await deps.db.select().from(userGroups);
+    const byUser = new Map<string, string[]>();
+    for (const l of links) byUser.set(l.userId, [...(byUser.get(l.userId) ?? []), l.groupId]);
+    return rows.map((r) => toUserDto(r, byUser.get(r.id)));
   });
 
   app.post('/api/users', { ...pre, schema: { body: CreateUserBody } }, async (req, reply) => {
@@ -82,7 +91,7 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
           row.sessionVersion,
         );
       }
-      return toUserDto(row);
+      return toUserDto(row, await userGroupIds(deps, row.id));
     },
   );
 

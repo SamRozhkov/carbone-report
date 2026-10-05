@@ -5,7 +5,7 @@ import { notFound } from '../../lib/errors';
 import type { SessionUser } from '../auth/session';
 
 /** exists() из drizzle не берёт сырой sql`` в скобки (получается `exists select …`). */
-const exists = (subquery: SQL): SQL => sql`exists (${subquery})`;
+const existsSub = (subquery: SQL): SQL => sql`exists (${subquery})`;
 
 /**
  * Единственное правило доступа к шаблону (§19.1). undefined — без ограничений (админ).
@@ -16,14 +16,14 @@ export function accessibleTemplates(user: SessionUser): SQL | undefined {
   if (user.role === 'admin') return undefined;
   return or(
     eq(templates.public, true),
-    exists(
+    existsSub(
       sql`select 1 from ${categories} where ${categories.id} = ${templates.categoryId} and ${categories.public}`,
     ),
-    exists(
+    existsSub(
       sql`select 1 from ${categoryGroups} join ${userGroups} on ${userGroups.groupId} = ${categoryGroups.groupId}
           where ${categoryGroups.categoryId} = ${templates.categoryId} and ${userGroups.userId} = ${user.id}`,
     ),
-    exists(
+    existsSub(
       sql`select 1 from ${templateGroups} join ${userGroups} on ${userGroups.groupId} = ${templateGroups.groupId}
           where ${templateGroups.templateId} = ${templates.id} and ${userGroups.userId} = ${user.id}`,
     ),

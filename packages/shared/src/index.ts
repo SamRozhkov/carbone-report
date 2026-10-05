@@ -110,6 +110,7 @@ export const UserDto = z.object({
   login: z.string(),
   role: Role,
   blocked: z.boolean(),
+  groupIds: z.array(z.string()),
   createdAt: z.string(),
 });
 export type UserDto = z.infer<typeof UserDto>;
@@ -127,6 +128,55 @@ export const UpdateUserBody = z.object({
   blocked: z.boolean().optional(),
 });
 export type UpdateUserBody = z.infer<typeof UpdateUserBody>;
+
+export const GroupDto = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  memberIds: z.array(z.string()),
+  createdAt: z.string(),
+});
+export type GroupDto = z.infer<typeof GroupDto>;
+
+export const GroupBody = z.object({
+  name: z.string().trim().min(1, 'укажите название').max(100),
+  description: z.string().trim().max(1000).default(''),
+});
+export type GroupBody = z.infer<typeof GroupBody>;
+
+export const CategoryDto = z.object({
+  id: z.string(),
+  name: z.string(),
+  sortOrder: z.number().int(),
+  public: z.boolean(),
+  groupIds: z.array(z.string()),
+  templateCount: z.number().int(),
+});
+export type CategoryDto = z.infer<typeof CategoryDto>;
+
+export const CategoryBody = z.object({
+  name: z.string().trim().min(1, 'укажите название').max(100),
+  sortOrder: z.number().int().min(-1_000_000).max(1_000_000).default(0),
+  public: z.boolean().default(false),
+});
+export type CategoryBody = z.infer<typeof CategoryBody>;
+
+export const TemplateAccess = z.object({
+  public: z.boolean(),
+  categoryId: z.uuid('неверный идентификатор').nullable(),
+  groupIds: z.array(z.uuid('неверный идентификатор')).max(1000),
+});
+export type TemplateAccess = z.infer<typeof TemplateAccess>;
+
+export const MembersBody = z.object({
+  userIds: z.array(z.uuid('неверный идентификатор')).max(10000),
+});
+export type MembersBody = z.infer<typeof MembersBody>;
+
+export const GroupIdsBody = z.object({
+  groupIds: z.array(z.uuid('неверный идентификатор')).max(10000),
+});
+export type GroupIdsBody = z.infer<typeof GroupIdsBody>;
 
 export const SslMode = z.enum(['disable', 'require', 'verify']);
 export type SslMode = z.infer<typeof SslMode>;

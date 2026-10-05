@@ -128,6 +128,8 @@ describe('правило доступа', () => {
     expect(q.sql).toContain('"categories"."public"');
     expect(q.sql).toContain('"category_groups"."category_id" = "templates"."category_id"');
     expect(q.sql).toContain('"template_groups"."template_id" = "templates"."id"');
+    expect(q.params).toContain(alice.id);
+    expect(q.sql).not.toContain(alice.id);
     expect(q.sql.match(/exists \(select 1 from/g)).toHaveLength(3);
     expect(accessibleTemplates({ id: alice.id, login: 'x', role: 'admin' })).toBeUndefined();
   });

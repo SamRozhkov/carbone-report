@@ -10,6 +10,7 @@ import {
 import type { AppDeps } from './deps';
 import { registerErrorHandler } from './lib/errors';
 import { makeGuards } from './modules/auth/guards';
+import { registerAccessRoutes } from './modules/access/routes';
 import { registerAuthRoutes } from './modules/auth/routes';
 import { registerDatasourceRoutes } from './modules/datasources/routes';
 import { registerOnlyOfficeRoutes } from './modules/onlyoffice/routes';
@@ -56,6 +57,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   app.get('/api/health', async () => ({ status: 'ok' }));
   registerAuthRoutes(app, deps, guards);
   registerUserRoutes(app, deps, guards);
+  registerAccessRoutes(app, deps, guards);
   registerDatasourceRoutes(app, deps, guards);
   registerTemplateRoutes(app, deps, guards);
   registerReportRoutes(app, deps, guards);

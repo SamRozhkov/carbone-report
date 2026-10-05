@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { templates, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { AppError } from '../../lib/errors';
 import { isZip } from '../../lib/http';
+import { discardUncommittedFile, templateFilePath } from '../templates/service';
 import { toInternalDownloadUrl } from './download-url';
 import { verifyOnlyOfficeCallback } from './jwt';
 
@@ -60,59 +61,69 @@ export async function handleCallback(
     throw new AppError('BAD_CALLBACK', 400, 'неверный формат callback OnlyOffice');
   const cb = parsed.data;
   if (![2, 3, 6, 7].includes(cb.status)) return; // остальные статусы не требуют действий и блокировок
-  const [exists] = await deps.db
-    .select({ id: templates.id })
-    .from(templates)
-    .where(eq(templates.id, templateId));
-  if (!exists) return; // шаблон удалён: подтверждаем, чтобы Document Server не повторял callback
+  const [current] = await deps.db.select().from(templates).where(eq(templates.id, templateId));
+  if (!current) return; // шаблон удалён: подтверждаем, чтобы Document Server не повторял callback
+  // Колбэк от закрытой сессии (ключ уже сменился) не должен затирать новую версию.
+  if (cb.key !== current.docKey) return;
 
-  let downloadFailed = false;
+  // Ошибка пишется, только если сессия всё ещё текущая.
+  const setError = (msg: string) =>
+    deps.db
+      .update(templates)
+      .set({ lastSaveError: msg })
+      .where(and(eq(templates.id, templateId), eq(templates.docKey, cb.key)));
+
+  if (cb.status === 3 || cb.status === 7) {
+    log?.warn({ templateId, status: cb.status }, SAVE_ERRORS[cb.status]);
+    await setError(SAVE_ERRORS[cb.status]!);
+    return;
+  }
+  if (!cb.url) {
+    await setError('OnlyOffice не передал ссылку на файл');
+    return;
+  }
+  // Скачиваем только из кэша Document Server по внутреннему адресу, а не по присланной ссылке.
+  const downloadUrl = toInternalDownloadUrl(cb.url, deps.config.onlyofficeInternalUrl);
+  if (!downloadUrl) {
+    log?.warn({ templateId, status: cb.status }, 'недопустимая ссылка на файл от OnlyOffice');
+    await setError('OnlyOffice передал недопустимую ссылку на файл');
+    return;
+  }
+
+  // Скачивание — без блокировки строки (до 60 с); ключ сверяется повторно под блокировкой.
+  let file: Buffer;
+  try {
+    file = await deps.fetchFile(downloadUrl);
+  } catch (err) {
+    await setError('не удалось скачать файл из OnlyOffice');
+    throw err;
+  }
+  if (!isZip(file)) {
+    await setError('полученный от OnlyOffice файл не является документом');
+    return;
+  }
+
+  let written: string | undefined;
+  let previous: string | undefined;
   try {
     await deps.db.transaction(async (tx) => {
-      // Блокировка строки сериализует параллельные callback-и и ручную замену файла.
+      // Блокировка строки сериализует запись версии с другими callback-ами и ручной заменой файла.
       const [row] = await tx
         .select()
         .from(templates)
         .where(eq(templates.id, templateId))
         .for('update');
-      // Колбэк от закрытой сессии (ключ уже сменился) не должен затирать новую версию.
+      // Пока файл скачивался, сессия могла смениться (ручная замена, другой callback).
       if (!row || cb.key !== row.docKey) return;
-      const setError = (msg: string) =>
-        tx.update(templates).set({ lastSaveError: msg }).where(eq(templates.id, row.id));
-
-      if (cb.status === 3 || cb.status === 7) {
-        log?.warn({ templateId, status: cb.status }, SAVE_ERRORS[cb.status]);
-        await setError(SAVE_ERRORS[cb.status]!);
-        return;
-      }
-      if (cb.status !== 2 && cb.status !== 6) return;
-      if (!cb.url) {
-        await setError('OnlyOffice не передал ссылку на файл');
-        return;
-      }
-      // Скачиваем только из кэша Document Server по внутреннему адресу, а не по присланной ссылке.
-      const downloadUrl = toInternalDownloadUrl(cb.url, deps.config.onlyofficeInternalUrl);
-      if (!downloadUrl) {
-        log?.warn({ templateId, status: cb.status }, 'недопустимая ссылка на файл от OnlyOffice');
-        await setError('OnlyOffice передал недопустимую ссылку на файл');
-        return;
-      }
-      let file: Buffer;
-      try {
-        file = await deps.fetchFile(downloadUrl);
-      } catch (err) {
-        downloadFailed = true;
-        throw err;
-      }
-      if (!isZip(file)) {
-        await setError('полученный от OnlyOffice файл не является документом');
-        return;
-      }
-      await deps.storage.write(row.filePath, file);
+      // Новая версия — новый файл: при сбое коммита строка продолжает указывать на прежний.
+      written = templateFilePath(row.id, row.fileExt, row.version + 1);
+      await deps.storage.write(written, file);
+      previous = row.filePath;
       await tx
         .update(templates)
         .set({
-          version: sql`${templates.version} + 1`,
+          version: row.version + 1,
+          filePath: written,
           updatedAt: new Date(),
           updatedBy: await existingUserId(tx, cb.users?.[0]),
           lastSaveError: null,
@@ -121,12 +132,19 @@ export async function handleCallback(
         .where(eq(templates.id, row.id));
     });
   } catch (err) {
-    if (downloadFailed) {
-      await deps.db
-        .update(templates)
-        .set({ lastSaveError: 'не удалось скачать файл из OnlyOffice' })
-        .where(eq(templates.id, templateId));
+    // Транзакция не прошла: новый файл — сирота, убираем.
+    if (written) {
+      const orphan = written;
+      await discardUncommittedFile(deps, templateId, orphan).catch((e) =>
+        log?.warn({ err: e, filePath: orphan }, 'несохранённый файл шаблона не удалён'),
+      );
     }
     throw err;
+  }
+  // Сюда доходим только после коммита; previous задан, только если версия записана.
+  if (previous && previous !== written) {
+    await deps.storage
+      .remove(previous)
+      .catch((e) => log?.warn({ err: e, templateId }, 'старый файл шаблона не удалён'));
   }
 }

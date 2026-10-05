@@ -10,20 +10,28 @@ import {
   TemplateQuery,
   UpdateTemplateBody,
 } from '@carbone-reports/shared';
-import { asc, eq, sql } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { App } from '../../app';
-import { datasources, templateParams, templateQueries, templates } from '../../db/schema';
+import {
+  datasources,
+  templateParams,
+  templateQueries,
+  templates,
+  type TemplateRow,
+} from '../../db/schema';
 import type { AppDeps } from '../../deps';
-import { badRequest } from '../../lib/errors';
+import { badRequest, notFound } from '../../lib/errors';
 import { contentDisposition, isZip, MIME } from '../../lib/http';
 import { currentUser, type Guards } from '../auth/guards';
 import { checkParamDefaults } from '../queries/params';
 import { createBlankDocument } from './blank';
 import {
+  discardUncommittedFile,
   loadTemplate,
   loadTemplateFull,
+  templateDir,
   templateFilePath,
   toAdminDetails,
   toDetails,
@@ -88,7 +96,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
   ) {
     await ensureDatasource(v.datasourceId);
     const id = randomUUID();
-    const filePath = templateFilePath(id, v.ext);
+    const filePath = templateFilePath(id, v.ext, 1);
     await storage.write(filePath, v.data);
     try {
       return await db.transaction(async (tx) => {
@@ -119,7 +127,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         return row!;
       });
     } catch (err) {
-      await storage.remove(filePath).catch(() => undefined);
+      await storage.remove(templateDir(id)).catch(() => undefined);
       throw err;
     }
   }
@@ -166,28 +174,51 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     const row = await loadTemplate(db, req.params.id);
     const { ext, data } = await readUpload(req);
     if (ext !== row.fileExt) throw badRequest(`ожидается файл .${row.fileExt}`);
-    const updated = await db.transaction(async (tx) => {
-      // Блокировка строки: ручная замена не должна пересекаться с callback OnlyOffice.
-      await tx
-        .select({ id: templates.id })
-        .from(templates)
-        .where(eq(templates.id, row.id))
-        .for('update');
-      await storage.write(row.filePath, data);
-      const [u] = await tx
-        .update(templates)
-        .set({
-          version: sql`${templates.version} + 1`,
-          docKey: randomUUID(),
-          updatedAt: new Date(),
-          updatedBy: currentUser(req).id,
-          lastSaveError: null,
-        })
-        .where(eq(templates.id, row.id))
-        .returning();
-      return u;
-    });
-    return toAdminDetails(await loadTemplateFull(db, updated!.id));
+    let written: string | undefined;
+    let previous: string | undefined;
+    let updated: TemplateRow;
+    try {
+      updated = await db.transaction(async (tx) => {
+        // Блокировка строки: ручная замена не должна пересекаться с callback OnlyOffice.
+        const [cur] = await tx
+          .select()
+          .from(templates)
+          .where(eq(templates.id, row.id))
+          .for('update');
+        if (!cur) throw notFound('шаблон');
+        // Новая версия — новый файл: при сбое коммита строка продолжает указывать на прежний.
+        previous = cur.filePath;
+        written = templateFilePath(cur.id, cur.fileExt, cur.version + 1);
+        await storage.write(written, data);
+        const [u] = await tx
+          .update(templates)
+          .set({
+            version: cur.version + 1,
+            filePath: written,
+            docKey: randomUUID(),
+            updatedAt: new Date(),
+            updatedBy: currentUser(req).id,
+            lastSaveError: null,
+          })
+          .where(eq(templates.id, cur.id))
+          .returning();
+        return u!;
+      });
+    } catch (err) {
+      // Транзакция не прошла: новый файл — сирота, убираем.
+      if (written) {
+        await discardUncommittedFile(deps, row.id, written).catch((e) =>
+          req.log.warn({ err: e, filePath: written }, 'несохранённый файл шаблона не удалён'),
+        );
+      }
+      throw err;
+    }
+    if (previous && previous !== updated.filePath) {
+      await storage
+        .remove(previous)
+        .catch((e) => req.log.warn({ err: e }, 'старый файл шаблона не удалён'));
+    }
+    return toAdminDetails(await loadTemplateFull(db, updated.id));
   });
 
   app.patch(
@@ -216,7 +247,9 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     async (req, reply) => {
       const row = await loadTemplate(db, req.params.id);
       await db.delete(templates).where(eq(templates.id, row.id));
-      await storage.remove(row.filePath);
+      await storage.remove(templateDir(row.id));
+      // Строка могла ещё указывать на путь старого формата templates/<id>.<ext>.
+      if (!row.filePath.startsWith(`${templateDir(row.id)}/`)) await storage.remove(row.filePath);
       return reply.status(204).send();
     },
   );

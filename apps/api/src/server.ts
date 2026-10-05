@@ -9,6 +9,7 @@ import { CarboneClient } from './modules/carbone/client';
 import { createSourcePools } from './modules/datasources/pools';
 import { createOnlyOfficeCommands } from './modules/onlyoffice/commands';
 import { startCleanupTimer } from './modules/reports/cleanup';
+import { migrateTemplateFiles } from './modules/templates/file-migration';
 
 const config = loadConfig(process.env);
 const { db, pool } = createDb(config.databaseUrl);
@@ -29,6 +30,8 @@ const deps: AppDeps = {
 
 await ensureAdmin(deps, console);
 const app = await buildApp(deps);
+// До listen: к первому запросу все строки уже указывают на пути с версией.
+await migrateTemplateFiles({ db, storage: deps.storage, log: app.log });
 const stopCleanup = startCleanupTimer(deps, app.log);
 
 async function shutdown(signal: string) {

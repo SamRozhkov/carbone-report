@@ -12,6 +12,7 @@ import type { Db } from '../../db/client';
 import { templateParams, templateQueries, templates, type TemplateRow } from '../../db/schema';
 import type { AppDeps, TemplateFileRef } from '../../deps';
 import { notFound } from '../../lib/errors';
+import type { Storage } from '../../lib/storage';
 
 export interface TemplateFull {
   row: TemplateRow;
@@ -19,7 +20,30 @@ export interface TemplateFull {
   params: TemplateParam[];
 }
 
-export const templateFilePath = (id: string, ext: TemplateExt) => `templates/${id}.${ext}`;
+export const templateDir = (id: string) => `templates/${id}`;
+/** Каждая версия — отдельный файл: строка переключается на него атомарно в транзакции. */
+export const templateFilePath = (id: string, ext: TemplateExt, version: number) =>
+  `${templateDir(id)}/v${version}.${ext}`;
+
+/**
+ * Убирает файл версии, которую не удалось зафиксировать. Под блокировкой строки и только если строка
+ * на него не ссылается: коммит мог пройти, несмотря на ошибку (обрыв соединения), или тот же путь
+ * успел записать и зафиксировать следующий писатель.
+ */
+export async function discardUncommittedFile(
+  deps: { db: Db; storage: Storage },
+  id: string,
+  path: string,
+): Promise<void> {
+  await deps.db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ filePath: templates.filePath })
+      .from(templates)
+      .where(eq(templates.id, id))
+      .for('update');
+    if (row?.filePath !== path) await deps.storage.remove(path);
+  });
+}
 
 export async function loadTemplate(db: Db, id: string): Promise<TemplateRow> {
   const [row] = await db.select().from(templates).where(eq(templates.id, id));
@@ -83,6 +107,14 @@ export function templateFileRef(deps: AppDeps, row: TemplateRow): TemplateFileRe
     id: row.id,
     version: row.version,
     ext: row.fileExt,
-    read: () => deps.storage.read(row.filePath),
+    read: async () => {
+      try {
+        return await deps.storage.read(row.filePath);
+      } catch (e) {
+        // Пока шли запросы, сохранили новую версию и удалили прежний файл — берём актуальный.
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+        return deps.storage.read((await loadTemplate(deps.db, row.id)).filePath);
+      }
+    },
   };
 }

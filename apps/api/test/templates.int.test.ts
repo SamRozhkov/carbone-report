@@ -5,6 +5,7 @@ import {
   createTemplate,
   createTestApp,
   loginAs,
+  multipart,
   type TestApp,
 } from './helpers';
 
@@ -12,29 +13,6 @@ let t: TestApp;
 let admin: string;
 let user: string;
 let dsId: string;
-
-function multipart(fields: Record<string, string>, file?: { name: string; data: Buffer }) {
-  const boundary = '----cr' + Math.random().toString(16).slice(2);
-  const parts: Buffer[] = [];
-  for (const [k, v] of Object.entries(fields)) {
-    parts.push(
-      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`),
-    );
-  }
-  if (file) {
-    parts.push(
-      Buffer.from(
-        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
-      ),
-    );
-    parts.push(file.data, Buffer.from('\r\n'));
-  }
-  parts.push(Buffer.from(`--${boundary}--\r\n`));
-  return {
-    payload: Buffer.concat(parts),
-    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
-  };
-}
 
 beforeAll(async () => {
   t = await createTestApp();
@@ -74,7 +52,7 @@ describe('templates', () => {
       params: [],
       outputFormats: ['pdf', 'docx', 'odt'],
     });
-    expect(await t.deps.storage.exists(`templates/${id}.docx`)).toBe(true);
+    expect(await t.deps.storage.exists(`templates/${id}/v1.docx`)).toBe(true);
   });
 
   it('user видит список и детали без SQL', async () => {
@@ -251,7 +229,7 @@ describe('templates', () => {
     });
     expect(copy.json()).toMatchObject({ queries: [{ key: 'q' }], params: [{ name: 'p' }] });
     expect(copy.json().name).toMatch(/\(копия\)$/);
-    expect(await t.deps.storage.exists(`templates/${r.json().id}.docx`)).toBe(true);
+    expect(await t.deps.storage.exists(`templates/${r.json().id}/v1.docx`)).toBe(true);
   });
 
   it('скачивание: правильный MIME и кириллица в имени файла', async () => {
@@ -275,7 +253,7 @@ describe('templates', () => {
       headers: { cookie: admin },
     });
     expect(r.statusCode).toBe(204);
-    expect(await t.deps.storage.exists(`templates/${id}.docx`)).toBe(false);
+    expect(await t.deps.storage.exists(`templates/${id}/v1.docx`)).toBe(false);
   });
 
   it('замена файла через PUT /file увеличивает version и меняет doc key', async () => {

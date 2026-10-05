@@ -240,6 +240,36 @@ describe('callback hardening', () => {
     expect(after.docKey).not.toBe(before.docKey);
   });
 
+  it('callback не держит блокировку строки во время скачивания: параллельный PATCH шаблона проходит', async () => {
+    const r0 = await row();
+    const saving = callback({ key: r0.docKey, status: 6, url: pub('slow') }); // fetchFile ждёт 300 мс
+    await new Promise((r) => setTimeout(r, 50));
+    const started = Date.now();
+    const patch = await t.app.inject({
+      method: 'PATCH',
+      url: `/api/templates/${tplId}`,
+      headers: { cookie: admin },
+      payload: { description: 'параллельно' },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(Date.now() - started).toBeLessThan(200);
+    expect((await saving).statusCode).toBe(200);
+    expect((await row()).version).toBe(r0.version + 1);
+  });
+
+  it('ключ сменился за время скачивания: файл выбрасывается, версия не растёт', async () => {
+    const r0 = await row();
+    const saving = callback({ key: r0.docKey, status: 2, url: pub('slow') });
+    await new Promise((r) => setTimeout(r, 50));
+    await t.deps.db.update(templates).set({ docKey: 'changed' }).where(eq(templates.id, tplId));
+    expect((await saving).statusCode).toBe(200);
+    const r1 = await row();
+    expect(r1.version).toBe(r0.version);
+    expect(r1.filePath).toBe(r0.filePath);
+    expect(r1.lastSaveError).toBeNull();
+    expect(await t.deps.storage.exists(`templates/${tplId}/v${r0.version + 1}.docx`)).toBe(false);
+  });
+
   it('callback без status → 400', async () => {
     const r = await callback({ key: (await row()).docKey });
     expect(r.statusCode).toBe(400);

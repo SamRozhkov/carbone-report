@@ -27,8 +27,9 @@ export class Storage {
     return readFile(this.path(rel));
   }
 
+  /** Удаляет файл или каталог целиком; отсутствие — не ошибка. */
   async remove(rel: string): Promise<void> {
-    await rm(this.path(rel), { force: true });
+    await rm(this.path(rel), { recursive: true, force: true });
   }
 
   async exists(rel: string): Promise<boolean> {

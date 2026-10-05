@@ -24,7 +24,7 @@ beforeAll(async () => {
 });
 afterAll(() => t.close());
 
-const body = () => ({ name: 'Склад', ...src, ssl: false });
+const body = () => ({ name: 'Склад', ...src });
 
 describe('datasources', () => {
   it('user → 403', async () => {
@@ -213,5 +213,25 @@ describe('datasources', () => {
       headers: { cookie: admin },
     });
     expect(r.statusCode).toBe(404);
+  });
+
+  it('sslMode и sslCa сохраняются и возвращаются; CA без verify → 400 с полем sslCa', async () => {
+    const pem = '-----BEGIN CERTIFICATE-----\nAA\n-----END CERTIFICATE-----';
+    const ok = await t.app.inject({
+      method: 'POST',
+      url: '/api/datasources',
+      headers: { cookie: admin },
+      payload: { ...body(), sslMode: 'verify', sslCa: pem },
+    });
+    expect(ok.statusCode).toBe(201);
+    expect(ok.json()).toMatchObject({ sslMode: 'verify', sslCa: pem });
+    const bad = await t.app.inject({
+      method: 'POST',
+      url: '/api/datasources',
+      headers: { cookie: admin },
+      payload: { ...body(), sslMode: 'require', sslCa: pem },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(JSON.stringify(bad.json())).toContain('sslCa');
   });
 });

@@ -11,7 +11,8 @@ const ds = [
     port: 5432,
     database: 'wh',
     username: 'ro',
-    ssl: false,
+    sslMode: 'disable',
+    sslCa: null,
     createdAt: '2026-01-01T00:00:00Z',
   },
 ];

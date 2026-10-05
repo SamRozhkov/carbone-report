@@ -19,8 +19,8 @@ beforeAll(async () => {
     create table big as select generate_series(1, 20) as n;
   `);
   srcConn = src;
-  pool = new pg.Pool(poolConfig({ ...src, ssl: false }));
-  onePool = new pg.Pool({ ...poolConfig({ ...src, ssl: false }), max: 1 });
+  pool = new pg.Pool(poolConfig({ ...src, sslMode: 'disable', sslCa: null }));
+  onePool = new pg.Pool({ ...poolConfig({ ...src, sslMode: 'disable', sslCa: null }), max: 1 });
 });
 afterAll(async () => {
   await pool.end();

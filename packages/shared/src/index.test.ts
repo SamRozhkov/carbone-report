@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TemplateParam, TemplateQuery, outputFormatsFor } from './index';
+import { DatasourceBody, TemplateParam, TemplateQuery, outputFormatsFor } from './index';
 
 describe('TemplateQuery', () => {
   it('принимает корректный ключ', () => {
@@ -68,5 +68,38 @@ describe('outputFormatsFor', () => {
   });
   it('для pptx — pdf, pptx', () => {
     expect(outputFormatsFor('pptx')).toEqual(['pdf', 'pptx']);
+  });
+});
+
+describe('DatasourceBody: SSL', () => {
+  const base = { name: 'n', host: 'h', port: 5432, database: 'd', username: 'u' };
+  it('по умолчанию disable и без CA', () => {
+    const r = DatasourceBody.parse(base);
+    expect(r.sslMode).toBe('disable');
+    expect(r.sslCa).toBeNull();
+  });
+  it('CA без режима verify — ошибка у поля sslCa', () => {
+    const r = DatasourceBody.safeParse({
+      ...base,
+      sslMode: 'require',
+      sslCa: '-----BEGIN CERTIFICATE-----x',
+    });
+    expect(r.success).toBe(false);
+    expect(r.error!.issues[0]!.path).toEqual(['sslCa']);
+  });
+  it('verify с не-PEM — ошибка', () => {
+    expect(DatasourceBody.safeParse({ ...base, sslMode: 'verify', sslCa: 'abc' }).success).toBe(
+      false,
+    );
+  });
+  it('verify с PEM и verify без CA — ок; пустая строка CA = null', () => {
+    expect(
+      DatasourceBody.parse({
+        ...base,
+        sslMode: 'verify',
+        sslCa: '-----BEGIN CERTIFICATE-----\nAA\n-----END CERTIFICATE-----',
+      }).sslCa,
+    ).toContain('BEGIN');
+    expect(DatasourceBody.parse({ ...base, sslMode: 'verify', sslCa: '  ' }).sslCa).toBeNull();
   });
 });

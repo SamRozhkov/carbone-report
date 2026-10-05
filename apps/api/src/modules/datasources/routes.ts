@@ -15,7 +15,8 @@ export const toDatasourceDto = (r: DatasourceRow): DatasourceDto => ({
   port: r.port,
   database: r.database,
   username: r.username,
-  ssl: r.ssl,
+  sslMode: r.sslMode,
+  sslCa: r.sslCa,
   createdAt: r.createdAt.toISOString(),
 });
 

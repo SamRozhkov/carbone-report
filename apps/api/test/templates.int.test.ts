@@ -45,7 +45,7 @@ beforeAll(async () => {
     method: 'POST',
     url: '/api/datasources',
     headers: { cookie: admin },
-    payload: { name: 'src', ...src, ssl: false },
+    payload: { name: 'src', ...src },
   });
   dsId = ds.json().id;
 });

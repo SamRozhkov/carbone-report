@@ -5,6 +5,7 @@ import type {
   QueryMode,
   Role,
   SelectOption,
+  SslMode,
   TemplateExt,
 } from '@carbone-reports/shared';
 import {
@@ -38,7 +39,8 @@ export const datasources = pgTable('datasources', {
   database: text('database').notNull(),
   username: text('username').notNull(),
   passwordEnc: text('password_enc').notNull(),
-  ssl: boolean('ssl').notNull().default(false),
+  sslMode: text('ssl_mode').$type<SslMode>().notNull().default('disable'),
+  sslCa: text('ssl_ca'),
   createdAt: createdAt(),
 });
 

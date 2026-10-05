@@ -44,7 +44,7 @@ beforeAll(async () => {
     method: 'POST',
     url: '/api/datasources',
     headers: { cookie: admin },
-    payload: { name: 'src', ...src, ssl: false },
+    payload: { name: 'src', ...src },
   });
   dsId = ds.json().id;
   tplId = await createTemplate(t, admin, dsId, {
@@ -273,7 +273,6 @@ describe('недоступный источник', () => {
         database: 'x',
         username: 'x',
         password: 'x',
-        ssl: false,
       },
     });
     const dead = await createTemplate(t, admin, ds.json().id, {

@@ -15,6 +15,13 @@
       "when": 1791188683858,
       "tag": "0001_session_version",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791189287369,
+      "tag": "0002_ssl_mode",
+      "breakpoints": true
     }
   ]
 }

@@ -100,7 +100,12 @@ export const UpdateUserBody = z.object({
 });
 export type UpdateUserBody = z.infer<typeof UpdateUserBody>;
 
-export const DatasourceBody = z.object({
+export const SslMode = z.enum(['disable', 'require', 'verify']);
+export type SslMode = z.infer<typeof SslMode>;
+
+const PEM_CERT = '-----BEGIN CERTIFICATE-----';
+
+const DatasourceFields = z.object({
   name: z.string().trim().min(1),
   host: z.string().trim().min(1),
   port: z.number().int().min(1).max(65535),
@@ -108,11 +113,36 @@ export const DatasourceBody = z.object({
   username: z.string().trim().min(1),
   /** При обновлении: undefined — пароль не меняется. */
   password: z.string().optional(),
-  ssl: z.boolean(),
+  sslMode: SslMode.default('disable'),
+  /** CA-сертификат (PEM) для режима verify; null — системные корневые сертификаты. */
+  sslCa: z
+    .string()
+    .trim()
+    .nullable()
+    .default(null)
+    .transform((v) => (v ? v : null)),
+});
+
+export const DatasourceBody = DatasourceFields.superRefine((d, ctx) => {
+  if (d.sslCa === null) return;
+  if (d.sslMode !== 'verify') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['sslCa'],
+      message: 'CA-сертификат указывается только для режима «SSL с проверкой»',
+    });
+  } else if (!d.sslCa.includes(PEM_CERT)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['sslCa'],
+      message: 'ожидается сертификат в формате PEM',
+    });
+  }
 });
 export type DatasourceBody = z.infer<typeof DatasourceBody>;
 
-export const DatasourceDto = DatasourceBody.omit({ password: true }).extend({
+export const DatasourceDto = DatasourceFields.omit({ password: true }).extend({
+  sslCa: z.string().nullable(),
   id: z.string(),
   createdAt: z.string(),
 });

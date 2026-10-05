@@ -40,7 +40,11 @@ export function DatasourcesPage() {
     { id: 'name', name: 'Название', template: (d) => d.name },
     { id: 'address', name: 'Адрес', template: (d) => `${d.host}:${d.port}/${d.database}` },
     { id: 'username', name: 'Пользователь БД', template: (d) => d.username },
-    { id: 'ssl', name: 'SSL', template: (d) => (d.ssl ? <Label theme="info">SSL</Label> : '—') },
+    {
+      id: 'ssl',
+      name: 'SSL',
+      template: (d) => (d.sslMode !== 'disable' ? <Label theme="info">SSL</Label> : '—'),
+    },
     {
       id: 'actions',
       name: '',

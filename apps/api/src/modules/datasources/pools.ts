@@ -1,3 +1,4 @@
+import type { SslMode } from '@carbone-reports/shared';
 import { eq } from 'drizzle-orm';
 import pg from 'pg';
 import type { Config } from '../../config';
@@ -30,7 +31,29 @@ export interface ConnParams {
   database: string;
   username: string;
   password: string;
-  ssl: boolean;
+  sslMode: SslMode;
+  sslCa: string | null;
+}
+
+export function sslOptions(mode: SslMode, ca: string | null): pg.PoolConfig['ssl'] {
+  if (mode === 'disable') return false;
+  // require: шифрование без проверки (источники во внутренней сети с самоподписанными сертификатами).
+  if (mode === 'require') return { rejectUnauthorized: false };
+  return ca ? { rejectUnauthorized: true, ca } : { rejectUnauthorized: true };
+}
+
+const CERT_ERRORS = new Set([
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+  'CERT_HAS_EXPIRED',
+]);
+
+export function certErrorMessage(e: Error): string {
+  const code = (e as NodeJS.ErrnoException).code;
+  return code && CERT_ERRORS.has(code) ? `сертификат не прошёл проверку: ${e.message}` : e.message;
 }
 
 export function poolConfig(c: ConnParams): pg.PoolConfig {
@@ -40,8 +63,7 @@ export function poolConfig(c: ConnParams): pg.PoolConfig {
     database: c.database,
     user: c.username,
     password: c.password,
-    // Источники во внутренней сети часто с самоподписанными сертификатами.
-    ssl: c.ssl ? { rejectUnauthorized: false } : false,
+    ssl: sslOptions(c.sslMode, c.sslCa),
     max: 5,
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 60_000,
@@ -56,7 +78,8 @@ export function connParamsFromRow(row: DatasourceRow, key: Buffer): ConnParams {
     database: row.database,
     username: row.username,
     password: decryptSecret(row.passwordEnc, key),
-    ssl: row.ssl,
+    sslMode: row.sslMode,
+    sslCa: row.sslCa,
   };
 }
 
@@ -70,7 +93,7 @@ export async function testConnection(
     await client.query('select 1');
     return { ok: true };
   } catch (e) {
-    return { ok: false, message: (e as Error).message };
+    return { ok: false, message: certErrorMessage(e as Error) };
   } finally {
     await client.end().catch(() => {});
   }

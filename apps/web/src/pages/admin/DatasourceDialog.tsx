@@ -26,7 +26,8 @@ export function DatasourceDialog({
     database: datasource?.database ?? '',
     username: datasource?.username ?? '',
     password: '',
-    ssl: datasource?.ssl ?? false,
+    sslMode: datasource?.sslMode ?? 'disable',
+    sslCa: datasource?.sslCa ?? null,
   });
   const body = (): DatasourceBody => {
     const { password, ...rest } = form;
@@ -40,7 +41,8 @@ export function DatasourceDialog({
       form.port !== datasource.port ||
       form.database !== datasource.database ||
       form.username !== datasource.username ||
-      form.ssl !== datasource.ssl);
+      form.sslMode !== datasource.sslMode ||
+      form.sslCa !== datasource.sslCa);
   const test = useMutation({
     // Без нового пароля у существующего источника проверяем сохранённые параметры.
     mutationFn: () =>
@@ -104,8 +106,12 @@ export function DatasourceDialog({
             />
           </Field>
           <Checkbox
-            checked={form.ssl}
-            onUpdate={(v) => set('ssl', v)}
+            checked={form.sslMode !== 'disable'}
+            onUpdate={(v) => {
+              // Временно (до полноценной формы): чекбокс включает require и сбрасывает CA.
+              set('sslMode', v ? 'require' : 'disable');
+              set('sslCa', null);
+            }}
             content="SSL (сертификат сервера не проверяется)"
           />
           <div>

@@ -78,7 +78,7 @@ async function main() {
     database: 'demo',
     username: 'demo_ro',
     password: need('DEMO_DB_PASSWORD'),
-    ssl: false,
+    sslMode: 'disable',
   };
   if (!ds) {
     ds = await call<Ds>('POST', '/api/datasources', dsBody);

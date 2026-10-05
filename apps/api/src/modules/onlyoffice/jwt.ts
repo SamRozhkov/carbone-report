@@ -36,7 +36,11 @@ export async function verifyOnlyOfficeCallback(
     currentDate: new Date(now * 1000),
   });
   if (payload.exp === undefined) {
-    if (typeof payload.iat !== 'number' || now - payload.iat > CALLBACK_MAX_AGE_SECONDS) {
+    if (
+      typeof payload.iat !== 'number' ||
+      now - payload.iat > CALLBACK_MAX_AGE_SECONDS ||
+      payload.iat > now + CLOCK_TOLERANCE_SECONDS
+    ) {
       throw new Error('callback-токен без срока действия');
     }
   }

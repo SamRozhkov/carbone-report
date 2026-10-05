@@ -31,6 +31,14 @@ describe('verifyOnlyOfficeCallback', () => {
       verifyOnlyOfficeCallback(await sign({ iat: now - CALLBACK_MAX_AGE_SECONDS - 120 }), secret),
     ).rejects.toThrow();
   });
+  it('без exp: iat из будущего — отказ (допуск 60 с)', async () => {
+    await expect(
+      verifyOnlyOfficeCallback(await sign({ iat: now + 3600 }), secret),
+    ).rejects.toThrow();
+    await expect(
+      verifyOnlyOfficeCallback(await sign({ iat: now + 30 }), secret),
+    ).resolves.toBeTruthy();
+  });
   it('без exp и iat — отказ', async () => {
     await expect(verifyOnlyOfficeCallback(await sign({ key: 'k' }), secret)).rejects.toThrow();
   });

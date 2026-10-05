@@ -294,12 +294,14 @@ describe('ParamField: значение по умолчанию SQL-списка 
     );
   }
 
-  it('одно значение сохраняется без пробелов по краям; одни пробелы → null', async () => {
+  it('ввод хранится как набран, с пробелами внутри; одни пробелы → null', async () => {
     const onChange = vi.fn();
     renderWithProviders(<DefaultHarness onChange={onChange} />);
     const input = await screen.findByRole('textbox', { name: 'По умолчанию' });
-    await userEvent.type(input, ' 42 ');
-    expect(onChange).toHaveBeenLastCalledWith('42');
+    // Первый пробел — ввод из одних пробелов → null; дальше текст хранится как набран.
+    await userEvent.type(input, ' 4 2 ');
+    expect(input).toHaveValue('4 2 ');
+    expect(onChange).toHaveBeenLastCalledWith('4 2 ');
     await userEvent.clear(input);
     await userEvent.type(input, '   ');
     expect(onChange).toHaveBeenLastCalledWith(null);

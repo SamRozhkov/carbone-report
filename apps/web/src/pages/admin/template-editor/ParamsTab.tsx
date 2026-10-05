@@ -68,12 +68,16 @@ const toDraft = (p: TemplateParam, id: number): Draft => ({
   multiple: p.multiple,
 });
 
+/** Одиночное значение SQL-списка вводится текстом: пробелы по краям убираем при сохранении, а не при вводе. */
+const trimDefault = (v: ParamValue): ParamValue =>
+  typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v;
+
 const toParam = (d: Draft): TemplateParam => ({
   name: d.name.trim(),
   label: d.label.trim(),
   type: d.type,
   required: d.required,
-  defaultValue: d.defaultValue,
+  defaultValue: d.type === 'query' ? trimDefault(d.defaultValue) : d.defaultValue,
   options: d.type === 'select' ? parseOptions(d.optionsText) : null,
   sql: d.type === 'query' ? d.sql : null,
   multiple: d.type === 'query' && d.multiple,

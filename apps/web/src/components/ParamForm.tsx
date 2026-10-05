@@ -108,7 +108,7 @@ export function ParamField({ param, value, onChange, error, disabled, label }: P
                   : ''
             }
             onUpdate={(v) => {
-              if (!param.multiple) return onChange(v.trim() === '' ? null : v.trim());
+              if (!param.multiple) return onChange(v.trim() === '' ? null : v);
               const items = v
                 .split(',')
                 .map((x) => x.trim())

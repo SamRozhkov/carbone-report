@@ -283,6 +283,24 @@ describe('ParamsTab', () => {
     );
   });
 
+  it('значение по умолчанию SQL-списка: пробелы по краям обрезаются при сохранении', async () => {
+    const { calls } = mockApi([
+      {
+        method: 'PUT',
+        path: '/api/templates/t1/params',
+        handler: ({ body }) => ({ body: { ...withQuery, params: body } }),
+      },
+    ]);
+    renderWithProviders(<ParamsTab template={withQuery} />);
+    const input = await screen.findByRole('textbox', { name: 'По умолчанию' });
+    await userEvent.type(input, ' 4 2 ');
+    expect(input).toHaveValue('4 2 ');
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить параметры' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
+    const body = calls.find((c) => c.method === 'PUT')!.body as Record<string, unknown>[];
+    expect(body[1]).toMatchObject({ name: 'city', defaultValue: '4 2' });
+  });
+
   it('«Проверить» выполняет options с тестовыми параметрами и показывает варианты', async () => {
     localStorage.setItem('cr-test-params-t1', JSON.stringify({ from: '2026-01-01' }));
     const { calls } = mockApi([

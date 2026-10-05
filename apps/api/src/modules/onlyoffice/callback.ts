@@ -5,6 +5,7 @@ import { templates, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { AppError } from '../../lib/errors';
 import { isZip } from '../../lib/http';
+import { toInternalDownloadUrl } from './download-url';
 import { verifyOnlyOffice } from './jwt';
 
 const Callback = z.object({
@@ -89,9 +90,16 @@ export async function handleCallback(
         await setError('OnlyOffice не передал ссылку на файл');
         return;
       }
+      // Скачиваем только из кэша Document Server по внутреннему адресу, а не по присланной ссылке.
+      const downloadUrl = toInternalDownloadUrl(cb.url, deps.config.onlyofficeInternalUrl);
+      if (!downloadUrl) {
+        log?.warn({ templateId, status: cb.status }, 'недопустимая ссылка на файл от OnlyOffice');
+        await setError('OnlyOffice передал недопустимую ссылку на файл');
+        return;
+      }
       let file: Buffer;
       try {
-        file = await deps.fetchFile(cb.url);
+        file = await deps.fetchFile(downloadUrl);
       } catch (err) {
         downloadFailed = true;
         throw err;

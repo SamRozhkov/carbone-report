@@ -19,17 +19,23 @@ let dsId: string;
 let tplId: string;
 let fetched: Buffer;
 const forceSaved: string[] = [];
+const fetchedUrls: string[] = [];
+// Document Server строит ссылку на результат от публичного origin (за nginx — префикс /onlyoffice).
+const CACHE = (name: string) => `/cache/files/data/${name}/output.docx?md5=abc&expires=1`;
+const pub = (name: string) => `https://localhost:8443/onlyoffice${CACHE(name)}`;
+const internal = (name: string) => `http://onlyoffice${CACHE(name)}`;
 
 beforeAll(async () => {
   t = await createTestApp({
     fetchFile: async (url) => {
-      if (url === 'http://oo/slow') {
+      fetchedUrls.push(url);
+      if (url === internal('slow')) {
         await new Promise((r) => setTimeout(r, 300));
         return Buffer.concat([await createBlankDocument('docx'), Buffer.from('old')]);
       }
-      if (url === 'http://oo/final')
+      if (url === internal('final'))
         return Buffer.concat([await createBlankDocument('docx'), Buffer.from('final')]);
-      if (url === 'http://oo/boom') throw new Error('network');
+      if (url === internal('boom')) throw new Error('network');
       return fetched;
     },
     onlyoffice: { forceSave: async (key) => void forceSaved.push(key) },
@@ -73,14 +79,14 @@ async function callback(body: Record<string, unknown>, via: 'body' | 'header' = 
 
 describe('callback: прочее', () => {
   it('callback для удалённого шаблона подтверждается {error:0}', async () => {
-    const r1 = await callback({ key: 'k', status: 2, url: 'http://oo/final' });
+    const r1 = await callback({ key: 'k', status: 2, url: pub('final') });
     expect(r1.statusCode).toBe(200);
     await t.app.inject({
       method: 'DELETE',
       url: `/api/templates/${tplId}`,
       headers: { cookie: admin },
     });
-    const r = await callback({ key: 'k', status: 2, url: 'http://oo/final' });
+    const r = await callback({ key: 'k', status: 2, url: pub('final') });
     expect(r.statusCode).toBe(200);
     expect(r.json()).toEqual({ error: 0 });
   });
@@ -142,7 +148,7 @@ describe('callback', () => {
     const r = await t.app.inject({
       method: 'POST',
       url: `/internal/onlyoffice/callback/${tplId}`,
-      payload: { key: (await row()).docKey, status: 2, url: 'http://x' },
+      payload: { key: (await row()).docKey, status: 2, url: pub('x') },
     });
     expect(r.statusCode).toBe(403);
     expect((await row()).version).toBe(1);
@@ -161,7 +167,7 @@ describe('callback', () => {
     const r = await callback({
       key: before.docKey,
       status: 6,
-      url: 'http://oo/cache/file.docx',
+      url: pub('file.docx'),
       users: [adminId],
     });
     expect(r.json()).toEqual({ error: 0 });
@@ -170,12 +176,13 @@ describe('callback', () => {
     expect(after.docKey).toBe(before.docKey);
     expect(after.updatedBy).toBe(adminId);
     expect((await t.deps.storage.read(after.filePath)).equals(fetched)).toBe(true);
+    expect(fetchedUrls.at(-1)).toBe(internal('file.docx'));
   });
 
   it('status 2 (JWT в заголовке) — сохраняет и выдаёт новый ключ', async () => {
     const before = await row();
     const r = await callback(
-      { key: before.docKey, status: 2, url: 'http://oo/f.docx', users: [adminId] },
+      { key: before.docKey, status: 2, url: pub('f.docx'), users: [adminId] },
       'header',
     );
     expect(r.json()).toEqual({ error: 0 });
@@ -186,9 +193,9 @@ describe('callback', () => {
 
   it('устаревший ключ (после закрытия сессии) игнорируется и не затирает новую версию', async () => {
     const old = (await row()).docKey;
-    await callback({ key: old, status: 2, url: 'http://oo/f.docx' });
+    await callback({ key: old, status: 2, url: pub('f.docx') });
     const v = (await row()).version;
-    const r = await callback({ key: old, status: 6, url: 'http://oo/stale.docx' });
+    const r = await callback({ key: old, status: 6, url: pub('stale.docx') });
     expect(r.json()).toEqual({ error: 0 });
     expect((await row()).version).toBe(v);
   });
@@ -197,7 +204,7 @@ describe('callback', () => {
     const before = await row();
     const original = await t.deps.storage.read(before.filePath);
     fetched = Buffer.from('<html>error</html>');
-    await callback({ key: before.docKey, status: 6, url: 'http://oo/f' });
+    await callback({ key: before.docKey, status: 6, url: pub('f') });
     const after = await row();
     expect(after.version).toBe(1);
     expect(after.lastSaveError).toMatch(/не является документом/);
@@ -206,14 +213,14 @@ describe('callback', () => {
 
   it('status 3 — lastSaveError виден админу в деталях шаблона, следующее сохранение его сбрасывает', async () => {
     const key = (await row()).docKey;
-    await callback({ key, status: 3, url: 'http://oo/f' });
+    await callback({ key, status: 3, url: pub('f') });
     const d = await t.app.inject({
       method: 'GET',
       url: `/api/templates/${tplId}`,
       headers: { cookie: admin },
     });
     expect(d.json().lastSaveError).toBe('OnlyOffice не смог сохранить документ');
-    await callback({ key, status: 6, url: 'http://oo/f.docx' });
+    await callback({ key, status: 6, url: pub('f.docx') });
     expect((await row()).lastSaveError).toBeNull();
   });
 });
@@ -221,9 +228,9 @@ describe('callback', () => {
 describe('callback hardening', () => {
   it('конкурентные callback-и: итоговый файл — последний (final), ключ сменён', async () => {
     const before = await row();
-    const slow = callback({ key: before.docKey, status: 6, url: 'http://oo/slow' });
+    const slow = callback({ key: before.docKey, status: 6, url: pub('slow') });
     await new Promise((r) => setTimeout(r, 50));
-    const fin = callback({ key: before.docKey, status: 2, url: 'http://oo/final' });
+    const fin = callback({ key: before.docKey, status: 2, url: pub('final') });
     await Promise.all([slow, fin]);
     const after = await row();
     const stored = await t.deps.storage.read(after.filePath);
@@ -237,8 +244,23 @@ describe('callback hardening', () => {
     expect(r.json().error.code).toBe('BAD_CALLBACK');
   });
 
+  it.each([
+    'https://localhost:8443/onlyoffice/web-apps/apps/api/documents/api.js',
+    'http://169.254.169.254/latest/meta-data',
+    'not a url',
+  ])('ссылка не на кэш Document Server (%s) → lastSaveError, без скачивания', async (url) => {
+    const before = await row();
+    const calls = fetchedUrls.length;
+    const r = await callback({ key: before.docKey, status: 6, url });
+    expect(r.json()).toEqual({ error: 0 });
+    const after = await row();
+    expect(after.version).toBe(1);
+    expect(after.lastSaveError).toBe('OnlyOffice передал недопустимую ссылку на файл');
+    expect(fetchedUrls.length).toBe(calls);
+  });
+
   it('fetchFile упал → 5xx и lastSaveError', async () => {
-    const r = await callback({ key: (await row()).docKey, status: 6, url: 'http://oo/boom' });
+    const r = await callback({ key: (await row()).docKey, status: 6, url: pub('boom') });
     expect(r.statusCode).toBeGreaterThanOrEqual(500);
     expect((await row()).lastSaveError).toBe('не удалось скачать файл из OnlyOffice');
   });

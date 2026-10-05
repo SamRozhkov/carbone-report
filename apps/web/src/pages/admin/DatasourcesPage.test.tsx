@@ -15,6 +15,19 @@ const ds = {
   createdAt: '2026-01-01T00:00:00Z',
 };
 
+async function openCreate() {
+  renderRoute('/admin/datasources');
+  await userEvent.click(await screen.findByRole('button', { name: 'Добавить источник' }));
+  const dialog = await screen.findByRole('dialog');
+  await userEvent.type(within(dialog).getByLabelText('Название'), 'Склад');
+  await userEvent.type(within(dialog).getByLabelText('Хост'), 'db');
+  await userEvent.type(within(dialog).getByLabelText('База данных'), 'wh');
+  await userEvent.type(within(dialog).getByLabelText('Пользователь БД'), 'ro');
+  await userEvent.type(within(dialog).getByLabelText('Пароль'), 'secret');
+  return dialog;
+}
+const PEM = '-----BEGIN CERTIFICATE-----';
+
 describe('DatasourcesPage', () => {
   it('создание с проверкой соединения: тест отправляет введённые параметры', async () => {
     const { calls } = mockApi([
@@ -194,5 +207,94 @@ describe('DatasourcesPage', () => {
       sslMode: 'disable',
       sslCa: null,
     });
+  });
+
+  it('режим «SSL с проверкой» показывает поле CA и отправляет sslMode/sslCa', async () => {
+    const { calls } = mockApi([
+      adminMe,
+      { path: '/api/datasources', body: [] },
+      { method: 'POST', path: '/api/datasources', status: 201, body: ds },
+    ]);
+    const dialog = await openCreate();
+    expect(within(dialog).queryByLabelText('CA-сертификат (PEM)')).not.toBeInTheDocument();
+    await userEvent.click(
+      within(dialog).getByRole('radio', { name: 'SSL с проверкой сертификата' }),
+    );
+    await userEvent.type(within(dialog).getByLabelText('CA-сертификат (PEM)'), PEM);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(
+        calls.find((c) => c.method === 'POST' && c.path === '/api/datasources')?.body,
+      ).toMatchObject({
+        sslMode: 'verify',
+        sslCa: PEM,
+      }),
+    );
+  });
+
+  it('при смене режима с verify поле CA скрывается и не отправляется', async () => {
+    const { calls } = mockApi([
+      adminMe,
+      { path: '/api/datasources', body: [] },
+      { method: 'POST', path: '/api/datasources', status: 201, body: ds },
+    ]);
+    const dialog = await openCreate();
+    await userEvent.click(
+      within(dialog).getByRole('radio', { name: 'SSL с проверкой сертификата' }),
+    );
+    await userEvent.type(within(dialog).getByLabelText('CA-сертификат (PEM)'), PEM);
+    await userEvent.click(
+      within(dialog).getByRole('radio', { name: 'SSL без проверки сертификата' }),
+    );
+    expect(within(dialog).queryByLabelText('CA-сертификат (PEM)')).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(
+        calls.find((c) => c.method === 'POST' && c.path === '/api/datasources')?.body,
+      ).toMatchObject({
+        sslMode: 'require',
+        sslCa: null,
+      }),
+    );
+  });
+
+  it('ошибка сервера по sslCa показывается у поля CA', async () => {
+    mockApi([
+      adminMe,
+      { path: '/api/datasources', body: [] },
+      {
+        method: 'POST',
+        path: '/api/datasources',
+        status: 400,
+        body: {
+          error: {
+            code: 'VALIDATION',
+            message: 'bad',
+            details: [{ path: '/sslCa', message: 'ожидается сертификат в формате PEM' }],
+          },
+        },
+      },
+    ]);
+    const dialog = await openCreate();
+    await userEvent.click(
+      within(dialog).getByRole('radio', { name: 'SSL с проверкой сертификата' }),
+    );
+    await userEvent.type(within(dialog).getByLabelText('CA-сертификат (PEM)'), 'abc');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    expect(
+      await within(dialog).findByText('ожидается сертификат в формате PEM'),
+    ).toBeInTheDocument();
+  });
+
+  it('источник с require: метка «SSL» в списке и выбранный режим в диалоге', async () => {
+    mockApi([adminMe, { path: '/api/datasources', body: [{ ...ds, sslMode: 'require' }] }]);
+    renderRoute('/admin/datasources');
+    const cell = (await screen.findByText('Склад')).closest('tr')!;
+    expect(within(cell).getByText('SSL')).toBeInTheDocument();
+    await userEvent.click(within(cell).getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByRole('radio', { name: 'SSL без проверки сертификата' }),
+    ).toBeChecked();
   });
 });

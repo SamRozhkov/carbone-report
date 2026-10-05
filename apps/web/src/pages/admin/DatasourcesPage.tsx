@@ -43,7 +43,14 @@ export function DatasourcesPage() {
     {
       id: 'ssl',
       name: 'SSL',
-      template: (d) => (d.sslMode !== 'disable' ? <Label theme="info">SSL</Label> : '—'),
+      template: (d) =>
+        d.sslMode === 'disable' ? (
+          '—'
+        ) : (
+          <Label theme={d.sslMode === 'verify' ? 'success' : 'info'}>
+            {d.sslMode === 'verify' ? 'SSL, проверка' : 'SSL'}
+          </Label>
+        ),
     },
     {
       id: 'actions',

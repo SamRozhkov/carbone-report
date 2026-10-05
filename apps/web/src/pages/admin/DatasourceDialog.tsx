@@ -1,5 +1,13 @@
 import type { DatasourceBody, DatasourceDto } from '@carbone-reports/shared';
-import { Alert, Button, Checkbox, Dialog, NumberInput, TextInput } from '@gravity-ui/uikit';
+import {
+  Alert,
+  Button,
+  Dialog,
+  NumberInput,
+  RadioGroup,
+  TextArea,
+  TextInput,
+} from '@gravity-ui/uikit';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/endpoints';
@@ -7,6 +15,8 @@ import { fieldErrors } from '../../api/errors';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Field } from '../../components/Field';
 import { GeneralError } from '../../components/GeneralError';
+
+type SslMode = DatasourceBody['sslMode'];
 
 export function DatasourceDialog({
   open,
@@ -26,12 +36,13 @@ export function DatasourceDialog({
     database: datasource?.database ?? '',
     username: datasource?.username ?? '',
     password: '',
-    sslMode: datasource?.sslMode ?? 'disable',
-    sslCa: datasource?.sslCa ?? null,
+    sslMode: (datasource?.sslMode ?? 'disable') as SslMode,
+    sslCa: datasource?.sslCa ?? '',
   });
   const body = (): DatasourceBody => {
-    const { password, ...rest } = form;
-    return password ? { ...rest, password } : rest;
+    const { password, sslCa, ...rest } = form;
+    const base = { ...rest, sslCa: form.sslMode === 'verify' && sslCa.trim() ? sslCa : null };
+    return password ? { ...base, password } : base;
   };
 
   const savedOnly = editing && !form.password;
@@ -42,7 +53,7 @@ export function DatasourceDialog({
       form.database !== datasource.database ||
       form.username !== datasource.username ||
       form.sslMode !== datasource.sslMode ||
-      form.sslCa !== datasource.sslCa);
+      (form.sslMode === 'verify' ? form.sslCa : '') !== (datasource.sslCa ?? ''));
   const test = useMutation({
     // Без нового пароля у существующего источника проверяем сохранённые параметры.
     mutationFn: () =>
@@ -105,15 +116,34 @@ export function DatasourceDialog({
               controlProps={{ 'aria-label': 'Пароль' }}
             />
           </Field>
-          <Checkbox
-            checked={form.sslMode !== 'disable'}
-            onUpdate={(v) => {
-              // Временно (до полноценной формы): чекбокс включает require и сбрасывает CA.
-              set('sslMode', v ? 'require' : 'disable');
-              set('sslCa', null);
-            }}
-            content="SSL (сертификат сервера не проверяется)"
-          />
+          <Field label="SSL" error={errors.sslMode}>
+            <RadioGroup
+              direction="vertical"
+              value={form.sslMode}
+              onUpdate={(v) => set('sslMode', v as SslMode)}
+              options={[
+                { value: 'disable', content: 'Без SSL' },
+                { value: 'require', content: 'SSL без проверки сертификата' },
+                { value: 'verify', content: 'SSL с проверкой сертификата' },
+              ]}
+            />
+          </Field>
+          {form.sslMode === 'verify' && (
+            <Field
+              label="CA-сертификат (PEM)"
+              error={errors.sslCa}
+              hint="Пусто — проверка по системным корневым сертификатам"
+            >
+              <TextArea
+                value={form.sslCa}
+                onUpdate={(v) => set('sslCa', v)}
+                minRows={4}
+                placeholder="-----BEGIN CERTIFICATE-----"
+                validationState={errors.sslCa ? 'invalid' : undefined}
+                controlProps={{ 'aria-label': 'CA-сертификат (PEM)' }}
+              />
+            </Field>
+          )}
           <div>
             <Button
               onClick={() => test.mutate()}
@@ -135,7 +165,7 @@ export function DatasourceDialog({
           <GeneralError
             error={save.error}
             errors={errors}
-            shown={['name', 'host', 'port', 'database', 'username', 'password']}
+            shown={['name', 'host', 'port', 'database', 'username', 'password', 'sslMode', 'sslCa']}
           />
         </div>
       </Dialog.Body>

@@ -46,38 +46,42 @@ export type ParamValue = z.infer<typeof ParamValue>;
 
 export const MAX_PARAM_OPTIONS = 1000;
 
-export const TemplateParam = z
-  .object({
-    name: z
-      .string()
-      .regex(IDENT_RE, 'имя: латиница, цифры и _')
-      .refine(notReserved, 'зарезервированное имя'),
-    label: z.string().min(1),
-    type: ParamType,
-    required: z.boolean(),
-    defaultValue: ParamValue,
-    options: z.array(SelectOption).min(1).nullable(),
-    /** Только для type=query: запрос вариантов к источнику шаблона; :name — ссылки на другие параметры. */
-    sql: z.string().nullable().default(null),
-    multiple: z.boolean().default(false),
-  })
-  .superRefine((p, ctx) => {
-    const issue = (path: string, message: string) =>
-      ctx.addIssue({ code: 'custom', path: [path], message });
-    if (p.type === 'select' && !(p.options && p.options.length > 0))
-      issue('options', 'для select нужен хотя бы один вариант');
-    if (p.type === 'query') {
-      if (!p.sql || !p.sql.trim()) issue('sql', 'укажите SQL-запрос вариантов');
-      if (p.options !== null) issue('options', 'у SQL-списка варианты задаются запросом');
-      if (Array.isArray(p.defaultValue) && !p.multiple)
-        issue('defaultValue', 'несколько значений допустимы только при множественном выборе');
-    } else {
-      if (p.sql !== null) issue('sql', 'SQL допустим только у типа «SQL-список»');
-      if (p.multiple) issue('multiple', 'множественный выбор допустим только у типа «SQL-список»');
-      if (Array.isArray(p.defaultValue)) issue('defaultValue', 'недопустимое значение');
-    }
-  });
+const TemplateParamFields = z.object({
+  name: z
+    .string()
+    .regex(IDENT_RE, 'имя: латиница, цифры и _')
+    .refine(notReserved, 'зарезервированное имя'),
+  label: z.string().min(1),
+  type: ParamType,
+  required: z.boolean(),
+  defaultValue: ParamValue,
+  options: z.array(SelectOption).min(1).nullable(),
+  /** Только для type=query: запрос вариантов к источнику шаблона; :name — ссылки на другие параметры. */
+  sql: z.string().nullable().default(null),
+  multiple: z.boolean().default(false),
+});
+
+export const TemplateParam = TemplateParamFields.superRefine((p, ctx) => {
+  const issue = (path: string, message: string) =>
+    ctx.addIssue({ code: 'custom', path: [path], message });
+  if (p.type === 'select' && !(p.options && p.options.length > 0))
+    issue('options', 'для select нужен хотя бы один вариант');
+  if (p.type === 'query') {
+    if (!p.sql || !p.sql.trim()) issue('sql', 'укажите SQL-запрос вариантов');
+    if (p.options !== null) issue('options', 'у SQL-списка варианты задаются запросом');
+    if (Array.isArray(p.defaultValue) && !p.multiple)
+      issue('defaultValue', 'несколько значений допустимы только при множественном выборе');
+  } else {
+    if (p.sql !== null) issue('sql', 'SQL допустим только у типа «SQL-список»');
+    if (p.multiple) issue('multiple', 'множественный выбор допустим только у типа «SQL-список»');
+    if (Array.isArray(p.defaultValue)) issue('defaultValue', 'недопустимое значение');
+  }
+});
 export type TemplateParam = z.infer<typeof TemplateParam>;
+
+/** Параметр в карточке шаблона: + имена параметров, на которые ссылается его SQL (у пользователя sql = null). */
+export const TemplateParamDto = TemplateParamFields.extend({ dependsOn: z.array(z.string()) });
+export type TemplateParamDto = z.infer<typeof TemplateParamDto>;
 
 export const QueryMode = z.enum(['list', 'single']);
 export type QueryMode = z.infer<typeof QueryMode>;
@@ -184,7 +188,7 @@ export const TemplateSummary = z.object({
 export type TemplateSummary = z.infer<typeof TemplateSummary>;
 
 export const TemplateDetails = TemplateSummary.extend({
-  params: z.array(TemplateParam),
+  params: z.array(TemplateParamDto),
   outputFormats: z.array(OutputFormat),
 });
 export type TemplateDetails = z.infer<typeof TemplateDetails>;

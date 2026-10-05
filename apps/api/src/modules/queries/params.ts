@@ -12,8 +12,17 @@ function isValidDate(v: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
 }
 
+const isScalar = (v: unknown): v is string | number =>
+  typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v));
+
 /** Возвращает текст ошибки или null, если значение подходит под тип. */
 function checkValue(def: TemplateParam, v: Exclude<ParamValue, null>): string | null {
+  if (def.type === 'query') {
+    if (def.multiple)
+      return Array.isArray(v) && v.every(isScalar) ? null : 'ожидается список значений';
+    return isScalar(v) ? null : 'ожидается одно значение';
+  }
+  if (Array.isArray(v)) return 'недопустимое значение';
   switch (def.type) {
     case 'string':
       return typeof v === 'string' ? null : 'ожидается строка';
@@ -27,16 +36,32 @@ function checkValue(def: TemplateParam, v: Exclude<ParamValue, null>): string | 
       return typeof v === 'string' && (def.options ?? []).some((o) => o.value === v)
         ? null
         : 'недопустимое значение';
-    case 'query': // Task 2: сверка с вариантами из SQL
-      return (Array.isArray(v) ? def.multiple : true) ? null : 'допустимо одно значение';
   }
 }
 
-const isEmpty = (v: ParamValue | undefined): v is null | undefined | '' =>
-  v === undefined || v === null || v === '';
+/** Отсутствующее значение: undefined, null, '' и пустой список. */
+export function isEmptyValue(v: ParamValue | undefined): v is null | undefined | '' | [] {
+  return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+}
 
 function fail(fields: Record<string, string>): never {
   throw new AppError('VALIDATION', 400, 'неверные параметры', { fields });
+}
+
+/**
+ * Типовая проверка одного параметра: пустое значение заменяется на default, затем на null.
+ * Возвращает итоговое значение и текст ошибки (null — ошибки нет).
+ */
+export function checkParam(
+  def: TemplateParam,
+  raw: ParamValue | undefined,
+): { value: ParamValue; error: string | null } {
+  const value = isEmptyValue(raw) ? def.defaultValue : raw;
+  if (isEmptyValue(value)) {
+    return { value: null, error: def.required ? 'обязательный параметр' : null };
+  }
+  const error = checkValue(def, value);
+  return { value: error ? null : value, error };
 }
 
 export function resolveParams(
@@ -46,15 +71,11 @@ export function resolveParams(
   const out: Record<string, ParamValue> = {};
   const fields: Record<string, string> = {};
   for (const def of defs) {
-    const raw = Object.hasOwn(input, def.name) ? input[def.name] : undefined;
-    const value = isEmpty(raw) ? def.defaultValue : raw;
-    if (isEmpty(value)) {
-      if (def.required) fields[def.name] = 'обязательный параметр';
-      out[def.name] = null;
-      continue;
-    }
-    const err = checkValue(def, value);
-    if (err) fields[def.name] = err;
+    const { value, error } = checkParam(
+      def,
+      Object.hasOwn(input, def.name) ? input[def.name] : undefined,
+    );
+    if (error) fields[def.name] = error;
     else out[def.name] = value;
   }
   if (Object.keys(fields).length > 0) fail(fields);
@@ -64,7 +85,7 @@ export function resolveParams(
 export function checkParamDefaults(defs: TemplateParam[]): void {
   const fields: Record<string, string> = {};
   for (const def of defs) {
-    if (isEmpty(def.defaultValue)) continue;
+    if (isEmptyValue(def.defaultValue)) continue;
     const err = checkValue(def, def.defaultValue);
     if (err) fields[def.name] = `значение по умолчанию: ${err}`;
   }

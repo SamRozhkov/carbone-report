@@ -97,6 +97,47 @@ describe('resolveParams', () => {
   });
 });
 
+describe('resolveParams: query', () => {
+  const q = (over: Partial<TemplateParam> & Pick<TemplateParam, 'name'>) =>
+    def({ type: 'query', sql: 'select 1', ...over });
+
+  it('одиночный: строка или число; массив и boolean → «ожидается одно значение»', () => {
+    const defs = [q({ name: 'a' }), q({ name: 'b' }), q({ name: 'c' }), q({ name: 'd' })];
+    expect(resolveParams(defs.slice(0, 2), { a: 'x', b: 5 })).toEqual({ a: 'x', b: 5 });
+    expect(fieldsOf(() => resolveParams(defs.slice(2), { c: [1], d: true }))).toEqual({
+      c: 'ожидается одно значение',
+      d: 'ожидается одно значение',
+    });
+  });
+
+  it('множественный: массив строк и чисел; скаляр и вложенное → «ожидается список значений»', () => {
+    const defs = [
+      q({ name: 'a', multiple: true }),
+      q({ name: 'b', multiple: true }),
+      q({ name: 'c', multiple: true }),
+    ];
+    expect(resolveParams(defs.slice(0, 1), { a: [1, 'x'] })).toEqual({ a: [1, 'x'] });
+    expect(
+      fieldsOf(() =>
+        resolveParams(defs.slice(1), { b: 5, c: [true] as unknown as (string | number)[] }),
+      ),
+    ).toEqual({ b: 'ожидается список значений', c: 'ожидается список значений' });
+  });
+
+  it('пустой массив — пустое значение: обязательный → ошибка, необязательный → null', () => {
+    expect(
+      fieldsOf(() => resolveParams([q({ name: 'a', multiple: true, required: true })], { a: [] })),
+    ).toEqual({ a: 'обязательный параметр' });
+    expect(resolveParams([q({ name: 'a', multiple: true })], { a: [] })).toEqual({ a: null });
+  });
+
+  it('массив у string → «недопустимое значение»', () => {
+    expect(
+      fieldsOf(() => resolveParams([def({ name: 's', type: 'string' })], { s: ['x'] })),
+    ).toEqual({ s: 'недопустимое значение' });
+  });
+});
+
 describe('checkParamDefaults', () => {
   it('отклоняет default неверного типа', () => {
     expect(

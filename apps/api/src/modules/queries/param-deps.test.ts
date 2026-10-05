@@ -58,6 +58,27 @@ describe('orderParams', () => {
       }),
     );
   });
+  it('цикл из трёх', () => {
+    expect(() =>
+      orderParams([p('a', 'select :b'), p('b', 'select :c'), p('c', 'select :a')]),
+    ).toThrow(
+      expect.objectContaining({
+        details: [expect.objectContaining({ message: 'циклическая зависимость: a → b → c → a' })],
+      }),
+    );
+  });
+  it('хвост, ведущий в цикл, в сообщение не попадает', () => {
+    expect(() =>
+      orderParams([p('d', 'select :b'), p('b', 'select :c'), p('c', 'select :b')]),
+    ).toThrow(
+      expect.objectContaining({
+        details: [expect.objectContaining({ message: 'циклическая зависимость: b → c → b' })],
+      }),
+    );
+  });
+  it('query ссылается на string — допустимо', () => {
+    expect(orderParams([p('c', 'select :s'), p('s')]).map((d) => d.name)).toEqual(['s', 'c']);
+  });
   it('ошибка парсера ($1) → VALIDATION у строки', () => {
     expect(() => orderParams([p('a', 'select $1')])).toThrow(
       expect.objectContaining({

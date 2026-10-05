@@ -8,6 +8,7 @@ import type { AppDeps } from '../../deps';
 import { badRequest } from '../../lib/errors';
 import { buildReportData } from '../queries/build-data';
 import { runQueries } from '../queries/executor';
+import { validateQueryParams } from '../queries/param-options';
 import { resolveParams } from '../queries/params';
 import { templateFileRef, type TemplateFull } from '../templates/service';
 
@@ -17,6 +18,8 @@ export async function collectReportData(
   input: ParamsInput,
 ): Promise<{ data: Record<string, unknown>; params: Record<string, ParamValue> }> {
   const params = resolveParams(full.params, input);
+  // VALIDATION отсюда, как и от resolveParams, не создаёт запуск с ошибкой (см. reports/routes).
+  await validateQueryParams(deps, full, params);
   if (full.queries.length === 0) return { data: buildReportData([], params), params };
   const { pool, name } = await deps.sources.get(full.row.datasourceId);
   const results = await runQueries(pool, name, full.queries, params, {

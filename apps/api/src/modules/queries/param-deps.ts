@@ -1,6 +1,6 @@
 import type { TemplateParam } from '@carbone-reports/shared';
 import { AppError } from '../../lib/errors';
-import { parseSqlParams } from './sql-params';
+import { parseSqlParams, SqlParamError } from './sql-params';
 
 /** Уникальные имена :x из SQL параметра типа query в порядке появления. */
 export function paramRefs(def: TemplateParam): string[] {
@@ -24,7 +24,8 @@ export function orderParams(defs: TemplateParam[]): TemplateParam[] {
     try {
       names = paramRefs(def);
     } catch (e) {
-      return fail(i, e instanceof Error ? e.message : 'неверный SQL');
+      if (e instanceof SqlParamError) return fail(i, e.message);
+      throw e;
     }
     return names.map((name) => {
       const j = index.get(name);

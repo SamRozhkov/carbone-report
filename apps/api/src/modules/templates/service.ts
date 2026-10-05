@@ -4,6 +4,7 @@ import {
   type TemplateDetails,
   type TemplateExt,
   type TemplateParam,
+  type TemplateParamDto,
   type TemplateQuery,
   type TemplateSummary,
 } from '@carbone-reports/shared';
@@ -12,6 +13,7 @@ import type { Db } from '../../db/client';
 import { templateParams, templateQueries, templates, type TemplateRow } from '../../db/schema';
 import type { AppDeps, TemplateFileRef } from '../../deps';
 import { notFound } from '../../lib/errors';
+import { paramRefs } from '../queries/param-deps';
 import type { Storage } from '../../lib/storage';
 import { STORAGE_REMOVE_LOCK_KEY } from '../../lib/storage-gate';
 
@@ -102,14 +104,19 @@ export const toSummary = (r: TemplateRow): TemplateSummary => ({
   updatedAt: r.updatedAt.toISOString(),
 });
 
-export const toDetails = (f: TemplateFull): TemplateDetails => ({
+function toParamDto(p: TemplateParam, withSql: boolean): TemplateParamDto {
+  return { ...p, sql: withSql ? p.sql : null, dependsOn: paramRefs(p) };
+}
+
+/** Карточка для пользователя: SQL параметров скрыт, зависимости (dependsOn) — нет. */
+export const toDetails = (f: TemplateFull, withSql = false): TemplateDetails => ({
   ...toSummary(f.row),
-  params: f.params,
+  params: f.params.map((p) => toParamDto(p, withSql)),
   outputFormats: outputFormatsFor(f.row.fileExt),
 });
 
 export const toAdminDetails = (f: TemplateFull): TemplateAdminDetails => ({
-  ...toDetails(f),
+  ...toDetails(f, true),
   datasourceId: f.row.datasourceId,
   version: f.row.version,
   queries: f.queries,

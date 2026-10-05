@@ -5,6 +5,8 @@ import {
   IdParams,
   type OutputFormat,
   outputFormatsFor,
+  ParamOptionsBody,
+  type ParamOptionsResult,
   TemplateExt,
   TemplateParam,
   TemplateQuery,
@@ -26,6 +28,7 @@ import { badRequest, notFound } from '../../lib/errors';
 import { contentDisposition, isZip, MIME } from '../../lib/http';
 import { currentUser, type Guards } from '../auth/guards';
 import { orderParams } from '../queries/param-deps';
+import { optionsForParam } from '../queries/param-options';
 import { checkParamDefaults } from '../queries/params';
 import { createBlankDocument } from './blank';
 import {
@@ -143,6 +146,18 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     const full = await loadTemplateFull(db, req.params.id);
     return currentUser(req).role === 'admin' ? toAdminDetails(full) : toDetails(full);
   });
+
+  app.post(
+    '/api/templates/:id/params/:name/options',
+    {
+      ...anyUser,
+      schema: { params: IdParams.extend({ name: z.string() }), body: ParamOptionsBody },
+    },
+    async (req): Promise<ParamOptionsResult> => {
+      const full = await loadTemplateFull(db, req.params.id);
+      return optionsForParam(deps, full, req.params.name, req.body.params);
+    },
+  );
 
   app.post(
     '/api/templates',

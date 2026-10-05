@@ -1,4 +1,11 @@
-import type { ParamValue, RunQueryResult, TemplateQuery } from '@carbone-reports/shared';
+import {
+  MAX_PARAM_OPTIONS,
+  type ParamValue,
+  type RunQueryResult,
+  type SelectOptionValue,
+  type TemplateParam,
+  type TemplateQuery,
+} from '@carbone-reports/shared';
 import type pg from 'pg';
 import Cursor from 'pg-cursor';
 import { AppError } from '../../lib/errors';
@@ -213,5 +220,45 @@ export function previewQuery(
     const r = await readQuery(tx.client, 'preview', sql, params, limits.previewRows);
     await tx.guard('preview');
     return r;
+  });
+}
+
+/** Строки запроса вариантов → варианты: колонки value/label, иначе первая и вторая, иначе первая. */
+export function rowsToOptions(columns: string[], rows: Row[]): SelectOptionValue[] {
+  const named = columns.includes('value') && columns.includes('label');
+  const vc = named ? 'value' : columns[0];
+  const lc = named ? 'label' : (columns[1] ?? columns[0]);
+  if (vc === undefined || lc === undefined) return [];
+  return rows.map((row) => {
+    const v = row[vc];
+    const value = typeof v === 'string' || typeof v === 'number' ? v : String(v);
+    return { value, label: String(row[lc] ?? value) };
+  });
+}
+
+/** Варианты параметров типа query — все в одной read-only транзакции, по порядку items. */
+export function loadParamOptions(
+  pool: pg.Pool,
+  sourceName: string,
+  items: { def: TemplateParam; params: Record<string, ParamValue> }[],
+  limits: QueryLimits,
+): Promise<SelectOptionValue[][]> {
+  return withReadOnly(pool, sourceName, limits.timeoutMs, async (tx) => {
+    const out: SelectOptionValue[][] = [];
+    for (const { def, params } of items) {
+      const key = `параметр "${def.label}"`;
+      // readQuery читает limit + 1 строку: truncated — вариантов больше MAX_PARAM_OPTIONS.
+      const r = await readQuery(tx.client, key, def.sql!, params, MAX_PARAM_OPTIONS);
+      await tx.guard(key);
+      if (r.truncated) {
+        throw new AppError(
+          'TOO_MANY_OPTIONS',
+          400,
+          `${key}: больше ${MAX_PARAM_OPTIONS} вариантов — уточните запрос`,
+        );
+      }
+      out.push(rowsToOptions(r.columns, r.rows));
+    }
+    return out;
   });
 }

@@ -2,6 +2,7 @@ import type {
   ParamOptionsResult,
   ParamsInput,
   ParamValue,
+  SelectOptionValue,
   TemplateParam,
 } from '@carbone-reports/shared';
 import type { AppDeps } from '../../deps';
@@ -39,19 +40,49 @@ export async function validateQueryParams(
   );
   const fields: Record<string, string> = {};
   toCheck.forEach((def, i) => {
-    const allowed = new Set(lists[i]!.map((o) => String(o.value)));
-    const v = resolved[def.name];
-    const vals = Array.isArray(v) ? v : [v as string | number];
-    if (!vals.every((x) => allowed.has(String(x)))) fields[def.name] = 'значение недоступно';
+    if (!isAllowed(lists[i]!, resolved[def.name]!)) fields[def.name] = 'значение недоступно';
   });
   if (Object.keys(fields).length > 0) {
     throw new AppError('VALIDATION', 400, 'неверные параметры', { fields });
   }
 }
 
+/** Значение входит в варианты (для множественного — каждое). */
+function isAllowed(options: SelectOptionValue[], v: ParamValue): boolean {
+  const allowed = new Set(options.map((o) => String(o.value)));
+  const vals = Array.isArray(v) ? v : [v as string | number];
+  return vals.every((x) => allowed.has(String(x)));
+}
+
+/** Все предки параметра (транзитивно), каждому — множество прямых родителей def, через которые он достижим. */
+function ancestorsVia(
+  def: TemplateParam,
+  byName: Map<string, TemplateParam>,
+): Map<string, Set<string>> {
+  const via = new Map<string, Set<string>>();
+  for (const direct of paramRefs(def)) {
+    const stack = [direct];
+    while (stack.length > 0) {
+      const name = stack.pop()!;
+      const p = byName.get(name);
+      if (!p) continue;
+      let set = via.get(name);
+      if (!set) via.set(name, (set = new Set()));
+      if (set.has(direct)) continue;
+      set.add(direct);
+      stack.push(...paramRefs(p));
+    }
+  }
+  return via;
+}
+
 /**
  * Варианты одного параметра типа query при текущих значениях родителей.
- * Обязательный родитель без допустимого значения → waitingFor, запрос не выполняется.
+ * Обязательный родитель без значения → waitingFor, запрос не выполняется.
+ * Строгая проверка, как при генерации: значение каждого предка типа query (транзитивно, в
+ * топологическом порядке) должно входить в его варианты, посчитанные с его родителями.
+ * Недопустимый предок → waitingFor получает прямого родителя, через которого он достижим, и
+ * варианты ребёнка не выдаются. Всё — в одной read-only транзакции.
  */
 export async function optionsForParam(
   deps: AppDeps,
@@ -63,23 +94,45 @@ export async function optionsForParam(
   if (!def || def.type !== 'query') throw notFound('параметр');
 
   const byName = new Map<string, TemplateParam>(full.params.map((p) => [p.name, p]));
-  const params: Record<string, ParamValue> = {};
+  const resolve = (p: TemplateParam): ParamValue => {
+    const { value, error } = checkParam(
+      p,
+      Object.hasOwn(input, p.name) ? input[p.name] : undefined,
+    );
+    return error ? null : value;
+  };
+
   const waitingFor: string[] = [];
   for (const ref of paramRefs(def)) {
     const parent = byName.get(ref);
     // Ссылки проверены при сохранении; неизвестную readQuery отклонит с ошибкой CONFIG.
-    if (!parent) continue;
-    const { value, error } = checkParam(parent, Object.hasOwn(input, ref) ? input[ref] : undefined);
-    if (error || isEmptyValue(value)) {
-      if (parent.required) waitingFor.push(ref);
-      params[ref] = null;
-    } else {
-      params[ref] = value;
-    }
+    if (parent && parent.required && isEmptyValue(resolve(parent))) waitingFor.push(ref);
   }
   if (waitingFor.length > 0) return { options: [], waitingFor };
 
+  const via = ancestorsVia(def, byName);
+  const params: Record<string, ParamValue> = {};
+  for (const name of via.keys()) params[name] = resolve(byName.get(name)!);
+  const toCheck = orderParams(full.params).filter(
+    (p) => via.has(p.name) && p.type === 'query' && !isEmptyValue(params[p.name]),
+  );
+
   const { pool, name } = await deps.sources.get(full.row.datasourceId);
-  const [options] = await loadParamOptions(pool, name, [{ def, params }], limitsOf(deps));
-  return { options: options! };
+  let bad: TemplateParam | undefined;
+  const lists = await loadParamOptions(
+    pool,
+    name,
+    [...toCheck, def].map((d) => ({ def: d, params })),
+    limitsOf(deps),
+    (i, options) => {
+      const anc = toCheck[i];
+      if (anc && !isAllowed(options, params[anc.name]!)) bad = anc;
+      return bad !== undefined;
+    },
+  );
+  if (bad) {
+    const leads = via.get(bad.name)!;
+    return { options: [], waitingFor: paramRefs(def).filter((r) => leads.has(r)) };
+  }
+  return { options: lists[toCheck.length]! };
 }

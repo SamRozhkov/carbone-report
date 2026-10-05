@@ -129,6 +129,11 @@ beforeAll(async () => {
       }),
       param({ name: 'city', label: 'Город', sql: CITIES_SQL }),
       param({ name: 'cities', label: 'Города', sql: CITIES_SQL, multiple: true }),
+      param({
+        name: 'pick',
+        label: 'Выбор',
+        sql: 'select id as value, name as label from cities where id = :city',
+      }),
     ],
   );
   badTplId = await createTpl(
@@ -163,6 +168,26 @@ describe('варианты параметров', () => {
         { value: 10, label: 'Архангельск' },
         { value: 11, label: 'Мурманск' },
       ],
+    });
+  });
+
+  it('недопустимое значение предка → ожидание прямого родителя, варианты ребёнка не выдаются', async () => {
+    expect((await options(tplId, 'city', { region: 999 })).json()).toEqual({
+      options: [],
+      waitingFor: ['region'],
+    });
+    // Транзитивно: регион недопустим → город тоже, ждём прямого родителя city.
+    expect((await options(tplId, 'pick', { region: 999, city: 10 })).json()).toEqual({
+      options: [],
+      waitingFor: ['city'],
+    });
+    // Город не из выбранного региона; city необязательный, но недопустимое значение — тоже ожидание.
+    expect((await options(tplId, 'pick', { region: 2, city: 10 })).json()).toEqual({
+      options: [],
+      waitingFor: ['city'],
+    });
+    expect((await options(tplId, 'pick', { region: 1, city: 10 })).json()).toEqual({
+      options: [{ value: 10, label: 'Архангельск' }],
     });
   });
 

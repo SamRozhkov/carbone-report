@@ -223,25 +223,48 @@ export function previewQuery(
   });
 }
 
-/** Строки запроса вариантов → варианты: колонки value/label, иначе первая и вторая, иначе первая. */
+/**
+ * Строки запроса вариантов → варианты.
+ * Значение — колонка `value`, иначе первая колонка, кроме `label`.
+ * Подпись — колонка `label`, иначе первая колонка, кроме колонки значения; если такой нет — само значение.
+ * Без `value` и `label` это первая и вторая колонки. Date → ISO-строка.
+ * Повторы значений (по String(value)) убираются, остаётся первое вхождение.
+ */
 export function rowsToOptions(columns: string[], rows: Row[]): SelectOptionValue[] {
-  const named = columns.includes('value') && columns.includes('label');
-  const vc = named ? 'value' : columns[0];
-  const lc = named ? 'label' : (columns[1] ?? columns[0]);
-  if (vc === undefined || lc === undefined) return [];
-  return rows.map((row) => {
-    const v = row[vc];
-    const value = typeof v === 'string' || typeof v === 'number' ? v : String(v);
-    return { value, label: String(row[lc] ?? value) };
-  });
+  const vc = columns.includes('value')
+    ? 'value'
+    : (columns.find((c) => c !== 'label') ?? columns[0]);
+  if (vc === undefined) return [];
+  const lc = columns.includes('label') ? 'label' : columns.find((c) => c !== vc);
+  const scalar = (x: unknown): string | number =>
+    x instanceof Date
+      ? x.toISOString()
+      : typeof x === 'string' || typeof x === 'number'
+        ? x
+        : String(x);
+  const seen = new Set<string>();
+  const out: SelectOptionValue[] = [];
+  for (const row of rows) {
+    const value = scalar(row[vc]);
+    const key = String(value);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const l = lc === undefined ? null : row[lc];
+    out.push({ value, label: l === null || l === undefined ? key : String(scalar(l)) });
+  }
+  return out;
 }
 
-/** Варианты параметров типа query — все в одной read-only транзакции, по порядку items. */
+/**
+ * Варианты параметров типа query — все в одной read-only транзакции, по порядку items.
+ * stop(i, options) → true: остальные items не выполняются, результат короче items.
+ */
 export function loadParamOptions(
   pool: pg.Pool,
   sourceName: string,
   items: { def: TemplateParam; params: Record<string, ParamValue> }[],
   limits: QueryLimits,
+  stop?: (index: number, options: SelectOptionValue[]) => boolean,
 ): Promise<SelectOptionValue[][]> {
   return withReadOnly(pool, sourceName, limits.timeoutMs, async (tx) => {
     const out: SelectOptionValue[][] = [];
@@ -257,7 +280,9 @@ export function loadParamOptions(
           `${key}: больше ${MAX_PARAM_OPTIONS} вариантов — уточните запрос`,
         );
       }
-      out.push(rowsToOptions(r.columns, r.rows));
+      const options = rowsToOptions(r.columns, r.rows);
+      out.push(options);
+      if (stop?.(out.length - 1, options)) break;
     }
     return out;
   });

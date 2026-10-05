@@ -131,3 +131,13 @@
   - потеря точности `numeric` и непреобразуемые массивы;
   - логгер без `hostname`;
   - отложенное фронтенда (раздел «Фронтенд (План 2): отложенное»).
+
+## Итоги Плана 5
+
+- **Что запускает CI** (`.github/workflows/ci.yml`):
+  - `checks`: typecheck, lint, `prettier --check`, модульные тесты;
+  - `integration`: `pnpm test:int` (testcontainers, 13 файлов, 144 теста);
+  - `images`: сборка образов api и web.
+- **Публикация:** образы уходят в GHCR только с `main` и с тегов `v*`. В ветках и PR образы собираются без публикации (`push: false`, вход в GHCR пропускается).
+- **E2E** остаётся ручным: в CI не запускается.
+- **Первый прогон на `feat/ci`:** https://github.com/SamRozhkov/carbone-report/actions/runs/37295906047, все задания зелёные с первого раза. Длительность: `checks` 1 мин 13 с, `integration` 46 с, `images` api 1 мин 15 с, web 1 мин 04 с.

@@ -175,7 +175,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
             .select({ id: groups.id })
             .from(groups)
             .where(eq(groups.id, req.params.id))
-            .for('update');
+            .for('no key update');
           if (!g) throw notFound('группа');
           await assertAllExist(tx, users, userIds, 'неизвестный пользователь');
           await tx.delete(userGroups).where(eq(userGroups.groupId, req.params.id));
@@ -265,7 +265,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
             .select({ id: categories.id })
             .from(categories)
             .where(eq(categories.id, req.params.id))
-            .for('update');
+            .for('no key update');
           if (!c) throw notFound('категория');
           await assertAllExist(tx, groups, groupIds, 'неизвестная группа');
           await tx.delete(categoryGroups).where(eq(categoryGroups.categoryId, req.params.id));
@@ -311,7 +311,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
             .select({ id: templates.id })
             .from(templates)
             .where(eq(templates.id, req.params.id))
-            .for('update');
+            .for('no key update');
           if (!t) throw notFound('шаблон');
           if (categoryId)
             await assertAllExist(tx, categories, [categoryId], 'неизвестная категория');
@@ -365,7 +365,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
             .select({ id: users.id })
             .from(users)
             .where(eq(users.id, req.params.id))
-            .for('update');
+            .for('no key update');
           if (!u) throw notFound('пользователь');
           await assertAllExist(tx, groups, groupIds, 'неизвестная группа');
           await tx.delete(userGroups).where(eq(userGroups.userId, req.params.id));

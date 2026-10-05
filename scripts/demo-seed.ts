@@ -118,7 +118,9 @@ async function main() {
 
   type Named = { id: string; name: string };
   const categories = await call<Named[]>('GET', '/api/categories');
-  let category = categories.find((c) => c.name === DEMO.categoryName);
+  let category = categories.find(
+    (c) => c.name.toLocaleLowerCase('ru') === DEMO.categoryName.toLocaleLowerCase('ru'),
+  );
   if (!category) {
     category = await call<Named>('POST', '/api/categories', {
       name: DEMO.categoryName,
@@ -128,7 +130,9 @@ async function main() {
     console.log(`✓ категория «${category.name}» создана`);
   }
   const groups = await call<Named[]>('GET', '/api/groups');
-  if (!groups.some((g) => g.name === DEMO.groupName)) {
+  if (
+    !groups.some((g) => g.name.toLocaleLowerCase('ru') === DEMO.groupName.toLocaleLowerCase('ru'))
+  ) {
     await call('POST', '/api/groups', { name: DEMO.groupName });
     console.log(`✓ группа «${DEMO.groupName}» создана`);
   }

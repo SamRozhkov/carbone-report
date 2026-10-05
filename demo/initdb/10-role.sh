@@ -7,4 +7,8 @@ CREATE ROLE demo_ro LOGIN PASSWORD '${DEMO_DB_PASSWORD}';
 GRANT CONNECT ON DATABASE ${POSTGRES_DB} TO demo_ro;
 GRANT USAGE ON SCHEMA public TO demo_ro;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO demo_ro;
+-- Суперпользователь без пароля: иначе он входил бы по TCP с тем же DEMO_DB_PASSWORD, и админ
+-- приложения, сменив логин источника на demo_owner, получил бы суперпользователя (COPY TO PROGRAM).
+-- Локальный сокет в образе — trust (initdb, сид), pg_isready аутентификации не требует.
+ALTER ROLE demo_owner PASSWORD NULL;
 SQL

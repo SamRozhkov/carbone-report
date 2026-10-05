@@ -67,8 +67,10 @@ const row = async () =>
 async function callback(body: Record<string, unknown>, via: 'body' | 'header' = 'body') {
   const headers: Record<string, string> = {};
   let payload: Record<string, unknown> = body;
-  if (via === 'body') payload = { ...body, token: await signOnlyOffice(body, secret()) };
-  else headers.authorization = `Bearer ${await signOnlyOffice({ payload: body }, secret())}`;
+  if (via === 'body')
+    payload = { ...body, token: await signOnlyOffice(body, secret(), { expiresIn: '5m' }) };
+  else
+    headers.authorization = `Bearer ${await signOnlyOffice({ payload: body }, secret(), { expiresIn: '5m' })}`;
   return t.app.inject({
     method: 'POST',
     url: `/internal/onlyoffice/callback/${tplId}`,
@@ -284,5 +286,58 @@ describe('save', () => {
     });
     expect(r.statusCode).toBe(204);
     expect(forceSaved.at(-1)).toBe((await row()).docKey);
+  });
+});
+
+describe('срок жизни callback-токена', () => {
+  const raw = (token: string) =>
+    t.app.inject({
+      method: 'POST',
+      url: `/internal/onlyoffice/callback/${tplId}`,
+      payload: { token },
+    });
+
+  it('просроченный токен → 403, версия не меняется', async () => {
+    const r0 = await row();
+    const { SignJWT } = await import('jose');
+    const token = await new SignJWT({ key: r0.docKey, status: 2, url: pub('x') })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt(Math.floor(Date.now() / 1000) - 3600)
+      .setExpirationTime(Math.floor(Date.now() / 1000) - 3000)
+      .sign(secret());
+    expect((await raw(token)).statusCode).toBe(403);
+    expect((await row()).version).toBe(r0.version);
+  });
+
+  it('токен без exp и iat → 403', async () => {
+    const r0 = await row();
+    const token = await signOnlyOffice({ key: r0.docKey, status: 2, url: pub('x') }, secret());
+    expect((await raw(token)).statusCode).toBe(403);
+  });
+
+  it('повтор со свежим токеном после отказа сохраняет версию', async () => {
+    const r0 = await row();
+    const res = await callback({ key: r0.docKey, status: 2, url: pub('fresh') });
+    expect(res.statusCode).toBe(200);
+    expect((await row()).version).toBe(r0.version + 1);
+  });
+
+  it('чужой секрет → 403', async () => {
+    const r0 = await row();
+    const token = await signOnlyOffice(
+      { key: r0.docKey, status: 2, url: pub('x') },
+      new TextEncoder().encode('wrong-secret-'.repeat(4)),
+      { expiresIn: '5m' },
+    );
+    expect((await raw(token)).statusCode).toBe(403);
+  });
+
+  it('статус 7 записывает lastSaveError и не меняет версию', async () => {
+    const r0 = await row();
+    const res = await callback({ key: r0.docKey, status: 7 });
+    expect(res.statusCode).toBe(200);
+    const r1 = await row();
+    expect(r1.version).toBe(r0.version);
+    expect(r1.lastSaveError).toBe('ошибка принудительного сохранения OnlyOffice');
   });
 });

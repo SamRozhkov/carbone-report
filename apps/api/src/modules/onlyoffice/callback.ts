@@ -6,7 +6,7 @@ import type { AppDeps } from '../../deps';
 import { AppError } from '../../lib/errors';
 import { isZip } from '../../lib/http';
 import { toInternalDownloadUrl } from './download-url';
-import { verifyOnlyOffice } from './jwt';
+import { verifyOnlyOfficeCallback } from './jwt';
 
 const Callback = z.object({
   key: z.string(),
@@ -28,9 +28,9 @@ async function verifiedPayload(
   const secret = deps.config.onlyofficeJwtSecret;
   const bodyToken = (body as { token?: unknown } | null)?.token;
   try {
-    if (typeof bodyToken === 'string') return await verifyOnlyOffice(bodyToken, secret);
+    if (typeof bodyToken === 'string') return await verifyOnlyOfficeCallback(bodyToken, secret);
     if (authorization?.startsWith('Bearer ')) {
-      const claims = await verifyOnlyOffice(authorization.slice(7), secret);
+      const claims = await verifyOnlyOfficeCallback(authorization.slice(7), secret);
       return claims.payload ?? claims;
     }
   } catch {

@@ -83,7 +83,29 @@ export interface ApiClient {
   raw(path: string, init?: Parameters<APIRequestContext['fetch']>[1]): Promise<APIResponse>;
 }
 
-export async function adminApi(): Promise<ApiClient> {
+let adminApiPromise: Promise<ApiClient> | undefined;
+
+/**
+ * API-клиент администратора: один вход на воркер. Вход ограничен 10 попытками в минуту на логин,
+ * поэтому сессия переиспользуется всеми тестами воркера (и для UI — см. loginAdminUi).
+ */
+export function adminApi(): Promise<ApiClient> {
+  adminApiPromise ??= createAdminApi().catch((e: unknown) => {
+    adminApiPromise = undefined;
+    throw e;
+  });
+  return adminApiPromise;
+}
+
+/** Вход админа в UI без формы входа: берём cookie сессии общего API-клиента. */
+export async function loginAdminUi(page: Page): Promise<void> {
+  const { ctx } = await adminApi();
+  await page.context().addCookies((await ctx.storageState()).cookies);
+  await page.goto('/reports');
+  await expect(page).not.toHaveURL(/\/login/);
+}
+
+async function createAdminApi(): Promise<ApiClient> {
   const ctx = await request.newContext({ baseURL: BASE, ignoreHTTPSErrors: true });
   const res = await ctx.post('/api/auth/login', { data: ADMIN });
   expect(res.ok(), `вход админа через API: ${res.status()}`).toBeTruthy();

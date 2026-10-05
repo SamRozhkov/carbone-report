@@ -1,10 +1,10 @@
-import { ADMIN, adminApi, demoTemplateId, expect, loginUi, test, waitForStack } from '../fixtures';
+import { adminApi, demoTemplateId, expect, loginAdminUi, test, waitForStack } from '../fixtures';
 
 test.beforeAll(waitForStack);
 
 test('админ: запрос во вкладке «Данные», предпросмотр и дерево тегов', async ({ page }) => {
   const id = await demoTemplateId(await adminApi());
-  await loginUi(page, ADMIN.login, ADMIN.password);
+  await loginAdminUi(page);
 
   await page.goto(`/admin/templates/${id}?tab=data`);
   await page.getByRole('button', { name: /^items/ }).click();

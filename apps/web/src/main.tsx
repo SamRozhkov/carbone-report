@@ -1,3 +1,4 @@
+import './zod-config';
 import '@gravity-ui/uikit/styles/styles.css';
 import './app/global.css';
 import { createRoot } from 'react-dom/client';

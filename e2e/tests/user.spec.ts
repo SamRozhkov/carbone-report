@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import {
-  ADMIN,
   adminApi,
   docxText,
   expect,
+  loginAdminUi,
   loginUi,
   logoutUi,
   test,
@@ -23,7 +23,7 @@ test.afterAll(async () => {
 });
 
 test('пользователь: создание админом, генерация PDF и DOCX, история', async ({ page }) => {
-  await loginUi(page, ADMIN.login, ADMIN.password);
+  await loginAdminUi(page);
   await page.goto('/admin/users');
   await page.getByRole('button', { name: 'Добавить пользователя' }).click();
   const dialog = page.getByRole('dialog');

@@ -297,4 +297,19 @@ describe('DatasourcesPage', () => {
       within(dialog).getByRole('radio', { name: 'SSL без проверки сертификата' }),
     ).toBeChecked();
   });
+
+  it('SSL: клик по подписи не меняет режим, радио и группа имеют точные имена', async () => {
+    mockApi([adminMe, { path: '/api/datasources', body: [{ ...ds, sslMode: 'verify' }] }]);
+    renderRoute('/admin/datasources');
+    await screen.findByText('Склад');
+    await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('group', { name: 'SSL' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('radio', { name: 'Без SSL' })).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByText('SSL', { selector: 'span, div' }));
+    expect(
+      within(dialog).getByRole('radio', { name: 'SSL с проверкой сертификата' }),
+    ).toBeChecked();
+    expect(within(dialog).getByLabelText('CA-сертификат (PEM)')).toBeInTheDocument();
+  });
 });

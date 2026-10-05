@@ -116,7 +116,7 @@ export function DatasourceDialog({
               controlProps={{ 'aria-label': 'Пароль' }}
             />
           </Field>
-          <Field label="SSL" error={errors.sslMode}>
+          <Field label="SSL" error={errors.sslMode} group>
             <RadioGroup
               direction="vertical"
               value={form.sslMode}

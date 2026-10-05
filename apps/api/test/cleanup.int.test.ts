@@ -42,7 +42,7 @@ describe('cleanupOldReports', () => {
     const [row] = await t.deps.db.select().from(reportRuns).where(eq(reportRuns.id, old.id));
     expect(row!.fileDeleted).toBe(true);
   });
-  it('сбой удаления одного файла не прерывает пакет', async () => {
+  it('сбой удаления одного файла не прерывает пакет; запись помечена, файл остаётся сиротой', async () => {
     const bad = await run(50);
     const good = await run(50);
     const orig = t.deps.storage.remove.bind(t.deps.storage);
@@ -62,8 +62,10 @@ describe('cleanupOldReports', () => {
     const [g] = await t.deps.db.select().from(reportRuns).where(eq(reportRuns.id, good.id));
     const [b] = await t.deps.db.select().from(reportRuns).where(eq(reportRuns.id, bad.id));
     expect(g!.fileDeleted).toBe(true);
-    expect(b!.fileDeleted).toBe(false);
-    expect(await cleanupOldReports(t.deps)).toBe(1); // повторная попытка для проблемного файла
+    // Отметка ставится до удаления: строка не указывает на файл, а сирота безвредна.
+    expect(b!.fileDeleted).toBe(true);
+    expect(await t.deps.storage.exists(bad.filePath)).toBe(true);
+    expect(await cleanupOldReports(t.deps)).toBe(0); // повторно не трогается
   });
   it('повторный запуск ничего не делает', async () => {
     expect(await cleanupOldReports(t.deps)).toBe(0);

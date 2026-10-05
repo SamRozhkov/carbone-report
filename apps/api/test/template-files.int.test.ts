@@ -37,6 +37,19 @@ afterAll(() => t.close());
 const rowOf = async (id: string) =>
   (await t.deps.db.select().from(templates).where(eq(templates.id, id)))[0]!;
 
+/** Удаление прежнего файла идёт в фоне: ждём результат не дольше 2 с. */
+async function eventually(check: () => Promise<void>, ms = 2000) {
+  const until = Date.now() + ms;
+  for (;;) {
+    try {
+      return await check();
+    } catch (err) {
+      if (Date.now() >= until) throw err;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  }
+}
+
 async function putFile(id: string, data: Buffer) {
   const mp = multipart({}, { name: 'x.docx', data });
   return t.app.inject({
@@ -61,7 +74,9 @@ describe('файлы шаблонов по версиям', () => {
     expect(row.version).toBe(2);
     expect(row.filePath).toBe(`templates/${id}/v2.docx`);
     expect(await t.deps.storage.exists(`templates/${id}/v2.docx`)).toBe(true);
-    expect(await t.deps.storage.exists(`templates/${id}/v1.docx`)).toBe(false);
+    await eventually(async () =>
+      expect(await t.deps.storage.exists(`templates/${id}/v1.docx`)).toBe(false),
+    );
   });
 
   it('сбой транзакции после записи файла: версия и путь прежние, старый файл на месте', async () => {
@@ -122,9 +137,12 @@ describe('файлы шаблонов по версиям', () => {
   });
   it('отчёт, начатый до сохранения новой версии, читает актуальный файл, а не удалённый прежний', async () => {
     const id = await createTemplate(t, admin, dsId);
-    const ref = templateFileRef(t.deps, await rowOf(id)); // снимок строки до замены
+    const before = await rowOf(id);
+    const ref = templateFileRef(t.deps, before); // снимок строки до замены
     const replacement = Buffer.concat([await createBlankDocument('docx'), Buffer.from('v2')]);
     expect((await putFile(id, replacement)).statusCode).toBe(200);
+    // Прежний файл удаляется в фоне — дожидаемся, чтобы проверить переход на актуальный.
+    await eventually(async () => expect(await t.deps.storage.exists(before.filePath)).toBe(false));
     expect((await ref.read()).equals(replacement)).toBe(true);
   });
   it('скачивание и дублирование переживают гонку с заменой файла (ENOENT на прежнем пути)', async () => {
@@ -209,6 +227,29 @@ describe('шлюз удалений: изоляция и неблокирующ�
     );
     await holder.query('select pg_advisory_unlock($1)', [STORAGE_REMOVE_LOCK_KEY]);
     await Promise.all(removes);
+  });
+
+  it('PUT /file во время бэкапа отвечает сразу; старый файл удаляется после снятия блокировки', async ({
+    onTestFinished,
+  }) => {
+    const id = await createTemplate(t, admin, dsId);
+    const old = (await rowOf(id)).filePath;
+    const holder = new pg.Client({ connectionString: t.deps.config.databaseUrl });
+    await holder.connect();
+    await holder.query('select pg_advisory_lock($1)', [STORAGE_REMOVE_LOCK_KEY]);
+    onTestFinished(async () => {
+      await holder.end(); // сессия закрыта — блокировка снята
+    });
+    const r = await bounded(
+      putFile(id, await createBlankDocument('docx')),
+      1500,
+      'PUT /file ждёт окончания бэкапа',
+    );
+    expect(r.statusCode).toBe(200);
+    expect((await rowOf(id)).filePath).toBe(`templates/${id}/v2.docx`);
+    expect(await t.deps.storage.exists(old)).toBe(true);
+    await holder.query('select pg_advisory_unlock($1)', [STORAGE_REMOVE_LOCK_KEY]);
+    await eventually(async () => expect(await t.deps.storage.exists(old)).toBe(false));
   });
 
   it('discardUncommittedFile при бэкапе не ждёт даже при занятом пуле шлюза и оставляет сироту', async ({

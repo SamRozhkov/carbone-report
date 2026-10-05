@@ -214,8 +214,9 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       }
       throw err;
     }
+    // Удаление — в фоне: во время бэкапа оно ждёт блокировку, а ответ ждать не должен (§17.1).
     if (previous && previous !== updated.filePath) {
-      await storage
+      void storage
         .remove(previous)
         .catch((e) => req.log.warn({ err: e }, 'старый файл шаблона не удалён'));
     }

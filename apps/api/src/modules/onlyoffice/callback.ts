@@ -142,8 +142,9 @@ export async function handleCallback(
     throw err;
   }
   // Сюда доходим только после коммита; previous задан, только если версия записана.
+  // Удаление — в фоне: во время бэкапа оно ждёт блокировку, а сохранение ждать не должно (§17.1).
   if (previous && previous !== written) {
-    await deps.storage
+    void deps.storage
       .remove(previous)
       .catch((e) => log?.warn({ err: e, templateId }, 'старый файл шаблона не удалён'));
   }

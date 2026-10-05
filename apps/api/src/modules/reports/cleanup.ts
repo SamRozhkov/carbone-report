@@ -21,8 +21,10 @@ export async function cleanupOldReports(
   let done = 0;
   for (const r of rows) {
     try {
-      await deps.storage.remove(r.filePath!);
+      // Сначала отметка в базе, затем удаление: при сбое удаления остаётся безвредный файл-сирота,
+      // а не строка, указывающая на отсутствующий файл.
       await deps.db.update(reportRuns).set({ fileDeleted: true }).where(eq(reportRuns.id, r.id));
+      await deps.storage.remove(r.filePath!);
       done++;
     } catch (err) {
       log?.warn({ err, runId: r.id }, 'не удалось удалить файл отчёта');

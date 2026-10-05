@@ -6,6 +6,7 @@ import type {
   UserDto,
 } from '@carbone-reports/shared';
 import { eq } from 'drizzle-orm';
+import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { templateGroups, templates, userGroups } from '../src/db/schema';
 import {
@@ -279,6 +280,50 @@ describe('роль user', () => {
     for (const [m, url, p] of routes) {
       const r = await call(m, url, userCookie, p);
       expect(r.statusCode, `${m} ${url}`).toBe(403);
+    }
+  });
+});
+
+describe('частичный PATCH', () => {
+  it('категория: { name } не сбрасывает public и sortOrder', async () => {
+    const c = await mkCategory('Частичная', { sortOrder: 7, public: true });
+    const r = await call('PATCH', `/api/categories/${c.id}`, admin, { name: 'Частичная 2' });
+    expect(r.statusCode, r.body).toBe(200);
+    expect(r.json()).toMatchObject({ name: 'Частичная 2', sortOrder: 7, public: true });
+    const r2 = await call('PATCH', `/api/categories/${c.id}`, admin, { public: false });
+    expect(r2.json()).toMatchObject({ name: 'Частичная 2', sortOrder: 7, public: false });
+    expect((await call('PATCH', `/api/categories/${c.id}`, admin, {})).statusCode).toBe(400);
+  });
+
+  it('группа: { name } не сбрасывает description; пустое тело → 400', async () => {
+    const g = (
+      await call('POST', '/api/groups', admin, { name: 'Часть', description: 'описание' })
+    ).json() as GroupDto;
+    const r = await call('PATCH', `/api/groups/${g.id}`, admin, { name: 'Часть 2' });
+    expect(r.json()).toMatchObject({ name: 'Часть 2', description: 'описание' });
+    const e = await call('PATCH', `/api/groups/${g.id}`, admin, {});
+    expect(e.statusCode).toBe(400);
+    expect(e.json().error.message).toBe('нет изменений');
+  });
+});
+
+describe('гонка с удалением', () => {
+  it('параллельное удаление группы во время замены → 400, а не 500', async () => {
+    const g = await mkGroup('Гонка');
+    const c = await mkCategory('Гонка-кат');
+    const other = new pg.Client({ connectionString: t.deps.config.databaseUrl });
+    await other.connect();
+    try {
+      await other.query('begin');
+      await other.query('delete from groups where id = $1', [g.id]);
+      // Проверка существования ждёт чужого удаления (FOR KEY SHARE), затем не находит группу.
+      const pending = call('PUT', `/api/categories/${c.id}/groups`, admin, { groupIds: [g.id] });
+      await new Promise((r) => setTimeout(r, 200));
+      await other.query('commit');
+      const res = await pending;
+      expect(res.statusCode, res.body).toBe(400);
+    } finally {
+      await other.end();
     }
   });
 });

@@ -1,6 +1,8 @@
 import {
   CategoryBody,
+  CategoryPatch,
   GroupBody,
+  GroupPatch,
   GroupIdsBody,
   IdParams,
   MembersBody,
@@ -23,7 +25,7 @@ import {
   type GroupRow,
 } from '../../db/schema';
 import type { AppDeps } from '../../deps';
-import { isUniqueViolation } from '../../lib/db-errors';
+import { isForeignKeyViolation, isUniqueViolation } from '../../lib/db-errors';
 import { badRequest, conflict, notFound } from '../../lib/errors';
 import type { Guards } from '../auth/guards';
 
@@ -39,7 +41,13 @@ async function assertAllExist(
   message: string,
 ): Promise<void> {
   if (ids.length === 0) return;
-  const rows = await db.select({ id: table.id }).from(table).where(inArray(table.id, ids));
+  // FOR KEY SHARE: параллельное удаление строки ждёт конца нашей транзакции.
+  const rows = await db
+    .select({ id: table.id })
+    .from(table)
+    .where(inArray(table.id, ids))
+    .orderBy(asc(table.id))
+    .for('key share');
   if (rows.length !== ids.length) throw badRequest(message);
 }
 
@@ -60,6 +68,16 @@ const toCategoryDto = (r: CategoryRow, groupIds: string[], templateCount: number
   templateCount,
 });
 
+/** Запись, на которую ссылаемся, могла исчезнуть между проверкой и вставкой. */
+async function fkGuard<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (isForeignKeyViolation(e)) throw badRequest('связанная запись удалена, повторите попытку');
+    throw e;
+  }
+}
+
 export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): void {
   const { db } = deps;
   const pre = { preHandler: guards.requireAdmin };
@@ -70,7 +88,9 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
         .select({ id: userGroups.userId })
         .from(userGroups)
         .where(eq(userGroups.groupId, groupId))
-    ).map((r) => r.id);
+    )
+      .map((r) => r.id)
+      .sort();
 
   const groupDto = async (id: string): Promise<GroupDto> => {
     const [row] = await db.select().from(groups).where(eq(groups.id, id));
@@ -89,11 +109,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
       .select({ n: sql<number>`count(*)::int` })
       .from(templates)
       .where(eq(templates.categoryId, id));
-    return toCategoryDto(
-      row,
-      gs.map((g) => g.id),
-      cnt?.n ?? 0,
-    );
+    return toCategoryDto(row, gs.map((g) => g.id).sort(), cnt?.n ?? 0);
   };
 
   // ---- группы ----
@@ -106,7 +122,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
     const links = await db.select().from(userGroups);
     const byGroup = new Map<string, string[]>();
     for (const l of links) byGroup.set(l.groupId, [...(byGroup.get(l.groupId) ?? []), l.userId]);
-    return rows.map((r) => toGroupDto(r, byGroup.get(r.id) ?? []));
+    return rows.map((r) => toGroupDto(r, (byGroup.get(r.id) ?? []).sort()));
   });
 
   app.post('/api/groups', { ...pre, schema: { body: GroupBody } }, async (req, reply) => {
@@ -121,8 +137,9 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
 
   app.patch(
     '/api/groups/:id',
-    { ...pre, schema: { params: IdParams, body: GroupBody } },
+    { ...pre, schema: { params: IdParams, body: GroupPatch } },
     async (req) => {
+      if (Object.keys(req.body).length === 0) throw badRequest('нет изменений');
       try {
         const [row] = await db
           .update(groups)
@@ -152,21 +169,23 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
     { ...pre, schema: { params: IdParams, body: MembersBody } },
     async (req) => {
       const userIds = unique(req.body.userIds);
-      await db.transaction(async (tx) => {
-        const [g] = await tx
-          .select({ id: groups.id })
-          .from(groups)
-          .where(eq(groups.id, req.params.id))
-          .for('update');
-        if (!g) throw notFound('группа');
-        await assertAllExist(tx, users, userIds, 'неизвестный пользователь');
-        await tx.delete(userGroups).where(eq(userGroups.groupId, req.params.id));
-        if (userIds.length > 0) {
-          await tx
-            .insert(userGroups)
-            .values(userIds.map((userId) => ({ userId, groupId: req.params.id })));
-        }
-      });
+      await fkGuard(() =>
+        db.transaction(async (tx) => {
+          const [g] = await tx
+            .select({ id: groups.id })
+            .from(groups)
+            .where(eq(groups.id, req.params.id))
+            .for('update');
+          if (!g) throw notFound('группа');
+          await assertAllExist(tx, users, userIds, 'неизвестный пользователь');
+          await tx.delete(userGroups).where(eq(userGroups.groupId, req.params.id));
+          if (userIds.length > 0) {
+            await tx
+              .insert(userGroups)
+              .values(userIds.map((userId) => ({ userId, groupId: req.params.id })));
+          }
+        }),
+      );
       return groupDto(req.params.id);
     },
   );
@@ -186,7 +205,9 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
       .from(templates)
       .groupBy(templates.categoryId);
     const countOf = new Map(counts.map((c) => [c.id, c.n]));
-    return rows.map((r) => toCategoryDto(r, byCat.get(r.id) ?? [], countOf.get(r.id) ?? 0));
+    return rows.map((r) =>
+      toCategoryDto(r, (byCat.get(r.id) ?? []).sort(), countOf.get(r.id) ?? 0),
+    );
   });
 
   app.post('/api/categories', { ...pre, schema: { body: CategoryBody } }, async (req, reply) => {
@@ -201,8 +222,9 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
 
   app.patch(
     '/api/categories/:id',
-    { ...pre, schema: { params: IdParams, body: CategoryBody } },
+    { ...pre, schema: { params: IdParams, body: CategoryPatch } },
     async (req) => {
+      if (Object.keys(req.body).length === 0) throw badRequest('нет изменений');
       try {
         const [row] = await db
           .update(categories)
@@ -237,21 +259,23 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
     { ...pre, schema: { params: IdParams, body: GroupIdsBody } },
     async (req) => {
       const groupIds = unique(req.body.groupIds);
-      await db.transaction(async (tx) => {
-        const [c] = await tx
-          .select({ id: categories.id })
-          .from(categories)
-          .where(eq(categories.id, req.params.id))
-          .for('update');
-        if (!c) throw notFound('категория');
-        await assertAllExist(tx, groups, groupIds, 'неизвестная группа');
-        await tx.delete(categoryGroups).where(eq(categoryGroups.categoryId, req.params.id));
-        if (groupIds.length > 0) {
-          await tx
-            .insert(categoryGroups)
-            .values(groupIds.map((groupId) => ({ categoryId: req.params.id, groupId })));
-        }
-      });
+      await fkGuard(() =>
+        db.transaction(async (tx) => {
+          const [c] = await tx
+            .select({ id: categories.id })
+            .from(categories)
+            .where(eq(categories.id, req.params.id))
+            .for('update');
+          if (!c) throw notFound('категория');
+          await assertAllExist(tx, groups, groupIds, 'неизвестная группа');
+          await tx.delete(categoryGroups).where(eq(categoryGroups.categoryId, req.params.id));
+          if (groupIds.length > 0) {
+            await tx
+              .insert(categoryGroups)
+              .values(groupIds.map((groupId) => ({ categoryId: req.params.id, groupId })));
+          }
+        }),
+      );
       return categoryDto(req.params.id);
     },
   );
@@ -268,7 +292,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
       .select({ id: templateGroups.groupId })
       .from(templateGroups)
       .where(eq(templateGroups.templateId, templateId));
-    return { public: t.public, categoryId: t.categoryId, groupIds: gs.map((g) => g.id) };
+    return { public: t.public, categoryId: t.categoryId, groupIds: gs.map((g) => g.id).sort() };
   };
 
   app.get('/api/templates/:id/access', { ...pre, schema: { params: IdParams } }, (req) =>
@@ -281,26 +305,29 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
     async (req) => {
       const { public: isPublic, categoryId } = req.body;
       const groupIds = unique(req.body.groupIds);
-      await db.transaction(async (tx) => {
-        const [t] = await tx
-          .select({ id: templates.id })
-          .from(templates)
-          .where(eq(templates.id, req.params.id))
-          .for('update');
-        if (!t) throw notFound('шаблон');
-        if (categoryId) await assertAllExist(tx, categories, [categoryId], 'неизвестная категория');
-        await assertAllExist(tx, groups, groupIds, 'неизвестная группа');
-        await tx
-          .update(templates)
-          .set({ public: isPublic, categoryId })
-          .where(eq(templates.id, req.params.id));
-        await tx.delete(templateGroups).where(eq(templateGroups.templateId, req.params.id));
-        if (groupIds.length > 0) {
+      await fkGuard(() =>
+        db.transaction(async (tx) => {
+          const [t] = await tx
+            .select({ id: templates.id })
+            .from(templates)
+            .where(eq(templates.id, req.params.id))
+            .for('update');
+          if (!t) throw notFound('шаблон');
+          if (categoryId)
+            await assertAllExist(tx, categories, [categoryId], 'неизвестная категория');
+          await assertAllExist(tx, groups, groupIds, 'неизвестная группа');
           await tx
-            .insert(templateGroups)
-            .values(groupIds.map((groupId) => ({ templateId: req.params.id, groupId })));
-        }
-      });
+            .update(templates)
+            .set({ public: isPublic, categoryId })
+            .where(eq(templates.id, req.params.id));
+          await tx.delete(templateGroups).where(eq(templateGroups.templateId, req.params.id));
+          if (groupIds.length > 0) {
+            await tx
+              .insert(templateGroups)
+              .values(groupIds.map((groupId) => ({ templateId: req.params.id, groupId })));
+          }
+        }),
+      );
       return accessOf(req.params.id);
     },
   );
@@ -313,7 +340,9 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
         .select({ id: userGroups.groupId })
         .from(userGroups)
         .where(eq(userGroups.userId, userId))
-    ).map((r) => r.id);
+    )
+      .map((r) => r.id)
+      .sort();
 
   const assertUser = async (id: string) => {
     const [u] = await db.select({ id: users.id }).from(users).where(eq(users.id, id));
@@ -330,21 +359,23 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
     { ...pre, schema: { params: IdParams, body: GroupIdsBody } },
     async (req) => {
       const groupIds = unique(req.body.groupIds);
-      await db.transaction(async (tx) => {
-        const [u] = await tx
-          .select({ id: users.id })
-          .from(users)
-          .where(eq(users.id, req.params.id))
-          .for('update');
-        if (!u) throw notFound('пользователь');
-        await assertAllExist(tx, groups, groupIds, 'неизвестная группа');
-        await tx.delete(userGroups).where(eq(userGroups.userId, req.params.id));
-        if (groupIds.length > 0) {
-          await tx
-            .insert(userGroups)
-            .values(groupIds.map((groupId) => ({ userId: req.params.id, groupId })));
-        }
-      });
+      await fkGuard(() =>
+        db.transaction(async (tx) => {
+          const [u] = await tx
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.id, req.params.id))
+            .for('update');
+          if (!u) throw notFound('пользователь');
+          await assertAllExist(tx, groups, groupIds, 'неизвестная группа');
+          await tx.delete(userGroups).where(eq(userGroups.userId, req.params.id));
+          if (groupIds.length > 0) {
+            await tx
+              .insert(userGroups)
+              .values(groupIds.map((groupId) => ({ userId: req.params.id, groupId })));
+          }
+        }),
+      );
       return userGroupIds(req.params.id);
     },
   );

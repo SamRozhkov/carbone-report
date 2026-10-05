@@ -24,7 +24,9 @@ const userGroupIds = async (deps: AppDeps, userId: string) =>
       .select({ id: userGroups.groupId })
       .from(userGroups)
       .where(eq(userGroups.userId, userId))
-  ).map((r) => r.id);
+  )
+    .map((r) => r.id)
+    .sort();
 
 export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): void {
   const pre = { preHandler: guards.requireAdmin };
@@ -34,7 +36,7 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
     const links = await deps.db.select().from(userGroups);
     const byUser = new Map<string, string[]>();
     for (const l of links) byUser.set(l.userId, [...(byUser.get(l.userId) ?? []), l.groupId]);
-    return rows.map((r) => toUserDto(r, byUser.get(r.id)));
+    return rows.map((r) => toUserDto(r, byUser.get(r.id)?.sort()));
   });
 
   app.post('/api/users', { ...pre, schema: { body: CreateUserBody } }, async (req, reply) => {

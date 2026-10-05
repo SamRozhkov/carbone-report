@@ -144,6 +144,13 @@ export const GroupBody = z.object({
 });
 export type GroupBody = z.infer<typeof GroupBody>;
 
+/** PATCH: только переданные поля, без значений по умолчанию. */
+export const GroupPatch = z.object({
+  name: GroupBody.shape.name.optional(),
+  description: z.string().trim().max(1000).optional(),
+});
+export type GroupPatch = z.infer<typeof GroupPatch>;
+
 export const CategoryDto = z.object({
   id: z.string(),
   name: z.string(),
@@ -160,6 +167,13 @@ export const CategoryBody = z.object({
   public: z.boolean().default(false),
 });
 export type CategoryBody = z.infer<typeof CategoryBody>;
+
+export const CategoryPatch = z.object({
+  name: CategoryBody.shape.name.optional(),
+  sortOrder: z.number().int().min(-1_000_000).max(1_000_000).optional(),
+  public: z.boolean().optional(),
+});
+export type CategoryPatch = z.infer<typeof CategoryPatch>;
 
 export const TemplateAccess = z.object({
   public: z.boolean(),

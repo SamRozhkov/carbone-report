@@ -71,6 +71,7 @@ export function PreviewTab({
           <Text color="secondary">Параметров нет</Text>
         ) : (
           <ParamForm
+            templateId={template.id}
             params={template.params}
             values={testParams}
             onChange={onTestParams}

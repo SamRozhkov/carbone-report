@@ -22,6 +22,17 @@ describe('initialValues', () => {
       ]),
     ).toEqual({ a: 'x', b: false, c: null });
   });
+
+  it('SQL-список: массив копируется, одиночный default множественного — в массив', () => {
+    const def = [1, 2];
+    const v = initialValues([
+      p({ name: 'a', type: 'query', sql: 'select 1', multiple: true, defaultValue: def }),
+      p({ name: 'b', type: 'query', sql: 'select 1', multiple: true, defaultValue: 3 }),
+      p({ name: 'c', type: 'query', sql: 'select 1', defaultValue: 'x' }),
+    ]);
+    expect(v).toEqual({ a: [1, 2], b: [3], c: 'x' });
+    expect(v['a']).not.toBe(def);
+  });
 });
 
 describe('pickParams', () => {
@@ -35,6 +46,18 @@ describe('pickParams', () => {
       a: 'x',
       b: null,
     });
+  });
+
+  it('массивы передаются как есть, пустой массив — null', () => {
+    expect(
+      pickParams(
+        [
+          p({ name: 'a', type: 'query', multiple: true }),
+          p({ name: 'b', type: 'query', multiple: true }),
+        ],
+        { a: [1, 'x'], b: [] },
+      ),
+    ).toEqual({ a: [1, 'x'], b: null });
   });
 });
 

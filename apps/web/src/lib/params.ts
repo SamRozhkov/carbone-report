@@ -1,15 +1,28 @@
-import type { ParamsInput, SelectOption, TemplateParam } from '@carbone-reports/shared';
+import type { ParamValue, ParamsInput, SelectOption, TemplateParam } from '@carbone-reports/shared';
+
+/** Пустое значение параметра: null, пустая строка или пустой массив. */
+export function isEmptyParam(v: ParamValue | undefined): boolean {
+  return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+}
+
+function initialValue(p: TemplateParam): ParamValue {
+  const v = p.defaultValue;
+  if (Array.isArray(v)) return [...v];
+  if (p.multiple && v !== null && typeof v !== 'boolean') return [v];
+  return v ?? (p.type === 'boolean' ? false : null);
+}
 
 export function initialValues(params: TemplateParam[]): ParamsInput {
-  return Object.fromEntries(
-    params.map((p) => [p.name, p.defaultValue ?? (p.type === 'boolean' ? false : null)]),
-  );
+  return Object.fromEntries(params.map((p) => [p.name, initialValue(p)]));
 }
 
 /** Значения только для объявленных параметров (устаревшие ключи не уходят на сервер). */
 export function pickParams(params: TemplateParam[], values: ParamsInput): ParamsInput {
   return Object.fromEntries(
-    params.map((p) => [p.name, Object.hasOwn(values, p.name) ? (values[p.name] ?? null) : null]),
+    params.map((p) => {
+      const v = Object.hasOwn(values, p.name) ? (values[p.name] ?? null) : null;
+      return [p.name, Array.isArray(v) && v.length === 0 ? null : v];
+    }),
   );
 }
 

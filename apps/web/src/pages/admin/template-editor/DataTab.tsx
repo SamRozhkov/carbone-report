@@ -186,7 +186,12 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
           {template.params.length === 0 ? (
             <Text color="secondary">Параметров нет</Text>
           ) : (
-            <ParamForm params={template.params} values={testParams} onChange={onTestParams} />
+            <ParamForm
+              templateId={template.id}
+              params={template.params}
+              values={testParams}
+              onChange={onTestParams}
+            />
           )}
         </Card>
       </div>

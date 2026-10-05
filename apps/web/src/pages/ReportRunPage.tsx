@@ -84,6 +84,7 @@ export function ReportRunPage() {
         >
           {t.params.length === 0 && <Text color="secondary">У отчёта нет параметров.</Text>}
           <ParamForm
+            templateId={t.id}
             params={t.params}
             values={values}
             onChange={setValues}

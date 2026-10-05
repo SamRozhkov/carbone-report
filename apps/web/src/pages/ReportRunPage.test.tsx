@@ -186,4 +186,44 @@ describe('ReportRunPage', () => {
     expect(await screen.findByText('ошибка генерации: boom')).toBeInTheDocument();
     expect(screen.queryByTitle('Предпросмотр отчёта')).not.toBeInTheDocument();
   });
+
+  it('SQL-список: варианты с сервера шаблона, выбранное значение уходит исходного типа', async () => {
+    const withQuery = {
+      ...template,
+      params: [
+        {
+          name: 'region',
+          label: 'Регион',
+          type: 'query',
+          required: true,
+          defaultValue: null,
+          options: null,
+          sql: null,
+          multiple: false,
+          dependsOn: [],
+        },
+      ],
+    };
+    const { calls } = mockApi([
+      userMe,
+      { path: '/api/templates/t1', body: withQuery },
+      {
+        method: 'POST',
+        path: '/api/templates/t1/params/region/options',
+        body: { options: [{ value: 7, label: 'Север' }] },
+      },
+      { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
+    ]);
+    renderRoute('/reports/t1');
+    const control = await screen.findByRole('combobox', { name: 'Регион *' });
+    await userEvent.click(control);
+    await userEvent.click(await screen.findByRole('option', { name: 'Север' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Сформировать' }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.path === '/api/reports/t1/render')?.body).toEqual({
+        params: { region: 7 },
+        format: 'pdf',
+      }),
+    );
+  });
 });

@@ -4,6 +4,7 @@ import type {
   DatasourceBody,
   DatasourceDto,
   LoginBody,
+  ParamOptionsResult,
   ParamsInput,
   RenderBody,
   RunQueryBody,
@@ -73,6 +74,11 @@ export const api = {
       apiJson<TemplateAdminDetails>(`/api/templates/${id}/params`, put(params)),
     runQuery: (id: string, body: RunQueryBody) =>
       apiJson<RunQueryResult>(`/api/templates/${id}/queries/run`, post(body)),
+    paramOptions: (id: string, name: string, params: ParamsInput) =>
+      apiJson<ParamOptionsResult>(
+        `/api/templates/${id}/params/${encodeURIComponent(name)}/options`,
+        post({ params }),
+      ),
     previewData: (id: string, params: ParamsInput) =>
       apiJson<Record<string, unknown>>(
         `/api/templates/${id}/preview`,

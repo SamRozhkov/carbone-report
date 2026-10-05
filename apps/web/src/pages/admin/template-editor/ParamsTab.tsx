@@ -1,4 +1,5 @@
 import type {
+  ParamOptionsResult,
   ParamType,
   ParamValue,
   TemplateAdminDetails,
@@ -19,12 +20,13 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { api } from '../../../api/endpoints';
-import { fieldErrors } from '../../../api/errors';
+import { errorMessage, fieldErrors } from '../../../api/errors';
+import { CodeEditor } from '../../../components/CodeEditor';
 import { Field } from '../../../components/Field';
 import { GeneralError } from '../../../components/GeneralError';
 import { ParamField } from '../../../components/ParamForm';
-import { formatOptions, parseOptions } from '../../../lib/params';
-import { applyTemplate } from './editorState';
+import { formatOptions, parseOptions, pickParams } from '../../../lib/params';
+import { applyTemplate, useTestParams } from './editorState';
 
 interface Draft {
   id: number;
@@ -34,6 +36,8 @@ interface Draft {
   required: boolean;
   defaultValue: ParamValue;
   optionsText: string;
+  sql: string;
+  multiple: boolean;
 }
 
 const TYPE_OPTIONS: { value: ParamType; content: string }[] = [
@@ -42,7 +46,15 @@ const TYPE_OPTIONS: { value: ParamType; content: string }[] = [
   { value: 'date', content: 'Дата' },
   { value: 'boolean', content: 'Да/нет' },
   { value: 'select', content: 'Список' },
+  { value: 'query', content: 'SQL-список' },
 ];
+
+/** Ссылки :имя в SQL (без приведений ::type). Только подсказка — зависимости определяет сервер. */
+export function sqlRefs(sql: string): string[] {
+  return [...new Set([...sql.matchAll(/(?<![:\w]):([A-Za-z_]\w*)/g)].map((m) => m[1]!))];
+}
+
+const CHECK_SHOWN = 20;
 
 const toDraft = (p: TemplateParam, id: number): Draft => ({
   id,
@@ -52,6 +64,8 @@ const toDraft = (p: TemplateParam, id: number): Draft => ({
   required: p.required,
   defaultValue: p.defaultValue,
   optionsText: formatOptions(p.options),
+  sql: p.sql ?? '',
+  multiple: p.multiple,
 });
 
 const toParam = (d: Draft): TemplateParam => ({
@@ -61,9 +75,72 @@ const toParam = (d: Draft): TemplateParam => ({
   required: d.required,
   defaultValue: d.defaultValue,
   options: d.type === 'select' ? parseOptions(d.optionsText) : null,
-  sql: null, // Task 4
-  multiple: false, // Task 4
+  sql: d.type === 'query' ? d.sql : null,
+  multiple: d.type === 'query' && d.multiple,
 });
+
+/** «Проверить»: запрос вариантов сохранённого параметра с тестовыми значениями. */
+function QueryCheck({
+  templateId,
+  name,
+  n,
+  saved,
+  testParams,
+}: {
+  templateId: string;
+  name: string;
+  n: number;
+  saved: boolean;
+  testParams: Record<string, ParamValue>;
+}) {
+  const check = useMutation<ParamOptionsResult>({
+    mutationFn: () => api.templates.paramOptions(templateId, name, testParams),
+  });
+  const r = saved ? check.data : undefined;
+  return (
+    <div className="cr-stack" style={{ gap: 4 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <Button
+          size="s"
+          aria-label={`Проверить: параметр ${n}`}
+          disabled={!saved}
+          loading={check.isPending}
+          onClick={() => check.mutate()}
+        >
+          Проверить
+        </Button>
+        {!saved && (
+          <Text color="secondary" variant="caption-2">
+            сохраните параметры
+          </Text>
+        )}
+      </div>
+      {saved && check.error && <Text color="danger">{errorMessage(check.error)}</Text>}
+      {r && r.waitingFor && r.waitingFor.length > 0 && (
+        <Text color="secondary">сначала задайте тестовые значения: {r.waitingFor.join(', ')}</Text>
+      )}
+      {r && !r.waitingFor?.length && (
+        <>
+          <Text color="secondary">всего вариантов: {r.options.length}</Text>
+          {r.options.length > 0 && (
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              {r.options.slice(0, CHECK_SHOWN).map((o) => (
+                <li key={String(o.value)}>
+                  {o.label} ({String(o.value)})
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function toggleMultiple(v: ParamValue, multiple: boolean): ParamValue {
+  if (multiple) return v === null || Array.isArray(v) || typeof v === 'boolean' ? v : [v];
+  return Array.isArray(v) ? (v[0] ?? null) : v;
+}
 
 export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
   const queryClient = useQueryClient();
@@ -72,6 +149,8 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
   const makeDrafts = (t: TemplateAdminDetails) => t.params.map((p) => toDraft(p, nextId.current++));
   const [baseline, setBaseline] = useState(template);
   const [drafts, setDrafts] = useState<Draft[]>(() => makeDrafts(template));
+  const [testValues] = useTestParams(template.id, template.params);
+  const testParams = pickParams(template.params, testValues);
   const strip = (ds: Draft[]) => JSON.stringify(ds.map(({ id: _id, ...rest }) => rest));
   const dirty = strip(drafts) !== strip(baseline.params.map((p) => toDraft(p, 0)));
   const reseed = (t: TemplateAdminDetails) => {
@@ -140,6 +219,8 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
           required: false,
           defaultValue: null,
           optionsText: '',
+          sql: '',
+          multiple: false,
         },
       ];
     });
@@ -172,6 +253,7 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
               </Field>
               <Field label="Тип">
                 <Select
+                  aria-label={`Тип параметра ${n}`}
                   value={[d.type]}
                   options={TYPE_OPTIONS}
                   onUpdate={([v]) =>
@@ -179,6 +261,7 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
                     update(i, {
                       type: v as ParamType,
                       defaultValue: v === 'boolean' ? false : null,
+                      multiple: v === 'query' && d.multiple,
                     })
                   }
                   width="max"
@@ -241,6 +324,44 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
                     controlProps={{ 'aria-label': `Варианты параметра ${n}` }}
                   />
                 </Field>
+              )}
+              {d.type === 'query' && (
+                <div className="cr-stack">
+                  <Field
+                    group
+                    label="SQL вариантов: колонки value и label"
+                    error={errorFor(i, 'sql')}
+                  >
+                    <CodeEditor
+                      language="sql"
+                      value={d.sql}
+                      onChange={(v) => update(i, { sql: v })}
+                      ariaLabel={`SQL параметра ${n}`}
+                      height={120}
+                    />
+                  </Field>
+                  <Checkbox
+                    checked={d.multiple}
+                    onUpdate={(v) =>
+                      update(i, {
+                        multiple: v,
+                        defaultValue: toggleMultiple(d.defaultValue, v),
+                      })
+                    }
+                    content="множественный выбор"
+                  />
+                  {errorFor(i, 'multiple') && <Text color="danger">{errorFor(i, 'multiple')}</Text>}
+                  <Text color="secondary">зависит от: {sqlRefs(d.sql).join(', ') || '—'}</Text>
+                  <QueryCheck
+                    templateId={template.id}
+                    name={d.name}
+                    n={n}
+                    saved={baseline.params.some(
+                      (p) => p.name === d.name && p.type === 'query' && p.sql === d.sql,
+                    )}
+                    testParams={testParams}
+                  />
+                </div>
               )}
             </div>
           </Card>

@@ -196,4 +196,112 @@ describe('ParamsTab', () => {
     expect(screen.queryByLabelText('Имя параметра 2')).not.toBeInTheDocument();
     expect(screen.queryByText(/Шаблон изменился на сервере/)).not.toBeInTheDocument();
   });
+
+  it('тип «SQL-список»: поле SQL, флажок, «зависит от»; PUT уходит с sql и multiple', async () => {
+    const { calls } = mockApi([
+      {
+        method: 'PUT',
+        path: '/api/templates/t1/params',
+        handler: ({ body }) => ({ body: { ...t, params: body } }),
+      },
+    ]);
+    renderWithProviders(<ParamsTab template={t} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Добавить параметр' }));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Тип параметра 3' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'SQL-список' }));
+    const sql = screen.getByLabelText('SQL параметра 3');
+    await userEvent.type(sql, 'select id from c where r = :from and x::int = 1');
+    expect(screen.getByText('зависит от: from')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'множественный выбор' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить параметры' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
+    const body = calls.find((c) => c.method === 'PUT')!.body as Record<string, unknown>[];
+    expect(body[2]).toEqual({
+      name: 'param3',
+      label: 'Новый параметр',
+      type: 'query',
+      required: false,
+      defaultValue: null,
+      options: null,
+      sql: 'select id from c where r = :from and x::int = 1',
+      multiple: true,
+    });
+    expect(body[0]).toMatchObject({ sql: null, multiple: false });
+    expect(body[0]).not.toHaveProperty('dependsOn');
+  });
+
+  const withQuery = {
+    ...t,
+    params: [
+      { ...t.params[0]!, dependsOn: [] },
+      {
+        name: 'city',
+        label: 'Город',
+        type: 'query',
+        required: false,
+        defaultValue: null,
+        options: null,
+        sql: 'select id as value, name as label from city where d > :from',
+        multiple: false,
+        dependsOn: ['from'],
+      },
+    ],
+  } as TemplateAdminDetails;
+
+  it('ошибка сервера 1.sql показывается у поля SQL второй строки', async () => {
+    mockApi([
+      {
+        method: 'PUT',
+        path: '/api/templates/t1/params',
+        handler: () => validation([{ path: '/1/sql', message: 'циклическая зависимость' }]),
+      },
+    ]);
+    renderWithProviders(<ParamsTab template={withQuery} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Сохранить параметры' }));
+    const msg = await screen.findByText('циклическая зависимость');
+    expect(msg).toHaveAttribute('data-testid', 'field-error');
+    expect(screen.getByLabelText('SQL параметра 2').closest('.cr-field')).toContainElement(msg);
+  });
+
+  it('«Проверить» выполняет options с тестовыми параметрами и показывает варианты', async () => {
+    localStorage.setItem('cr-test-params-t1', JSON.stringify({ from: '2026-01-01' }));
+    const { calls } = mockApi([
+      {
+        method: 'POST',
+        path: '/api/templates/t1/params/city/options',
+        body: {
+          options: Array.from({ length: 25 }, (_, k) => ({
+            value: k + 1,
+            label: `Город ${k + 1}`,
+          })),
+        },
+      },
+    ]);
+    renderWithProviders(<ParamsTab template={withQuery} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Проверить: параметр 2' }));
+    expect(await screen.findByText(/всего вариантов: 25/)).toBeInTheDocument();
+    expect(screen.getByText('Город 20 (20)')).toBeInTheDocument();
+    expect(screen.queryByText('Город 21 (21)')).not.toBeInTheDocument();
+    expect(calls.find((c) => c.method === 'POST')!.body).toEqual({
+      params: { from: '2026-01-01', city: null },
+    });
+  });
+
+  it('«Проверить»: ошибка сервера; несохранённый SQL — кнопка неактивна', async () => {
+    mockApi([
+      {
+        method: 'POST',
+        path: '/api/templates/t1/params/city/options',
+        status: 400,
+        body: { error: { code: 'SQL_ERROR', message: 'ошибка SQL: syntax error' } },
+      },
+    ]);
+    renderWithProviders(<ParamsTab template={withQuery} />);
+    const check = await screen.findByRole('button', { name: 'Проверить: параметр 2' });
+    await userEvent.click(check);
+    expect(await screen.findByText('ошибка SQL: syntax error')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('SQL параметра 2'), ' and 1=1');
+    expect(screen.getByRole('button', { name: 'Проверить: параметр 2' })).toBeDisabled();
+    expect(screen.getByText('сохраните параметры')).toBeInTheDocument();
+  });
 });

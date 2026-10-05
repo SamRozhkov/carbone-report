@@ -80,9 +80,10 @@ async function main() {
     const html = await r.text();
     assert(html.includes('<div id="root">'), 'нет корня SPA');
     assert(r.headers.get('x-content-type-options') === 'nosniff', 'нет X-Content-Type-Options');
+    assert(r.headers.get('content-security-policy')?.includes("default-src 'self'"), 'нет CSP');
     assert(
-      r.headers.get('content-security-policy-report-only')?.includes("default-src 'self'"),
-      'нет CSP',
+      r.headers.get('content-security-policy-report-only') === null,
+      'CSP должна быть строгой, а не Report-Only',
     );
     const script = /src="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];
     assert(script, 'не найден JS-бандл');

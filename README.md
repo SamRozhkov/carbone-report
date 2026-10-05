@@ -85,6 +85,18 @@ pnpm --filter @carbone-reports/web dev       # интерфейс с hot reload 
 Vite проксирует `/api` и `/onlyoffice` (включая WebSocket) на `http://localhost:8080`; другой адрес стека — переменная `STACK_URL`.
 Тесты интерфейса: `pnpm --filter @carbone-reports/web test`. В прод-образе (`pnpm stack:prod`) интерфейс собирается в `docker/web.Dockerfile`.
 
+## Демо и E2E
+
+```bash
+pnpm stack:demo     # прод-стек + демо-БД + шаблон «Счёт (демо)» (нужен DEMO_DB_PASSWORD в .env)
+pnpm e2e            # E2E на Playwright (Chromium на хосте) против поднятого стека
+pnpm stack:down     # остановить
+```
+
+Первый запуск E2E: `pnpm --filter @carbone-reports/e2e exec playwright install chromium`.
+Отчёт — `e2e/report/index.html`; при падении trace сохраняется в `e2e/test-results/`.
+E2E меняет демо-шаблон и сам восстанавливает его; вручную: `pnpm demo:seed -- --reset-template`.
+
 ## Безопасность источников данных
 
 Подключайте источники под отдельным пользователем PostgreSQL с правами только на чтение

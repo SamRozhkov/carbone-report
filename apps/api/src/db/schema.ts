@@ -89,6 +89,8 @@ export const templateParams = pgTable(
     required: boolean('required').notNull(),
     defaultValue: jsonb('default_value').$type<ParamValue>(),
     options: jsonb('options').$type<SelectOption[] | null>(),
+    sql: text('sql'),
+    multiple: boolean('multiple').notNull().default(false),
     sortOrder: integer('sort_order').notNull(),
   },
   (t) => [unique().on(t.templateId, t.name)],

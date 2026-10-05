@@ -184,6 +184,8 @@ describe('templates', () => {
           required: false,
           defaultValue: 'abc',
           options: null,
+          sql: null,
+          multiple: false,
         },
       ],
     });
@@ -213,6 +215,8 @@ describe('templates', () => {
           required: false,
           defaultValue: null,
           options: null,
+          sql: null,
+          multiple: false,
         },
       ],
     });

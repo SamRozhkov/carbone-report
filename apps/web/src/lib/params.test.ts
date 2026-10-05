@@ -7,6 +7,8 @@ const p = (over: Partial<TemplateParam> & Pick<TemplateParam, 'name' | 'type'>):
   required: false,
   defaultValue: null,
   options: null,
+  sql: null,
+  multiple: false,
   ...over,
 });
 

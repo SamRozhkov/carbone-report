@@ -136,6 +136,8 @@ describe('запись об ошибке генерации', () => {
           required: false,
           defaultValue: 'dflt',
           options: null,
+          sql: null,
+          multiple: false,
         },
       ],
     });

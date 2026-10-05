@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { DatasourceBody, TemplateParam, TemplateQuery, outputFormatsFor } from './index';
+import {
+  DatasourceBody,
+  ParamsInput,
+  TemplateParam,
+  TemplateQuery,
+  outputFormatsFor,
+} from './index';
 
 describe('TemplateQuery', () => {
   it('принимает корректный ключ', () => {
@@ -56,6 +62,49 @@ describe('TemplateParam', () => {
       options: null,
     });
     expect(r.success).toBe(true);
+  });
+  const q = {
+    name: 'city',
+    label: 'Город',
+    type: 'query',
+    required: false,
+    defaultValue: null,
+    options: null,
+  };
+  it('query требует непустой sql; options запрещены', () => {
+    expect(TemplateParam.safeParse({ ...q, sql: 'select 1' }).success).toBe(true);
+    expect(TemplateParam.safeParse({ ...q, sql: '  ' }).success).toBe(false);
+    expect(TemplateParam.safeParse({ ...q }).success).toBe(false);
+    expect(
+      TemplateParam.safeParse({ ...q, sql: 'select 1', options: [{ value: 'a', label: 'a' }] })
+        .success,
+    ).toBe(false);
+  });
+  it('sql и multiple допустимы только у query', () => {
+    const s = {
+      name: 's',
+      label: 'S',
+      type: 'string',
+      required: false,
+      defaultValue: null,
+      options: null,
+    };
+    expect(TemplateParam.parse(s)).toMatchObject({ sql: null, multiple: false });
+    expect(TemplateParam.safeParse({ ...s, sql: 'select 1' }).success).toBe(false);
+    expect(TemplateParam.safeParse({ ...s, multiple: true }).success).toBe(false);
+  });
+  it('значение по умолчанию: массив только у multiple', () => {
+    expect(
+      TemplateParam.safeParse({ ...q, sql: 'select 1', multiple: true, defaultValue: [1, 'a'] })
+        .success,
+    ).toBe(true);
+    expect(TemplateParam.safeParse({ ...q, sql: 'select 1', defaultValue: [1] }).success).toBe(
+      false,
+    );
+  });
+  it('ParamsInput принимает массивы скаляров, но не boolean в массиве', () => {
+    expect(ParamsInput.parse({ ids: [1, 2], s: 'x' })).toEqual({ ids: [1, 2], s: 'x' });
+    expect(ParamsInput.safeParse({ ids: [true] }).success).toBe(false);
   });
 });
 

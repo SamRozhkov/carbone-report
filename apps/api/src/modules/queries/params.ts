@@ -27,6 +27,8 @@ function checkValue(def: TemplateParam, v: Exclude<ParamValue, null>): string | 
       return typeof v === 'string' && (def.options ?? []).some((o) => o.value === v)
         ? null
         : 'недопустимое значение';
+    case 'query': // Task 2: сверка с вариантами из SQL
+      return (Array.isArray(v) ? def.multiple : true) ? null : 'допустимо одно значение';
   }
 }
 

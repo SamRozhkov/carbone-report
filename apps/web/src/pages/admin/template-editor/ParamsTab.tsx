@@ -61,6 +61,8 @@ const toParam = (d: Draft): TemplateParam => ({
   required: d.required,
   defaultValue: d.defaultValue,
   options: d.type === 'select' ? parseOptions(d.optionsText) : null,
+  sql: null, // Task 4
+  multiple: false, // Task 4
 });
 
 export function ParamsTab({ template }: { template: TemplateAdminDetails }) {

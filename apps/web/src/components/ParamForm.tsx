@@ -80,6 +80,7 @@ export function ParamField({ param, value, onChange, error, disabled, label }: P
           />
         </Field>
       );
+    case 'query': // Task 4: выбор из SQL-списка; пока текстовое поле
     default:
       return (
         <Field label={caption} error={error}>

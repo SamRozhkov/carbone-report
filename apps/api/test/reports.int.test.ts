@@ -67,6 +67,8 @@ beforeAll(async () => {
         required: true,
         defaultValue: null,
         options: null,
+        sql: null,
+        multiple: false,
       },
     ],
   });

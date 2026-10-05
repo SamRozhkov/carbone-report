@@ -29,6 +29,8 @@ export const DEMO_PARAMS: TemplateParam[] = [
     required: true,
     defaultValue: 1,
     options: null,
+    sql: null,
+    multiple: false,
   },
 ];
 

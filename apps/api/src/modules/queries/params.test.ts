@@ -10,6 +10,8 @@ const def = (
   required: false,
   defaultValue: null,
   options: null,
+  sql: null,
+  multiple: false,
   ...over,
 });
 

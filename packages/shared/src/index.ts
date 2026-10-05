@@ -28,14 +28,23 @@ export function outputFormatsFor(ext: TemplateExt): OutputFormat[] {
   return FORMATS_BY_EXT[ext];
 }
 
-export const ParamType = z.enum(['string', 'number', 'date', 'boolean', 'select']);
+export const ParamType = z.enum(['string', 'number', 'date', 'boolean', 'select', 'query']);
 export type ParamType = z.infer<typeof ParamType>;
 
 export const SelectOption = z.object({ value: z.string().min(1), label: z.string().min(1) });
 export type SelectOption = z.infer<typeof SelectOption>;
 
-export const ParamValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+export const ScalarValue = z.union([z.string(), z.number()]);
+export const ParamValue = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.array(ScalarValue),
+]);
 export type ParamValue = z.infer<typeof ParamValue>;
+
+export const MAX_PARAM_OPTIONS = 1000;
 
 export const TemplateParam = z
   .object({
@@ -48,10 +57,25 @@ export const TemplateParam = z
     required: z.boolean(),
     defaultValue: ParamValue,
     options: z.array(SelectOption).min(1).nullable(),
+    /** Только для type=query: запрос вариантов к источнику шаблона; :name — ссылки на другие параметры. */
+    sql: z.string().nullable().default(null),
+    multiple: z.boolean().default(false),
   })
-  .refine((p) => p.type !== 'select' || (p.options && p.options.length > 0), {
-    message: 'для select нужен хотя бы один вариант',
-    path: ['options'],
+  .superRefine((p, ctx) => {
+    const issue = (path: string, message: string) =>
+      ctx.addIssue({ code: 'custom', path: [path], message });
+    if (p.type === 'select' && !(p.options && p.options.length > 0))
+      issue('options', 'для select нужен хотя бы один вариант');
+    if (p.type === 'query') {
+      if (!p.sql || !p.sql.trim()) issue('sql', 'укажите SQL-запрос вариантов');
+      if (p.options !== null) issue('options', 'у SQL-списка варианты задаются запросом');
+      if (Array.isArray(p.defaultValue) && !p.multiple)
+        issue('defaultValue', 'несколько значений допустимы только при множественном выборе');
+    } else {
+      if (p.sql !== null) issue('sql', 'SQL допустим только у типа «SQL-список»');
+      if (p.multiple) issue('multiple', 'множественный выбор допустим только у типа «SQL-список»');
+      if (Array.isArray(p.defaultValue)) issue('defaultValue', 'недопустимое значение');
+    }
   });
 export type TemplateParam = z.infer<typeof TemplateParam>;
 
@@ -191,6 +215,12 @@ export type UpdateTemplateBody = z.infer<typeof UpdateTemplateBody>;
 
 export const ParamsInput = z.record(z.string(), ParamValue);
 export type ParamsInput = z.infer<typeof ParamsInput>;
+
+export const SelectOptionValue = z.object({ value: ScalarValue, label: z.string() });
+export type SelectOptionValue = z.infer<typeof SelectOptionValue>;
+export const ParamOptionsBody = z.object({ params: ParamsInput });
+export type ParamOptionsBody = z.infer<typeof ParamOptionsBody>;
+export type ParamOptionsResult = { options: SelectOptionValue[]; waitingFor?: string[] };
 
 export const RenderBody = z.object({ params: ParamsInput, format: OutputFormat });
 export type RenderBody = z.infer<typeof RenderBody>;

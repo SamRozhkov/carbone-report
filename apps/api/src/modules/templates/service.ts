@@ -87,6 +87,8 @@ export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull
       required: p.required,
       defaultValue: p.defaultValue ?? null,
       options: p.options ?? null,
+      sql: p.sql,
+      multiple: p.multiple,
     })),
   };
 }

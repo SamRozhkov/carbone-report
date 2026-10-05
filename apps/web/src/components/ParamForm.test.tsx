@@ -14,6 +14,8 @@ const params: TemplateParam[] = [
     required: true,
     defaultValue: null,
     options: null,
+    sql: null,
+    multiple: false,
   },
   {
     name: 'limit',
@@ -22,6 +24,8 @@ const params: TemplateParam[] = [
     required: false,
     defaultValue: 10,
     options: null,
+    sql: null,
+    multiple: false,
   },
   {
     name: 'withVat',
@@ -30,6 +34,8 @@ const params: TemplateParam[] = [
     required: false,
     defaultValue: false,
     options: null,
+    sql: null,
+    multiple: false,
   },
   {
     name: 'status',
@@ -41,6 +47,8 @@ const params: TemplateParam[] = [
       { value: 'new', label: 'Новый' },
       { value: 'done', label: 'Готов' },
     ],
+    sql: null,
+    multiple: false,
   },
 ];
 

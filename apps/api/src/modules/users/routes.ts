@@ -3,7 +3,7 @@ import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
 import type { App } from '../../app';
 import { reportRuns, users, type UserRow } from '../../db/schema';
 import type { AppDeps } from '../../deps';
-import { badRequest, conflict, notFound } from '../../lib/errors';
+import { badRequest, conflict, notFound, unauthorized } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
 import { hashPassword } from '../auth/password';
 import { setSessionCookie } from '../auth/routes';
@@ -61,12 +61,18 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
       if (Object.keys(patch).length === 0) throw badRequest('нет изменений');
       // Смена пароля, роли или блокировка завершает все выданные сессии пользователя.
       const revoke = password !== undefined || role !== undefined || blocked !== undefined;
+      const isSelf = req.params.id === me.id;
+      // Своя запись: обновляем, только если версия сессии не менялась с момента проверки в guard.
       const [row] = await deps.db
         .update(users)
         .set(revoke ? { ...patch, sessionVersion: sql`${users.sessionVersion} + 1` } : patch)
-        .where(eq(users.id, req.params.id))
+        .where(
+          isSelf
+            ? and(eq(users.id, req.params.id), eq(users.sessionVersion, req.sessionVersion!))
+            : eq(users.id, req.params.id),
+        )
         .returning();
-      if (!row) throw notFound('пользователь');
+      if (!row) throw isSelf ? unauthorized() : notFound('пользователь');
       // Своя запись: текущая вкладка продолжает работать с новой cookie.
       if (revoke && row.id === me.id) {
         await setSessionCookie(

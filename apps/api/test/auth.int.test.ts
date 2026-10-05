@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { users } from '../src/db/schema';
 import { ensureAdmin } from '../src/modules/auth/bootstrap';
@@ -131,6 +131,7 @@ describe('отзыв сессий', () => {
       payload: { password: 'new-password-1' },
     });
     expect(r.statusCode).toBe(200);
+    expect(r.headers['set-cookie']).toBeUndefined();
     expect((await me(u.cookie)).statusCode).toBe(401);
   });
 
@@ -159,6 +160,28 @@ describe('отзыв сессий', () => {
     expect(fresh).toMatch(/^session=/);
     expect((await me(fresh)).statusCode).toBe(200);
     expect((await me(admin.cookie)).statusCode).toBe(401);
+  });
+
+  it('самоправка со старой cookie после отзыва: 401, без set-cookie, пароль не изменён', async () => {
+    const admin = await loginAs(t, 'admin');
+    await t.deps.db
+      .update(users)
+      .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
+      .where(eq(users.id, admin.user.id));
+    const r = await t.app.inject({
+      method: 'PATCH',
+      url: `/api/users/${admin.user.id}`,
+      headers: { cookie: admin.cookie },
+      payload: { password: 'new-password-3' },
+    });
+    expect(r.statusCode).toBe(401);
+    expect(r.headers['set-cookie']).toBeUndefined();
+    const login = await t.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: admin.user.login, password: 'password123' },
+    });
+    expect(login.statusCode).toBe(200);
   });
 
   it('admin завершает сессии пользователя; свои — нельзя; несуществующий — 404', async () => {

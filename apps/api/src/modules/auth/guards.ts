@@ -8,6 +8,7 @@ import { SESSION_COOKIE, verifySession, type SessionUser } from './session';
 declare module 'fastify' {
   interface FastifyRequest {
     user?: SessionUser;
+    sessionVersion?: number;
   }
 }
 
@@ -24,6 +25,7 @@ export function makeGuards(deps: AppDeps) {
     // Роль, блокировка и версия сессий берутся из БД: изменения применяются сразу, без перевыпуска cookie.
     const [row] = await deps.db.select().from(users).where(eq(users.id, session.id));
     if (!row || row.blocked || row.sessionVersion !== session.sv) throw unauthorized();
+    req.sessionVersion = session.sv;
     req.user = { id: row.id, login: row.login, role: row.role };
   }
 

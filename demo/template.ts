@@ -21,15 +21,26 @@ export const DEMO_QUERIES: TemplateQuery[] = [
   },
 ];
 
+/** Зависимые SQL-списки: «Счёт» перечисляет счета выбранной «Компании» (ссылка :companyId). */
 export const DEMO_PARAMS: TemplateParam[] = [
   {
-    name: 'invoiceId',
-    label: 'Номер счёта (id)',
-    type: 'number',
+    name: 'companyId',
+    label: 'Компания',
+    type: 'query',
     required: true,
     defaultValue: 1,
     options: null,
-    sql: null,
+    sql: 'select id as value, name as label from company order by id',
+    multiple: false,
+  },
+  {
+    name: 'invoiceId',
+    label: 'Счёт',
+    type: 'query',
+    required: true,
+    defaultValue: 1,
+    options: null,
+    sql: 'select id as value, number as label from invoices where company_id = :companyId order by id',
     multiple: false,
   },
 ];

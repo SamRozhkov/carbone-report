@@ -40,9 +40,9 @@ test('пользователь: создание админом, генерац�
   await expect(page.getByText('Пользователи', { exact: true })).toHaveCount(0);
   await page.goto('/reports');
   await page.getByText('Счёт (демо)', { exact: true }).click();
-  await expect(
-    page.getByRole('textbox', { name: /Номер счёта/ }).or(page.getByLabel(/Номер счёта/)),
-  ).toBeVisible();
+  // Значения по умолчанию: «Компания» = 1, «Счёт» = 1 (зависимые SQL-списки).
+  await expect(page.getByRole('combobox', { name: 'Компания *' })).toContainText('ООО «Ромашка»');
+  await expect(page.getByRole('combobox', { name: 'Счёт *' })).toContainText('СЧ-001');
 
   await page.getByRole('button', { name: 'Сформировать' }).click();
   const frame = page.getByTitle('Предпросмотр отчёта');

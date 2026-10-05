@@ -32,6 +32,7 @@ import {
   loadTemplate,
   loadTemplateFull,
   templateDir,
+  templateFileRef,
   templateFilePath,
   toAdminDetails,
   toDetails,
@@ -265,7 +266,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           description: src.row.description,
           datasourceId: src.row.datasourceId,
           ext: src.row.fileExt,
-          data: await storage.read(src.row.filePath),
+          data: await templateFileRef(deps, src.row).read(),
           userId: currentUser(req).id,
         },
         { defaultOutput: src.row.defaultOutput, queries: src.queries, params: src.params },
@@ -279,7 +280,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     { ...admin, schema: { params: IdParams } },
     async (req, reply) => {
       const row = await loadTemplate(db, req.params.id);
-      const data = await storage.read(row.filePath);
+      const data = await templateFileRef(deps, row).read();
       return reply
         .header('content-type', MIME[row.fileExt])
         .header('content-disposition', contentDisposition(`${row.name}.${row.fileExt}`))

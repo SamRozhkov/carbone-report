@@ -5,7 +5,7 @@ import type { AppDeps } from '../../deps';
 import { AppError } from '../../lib/errors';
 import { MIME } from '../../lib/http';
 import { currentUser, type Guards } from '../auth/guards';
-import { loadTemplate } from '../templates/service';
+import { loadTemplate, templateFileRef } from '../templates/service';
 import { handleCallback } from './callback';
 import { buildEditorConfig } from './editor-config';
 import { verifyFileToken } from './jwt';
@@ -39,7 +39,7 @@ export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards
       const row = await loadTemplate(deps.db, req.params.id);
       return reply
         .header('content-type', MIME[row.fileExt])
-        .send(await deps.storage.read(row.filePath));
+        .send(await templateFileRef(deps, row).read());
     },
   );
 

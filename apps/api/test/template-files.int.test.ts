@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { templates } from '../src/db/schema';
 import { createBlankDocument } from '../src/modules/templates/blank';
 import { migrateTemplateFiles } from '../src/modules/templates/file-migration';
@@ -124,6 +124,41 @@ describe('файлы шаблонов по версиям', () => {
     const replacement = Buffer.concat([await createBlankDocument('docx'), Buffer.from('v2')]);
     expect((await putFile(id, replacement)).statusCode).toBe(200);
     expect((await ref.read()).equals(replacement)).toBe(true);
+  });
+  it('скачивание и дублирование переживают гонку с заменой файла (ENOENT на прежнем пути)', async () => {
+    const id = await createTemplate(t, admin, dsId);
+    const replacement = Buffer.concat([await createBlankDocument('docx'), Buffer.from('v2')]);
+    expect((await putFile(id, replacement)).statusCode).toBe(200);
+    const current = (await rowOf(id)).filePath;
+    // Строка прочитана до коммита: первое чтение по пути из строки падает, как после удаления файла.
+    const failOnce = () => {
+      const real = t.deps.storage.read.bind(t.deps.storage);
+      let failed = false;
+      return vi.spyOn(t.deps.storage, 'read').mockImplementation(async (path) => {
+        if (!failed && path === current) {
+          failed = true;
+          throw Object.assign(new Error('gone'), { code: 'ENOENT' });
+        }
+        return real(path);
+      });
+    };
+    const spy = failOnce();
+    const dl = await t.app.inject({
+      method: 'GET',
+      url: `/api/templates/${id}/download`,
+      headers: { cookie: admin },
+    });
+    spy.mockRestore();
+    expect(dl.statusCode).toBe(200);
+    expect(dl.rawPayload.equals(replacement)).toBe(true);
+    const spy2 = failOnce();
+    const dup = await t.app.inject({
+      method: 'POST',
+      url: `/api/templates/${id}/duplicate`,
+      headers: { cookie: admin },
+    });
+    spy2.mockRestore();
+    expect(dup.statusCode).toBe(201);
   });
 });
 

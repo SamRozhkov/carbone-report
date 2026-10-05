@@ -8,14 +8,18 @@ import type {
   SslMode,
   TemplateExt,
 } from '@carbone-reports/shared';
+import { sql } from 'drizzle-orm';
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -44,6 +48,61 @@ export const datasources = pgTable('datasources', {
   createdAt: createdAt(),
 });
 
+export const groups = pgTable(
+  'groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('groups_name_lower_uq').on(sql`lower(${t.name})`)],
+);
+
+export const userGroups = pgTable(
+  'user_groups',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.groupId] }),
+    index('user_groups_group_id_idx').on(t.groupId),
+  ],
+);
+
+export const categories = pgTable(
+  'categories',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    public: boolean('public').notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('categories_name_lower_uq').on(sql`lower(${t.name})`)],
+);
+
+export const categoryGroups = pgTable(
+  'category_groups',
+  {
+    categoryId: uuid('category_id')
+      .notNull()
+      .references(() => categories.id, { onDelete: 'cascade' }),
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.categoryId, t.groupId] }),
+    index('category_groups_group_id_idx').on(t.groupId),
+  ],
+);
+
 export const templates = pgTable('templates', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
@@ -59,7 +118,25 @@ export const templates = pgTable('templates', {
   lastSaveError: text('last_save_error'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+  categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
+  public: boolean('public').notNull().default(false),
 });
+
+export const templateGroups = pgTable(
+  'template_groups',
+  {
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => templates.id, { onDelete: 'cascade' }),
+    groupId: uuid('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.templateId, t.groupId] }),
+    index('template_groups_group_id_idx').on(t.groupId),
+  ],
+);
 
 export const templateQueries = pgTable(
   'template_queries',
@@ -120,3 +197,5 @@ export type TemplateRow = typeof templates.$inferSelect;
 export type TemplateQueryRow = typeof templateQueries.$inferSelect;
 export type TemplateParamRow = typeof templateParams.$inferSelect;
 export type RunRow = typeof reportRuns.$inferSelect;
+export type GroupRow = typeof groups.$inferSelect;
+export type CategoryRow = typeof categories.$inferSelect;

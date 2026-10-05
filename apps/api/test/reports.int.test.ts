@@ -51,6 +51,7 @@ beforeAll(async () => {
   });
   dsId = ds.json().id;
   tplId = await createTemplate(t, admin, dsId, {
+    public: true,
     queries: [
       {
         key: 'orders',
@@ -149,6 +150,7 @@ describe('генерация', () => {
 
   it('ошибка SQL → 400 и запись со status=error', async () => {
     const bad = await createTemplate(t, admin, dsId, {
+      public: true,
       queries: [{ key: 'x', mode: 'list', sql: 'select nope from orders' }],
     });
     const r = await render(userA, bad, { params: {}, format: 'pdf' });
@@ -167,7 +169,7 @@ describe('генерация', () => {
   });
 
   it('шаблон без запросов генерируется только с params', async () => {
-    const empty = await createTemplate(t, admin, dsId);
+    const empty = await createTemplate(t, admin, dsId, { public: true });
     const r = await render(userA, empty, { params: {}, format: 'pdf' });
     const file = await t.app.inject({
       method: 'GET',
@@ -292,7 +294,7 @@ describe('история', () => {
   });
 
   it('после удаления шаблона история остаётся читаемой', async () => {
-    const tmp = await createTemplate(t, admin, dsId);
+    const tmp = await createTemplate(t, admin, dsId, { public: true });
     const r = await render(userA, tmp, { params: {}, format: 'pdf' });
     const runId = r.json().runId;
     await t.app.inject({
@@ -330,6 +332,7 @@ describe('недоступный источник', () => {
       },
     });
     const dead = await createTemplate(t, admin, ds.json().id, {
+      public: true,
       queries: [{ key: 'q', mode: 'list', sql: 'select 1 as a' }],
     });
     const r = await render(userA, dead, { params: {}, format: 'pdf' });

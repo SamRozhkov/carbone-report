@@ -1,6 +1,7 @@
 import {
   outputFormatsFor,
   type TemplateAdminDetails,
+  type TemplateCategoryRef,
   type TemplateDetails,
   type TemplateExt,
   type TemplateParam,
@@ -10,7 +11,13 @@ import {
 } from '@carbone-reports/shared';
 import { asc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
-import { templateParams, templateQueries, templates, type TemplateRow } from '../../db/schema';
+import {
+  categories,
+  templateParams,
+  templateQueries,
+  templates,
+  type TemplateRow,
+} from '../../db/schema';
 import type { AppDeps, TemplateFileRef } from '../../deps';
 import { notFound } from '../../lib/errors';
 import { paramRefs } from '../queries/param-deps';
@@ -19,6 +26,7 @@ import { STORAGE_REMOVE_LOCK_KEY } from '../../lib/storage-gate';
 
 export interface TemplateFull {
   row: TemplateRow;
+  category: TemplateCategoryRef | null;
   queries: TemplateQuery[];
   params: TemplateParam[];
 }
@@ -67,7 +75,7 @@ export async function loadTemplate(db: Db, id: string): Promise<TemplateRow> {
 
 export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull> {
   const row = await loadTemplate(db, id);
-  const [qs, ps] = await Promise.all([
+  const [qs, ps, cat] = await Promise.all([
     db
       .select()
       .from(templateQueries)
@@ -78,9 +86,11 @@ export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull
       .from(templateParams)
       .where(eq(templateParams.templateId, id))
       .orderBy(asc(templateParams.sortOrder)),
+    loadCategoryRef(db, row.categoryId),
   ]);
   return {
     row,
+    category: cat,
     queries: qs.map((q) => ({ key: q.key, sql: q.sql, mode: q.mode })),
     params: ps.map((p) => ({
       name: p.name,
@@ -95,13 +105,35 @@ export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull
   };
 }
 
-export const toSummary = (r: TemplateRow): TemplateSummary => ({
+export const categoryRefColumns = {
+  id: categories.id,
+  name: categories.name,
+  sortOrder: categories.sortOrder,
+};
+
+export async function loadCategoryRef(
+  db: Db,
+  categoryId: string | null,
+): Promise<TemplateCategoryRef | null> {
+  if (!categoryId) return null;
+  const [cat] = await db
+    .select(categoryRefColumns)
+    .from(categories)
+    .where(eq(categories.id, categoryId));
+  return cat ?? null;
+}
+
+export const toSummary = (
+  r: TemplateRow,
+  category: TemplateCategoryRef | null,
+): TemplateSummary => ({
   id: r.id,
   name: r.name,
   description: r.description,
   fileExt: r.fileExt,
   defaultOutput: r.defaultOutput,
   updatedAt: r.updatedAt.toISOString(),
+  category,
 });
 
 function toParamDto(p: TemplateParam, withSql: boolean): TemplateParamDto {
@@ -110,7 +142,7 @@ function toParamDto(p: TemplateParam, withSql: boolean): TemplateParamDto {
 
 /** Карточка для пользователя: SQL параметров скрыт, зависимости (dependsOn) — нет. */
 export const toDetails = (f: TemplateFull, withSql = false): TemplateDetails => ({
-  ...toSummary(f.row),
+  ...toSummary(f.row, f.category),
   params: f.params.map((p) => toParamDto(p, withSql)),
   outputFormats: outputFormatsFor(f.row.fileExt),
 });

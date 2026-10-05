@@ -8,7 +8,8 @@ import { inject } from 'vitest';
 import { buildApp, type App } from '../src/app';
 import type { Config } from '../src/config';
 import { createDb, migrateDb } from '../src/db/client';
-import { users, type UserRow } from '../src/db/schema';
+import { eq } from 'drizzle-orm';
+import { templates, users, type UserRow } from '../src/db/schema';
 import type { AppDeps } from '../src/deps';
 import { Storage } from '../src/lib/storage';
 import { createRemoveGate } from '../src/lib/storage-gate';
@@ -136,7 +137,7 @@ export async function createTemplate(
   t: TestApp,
   cookie: string,
   datasourceId: string,
-  opts: { queries?: TemplateQuery[]; params?: TemplateParam[] } = {},
+  opts: { queries?: TemplateQuery[]; params?: TemplateParam[]; public?: boolean } = {},
 ): Promise<string> {
   const r = await t.app.inject({
     method: 'POST',
@@ -146,6 +147,8 @@ export async function createTemplate(
   });
   if (r.statusCode !== 201) throw new Error(r.body);
   const id = r.json().id as string;
+  // Новые шаблоны закрыты; открыть — тестам, где генерирует обычный пользователь.
+  if (opts.public) await openTemplate(t, id);
   if (opts.queries) {
     await t.app.inject({
       method: 'PUT',
@@ -163,6 +166,11 @@ export async function createTemplate(
     });
   }
   return id;
+}
+
+/** Делает шаблон доступным всем пользователям (templates.public = true). */
+export async function openTemplate(t: TestApp, id: string): Promise<void> {
+  await t.deps.db.update(templates).set({ public: true }).where(eq(templates.id, id));
 }
 
 export function multipart(fields: Record<string, string>, file?: { name: string; data: Buffer }) {

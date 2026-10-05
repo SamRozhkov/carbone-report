@@ -177,6 +177,14 @@ export const DatasourceDto = DatasourceFields.omit({ password: true }).extend({
 });
 export type DatasourceDto = z.infer<typeof DatasourceDto>;
 
+/** Категория в карточке и списке шаблонов: достаточно для группировки каталога. */
+export const TemplateCategoryRef = z.object({
+  id: z.string(),
+  name: z.string(),
+  sortOrder: z.number().int(),
+});
+export type TemplateCategoryRef = z.infer<typeof TemplateCategoryRef>;
+
 export const TemplateSummary = z.object({
   id: z.string(),
   name: z.string(),
@@ -184,6 +192,7 @@ export const TemplateSummary = z.object({
   fileExt: TemplateExt,
   defaultOutput: OutputFormat,
   updatedAt: z.string(),
+  category: TemplateCategoryRef.nullable(),
 });
 export type TemplateSummary = z.infer<typeof TemplateSummary>;
 

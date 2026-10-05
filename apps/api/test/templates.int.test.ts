@@ -57,6 +57,7 @@ describe('templates', () => {
 
   it('user видит список и детали без SQL', async () => {
     const id = await createTemplate(t, admin, dsId, {
+      public: true,
       queries: [{ key: 'q', mode: 'list', sql: 'select secret from t' }],
     });
     const list = await t.app.inject({

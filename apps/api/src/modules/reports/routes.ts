@@ -18,6 +18,7 @@ import { reportRuns, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { AppError, notFound } from '../../lib/errors';
 import { contentDisposition, MIME } from '../../lib/http';
+import { assertTemplateAccess } from '../access/access';
 import { currentUser, type Guards } from '../auth/guards';
 import { previewQuery } from '../queries/executor';
 import { resolveParams } from '../queries/params';
@@ -47,6 +48,8 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
     { preHandler: guards.requireUser, schema: { params: IdParams, body: RenderBody } },
     async (req, reply) => {
       const user = currentUser(req);
+      // До загрузки и до любой записи запуска: недоступный шаблон не оставляет следов в истории.
+      await assertTemplateAccess(db, user, req.params.id);
       const full = await loadTemplateFull(db, req.params.id);
       assertFormat(full, req.body.format);
       const runId = randomUUID();
@@ -194,6 +197,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
     '/api/templates/:id/preview',
     { preHandler: guards.requireAdmin, schema: { params: IdParams, body: PreviewBody } },
     async (req, reply) => {
+      await assertTemplateAccess(db, currentUser(req), req.params.id);
       const full = await loadTemplateFull(db, req.params.id);
       const { data } = await collectReportData(deps, full, req.body.params);
       if (req.body.mode === 'data') return data;

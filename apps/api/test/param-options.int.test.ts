@@ -1,7 +1,13 @@
 import type { TemplateDetails, TemplateParam } from '@carbone-reports/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { CarboneRenderer } from '../src/deps';
-import { createSourceDatabase, createTestApp, loginAs, type TestApp } from './helpers';
+import {
+  createSourceDatabase,
+  createTestApp,
+  loginAs,
+  openTemplate,
+  type TestApp,
+} from './helpers';
 
 let t: TestApp;
 let admin: string;
@@ -47,6 +53,7 @@ async function createTpl(
   });
   expect(r.statusCode).toBe(201);
   const id = r.json().id as string;
+  await openTemplate(t, id);
   const q = await t.app.inject({
     method: 'PUT',
     url: `/api/templates/${id}/queries`,

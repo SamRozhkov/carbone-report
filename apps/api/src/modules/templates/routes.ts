@@ -12,12 +12,14 @@ import {
   TemplateQuery,
   UpdateTemplateBody,
 } from '@carbone-reports/shared';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, getTableColumns } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { App } from '../../app';
 import {
+  categories,
   datasources,
+  templateGroups,
   templateParams,
   templateQueries,
   templates,
@@ -26,12 +28,14 @@ import {
 import type { AppDeps } from '../../deps';
 import { badRequest, notFound } from '../../lib/errors';
 import { contentDisposition, isZip, MIME } from '../../lib/http';
+import { accessibleTemplates, assertTemplateAccess } from '../access/access';
 import { currentUser, type Guards } from '../auth/guards';
 import { orderParams } from '../queries/param-deps';
 import { optionsForParam } from '../queries/param-options';
 import { checkParamDefaults } from '../queries/params';
 import { createBlankDocument } from './blank';
 import {
+  categoryRefColumns,
   discardUncommittedFile,
   loadTemplate,
   loadTemplateFull,
@@ -97,6 +101,11 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       defaultOutput?: OutputFormat;
       queries?: TemplateQuery[];
       params?: TemplateParam[];
+      /** Настройки доступа; по умолчанию шаблон закрыт и без категории. */
+      categoryId?: string | null;
+      public?: boolean;
+      /** Скопировать группы доступа (template_groups) этого шаблона. */
+      copyGroupsFrom?: string;
     },
   ) {
     await ensureDatasource(v.datasourceId);
@@ -116,9 +125,22 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
             filePath,
             docKey: randomUUID(),
             updatedBy: v.userId,
+            categoryId: extra?.categoryId ?? null,
+            public: extra?.public ?? false,
             ...(extra?.defaultOutput ? { defaultOutput: extra.defaultOutput } : {}),
           })
           .returning();
+        if (extra?.copyGroupsFrom) {
+          const gs = await tx
+            .select({ groupId: templateGroups.groupId })
+            .from(templateGroups)
+            .where(eq(templateGroups.templateId, extra.copyGroupsFrom));
+          if (gs.length) {
+            await tx
+              .insert(templateGroups)
+              .values(gs.map((g) => ({ templateId: id, groupId: g.groupId })));
+          }
+        }
         if (extra?.queries?.length) {
           await tx
             .insert(templateQueries)
@@ -137,12 +159,18 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     }
   }
 
-  app.get('/api/templates', anyUser, async () => {
-    const rows = await db.select().from(templates).orderBy(asc(templates.name));
-    return rows.map(toSummary);
+  app.get('/api/templates', anyUser, async (req) => {
+    const rows = await db
+      .select({ row: getTableColumns(templates), category: categoryRefColumns })
+      .from(templates)
+      .leftJoin(categories, eq(categories.id, templates.categoryId))
+      .where(accessibleTemplates(currentUser(req)))
+      .orderBy(asc(templates.name));
+    return rows.map((r) => toSummary(r.row, r.category));
   });
 
   app.get('/api/templates/:id', { ...anyUser, schema: { params: IdParams } }, async (req) => {
+    await assertTemplateAccess(db, currentUser(req), req.params.id);
     const full = await loadTemplateFull(db, req.params.id);
     return currentUser(req).role === 'admin' ? toAdminDetails(full) : toDetails(full);
   });
@@ -154,6 +182,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       schema: { params: IdParams.extend({ name: z.string() }), body: ParamOptionsBody },
     },
     async (req): Promise<ParamOptionsResult> => {
+      await assertTemplateAccess(db, currentUser(req), req.params.id);
       const full = await loadTemplateFull(db, req.params.id);
       return optionsForParam(deps, full, req.params.name, req.body.params);
     },
@@ -169,7 +198,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         data: await createBlankDocument(req.body.blank),
         userId: currentUser(req).id,
       });
-      return reply.status(201).send(toSummary(row));
+      return reply.status(201).send(toSummary(row, null));
     },
   );
 
@@ -184,7 +213,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       .safeParse(fields);
     if (!meta.success) throw badRequest('укажите название и источник данных');
     const row = await insertTemplate({ ...meta.data, ext, data, userId: currentUser(req).id });
-    return reply.status(201).send(toSummary(row));
+    return reply.status(201).send(toSummary(row, null));
   });
 
   app.put('/api/templates/:id/file', { ...admin, schema: { params: IdParams } }, async (req) => {
@@ -286,9 +315,16 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           data: await templateFileRef(deps, src.row).read(),
           userId: currentUser(req).id,
         },
-        { defaultOutput: src.row.defaultOutput, queries: src.queries, params: src.params },
+        {
+          defaultOutput: src.row.defaultOutput,
+          queries: src.queries,
+          params: src.params,
+          categoryId: src.row.categoryId,
+          public: src.row.public,
+          copyGroupsFrom: src.row.id,
+        },
       );
-      return reply.status(201).send(toSummary(row));
+      return reply.status(201).send(toSummary(row, src.category));
     },
   );
 

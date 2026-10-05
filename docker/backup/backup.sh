@@ -25,10 +25,16 @@ fail() {
 # явным unlock или — при любом сбое — закрытием сессии, так что API не останется заблокированным.
 # Код возврата \! psql игнорирует (ON_ERROR_STOP на него не действует), поэтому успех каждого
 # шага фиксируется файлом-маркером и проверяется после psql.
+#
+# tar: *.tmp — временные файлы атомарной записи API (<файл>.<uuid>.tmp → rename); они исчезают
+# посреди чтения и в архиве не нужны. Прочие файлы во время бэкапа не удаляются (удаления ждут
+# блокировку). В образе tar из busybox: у него нет отдельного кода «файл изменился при чтении»
+# (как exit 1 у GNU tar) — любая ошибка, включая исчезнувший файл и сбой записи архива, даёт 1.
+# Поэтому ненулевой код tar всегда считается сбоем: лучше лишний неудачный бэкап, чем неполный.
 psql -v ON_ERROR_STOP=1 -q -o /dev/null <<SQL || fail "psql"
 select pg_advisory_lock($LOCK_KEY);
 \! pg_dump -Fc -f "$dir/db.dump" && touch "$dir/.dump-ok"
-\! tar -czf "$dir/storage.tar.gz" -C /data . && touch "$dir/.storage-ok"
+\! tar -czf "$dir/storage.tar.gz" --exclude='*.tmp' -C /data . && touch "$dir/.storage-ok"
 select pg_advisory_unlock($LOCK_KEY);
 SQL
 

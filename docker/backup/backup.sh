@@ -4,7 +4,8 @@
 set -eu
 : "${PGHOST:=postgres}" "${PGUSER:=app}" "${PGDATABASE:=app}" "${LOCK_KEY:=726100001}"
 : "${BACKUP_KEEP:=14}"
-case $BACKUP_KEEP in ''|*[!0-9]*|0) echo "BACKUP_KEEP должен быть целым ≥1" >&2; exit 2;; esac
+BACKUP_KEEP=${BACKUP_KEEP#"${BACKUP_KEEP%%[!0]*}"} # без ведущих нулей: 014 → 14, 08 → 8, 00 → «»
+case $BACKUP_KEEP in ''|*[!0-9]*) echo "BACKUP_KEEP должен быть целым ≥1" >&2; exit 2;; esac
 PGAPPNAME=backup
 export PGHOST PGUSER PGDATABASE PGAPPNAME
 : "${PGPASSWORD:?не задан PGPASSWORD}"

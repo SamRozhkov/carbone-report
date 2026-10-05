@@ -115,6 +115,30 @@ async function main() {
   await call('PUT', `/api/templates/${tpl.id}/params`, DEMO_PARAMS);
   await call('PUT', `/api/templates/${tpl.id}/queries`, DEMO_QUERIES);
   console.log(`✓ запросы и параметры шаблона приведены к эталону (id ${tpl.id})`);
+
+  type Named = { id: string; name: string };
+  const categories = await call<Named[]>('GET', '/api/categories');
+  let category = categories.find((c) => c.name === DEMO.categoryName);
+  if (!category) {
+    category = await call<Named>('POST', '/api/categories', {
+      name: DEMO.categoryName,
+      sortOrder: 1,
+      public: false,
+    });
+    console.log(`✓ категория «${category.name}» создана`);
+  }
+  const groups = await call<Named[]>('GET', '/api/groups');
+  if (!groups.some((g) => g.name === DEMO.groupName)) {
+    await call('POST', '/api/groups', { name: DEMO.groupName });
+    console.log(`✓ группа «${DEMO.groupName}» создана`);
+  }
+  // Новые шаблоны закрыты; демо-шаблон доступен всем, чтобы демо и E2E работали у любого пользователя.
+  await call('PUT', `/api/templates/${tpl.id}/access`, {
+    public: true,
+    categoryId: category.id,
+    groupIds: [],
+  });
+  console.log(`✓ шаблон «${DEMO.templateName}» в категории «${category.name}», доступен всем`);
 }
 
 main().catch((e) => {

@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { adminMe, mockApi, renderRoute } from '../../test/utils';
 
 const users = [
@@ -346,5 +346,65 @@ describe('UsersPage', () => {
     const writes = calls.filter((c) => c.method === 'PATCH' || c.method === 'PUT');
     expect(writes.map((c) => c.method)).toEqual(['PATCH', 'PUT']);
     expect(writes[1]?.body).toEqual({ groupIds: ['g2'] });
+  });
+  it('группы не загрузились: ошибка «Не удалось загрузить группы»', async () => {
+    mockApi([
+      adminMe,
+      { path: '/api/users', body: users },
+      {
+        path: '/api/groups',
+        status: 500,
+        body: { error: { code: 'INTERNAL', message: 'сбой сервера' } },
+      },
+    ]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    expect(await screen.findByText('Не удалось загрузить группы')).toBeInTheDocument();
+  });
+
+  it('группы ещё загружаются: в колонке «…», а не «—»', async () => {
+    mockApi([adminMe, { path: '/api/users', body: users }]);
+    const mocked = vi.mocked(globalThis.fetch);
+    const base = mocked.getMockImplementation()!;
+    mocked.mockImplementation((input, init) =>
+      new URL(String(input), 'http://localhost').pathname === '/api/groups'
+        ? new Promise<Response>(() => {})
+        : base(input, init),
+    );
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    expect(row('ivanov')).toHaveTextContent('…');
+    expect(row('ivanov')).not.toHaveTextContent('—');
+  });
+
+  it('PATCH прошёл, PUT groups упал: список пользователей всё равно обновляется', async () => {
+    const { calls } = mockApi([
+      adminMe,
+      { path: '/api/users', body: users },
+      { path: '/api/groups', body: groups },
+      { method: 'PATCH', path: '/api/users/u2', body: users[1] },
+      {
+        method: 'PUT',
+        path: '/api/users/u2/groups',
+        status: 400,
+        body: { error: { code: 'BAD_REQUEST', message: 'неизвестная группа' } },
+      },
+    ]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    const usersGets = () =>
+      calls.filter((c) => c.method === 'GET' && c.path === '/api/users').length;
+    const before = usersGets();
+    await userEvent.click(within(row('ivanov')).getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Новый пароль'), 'newpass123');
+    const combo = within(dialog).getByRole('combobox', { name: 'Группы' });
+    await waitFor(() => expect(combo).toHaveTextContent('Бухгалтерия'));
+    await userEvent.click(combo);
+    await userEvent.click(await screen.findByRole('option', { name: 'Бухгалтерия' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    expect(await within(dialog).findByText(/неизвестная группа/)).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await waitFor(() => expect(usersGets()).toBeGreaterThan(before));
   });
 });

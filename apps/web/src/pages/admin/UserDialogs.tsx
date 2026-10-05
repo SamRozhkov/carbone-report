@@ -111,13 +111,14 @@ export function EditUserDialog({
       if (Object.keys(body).length) await api.users.update(user!.id, body);
       if (groupsChanged) await api.users.setGroups(user!.id, groupIds);
     },
-    onSuccess: async () => {
+    // onSettled: PATCH мог пройти, даже если следующий PUT groups упал, — список обновляем всегда.
+    onSettled: async (_data, error) => {
       if (changed) {
         await Promise.all(
           [['users'], ['groups']].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
         );
       }
-      onClose();
+      if (!error) onClose();
     },
   });
   const errors = fieldErrors(save.error);

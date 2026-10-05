@@ -42,6 +42,13 @@ body {
   gap: 16px;
 }
 
+.cr-catalog-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
 .cr-card {
   display: flex;
   flex-direction: column;

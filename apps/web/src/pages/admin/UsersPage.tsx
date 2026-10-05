@@ -93,10 +93,12 @@ export function UsersPage() {
       id: 'groups',
       name: 'Группы',
       template: (u) =>
-        u.groupIds
-          .map((id) => groupName.get(id))
-          .filter(Boolean)
-          .join(', ') || '—',
+        groups.isPending && u.groupIds.length > 0
+          ? '…'
+          : u.groupIds
+              .map((id) => groupName.get(id))
+              .filter(Boolean)
+              .join(', ') || '—',
     },
     { id: 'createdAt', name: 'Создан', template: (u) => formatDate(u.createdAt) },
     {
@@ -171,6 +173,7 @@ export function UsersPage() {
         }
       />
       <ErrorAlert error={users.error} />
+      {groups.error && <ErrorAlert error={groups.error} title="Не удалось загрузить группы" />}
       {users.isPending ? (
         <Loader />
       ) : (

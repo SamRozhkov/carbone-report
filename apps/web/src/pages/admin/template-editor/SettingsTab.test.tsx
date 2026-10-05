@@ -103,6 +103,7 @@ describe('SettingsTab', () => {
       { id: 'c3', name: 'Черновики', sortOrder: 3, public: false, groupIds: [], templateCount: 0 },
     ];
     const WARNING = 'Шаблон сейчас доступен только администраторам';
+    const DIRTY_WARNING = 'После сохранения шаблон будет доступен только администраторам';
     const routes = (access: object): MockRoute[] => [
       { path: '/api/datasources', body: [] },
       { path: '/api/groups', body: groups },
@@ -155,7 +156,8 @@ describe('SettingsTab', () => {
 
       await userEvent.click(combo);
       await userEvent.click(await screen.findByRole('option', { name: 'Черновики' }));
-      expect(await s.findByText(WARNING)).toBeInTheDocument();
+      expect(await s.findByText(DIRTY_WARNING)).toBeInTheDocument();
+      expect(s.queryByText(WARNING)).not.toBeInTheDocument();
 
       await userEvent.click(combo);
       await userEvent.click(await screen.findByRole('option', { name: 'Общие' }));
@@ -163,7 +165,7 @@ describe('SettingsTab', () => {
 
       await userEvent.click(combo);
       await userEvent.click(await screen.findByRole('option', { name: 'Без категории' }));
-      expect(await s.findByText(WARNING)).toBeInTheDocument();
+      expect(await s.findByText(DIRTY_WARNING)).toBeInTheDocument();
 
       await userEvent.click(s.getByRole('button', { name: 'Сохранить доступ' }));
       await waitFor(() =>
@@ -173,6 +175,9 @@ describe('SettingsTab', () => {
           groupIds: [],
         }),
       );
+      // После сохранения форма чиста: предупреждение снова про текущее состояние.
+      expect(await s.findByText(WARNING)).toBeInTheDocument();
+      expect(s.queryByText(DIRTY_WARNING)).not.toBeInTheDocument();
     });
 
     it('доступный шаблон: предупреждения нет, поля заполнены', async () => {

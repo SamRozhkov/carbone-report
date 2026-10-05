@@ -1,7 +1,14 @@
 import type { TemplateParam, TemplateQuery } from '@carbone-reports/shared';
 import JSZip from 'jszip';
 
-export const DEMO = { datasourceName: 'Демо-база', templateName: 'Счёт (демо)' } as const;
+export const DEMO = {
+  datasourceName: 'Демо-база',
+  templateName: 'Счёт (демо)',
+  /** Категория демо-шаблона (sortOrder 1, сама не «доступно всем»). */
+  categoryName: 'Финансы',
+  /** Пример группы для настройки доступа. */
+  groupName: 'Бухгалтерия',
+} as const;
 
 export const DEMO_QUERIES: TemplateQuery[] = [
   {

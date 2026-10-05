@@ -258,7 +258,14 @@ function AccessSection({ templateId }: { templateId: string }) {
             />
           </Field>
           {adminOnly && (
-            <Alert theme="warning" message="Шаблон сейчас доступен только администраторам" />
+            <Alert
+              theme="warning"
+              message={
+                dirty
+                  ? 'После сохранения шаблон будет доступен только администраторам'
+                  : 'Шаблон сейчас доступен только администраторам'
+              }
+            />
           )}
           <GeneralError error={save.error} errors={errors} shown={['categoryId', 'public']} />
           <div>

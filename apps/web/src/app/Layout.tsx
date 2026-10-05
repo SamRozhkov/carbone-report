@@ -1,5 +1,6 @@
 import {
   ArrowRightFromSquare,
+  ArrowRightToSquare,
   ClockArrowRotateLeft,
   Database,
   FileText,
@@ -68,9 +69,9 @@ export function Layout() {
     );
   }
 
-  const logout = async () => {
+  const signOut = async (call: () => Promise<void>) => {
     let failed = false;
-    await api.logout().catch(() => {
+    await call().catch(() => {
       failed = true;
     });
     queryClient.clear();
@@ -117,7 +118,14 @@ export function Layout() {
             title="Выйти"
             icon={ArrowRightFromSquare}
             compact={isCompact}
-            onItemClick={logout}
+            onItemClick={() => void signOut(api.logout)}
+          />
+          <FooterItem
+            id="logout-all"
+            title="Выйти везде"
+            icon={ArrowRightToSquare}
+            compact={isCompact}
+            onItemClick={() => void signOut(api.logoutAll)}
           />
         </>
       )}

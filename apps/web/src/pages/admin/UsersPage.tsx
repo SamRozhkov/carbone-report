@@ -1,5 +1,5 @@
 import type { UserDto } from '@carbone-reports/shared';
-import { Lock, LockOpen, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
+import { Lock, LockOpen, Pencil, PersonXmark, Plus, TrashBin } from '@gravity-ui/icons';
 import type { TableColumnConfig } from '@gravity-ui/uikit';
 import { Button, Icon, Label, Loader, Table, useToaster } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +21,7 @@ export function UsersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<UserDto | null>(null);
   const [deleting, setDeleting] = useState<UserDto | null>(null);
+  const [revoking, setRevoking] = useState<UserDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserDto | null>(null);
 
   const fail = (e: unknown) =>
@@ -43,6 +44,19 @@ export function UsersPage() {
       await refresh();
       void queryClient.invalidateQueries({ queryKey: ['runs'] });
       setDeleting(null);
+    },
+    onError: fail,
+  });
+
+  const revoke = useMutation({
+    mutationFn: (u: UserDto) => api.users.revokeSessions(u.id),
+    onSuccess: (_d, u) => {
+      setRevoking(null);
+      add({
+        name: `users-revoked-${u.id}`,
+        title: `Сессии пользователя ${u.login} завершены`,
+        theme: 'success',
+      });
     },
     onError: fail,
   });
@@ -91,6 +105,17 @@ export function UsersPage() {
             >
               <Icon data={Pencil} />
             </Button>
+            {!self && (
+              <Button
+                view="flat"
+                size="s"
+                aria-label="Завершить сессии"
+                title="Завершить сессии"
+                onClick={() => setRevoking(u)}
+              >
+                <Icon data={PersonXmark} />
+              </Button>
+            )}
             {!self && (
               <Button
                 view="flat"
@@ -170,6 +195,15 @@ export function UsersPage() {
         loading={remove.isPending}
         onConfirm={() => deleting && remove.mutate(deleting)}
         onCancel={() => setDeleting(null)}
+      />
+      <ConfirmDialog
+        open={!!revoking}
+        title="Завершить сессии"
+        text={`Пользователю ${revoking?.login ?? ''} придётся войти заново на всех устройствах.`}
+        confirmText="Завершить"
+        loading={revoke.isPending}
+        onConfirm={() => revoking && revoke.mutate(revoking)}
+        onCancel={() => setRevoking(null)}
       />
     </>
   );

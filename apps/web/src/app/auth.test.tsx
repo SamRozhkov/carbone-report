@@ -147,6 +147,19 @@ describe('вход и защита маршрутов', () => {
     expect(queryClient.getQueryData(meKey)).toBeNull();
   });
 
+  it('«Выйти везде» вызывает logout-all, очищает кэш и уводит на /login', async () => {
+    const { calls } = mockApi([
+      userMe,
+      { method: 'POST', path: '/api/auth/logout-all', status: 204 },
+      { path: '/api/templates', body: [] },
+    ]);
+    const { router, queryClient } = renderRoute('/reports');
+    await userEvent.click(await screen.findByText('Выйти везде'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    expect(calls.some((c) => c.method === 'POST' && c.path === '/api/auth/logout-all')).toBe(true);
+    expect(queryClient.getQueryData(meKey)).toBeNull();
+  });
+
   it('выход удаляет черновики превью и параметры теста из localStorage', async () => {
     mockApi([
       userMe,

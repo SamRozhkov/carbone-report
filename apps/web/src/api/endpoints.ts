@@ -34,12 +34,14 @@ export const api = {
   me: () => apiJson<SessionUser>('/api/auth/me'),
   login: (body: LoginBody) => apiJson<SessionUser>('/api/auth/login', post(body)),
   logout: () => apiJson<void>('/api/auth/logout', post()),
+  logoutAll: () => apiJson<void>('/api/auth/logout-all', post()),
 
   users: {
     list: () => apiJson<UserDto[]>('/api/users'),
     create: (body: CreateUserBody) => apiJson<UserDto>('/api/users', post(body)),
     update: (id: string, body: UpdateUserBody) => apiJson<UserDto>(`/api/users/${id}`, patch(body)),
     remove: (id: string) => apiJson<void>(`/api/users/${id}`, del),
+    revokeSessions: (id: string) => apiJson<void>(`/api/users/${id}/sessions/revoke`, post()),
   },
 
   datasources: {

@@ -247,4 +247,29 @@ describe('UsersPage', () => {
       await screen.findByText('нельзя заблокировать последнего администратора'),
     ).toBeInTheDocument();
   });
+
+  it('«Завершить сессии»: подтверждение, вызов API, уведомление; у себя кнопки нет', async () => {
+    const { calls } = mockApi([
+      adminMe,
+      { path: '/api/users', body: users },
+      { method: 'POST', path: '/api/users/u2/sessions/revoke', status: 204 },
+    ]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    expect(
+      within(row('admin (вы)')).queryByRole('button', { name: 'Завершить сессии' }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(within(row('ivanov')).getByRole('button', { name: 'Завершить сессии' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent(
+      'Пользователю ivanov придётся войти заново на всех устройствах.',
+    );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Завершить' }));
+    await waitFor(() =>
+      expect(
+        calls.some((c) => c.method === 'POST' && c.path === '/api/users/u2/sessions/revoke'),
+      ).toBe(true),
+    );
+    expect(await screen.findByText('Сессии пользователя ivanov завершены')).toBeInTheDocument();
+  });
 });

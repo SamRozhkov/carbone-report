@@ -5,13 +5,21 @@ const VERSION_HEADER = { 'carbone-version': '5' };
 
 class TemplateMissing extends Error {}
 
+export interface CarboneLog {
+  info(obj: object, msg: string): void;
+}
+
 export class CarboneClient implements CarboneRenderer {
   private readonly baseUrl: string;
   private readonly fetch: typeof fetch;
   /** `${templateId}` → { version, carboneId } */
   private readonly ids = new Map<string, { version: number; carboneId: string }>();
 
-  constructor(opts: { baseUrl: string; fetch?: typeof fetch }) {
+  /** Логгер задаётся после создания приложения (до него Fastify-логгера нет). */
+  log?: CarboneLog;
+
+  constructor(opts: { baseUrl: string; fetch?: typeof fetch; log?: CarboneLog }) {
+    this.log = opts.log;
     this.baseUrl = opts.baseUrl.replace(/\/$/, '');
     this.fetch = opts.fetch ?? fetch;
   }
@@ -26,6 +34,10 @@ export class CarboneClient implements CarboneRenderer {
         return await this.renderWith(carboneId, data, opts, signal);
       } catch (e) {
         if (!(e instanceof TemplateMissing)) throw e;
+        this.log?.info(
+          { templateId: tpl.id, version: tpl.version },
+          'шаблон отсутствует в Carbone, загружаем повторно',
+        );
         carboneId = await this.upload(tpl, signal);
         return await this.renderWith(carboneId, data, opts, signal);
       }

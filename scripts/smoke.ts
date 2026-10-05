@@ -1,4 +1,6 @@
-// Сквозная проверка работающего стека через nginx. Запуск: pnpm stack:smoke [--insecure]
+// Сквозная проверка работающего стека через nginx. Запуск: pnpm stack:smoke [--insecure] [--carbone-restart]
+// --carbone-restart: ДЕСТРУКТИВНО. Пересоздаёт контейнер carbone и удаляет том carbone_templates
+// локального docker compose-проекта. Допустим только при BASE_URL на localhost/127.0.0.1/[::1].
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
@@ -70,14 +72,21 @@ async function docxWithTag(): Promise<Buffer> {
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
+class Retryable extends Error {}
+
 // Пересоздаёт контейнер carbone и проверяет, что API заново загружает шаблон.
 async function carboneRestart(templateId: string): Promise<void> {
+  console.log(
+    'ВНИМАНИЕ: контейнер carbone будет пересоздан, том carbone_templates (кэш шаблонов) удалён',
+  );
   const renderOnce = async (): Promise<string | null> => {
     const r = await api(`/api/reports/${templateId}/render`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ params: {}, format: 'pdf' }),
     });
+    if (r.status === 502 || r.status === 503)
+      throw new Retryable(`генерация: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
     if (r.status !== 201)
       throw new Error(`генерация: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
     const { runId } = (await r.json()) as { runId: string };
@@ -85,15 +94,17 @@ async function carboneRestart(templateId: string): Promise<void> {
     assert(f.status === 200, `файл отчёта: HTTP ${f.status}`);
     return f.headers.get('content-type');
   };
-  // У carbone нет healthcheck: --wait ждёт лишь состояния running, поэтому после пересоздания повторяем.
+  // У carbone нет healthcheck: --wait ждёт лишь состояния running (готовность ~40 с), поэтому опрашиваем.
   const renderWithRetry = async (): Promise<string | null> => {
+    const deadline = Date.now() + 120_000;
     for (let attempt = 1; ; attempt++) {
+      console.log(`  попытка ${attempt}`);
       try {
-        console.log(`  попытка ${attempt}/5`);
         return await renderOnce();
       } catch (e) {
+        const retryable = e instanceof Retryable || e instanceof TypeError; // TypeError: сбой сети в fetch
         console.log(`  попытка ${attempt} не удалась: ${(e as Error).message}`);
-        if (attempt >= 5) throw e;
+        if (!retryable || Date.now() + 3000 > deadline) throw e;
         await new Promise((r) => setTimeout(r, 3000));
       }
     }
@@ -101,34 +112,49 @@ async function carboneRestart(templateId: string): Promise<void> {
   await step('Carbone: отчёт до пересоздания контейнера', async () => {
     await renderOnce();
   });
-  await step('Carbone: пересоздание контейнера (шаблоны в Carbone теряются)', async () => {
-    execFileSync('docker', ['compose', 'rm', '-sf', 'carbone'], { stdio: 'inherit' });
-    // Шаблоны лежат в именованном томе: без его удаления они пережили бы пересоздание.
-    const vols = execFileSync(
-      'docker',
-      [
-        'volume',
-        'ls',
-        '-q',
-        '--filter',
-        'label=com.docker.compose.project=carbone-reports',
-        '--filter',
-        'label=com.docker.compose.volume=carbone_templates',
-      ],
-      { encoding: 'utf8' },
-    )
-      .split('\n')
-      .filter(Boolean);
-    if (vols.length > 0) execFileSync('docker', ['volume', 'rm', ...vols], { stdio: 'inherit' });
-    execFileSync('docker', ['compose', 'up', '-d', '--wait', 'carbone'], { stdio: 'inherit' });
-  });
+  await step(
+    'Carbone: пересоздание контейнера и удаление тома carbone_templates (кэш шаблонов)',
+    async () => {
+      execFileSync('docker', ['compose', 'rm', '-sf', 'carbone'], { stdio: 'inherit' });
+      // Шаблоны лежат в именованном томе: без его удаления они пережили бы пересоздание.
+      const vols = execFileSync(
+        'docker',
+        [
+          'volume',
+          'ls',
+          '-q',
+          '--filter',
+          'label=com.docker.compose.project=carbone-reports',
+          '--filter',
+          'label=com.docker.compose.volume=carbone_templates',
+        ],
+        { encoding: 'utf8' },
+      )
+        .split('\n')
+        .filter(Boolean);
+      if (vols.length > 0) execFileSync('docker', ['volume', 'rm', ...vols], { stdio: 'inherit' });
+      execFileSync('docker', ['compose', 'up', '-d', '--wait', 'carbone'], { stdio: 'inherit' });
+    },
+  );
   await step('Carbone: отчёт после пересоздания — шаблон загружен повторно', async () => {
     const type = await renderWithRetry();
     assert(type === 'application/pdf', `content-type: ${type}`);
   });
 }
 
+function assertLocalBase(): void {
+  const host = new URL(BASE).hostname;
+  if (!['localhost', '127.0.0.1', '[::1]', '::1'].includes(host)) {
+    console.error(
+      `--carbone-restart допустим только для локального стека (BASE_URL=localhost), сейчас: ${host}`,
+    );
+    process.exit(1);
+  }
+}
+
 async function main() {
+  // Охрана до любых запросов и команд docker.
+  if (process.argv.includes('--carbone-restart')) assertLocalBase();
   console.log(`Smoke-проверка ${BASE}`);
   let templateId = '';
   let datasourceId = '';

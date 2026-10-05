@@ -15,12 +15,13 @@ const config = loadConfig(process.env);
 const { db, pool } = createDb(config.databaseUrl);
 await migrateDb(db);
 
+const carbone = new CarboneClient({ baseUrl: config.carboneUrl });
 const deps: AppDeps = {
   config,
   db,
   storage: new Storage(config.storageDir),
   sources: createSourcePools({ db, config }),
-  carbone: new CarboneClient({ baseUrl: config.carboneUrl }),
+  carbone,
   onlyoffice: createOnlyOfficeCommands({
     baseUrl: config.onlyofficeInternalUrl,
     secret: config.onlyofficeJwtSecret,
@@ -30,6 +31,7 @@ const deps: AppDeps = {
 
 await ensureAdmin(deps, console);
 const app = await buildApp(deps);
+carbone.log = app.log;
 // До listen: к первому запросу все строки уже указывают на пути с версией.
 await migrateTemplateFiles({ db, storage: deps.storage, log: app.log });
 const stopCleanup = startCleanupTimer(deps, app.log);

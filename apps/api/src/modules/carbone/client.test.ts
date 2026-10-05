@@ -87,10 +87,17 @@ describe('CarboneClient', () => {
       renders++;
       return renders === 2 ? json(404, { success: false, error: 'Template not found' }) : pdf();
     });
-    const client = new CarboneClient({ baseUrl: 'http://c', fetch: fn });
+    const infos: { obj: object; msg: string }[] = [];
+    const client = new CarboneClient({
+      baseUrl: 'http://c',
+      fetch: fn,
+      log: { info: (obj, msg) => infos.push({ obj, msg }) },
+    });
     await client.render(tpl(), {}, opts);
     await client.render(tpl(), {}, opts);
     expect(calls.filter((c) => c.url.endsWith('/template'))).toHaveLength(2);
+    expect(infos).toHaveLength(1);
+    expect(infos[0]!.msg).toContain('загружаем повторно');
   });
 
   it('ошибка рендера → AppError CARBONE_ERROR 502 с текстом Carbone', async () => {

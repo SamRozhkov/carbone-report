@@ -41,11 +41,19 @@ describe('toInternalDownloadUrl', () => {
     'https://localhost:8443/onlyoffice/cache/files/../../x',
     'https://localhost:8443/onlyoffice/cache/files/%2e%2e/%2e%2e/x',
     'https://localhost:8443/onlyoffice/cache/files/..%2f..%2fx',
-  ])('обход каталога не выходит из /cache/files/: %s', (url) => {
-    const r = toInternalDownloadUrl(url, BASE);
-    if (r !== null) {
-      expect(new URL(r).pathname.startsWith('/cache/files/')).toBe(true);
-      expect(r).not.toMatch(/\.\.|%2e%2e|%2f/i);
-    }
+    'https://localhost:8443/onlyoffice/cache/files/..%2F..%2Fx',
+    'https://localhost:8443/onlyoffice/cache/files/..\\..\\x',
+    'https://localhost:8443/onlyoffice/cache/files/..%5c..%5cx',
+    'https://localhost:8443/onlyoffice/cache/files/..%5C..%5Cx',
+  ])('обход каталога → null: %s', (url) => {
+    expect(toInternalDownloadUrl(url, BASE)).toBeNull();
+  });
+
+  it('двойное кодирование %252e%252e остаётся литералом внутри /cache/files/', () => {
+    // Декодирование не выполняется, поэтому «%252e%252e» — просто имя каталога. Безопасно: хост
+    // фиксирован (internalBase), а путь остаётся под /cache/files/ Document Server.
+    expect(
+      toInternalDownloadUrl('https://localhost:8443/onlyoffice/cache/files/%252e%252e/x', BASE),
+    ).toBe(`${BASE}/cache/files/%252e%252e/x`);
   });
 });

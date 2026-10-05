@@ -17,20 +17,7 @@ test.beforeAll(async () => {
   await waitForStack();
   api = await adminApi();
   templateId = await demoTemplateId(api);
-  // Динамический импорт: jszip (CommonJS) к этому моменту уже загружен через require в fixtures,
-  // статический ESM-импорт demo/template падает в Node 22 («Unexpected module status 3»).
-  const { buildDemoTemplate } = await import('../../demo/template');
-  // Исходный файл: прошлые прогоны правили шаблон.
-  const res = await api.ctx.put(`/api/templates/${templateId}/file`, {
-    multipart: {
-      file: {
-        name: 'schet-demo.docx',
-        mimeType: 'application/octet-stream',
-        buffer: await buildDemoTemplate(),
-      },
-    },
-  });
-  expect(res.ok(), `восстановление шаблона: ${res.status()}`).toBeTruthy();
+  // Исходный файл, запросы и параметры шаблона восстанавливает global-setup.ts.
 });
 
 async function openEditor(page: Page) {
@@ -95,8 +82,8 @@ test('наблюдение: смена ключа документа после 
   ).document.key;
   const observed =
     keyBefore === keyAfter
-      ? 'ключ не сменился (без правок — статус 4)'
-      : 'ключ сменился (статус 2)';
+      ? 'ключ не сменился (источник сессии и статус callback не определялись)'
+      : 'ключ сменился (источник сессии и статус callback не определялись)';
   test.info().annotations.push({ type: 'doc_key после закрытия', description: observed });
   console.log(`наблюдение: ${observed}`);
 });

@@ -34,6 +34,9 @@ test('пользователь: создание админом, генерац�
   await logoutUi(page);
 
   await loginUi(page, login, password);
+  // Сначала меню отрисовано (пункты для всех пользователей видны), потом проверяем отсутствие админских.
+  await expect(page.getByText('Отчёты', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Выйти', { exact: true })).toBeVisible();
   await expect(page.getByText('Пользователи', { exact: true })).toHaveCount(0);
   await page.goto('/reports');
   await page.getByText('Счёт (демо)', { exact: true }).click();

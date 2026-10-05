@@ -15,7 +15,7 @@
     "format": "prettier --write .",
     "stack:prod": "docker compose up -d --build",
     "stack:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
-    "stack:demo": "docker compose --profile demo up -d --build && pnpm demo:seed",
+    "stack:demo": "docker compose --profile demo up -d --build --wait && pnpm demo:seed",
     "demo:seed": "tsx scripts/demo-seed.ts --insecure --wait",
     "stack:down": "docker compose --profile demo -f docker-compose.yml -f docker-compose.dev.yml down",
     "stack:smoke": "tsx scripts/smoke.ts",

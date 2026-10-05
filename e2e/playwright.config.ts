@@ -8,6 +8,7 @@ try {
 
 export default defineConfig({
   testDir: './tests',
+  globalSetup: './global-setup.ts',
   timeout: 240_000,
   expect: { timeout: 30_000 },
   fullyParallel: false,

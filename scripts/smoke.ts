@@ -150,6 +150,7 @@ async function main() {
           database: 'app',
           username: 'app',
           password: need('POSTGRES_PASSWORD'),
+          sslMode: 'disable',
         }),
       }),
       201,

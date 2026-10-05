@@ -24,7 +24,7 @@ beforeAll(async () => {
 });
 afterAll(() => t.close());
 
-const body = () => ({ name: 'Склад', ...src });
+const body = () => ({ name: 'Склад', ...src, sslMode: 'disable' });
 
 describe('datasources', () => {
   it('user → 403', async () => {
@@ -233,5 +233,18 @@ describe('datasources', () => {
     });
     expect(bad.statusCode).toBe(400);
     expect(JSON.stringify(bad.json())).toContain('sslCa');
+  });
+
+  it('старая форма тела ({ ssl: true } без sslMode) → 400 VALIDATION, а не тихий disable', async () => {
+    const { sslMode: _, ...legacy } = body();
+    const r = await t.app.inject({
+      method: 'POST',
+      url: '/api/datasources',
+      headers: { cookie: admin },
+      payload: { ...legacy, ssl: true },
+    });
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error.code).toBe('VALIDATION');
+    expect(JSON.stringify(r.json())).toContain('sslMode');
   });
 });

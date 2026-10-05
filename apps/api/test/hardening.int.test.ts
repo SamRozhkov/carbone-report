@@ -29,7 +29,7 @@ beforeAll(async () => {
       method: 'POST',
       url: '/api/datasources',
       headers: { cookie: admin.cookie },
-      payload: { name: 's', ...src },
+      payload: { name: 's', ...src, sslMode: 'disable' },
     })
   ).json().id;
 });

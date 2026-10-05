@@ -113,7 +113,8 @@ const DatasourceFields = z.object({
   username: z.string().trim().min(1),
   /** При обновлении: undefined — пароль не меняется. */
   password: z.string().optional(),
-  sslMode: SslMode.default('disable'),
+  /** Обязателен: без значения по умолчанию, чтобы старый клиент с `ssl: true` не откатился на disable. */
+  sslMode: SslMode,
   /** CA-сертификат (PEM) для режима verify; null — системные корневые сертификаты. */
   sslCa: z
     .string()

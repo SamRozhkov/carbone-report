@@ -73,10 +73,11 @@ describe('outputFormatsFor', () => {
 
 describe('DatasourceBody: SSL', () => {
   const base = { name: 'n', host: 'h', port: 5432, database: 'd', username: 'u' };
-  it('по умолчанию disable и без CA', () => {
-    const r = DatasourceBody.parse(base);
-    expect(r.sslMode).toBe('disable');
-    expect(r.sslCa).toBeNull();
+  it('sslMode обязателен; sslCa по умолчанию null', () => {
+    const missing = DatasourceBody.safeParse(base);
+    expect(missing.success).toBe(false);
+    expect(missing.error!.issues[0]!.path).toEqual(['sslMode']);
+    expect(DatasourceBody.parse({ ...base, sslMode: 'disable' }).sslCa).toBeNull();
   });
   it('CA без режима verify — ошибка у поля sslCa', () => {
     const r = DatasourceBody.safeParse({

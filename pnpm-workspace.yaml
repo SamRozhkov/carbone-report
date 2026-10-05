@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - e2e
 onlyBuiltDependencies:
   - argon2
   - esbuild

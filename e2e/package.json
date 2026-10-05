@@ -1,0 +1,17 @@
+{
+  "name": "@carbone-reports/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "playwright test",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@carbone-reports/shared": "workspace:*",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^22.20.5",
+    "jszip": "^3.10.2",
+    "typescript": "5.9.3"
+  }
+}

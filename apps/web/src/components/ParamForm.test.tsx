@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { mockApi, renderWithProviders, type MockResponse, type MockRoute } from '../test/utils';
-import { ParamForm } from './ParamForm';
+import { ParamField, ParamForm } from './ParamForm';
 
 const params: TemplateParamDto[] = [
   {
@@ -275,5 +275,33 @@ describe('ParamForm: SQL-список', () => {
     );
     const msg = await screen.findByText('ошибка SQL: relation "x" does not exist');
     expect(msg).toHaveAttribute('data-testid', 'field-error');
+  });
+});
+
+describe('ParamField: значение по умолчанию SQL-списка (редактор)', () => {
+  function DefaultHarness({ onChange }: { onChange: (v: unknown) => void }) {
+    const [v, setV] = useState<ParamsInput[string]>(null);
+    return (
+      <ParamField
+        param={q('invoice', 'Счёт', [])}
+        label="По умолчанию"
+        value={v}
+        onChange={(x) => {
+          setV(x);
+          onChange(x);
+        }}
+      />
+    );
+  }
+
+  it('одно значение сохраняется без пробелов по краям; одни пробелы → null', async () => {
+    const onChange = vi.fn();
+    renderWithProviders(<DefaultHarness onChange={onChange} />);
+    const input = await screen.findByRole('textbox', { name: 'По умолчанию' });
+    await userEvent.type(input, ' 42 ');
+    expect(onChange).toHaveBeenLastCalledWith('42');
+    await userEvent.clear(input);
+    await userEvent.type(input, '   ');
+    expect(onChange).toHaveBeenLastCalledWith(null);
   });
 });

@@ -263,6 +263,26 @@ describe('ParamsTab', () => {
     expect(screen.getByLabelText('SQL параметра 2').closest('.cr-field')).toContainElement(msg);
   });
 
+  it('после сохранения кэш вариантов SQL-списков шаблона сбрасывается', async () => {
+    mockApi([
+      {
+        method: 'PUT',
+        path: '/api/templates/t1/params',
+        handler: ({ body }) => ({ body: { ...withQuery, params: body } }),
+      },
+    ]);
+    const { queryClient } = renderWithProviders(<ParamsTab template={withQuery} />);
+    const key = ['param-options', 't1', 'city', { from: '2026-01-01' }];
+    queryClient.setQueryData(key, { options: [{ value: 1, label: 'Старый' }] });
+    queryClient.setQueryData(['param-options', 't2', 'city', {}], { options: [] });
+    expect(queryClient.getQueryState(key)?.isInvalidated).toBe(false);
+    await userEvent.click(await screen.findByRole('button', { name: 'Сохранить параметры' }));
+    await waitFor(() => expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true));
+    expect(queryClient.getQueryState(['param-options', 't2', 'city', {}])?.isInvalidated).toBe(
+      false,
+    );
+  });
+
   it('«Проверить» выполняет options с тестовыми параметрами и показывает варианты', async () => {
     localStorage.setItem('cr-test-params-t1', JSON.stringify({ from: '2026-01-01' }));
     const { calls } = mockApi([

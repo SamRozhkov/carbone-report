@@ -165,6 +165,8 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
     mutationFn: () => api.templates.saveParams(template.id, drafts.map(toParam)),
     onSuccess: (t) => {
       applyTemplate(queryClient, t);
+      // SQL вариантов мог измениться: старые варианты из кэша не показываем.
+      void queryClient.invalidateQueries({ queryKey: ['param-options', template.id] });
       reseed(t);
       add({ name: `tpl-params-${Date.now()}`, title: 'Параметры сохранены', theme: 'success' });
     },

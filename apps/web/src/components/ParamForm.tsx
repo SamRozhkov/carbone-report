@@ -93,6 +93,8 @@ export function ParamField({ param, value, onChange, error, disabled, label }: P
       );
     case 'query':
       // Значение по умолчанию в редакторе: варианты зависят от родителей, поэтому — ввод текстом.
+      // Текст хранится как набран (и для множественного — строкой); обрезка и разбор по запятым —
+      // при сохранении (toParam в ParamsTab), иначе запятые и пробелы пропадали бы при наборе.
       return (
         <Field
           label={caption}
@@ -107,14 +109,7 @@ export function ParamField({ param, value, onChange, error, disabled, label }: P
                   ? String(value)
                   : ''
             }
-            onUpdate={(v) => {
-              if (!param.multiple) return onChange(v.trim() === '' ? null : v);
-              const items = v
-                .split(',')
-                .map((x) => x.trim())
-                .filter(Boolean);
-              onChange(items.length > 0 ? items : null);
-            }}
+            onUpdate={(v) => onChange(v.trim() === '' ? null : v)}
             disabled={disabled}
             validationState={invalid}
             controlProps={{ 'aria-label': caption }}

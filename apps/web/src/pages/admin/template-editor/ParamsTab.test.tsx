@@ -301,6 +301,52 @@ describe('ParamsTab', () => {
     expect(body[1]).toMatchObject({ name: 'city', defaultValue: '4 2' });
   });
 
+  const withMulti = {
+    ...withQuery,
+    params: [withQuery.params[0]!, { ...withQuery.params[1]!, multiple: true }],
+  } as TemplateAdminDetails;
+
+  async function saveMultiDefault(typed: string) {
+    const { calls } = mockApi([
+      {
+        method: 'PUT',
+        path: '/api/templates/t1/params',
+        handler: ({ body }) => ({ body: { ...withMulti, params: body } }),
+      },
+    ]);
+    renderWithProviders(<ParamsTab template={withMulti} />);
+    const input = await screen.findByRole('textbox', { name: 'По умолчанию' });
+    await userEvent.type(input, typed);
+    const shown = (input as HTMLInputElement).value;
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить параметры' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
+    const body = calls.find((c) => c.method === 'PUT')!.body as Record<string, unknown>[];
+    return { input, shown, sent: body[1]!.defaultValue };
+  }
+
+  it('множественное значение по умолчанию: набирается как текст, при сохранении — массив', async () => {
+    const { input, shown, sent } = await saveMultiDefault('1, 2');
+    expect(shown).toBe('1, 2');
+    expect(sent).toEqual(['1', '2']);
+    // После сохранения поле показывает сохранённый массив.
+    await waitFor(() => expect(screen.getByText('Параметры сохранены')).toBeInTheDocument());
+    expect(input).toHaveValue('1, 2');
+  });
+
+  it('множественное значение по умолчанию: пробелы внутри сохраняются, пустые элементы отбрасываются', async () => {
+    const { sent } = await saveMultiDefault(' a b , c ,');
+    expect(sent).toEqual(['a b', 'c']);
+  });
+
+  it('множественное значение по умолчанию из шаблона показывается через запятую', async () => {
+    const tpl = {
+      ...withMulti,
+      params: [withMulti.params[0]!, { ...withMulti.params[1]!, defaultValue: ['3', '4'] }],
+    } as TemplateAdminDetails;
+    renderWithProviders(<ParamsTab template={tpl} />);
+    expect(await screen.findByRole('textbox', { name: 'По умолчанию' })).toHaveValue('3, 4');
+  });
+
   it('«Проверить» выполняет options с тестовыми параметрами и показывает варианты', async () => {
     localStorage.setItem('cr-test-params-t1', JSON.stringify({ from: '2026-01-01' }));
     const { calls } = mockApi([

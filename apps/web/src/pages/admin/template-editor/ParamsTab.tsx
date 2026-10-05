@@ -72,12 +72,27 @@ const toDraft = (p: TemplateParam, id: number): Draft => ({
 const trimDefault = (v: ParamValue): ParamValue =>
   typeof v === 'string' ? (v.trim() === '' ? null : v.trim()) : v;
 
+/** Множественное: при вводе это строка «1, 2»; при сохранении — по запятым, без пробелов по краям и пустых. */
+const splitDefault = (v: ParamValue): ParamValue => {
+  if (typeof v !== 'string') return v;
+  const items = v
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return items.length > 0 ? items : null;
+};
+
 const toParam = (d: Draft): TemplateParam => ({
   name: d.name.trim(),
   label: d.label.trim(),
   type: d.type,
   required: d.required,
-  defaultValue: d.type === 'query' ? trimDefault(d.defaultValue) : d.defaultValue,
+  defaultValue:
+    d.type !== 'query'
+      ? d.defaultValue
+      : d.multiple
+        ? splitDefault(d.defaultValue)
+        : trimDefault(d.defaultValue),
   options: d.type === 'select' ? parseOptions(d.optionsText) : null,
   sql: d.type === 'query' ? d.sql : null,
   multiple: d.type === 'query' && d.multiple,
@@ -142,7 +157,8 @@ function QueryCheck({
 }
 
 function toggleMultiple(v: ParamValue, multiple: boolean): ParamValue {
-  if (multiple) return v === null || Array.isArray(v) || typeof v === 'boolean' ? v : [v];
+  // Строка — набранный текст: для множественного её разберёт splitDefault при сохранении.
+  if (multiple) return v === null || Array.isArray(v) || typeof v !== 'number' ? v : [v];
   return Array.isArray(v) ? (v[0] ?? null) : v;
 }
 

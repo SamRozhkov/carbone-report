@@ -279,11 +279,17 @@ describe('ParamForm: SQL-список', () => {
 });
 
 describe('ParamField: значение по умолчанию SQL-списка (редактор)', () => {
-  function DefaultHarness({ onChange }: { onChange: (v: unknown) => void }) {
+  function DefaultHarness({
+    onChange,
+    multiple = false,
+  }: {
+    onChange: (v: unknown) => void;
+    multiple?: boolean;
+  }) {
     const [v, setV] = useState<ParamsInput[string]>(null);
     return (
       <ParamField
-        param={q('invoice', 'Счёт', [])}
+        param={q('invoice', 'Счёт', [], { multiple })}
         label="По умолчанию"
         value={v}
         onChange={(x) => {
@@ -305,5 +311,26 @@ describe('ParamField: значение по умолчанию SQL-списка 
     await userEvent.clear(input);
     await userEvent.type(input, '   ');
     expect(onChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('множественный: текст набирается посимвольно, с запятыми и пробелами; разбор — при сохранении', async () => {
+    const onChange = vi.fn();
+    renderWithProviders(<DefaultHarness onChange={onChange} multiple />);
+    const input = await screen.findByRole('textbox', { name: 'По умолчанию' });
+    await userEvent.type(input, '1, 2');
+    expect(input).toHaveValue('1, 2');
+    expect(onChange).toHaveBeenLastCalledWith('1, 2');
+  });
+
+  it('множественный: массив показывается через запятую', async () => {
+    renderWithProviders(
+      <ParamField
+        param={q('invoice', 'Счёт', [], { multiple: true })}
+        label="По умолчанию"
+        value={['3', 4]}
+        onChange={() => {}}
+      />,
+    );
+    expect(await screen.findByRole('textbox', { name: 'По умолчанию' })).toHaveValue('3, 4');
   });
 });

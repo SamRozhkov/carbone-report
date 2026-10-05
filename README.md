@@ -2,6 +2,8 @@
 
 Генерация отчётов на базе Carbone с редактированием шаблонов в браузере (OnlyOffice) и интерфейсом на GravityUI.
 
+[![CI](https://github.com/SamRozhkov/carbone-report/actions/workflows/ci.yml/badge.svg)](https://github.com/SamRozhkov/carbone-report/actions/workflows/ci.yml)
+
 Спецификация: `docs/superpowers/specs/2026-10-02-carbone-reports-design.md`.
 
 ## Разработка API
@@ -70,6 +72,24 @@ docker run --rm -v carbone-reports_storage:/data -v "$PWD":/backup alpine tar cz
 ```
 
 `POSTGRES_PASSWORD` применяется только при первом создании тома `pgdata`; позже пароль меняется внутри PostgreSQL (`ALTER USER`), а не в `.env`.
+
+### Запуск из готовых образов
+
+CI публикует образы после зелёных проверок:
+
+- `ghcr.io/samrozhkov/carbone-report-api`, `ghcr.io/samrozhkov/carbone-report-web`;
+- теги: `latest` и `main` — последняя сборка `main`, `sha-<коммит>`, `X.Y.Z` и `X.Y` — релизы по тегам `vX.Y.Z`.
+
+```bash
+# в .env
+API_IMAGE=ghcr.io/samrozhkov/carbone-report-api:1.0.0
+WEB_IMAGE=ghcr.io/samrozhkov/carbone-report-web:1.0.0
+
+docker compose pull api web
+docker compose up -d --no-build
+```
+
+Новые пакеты GHCR приватные: сделайте их публичными (Package settings → Change visibility) или войдите на сервере: `echo <token> | docker login ghcr.io -u <user> --password-stdin` (токен с правом `read:packages`).
 
 ### Обновление / выкат
 

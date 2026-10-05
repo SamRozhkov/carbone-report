@@ -8,6 +8,7 @@ x-logging: &logging
 
 services:
   web:
+    image: ${WEB_IMAGE:-carbone-reports-web}
     build:
       context: .
       dockerfile: docker/web.Dockerfile
@@ -25,6 +26,7 @@ services:
     logging: *logging
 
   api:
+    image: ${API_IMAGE:-carbone-reports-api}
     build:
       context: .
       dockerfile: docker/api.Dockerfile

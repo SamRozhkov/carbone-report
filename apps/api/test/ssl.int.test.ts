@@ -7,7 +7,8 @@ let ca: string;
 const PASSWORD = 'ssl-test-password';
 
 beforeAll(async () => {
-  pg = await new GenericContainer('postgres:17')
+  // debian-образ: в alpine нет openssl CLI
+  pg = await new GenericContainer('postgres:17-bookworm')
     .withEnvironment({ POSTGRES_PASSWORD: PASSWORD })
     .withExposedPorts(5432)
     .withEntrypoint(['bash', '-c'])
@@ -16,7 +17,7 @@ beforeAll(async () => {
         'set -e',
         'mkdir -p /certs',
         'openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=localhost" ' +
-          '-addext "subjectAltName=DNS:localhost,IP:127.0.0.1" ' +
+          '-addext "subjectAltName=DNS:localhost" ' +
           '-keyout /certs/server.key -out /certs/server.crt',
         'chown postgres:postgres /certs/server.key /certs/server.crt',
         'chmod 600 /certs/server.key',
@@ -25,7 +26,11 @@ beforeAll(async () => {
     ])
     .withWaitStrategy(Wait.forLogMessage(/database system is ready to accept connections/, 2))
     .start();
-  ca = (await pg.exec(['cat', '/certs/server.crt'])).output;
+  const out = (await pg.exec(['cat', '/certs/server.crt'])).output;
+  ca = out.slice(
+    out.indexOf('-----BEGIN CERTIFICATE-----'),
+    out.indexOf('-----END CERTIFICATE-----') + 25,
+  );
 }, 120_000);
 afterAll(() => pg?.stop());
 
@@ -56,8 +61,8 @@ describe('SSL источников', () => {
     expect(await testConnection(conn('verify', ca))).toEqual({ ok: true });
   });
   it('verify с CA, но чужим именем хоста — ошибка проверки', async () => {
-    // ::1 нет в SAN сертификата (localhost, 127.0.0.1); 127.0.0.2 на macOS не маршрутизируется.
-    const r = await testConnection(conn('verify', ca, '::1'));
+    // 127.0.0.1 нет в SAN сертификата (только DNS:localhost), маршрут тот же, что у localhost.
+    const r = await testConnection(conn('verify', ca, '127.0.0.1'));
     expect(r.ok).toBe(false);
     expect((r as { message: string }).message).toMatch(
       /^сертификат не прошёл проверку: .*altnames/,

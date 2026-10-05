@@ -193,6 +193,40 @@ describe('templates', () => {
     expect(r.json().error.details.fields).toHaveProperty('n');
   });
 
+  it('PUT params с циклом → 400 у строки, сохранённые параметры не меняются', async () => {
+    const q = (name: string, sql: string) => ({
+      name,
+      label: name,
+      type: 'query' as const,
+      required: false,
+      defaultValue: null,
+      options: null,
+      sql,
+      multiple: false,
+    });
+    const id = await createTemplate(t, admin, dsId);
+    const put = (payload: unknown) =>
+      t.app.inject({
+        method: 'PUT',
+        url: `/api/templates/${id}/params`,
+        headers: { cookie: admin },
+        payload: payload as object,
+      });
+    const ok = await put([q('region', 'select 1'), q('city', 'select 1 where :region = 1')]);
+    expect(ok.statusCode).toBe(200);
+    const bad = await put([q('a', 'select :b'), q('b', 'select :a')]);
+    expect(bad.statusCode).toBe(400);
+    const d = bad.json().error.details as { path: string; message: string }[];
+    expect(d[0]!.path).toMatch(/^\/[01]\/sql$/);
+    expect(d[0]!.message).toContain('циклическая зависимость');
+    const get = await t.app.inject({
+      method: 'GET',
+      url: `/api/templates/${id}`,
+      headers: { cookie: admin },
+    });
+    expect(get.json().params.map((x: { name: string }) => x.name)).toEqual(['region', 'city']);
+  });
+
   it('PATCH defaultOutput, недопустимый для расширения → 400', async () => {
     const id = await createTemplate(t, admin, dsId);
     const r = await t.app.inject({

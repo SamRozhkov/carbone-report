@@ -25,6 +25,7 @@ import type { AppDeps } from '../../deps';
 import { badRequest, notFound } from '../../lib/errors';
 import { contentDisposition, isZip, MIME } from '../../lib/http';
 import { currentUser, type Guards } from '../auth/guards';
+import { orderParams } from '../queries/param-deps';
 import { checkParamDefaults } from '../queries/params';
 import { createBlankDocument } from './blank';
 import {
@@ -323,6 +324,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         req.body.map((p) => p.name),
         'параметр',
       );
+      orderParams(req.body); // только проверка графа; порядок хранения не меняется
       checkParamDefaults(req.body);
       await db.transaction(async (tx) => {
         await tx.delete(templateParams).where(eq(templateParams.templateId, row.id));

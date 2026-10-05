@@ -222,6 +222,25 @@ describe('вход и защита маршрутов', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
     expect(await screen.findByText('Не удалось завершить сессию на сервере')).toBeInTheDocument();
   });
+
+  it('сбой «Выйти везде» → предупреждаем, что сессии на других устройствах могут быть активны', async () => {
+    mockApi([
+      userMe,
+      {
+        method: 'POST',
+        path: '/api/auth/logout-all',
+        status: 500,
+        body: { error: { code: 'INTERNAL', message: 'сбой' } },
+      },
+      { path: '/api/templates', body: [] },
+    ]);
+    const { router } = renderRoute('/reports');
+    await userEvent.click(await screen.findByText('Выйти везде'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    expect(
+      await screen.findByText('Не удалось завершить сессии на других устройствах'),
+    ).toBeInTheDocument();
+  });
 });
 
 describe('safeNext', () => {

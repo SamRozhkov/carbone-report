@@ -69,7 +69,10 @@ export function Layout() {
     );
   }
 
-  const signOut = async (call: () => Promise<void>) => {
+  const signOut = async (
+    call: () => Promise<void>,
+    failure: { title: string; content: string },
+  ) => {
     let failed = false;
     await call().catch(() => {
       failed = true;
@@ -82,8 +85,7 @@ export function Layout() {
       toaster.add({
         name: 'logout-failed',
         theme: 'warning',
-        title: 'Не удалось завершить сессию на сервере',
-        content: 'Закройте браузер, если компьютер общий.',
+        ...failure,
       });
     }
   };
@@ -118,14 +120,25 @@ export function Layout() {
             title="Выйти"
             icon={ArrowRightFromSquare}
             compact={isCompact}
-            onItemClick={() => void signOut(api.logout)}
+            onItemClick={() =>
+              void signOut(api.logout, {
+                title: 'Не удалось завершить сессию на сервере',
+                content: 'Закройте браузер, если компьютер общий.',
+              })
+            }
           />
           <FooterItem
             id="logout-all"
             title="Выйти везде"
             icon={ArrowRightToSquare}
             compact={isCompact}
-            onItemClick={() => void signOut(api.logoutAll)}
+            onItemClick={() =>
+              void signOut(api.logoutAll, {
+                title: 'Не удалось завершить сессии на других устройствах',
+                content:
+                  'Попробуйте ещё раз после входа или попросите администратора завершить сессии.',
+              })
+            }
           />
         </>
       )}

@@ -90,6 +90,7 @@ export async function createTestApp(
   const config = testConfig(databaseUrl, storageDir);
   const { db, pool } = createDb(databaseUrl);
   const gatePool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+  gatePool.on('error', () => {});
   await migrateDb(db);
   const deps: AppDeps = {
     config,

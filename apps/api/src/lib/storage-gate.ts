@@ -34,34 +34,5 @@ export function createRemoveGate(pool: pg.Pool): RemoveGate {
       client.release(broken);
     }
   };
-  gate.tryRun = async (fn) => {
-    const client = await pool.connect();
-    let broken = false;
-    try {
-      let got: boolean;
-      try {
-        const { rows } = await client.query('select pg_try_advisory_lock_shared($1) as ok', [
-          STORAGE_REMOVE_LOCK_KEY,
-        ]);
-        got = rows[0].ok === true;
-      } catch (err) {
-        broken = true;
-        throw err;
-      }
-      if (!got) return false;
-      try {
-        await fn();
-      } finally {
-        try {
-          await client.query('select pg_advisory_unlock_shared($1)', [STORAGE_REMOVE_LOCK_KEY]);
-        } catch {
-          broken = true;
-        }
-      }
-      return true;
-    } finally {
-      client.release(broken);
-    }
-  };
   return gate;
 }

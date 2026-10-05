@@ -16,6 +16,7 @@ import { migrateTemplateFiles } from './modules/templates/file-migration';
 const config = loadConfig(process.env);
 const { db, pool } = createDb(config.databaseUrl);
 const gatePool = new pg.Pool({ connectionString: config.databaseUrl, max: 2 });
+gatePool.on('error', (err) => console.error('gate pool', err));
 await migrateDb(db);
 
 const carbone = new CarboneClient({ baseUrl: config.carboneUrl });

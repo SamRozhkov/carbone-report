@@ -67,7 +67,6 @@ it('ошибка запроса блокировки уничтожает сое
   const gate = createRemoveGate(bad);
   const client = await bad.connect();
   await client.query('select 1');
-  const orig = client.query.bind(client);
   client.release();
   // Ломаем первый запрос блокировки на этом единственном соединении.
   const spy = vi
@@ -78,20 +77,6 @@ it('ошибка запроса блокировки уничтожает сое
   } finally {
     spy.mockRestore();
   }
-  void orig;
   expect(bad.totalCount).toBe(0);
   await bad.end();
-});
-
-it('tryRun возвращает false при удерживаемой блокировке и не вызывает fn', async () => {
-  const gate = createRemoveGate(pool);
-  await holder.query('select pg_advisory_lock($1)', [STORAGE_REMOVE_LOCK_KEY]);
-  let called = false;
-  const ok = await gate.tryRun!(async () => {
-    called = true;
-  });
-  await holder.query('select pg_advisory_unlock($1)', [STORAGE_REMOVE_LOCK_KEY]);
-  expect(ok).toBe(false);
-  expect(called).toBe(false);
-  expect(pool.totalCount - pool.idleCount).toBe(0);
 });

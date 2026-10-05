@@ -7,12 +7,13 @@ import {
   type TemplateQuery,
   type TemplateSummary,
 } from '@carbone-reports/shared';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import { templateParams, templateQueries, templates, type TemplateRow } from '../../db/schema';
 import type { AppDeps, TemplateFileRef } from '../../deps';
 import { notFound } from '../../lib/errors';
 import type { Storage } from '../../lib/storage';
+import { STORAGE_REMOVE_LOCK_KEY } from '../../lib/storage-gate';
 
 export interface TemplateFull {
   row: TemplateRow;
@@ -44,9 +45,15 @@ export async function discardUncommittedFile(
       .for('update');
     if (row?.filePath === path) return;
     // Под блокировкой строки не ждём бэкап: сирота безвреден, блокировка строки — нет.
-    if (!(await deps.storage.removeIfIdle(path))) {
+    // Блокировка берётся на соединении самой транзакции (без пула шлюза) и снимается при её конце.
+    const { rows } = await tx.execute(
+      sql`select pg_try_advisory_xact_lock_shared(${STORAGE_REMOVE_LOCK_KEY}) as ok`,
+    );
+    if ((rows[0] as { ok: boolean }).ok !== true) {
       log?.warn(`идёт бэкап — файл-сирота оставлен: ${path}`);
+      return;
     }
+    await deps.storage.removeUngated(path);
   });
 }
 

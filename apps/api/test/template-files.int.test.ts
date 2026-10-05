@@ -5,7 +5,7 @@ import { templates } from '../src/db/schema';
 import { STORAGE_REMOVE_LOCK_KEY } from '../src/lib/storage-gate';
 import { createBlankDocument } from '../src/modules/templates/blank';
 import { migrateTemplateFiles } from '../src/modules/templates/file-migration';
-import { templateFileRef } from '../src/modules/templates/service';
+import { discardUncommittedFile, templateFileRef } from '../src/modules/templates/service';
 import {
   createSourceDatabase,
   createTemplate,
@@ -189,41 +189,56 @@ describe('шлюз удалений', () => {
 });
 
 describe('шлюз удалений: изоляция и неблокирующий путь', () => {
-  const lockHolder = async () => {
+  const bounded = <T>(p: Promise<T>, ms: number, msg: string) =>
+    Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
+
+  it('ожидающие удаления не занимают основной пул', async ({ onTestFinished }) => {
     const holder = new pg.Client({ connectionString: t.deps.config.databaseUrl });
     await holder.connect();
     await holder.query('select pg_advisory_lock($1)', [STORAGE_REMOVE_LOCK_KEY]);
-    return holder;
-  };
-
-  it('ожидающие удаления не занимают основной пул', async () => {
-    const holder = await lockHolder();
-    try {
-      const removes = Array.from({ length: 12 }, (_, i) => t.deps.storage.remove(`gate/${i}.bin`));
-      await new Promise((r) => setTimeout(r, 200));
-      const started = Date.now();
-      await t.deps.db.execute(sql`select 1`);
-      expect(Date.now() - started).toBeLessThan(250);
-      await holder.query('select pg_advisory_unlock($1)', [STORAGE_REMOVE_LOCK_KEY]);
-      await Promise.all(removes);
-    } finally {
+    // Всегда выполняется: снимает блокировку, чтобы ожидающие удаления завершились, и закрывает соединение.
+    onTestFinished(async () => {
       await holder.end();
-    }
+    });
+    const removes = Array.from({ length: 12 }, (_, i) => t.deps.storage.remove(`gate/${i}.bin`));
+    await new Promise((r) => setTimeout(r, 200));
+    await bounded(
+      t.deps.db.execute(sql`select 1`),
+      1500,
+      'основной пул занят ожидающими удалениями',
+    );
+    await holder.query('select pg_advisory_unlock($1)', [STORAGE_REMOVE_LOCK_KEY]);
+    await Promise.all(removes);
   });
 
-  it('removeIfIdle при бэкапе сразу возвращает false и не трогает файл', async () => {
-    await t.deps.storage.write('gate/idle.bin', Buffer.from('1'));
-    const holder = await lockHolder();
-    try {
-      const started = Date.now();
-      expect(await t.deps.storage.removeIfIdle('gate/idle.bin')).toBe(false);
-      expect(Date.now() - started).toBeLessThan(250);
-      expect(await t.deps.storage.exists('gate/idle.bin')).toBe(true);
-    } finally {
-      await holder.end();
-    }
-    expect(await t.deps.storage.removeIfIdle('gate/idle.bin')).toBe(true);
-    expect(await t.deps.storage.exists('gate/idle.bin')).toBe(false);
+  it('discardUncommittedFile при бэкапе не ждёт даже при занятом пуле шлюза и оставляет сироту', async ({
+    onTestFinished,
+  }) => {
+    const id = await createTemplate(t, admin, dsId);
+    const orphan = `templates/${id}/v99.docx`;
+    await t.deps.storage.write(orphan, Buffer.from('x'));
+    const holder = new pg.Client({ connectionString: t.deps.config.databaseUrl });
+    await holder.connect();
+    await holder.query('select pg_advisory_lock($1)', [STORAGE_REMOVE_LOCK_KEY]);
+    onTestFinished(async () => {
+      await holder.end(); // сессия закрыта — блокировка снята, ожидающие удаления завершатся
+    });
+    // Оба соединения пула шлюза (max 2) заняты ожидающими удалениями.
+    const waiters = [0, 1, 2].map((i) => t.deps.storage.remove(`gate/w${i}.bin`));
+    await new Promise((r) => setTimeout(r, 200));
+    const warns: string[] = [];
+    await bounded(
+      discardUncommittedFile(t.deps, id, orphan, { warn: (m) => warns.push(m) }),
+      1500,
+      'discardUncommittedFile ждёт бэкап',
+    );
+    expect(await t.deps.storage.exists(orphan)).toBe(true);
+    expect(warns).toEqual([`идёт бэкап — файл-сирота оставлен: ${orphan}`]);
+    await holder.query('select pg_advisory_unlock($1)', [STORAGE_REMOVE_LOCK_KEY]);
+    await Promise.all(waiters);
+    // Без бэкапа сирота убирается.
+    await discardUncommittedFile(t.deps, id, orphan);
+    expect(await t.deps.storage.exists(orphan)).toBe(false);
   });
 });
 

@@ -133,6 +133,26 @@ services:
     restart: unless-stopped
     logging: *logging
 
+  backup:
+    image: postgres:17-alpine
+    profiles: [backup]
+    entrypoint: ['/backup/entrypoint.sh']
+    command: ['cron']
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
+      BACKUP_CRON: ${BACKUP_CRON:-0 3 * * *}
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+      TZ: ${TZ:-Europe/Moscow}
+    volumes:
+      - ./docker/backup:/backup:ro
+      - storage:/data:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *logging
+    restart: unless-stopped
+
 volumes:
   storage:
   pgdata:

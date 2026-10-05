@@ -7,3 +7,4 @@ coverage/
 certs/
 e2e/report/
 e2e/test-results/
+backups/

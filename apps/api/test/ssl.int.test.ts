@@ -7,7 +7,7 @@ let ca: string;
 const PASSWORD = 'ssl-test-password';
 
 beforeAll(async () => {
-  // debian-образ: в alpine нет openssl CLI
+  // postgres:17 уже на Debian; тег -bookworm лишь закрепляет дистрибутив, чтобы openssl CLI оставался доступен
   pg = await new GenericContainer('postgres:17-bookworm')
     .withEnvironment({ POSTGRES_PASSWORD: PASSWORD })
     .withExposedPorts(5432)

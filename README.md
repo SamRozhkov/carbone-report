@@ -89,6 +89,8 @@ docker compose pull api web
 docker compose up -d --no-build
 ```
 
+С заданными `API_IMAGE`/`WEB_IMAGE` не используйте `pnpm stack:*`: они пересобирают локальные исходники и тегируют их под имя релиза. Применяйте `docker compose pull` и `up -d --no-build`.
+
 Новые пакеты GHCR приватные: сделайте их публичными (Package settings → Change visibility) или войдите на сервере: `echo <token> | docker login ghcr.io -u <user> --password-stdin` (токен с правом `read:packages`).
 
 ### Обновление / выкат

@@ -510,3 +510,31 @@ scripts/smoke.ts            сквозная проверка работающе
   - атомарность записи файла;
   - отсутствие блокировки строки во время скачивания.
 - E2E Плана 3 должны оставаться зелёными. Добавляется сценарий «Завершить сессии»: админ завершает сессии пользователя, следующий запрос пользователя уводит его на страницу входа.
+
+## 16. План 5: CI и публикация образов
+
+### 16.1 Проверки
+- `.github/workflows/ci.yml` запускается на `push` в любую ветку и на `pull_request` в `main`. Новый запуск на той же ветке отменяет предыдущий (`concurrency` по ref).
+- Задание `checks`:
+  - Node 22 и pnpm с кэшем;
+  - `pnpm install --frozen-lockfile`;
+  - `pnpm typecheck`, `pnpm lint`, `pnpm exec prettier --check .`, `pnpm test`.
+- Задание `integration`: `pnpm test:int` на testcontainers, с Docker раннера.
+- Тесты не должны зависеть от IPv6 на хосте. Интеграционный тест SSL выписывает сертификат только на `DNS:localhost`, а несовпадение имени проверяет подключением к `127.0.0.1`.
+- E2E (Playwright с полным стеком) в CI не запускается и остаётся ручным.
+
+### 16.2 Образы
+- Задание `images` начинается после зелёных `checks` и `integration`. Оно собирает `docker/api.Dockerfile` и `docker/web.Dockerfile` через buildx с кэшем `type=gha`.
+- На PR образы только собираются. На push в `main` и на теги `v*` они публикуются:
+  - `ghcr.io/samrozhkov/carbone-report-api`;
+  - `ghcr.io/samrozhkov/carbone-report-web`.
+- Теги образов:
+  - `sha-<7 символов>`;
+  - `main` и `latest` для ветки `main`;
+  - `X.Y.Z` и `X.Y` для тега `vX.Y.Z`.
+- Публикация идёт через `GITHUB_TOKEN`. Права у workflow — `contents: read`; `packages: write` есть только у задания `images`.
+- `docker-compose.yml`: у `api` и `web` появляется `image: ${API_IMAGE:-carbone-reports-api}` / `${WEB_IMAGE:-carbone-reports-web}`, сборка (`build`) остаётся. Запуск из готовых образов: указать `API_IMAGE`/`WEB_IMAGE` с тегом, затем `docker compose pull api web && docker compose up -d --no-build`.
+- В README появляются значок статуса CI и раздел «Запуск из готовых образов». В разделе сказано, что новые пакеты GHCR приватные: нужна публичная видимость пакета или `docker login ghcr.io`.
+
+### 16.3 Готовность
+- Реальный прогон workflow на GitHub для ветки зелёный во всех трёх заданиях. После слияния в `main` образы опубликованы.

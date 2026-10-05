@@ -1,4 +1,7 @@
+import { RUNS_PAGE_SIZE } from '@carbone-reports/shared';
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { reportRuns } from '../src/db/schema';
 import { AppError } from '../src/lib/errors';
 import type { CarboneRenderer } from '../src/deps';
 import {
@@ -174,6 +177,54 @@ describe('генерация', () => {
 });
 
 describe('история', () => {
+  it('пагинация: страница по RUNS_PAGE_SIZE, total, вторая страница, порядок от новых к старым', async () => {
+    const u = await loginAs(t, 'user');
+    for (let i = 0; i < RUNS_PAGE_SIZE + 3; i++) {
+      const r = await render(u.cookie, tplId, { params: { from: '2026-01-01' }, format: 'pdf' });
+      expect(r.statusCode).toBe(201);
+    }
+    const p1 = (
+      await t.app.inject({ method: 'GET', url: '/api/runs?page=1', headers: { cookie: u.cookie } })
+    ).json();
+    const p2 = (
+      await t.app.inject({ method: 'GET', url: '/api/runs?page=2', headers: { cookie: u.cookie } })
+    ).json();
+    expect(p1.total).toBe(RUNS_PAGE_SIZE + 3);
+    expect(p1.items).toHaveLength(RUNS_PAGE_SIZE);
+    expect(p2.items).toHaveLength(3);
+    const ids = [...p1.items, ...p2.items].map((x: { id: string }) => x.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    const times = [...p1.items, ...p2.items].map((x: { createdAt: string }) =>
+      Date.parse(x.createdAt),
+    );
+    expect([...times].sort((a, b) => b - a)).toEqual(times);
+  });
+
+  it('page=0 и нечисловая страница → 400', async () => {
+    const u = await loginAs(t, 'user');
+    for (const q of ['page=0', 'page=abc']) {
+      const r = await t.app.inject({
+        method: 'GET',
+        url: `/api/runs?${q}`,
+        headers: { cookie: u.cookie },
+      });
+      expect(r.statusCode).toBe(400);
+    }
+  });
+
+  it('файл отчёта удалён с диска → 410', async () => {
+    const r = await render(userA, tplId, { params: { from: '2026-01-01' }, format: 'pdf' });
+    const runId = r.json().runId;
+    const [run] = await t.deps.db.select().from(reportRuns).where(eq(reportRuns.id, runId));
+    await t.deps.storage.remove(run!.filePath!);
+    const file = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${runId}/file`,
+      headers: { cookie: userA },
+    });
+    expect(file.statusCode).toBe(410);
+  });
+
   it('user видит только свои запуски и не может скачать чужой файл', async () => {
     const r = await render(userB, tplId, { params: { from: '2026-01-01' }, format: 'pdf' });
     const runId = r.json().runId;

@@ -1,4 +1,5 @@
 // Сквозная проверка работающего стека через nginx. Запуск: pnpm stack:smoke [--insecure]
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
@@ -67,6 +68,64 @@ async function docxWithTag(): Promise<Buffer> {
     `${XML}<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Компания: {d.company.name}</w:t></w:r></w:p></w:body></w:document>`,
   );
   return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+// Пересоздаёт контейнер carbone и проверяет, что API заново загружает шаблон.
+async function carboneRestart(templateId: string): Promise<void> {
+  const renderOnce = async (): Promise<string | null> => {
+    const r = await api(`/api/reports/${templateId}/render`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ params: {}, format: 'pdf' }),
+    });
+    if (r.status !== 201)
+      throw new Error(`генерация: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
+    const { runId } = (await r.json()) as { runId: string };
+    const f = await api(`/api/runs/${runId}/file`);
+    assert(f.status === 200, `файл отчёта: HTTP ${f.status}`);
+    return f.headers.get('content-type');
+  };
+  // У carbone нет healthcheck: --wait ждёт лишь состояния running, поэтому после пересоздания повторяем.
+  const renderWithRetry = async (): Promise<string | null> => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        console.log(`  попытка ${attempt}/5`);
+        return await renderOnce();
+      } catch (e) {
+        console.log(`  попытка ${attempt} не удалась: ${(e as Error).message}`);
+        if (attempt >= 5) throw e;
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    }
+  };
+  await step('Carbone: отчёт до пересоздания контейнера', async () => {
+    await renderOnce();
+  });
+  await step('Carbone: пересоздание контейнера (шаблоны в Carbone теряются)', async () => {
+    execFileSync('docker', ['compose', 'rm', '-sf', 'carbone'], { stdio: 'inherit' });
+    // Шаблоны лежат в именованном томе: без его удаления они пережили бы пересоздание.
+    const vols = execFileSync(
+      'docker',
+      [
+        'volume',
+        'ls',
+        '-q',
+        '--filter',
+        'label=com.docker.compose.project=carbone-reports',
+        '--filter',
+        'label=com.docker.compose.volume=carbone_templates',
+      ],
+      { encoding: 'utf8' },
+    )
+      .split('\n')
+      .filter(Boolean);
+    if (vols.length > 0) execFileSync('docker', ['volume', 'rm', ...vols], { stdio: 'inherit' });
+    execFileSync('docker', ['compose', 'up', '-d', '--wait', 'carbone'], { stdio: 'inherit' });
+  });
+  await step('Carbone: отчёт после пересоздания — шаблон загружен повторно', async () => {
+    const type = await renderWithRetry();
+    assert(type === 'application/pdf', `content-type: ${type}`);
+  });
 }
 
 async function main() {
@@ -251,6 +310,8 @@ async function main() {
       'результат конвертации не PDF',
     );
   });
+
+  if (process.argv.includes('--carbone-restart')) await carboneRestart(templateId);
 
   for (const fn of cleanup) {
     await fn().catch(() => undefined);

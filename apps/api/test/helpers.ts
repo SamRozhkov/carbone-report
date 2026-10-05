@@ -89,11 +89,12 @@ export async function createTestApp(
   const storageDir = await mkdtemp(join(tmpdir(), 'cr-test-'));
   const config = testConfig(databaseUrl, storageDir);
   const { db, pool } = createDb(databaseUrl);
+  const gatePool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
   await migrateDb(db);
   const deps: AppDeps = {
     config,
     db,
-    storage: new Storage(storageDir, createRemoveGate(pool)),
+    storage: new Storage(storageDir, createRemoveGate(gatePool)),
     sources: createSourcePools({ db, config }),
     carbone: { render: notConfigured('carbone') },
     onlyoffice: { forceSave: notConfigured('onlyoffice') },
@@ -107,6 +108,7 @@ export async function createTestApp(
     async close() {
       await app.close();
       await deps.sources.closeAll();
+      await gatePool.end();
       await pool.end();
       await rm(storageDir, { recursive: true, force: true });
     },

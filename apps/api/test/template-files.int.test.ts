@@ -188,6 +188,45 @@ describe('шлюз удалений', () => {
   });
 });
 
+describe('шлюз удалений: изоляция и неблокирующий путь', () => {
+  const lockHolder = async () => {
+    const holder = new pg.Client({ connectionString: t.deps.config.databaseUrl });
+    await holder.connect();
+    await holder.query('select pg_advisory_lock($1)', [STORAGE_REMOVE_LOCK_KEY]);
+    return holder;
+  };
+
+  it('ожидающие удаления не занимают основной пул', async () => {
+    const holder = await lockHolder();
+    try {
+      const removes = Array.from({ length: 12 }, (_, i) => t.deps.storage.remove(`gate/${i}.bin`));
+      await new Promise((r) => setTimeout(r, 200));
+      const started = Date.now();
+      await t.deps.db.execute(sql`select 1`);
+      expect(Date.now() - started).toBeLessThan(250);
+      await holder.query('select pg_advisory_unlock($1)', [STORAGE_REMOVE_LOCK_KEY]);
+      await Promise.all(removes);
+    } finally {
+      await holder.end();
+    }
+  });
+
+  it('removeIfIdle при бэкапе сразу возвращает false и не трогает файл', async () => {
+    await t.deps.storage.write('gate/idle.bin', Buffer.from('1'));
+    const holder = await lockHolder();
+    try {
+      const started = Date.now();
+      expect(await t.deps.storage.removeIfIdle('gate/idle.bin')).toBe(false);
+      expect(Date.now() - started).toBeLessThan(250);
+      expect(await t.deps.storage.exists('gate/idle.bin')).toBe(true);
+    } finally {
+      await holder.end();
+    }
+    expect(await t.deps.storage.removeIfIdle('gate/idle.bin')).toBe(true);
+    expect(await t.deps.storage.exists('gate/idle.bin')).toBe(false);
+  });
+});
+
 describe('перенос старых путей при старте', () => {
   it('переносит templates/<id>.<ext> в templates/<id>/v<version>.<ext>, идемпотентно, без файла — не падает', async () => {
     const a = await createTemplate(t, admin, dsId);

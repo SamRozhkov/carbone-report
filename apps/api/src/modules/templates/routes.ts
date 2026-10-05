@@ -208,7 +208,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     } catch (err) {
       // Транзакция не прошла: новый файл — сирота, убираем.
       if (written) {
-        await discardUncommittedFile(deps, row.id, written).catch((e) =>
+        await discardUncommittedFile(deps, row.id, written, req.log).catch((e) =>
           req.log.warn({ err: e, filePath: written }, 'несохранённый файл шаблона не удалён'),
         );
       }

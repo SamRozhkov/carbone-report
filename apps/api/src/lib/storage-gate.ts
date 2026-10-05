@@ -4,18 +4,64 @@ import type { RemoveGate } from './storage';
 /** Общий с docker/backup/backup.sh ключ: бэкап берёт его исключительно, удаления — разделяемо. */
 export const STORAGE_REMOVE_LOCK_KEY = 726100001;
 
+/**
+ * Пул должен быть отдельным и небольшим: ожидающие удаления занимают его соединения, а не основной пул API.
+ * При любой ошибке запроса соединение уничтожается: закрытие сессии снимает её advisory-блокировки,
+ * так что сбой разблокировки не может навсегда заблокировать бэкап.
+ */
 export function createRemoveGate(pool: pg.Pool): RemoveGate {
-  return async (fn) => {
+  const gate: RemoveGate = async (fn) => {
     const client = await pool.connect();
+    let broken = false;
     try {
-      await client.query('select pg_advisory_lock_shared($1)', [STORAGE_REMOVE_LOCK_KEY]);
+      try {
+        await client.query('select pg_advisory_lock_shared($1)', [STORAGE_REMOVE_LOCK_KEY]);
+      } catch (err) {
+        broken = true;
+        throw err;
+      }
       try {
         return await fn();
       } finally {
-        await client.query('select pg_advisory_unlock_shared($1)', [STORAGE_REMOVE_LOCK_KEY]);
+        try {
+          await client.query('select pg_advisory_unlock_shared($1)', [STORAGE_REMOVE_LOCK_KEY]);
+        } catch {
+          // Результат fn важнее; соединение уничтожается ниже и снимает блокировку само.
+          broken = true;
+        }
       }
     } finally {
-      client.release();
+      client.release(broken);
     }
   };
+  gate.tryRun = async (fn) => {
+    const client = await pool.connect();
+    let broken = false;
+    try {
+      let got: boolean;
+      try {
+        const { rows } = await client.query('select pg_try_advisory_lock_shared($1) as ok', [
+          STORAGE_REMOVE_LOCK_KEY,
+        ]);
+        got = rows[0].ok === true;
+      } catch (err) {
+        broken = true;
+        throw err;
+      }
+      if (!got) return false;
+      try {
+        await fn();
+      } finally {
+        try {
+          await client.query('select pg_advisory_unlock_shared($1)', [STORAGE_REMOVE_LOCK_KEY]);
+        } catch {
+          broken = true;
+        }
+      }
+      return true;
+    } finally {
+      client.release(broken);
+    }
+  };
+  return gate;
 }

@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createRemoveGate, STORAGE_REMOVE_LOCK_KEY } from '../src/lib/storage-gate';
 import { createTestDatabase } from './helpers';
 
@@ -59,5 +59,39 @@ it('ошибка внутри шлюза снимает блокировку и 
   expect(rows[0].ok).toBe(true);
   await holder.query('select pg_advisory_unlock($1)', [STORAGE_REMOVE_LOCK_KEY]);
   // Соединение шлюза возвращено в пул.
+  expect(pool.totalCount - pool.idleCount).toBe(0);
+});
+
+it('ошибка запроса блокировки уничтожает соединение, а не возвращает в пул', async () => {
+  const bad = new pg.Pool({ connectionString: pool.options.connectionString, max: 1 });
+  const gate = createRemoveGate(bad);
+  const client = await bad.connect();
+  await client.query('select 1');
+  const orig = client.query.bind(client);
+  client.release();
+  // Ломаем первый запрос блокировки на этом единственном соединении.
+  const spy = vi
+    .spyOn(pg.Client.prototype, 'query')
+    .mockImplementationOnce((() => Promise.reject(new Error('lock failed'))) as never);
+  try {
+    await expect(gate(async () => 1)).rejects.toThrow('lock failed');
+  } finally {
+    spy.mockRestore();
+  }
+  void orig;
+  expect(bad.totalCount).toBe(0);
+  await bad.end();
+});
+
+it('tryRun возвращает false при удерживаемой блокировке и не вызывает fn', async () => {
+  const gate = createRemoveGate(pool);
+  await holder.query('select pg_advisory_lock($1)', [STORAGE_REMOVE_LOCK_KEY]);
+  let called = false;
+  const ok = await gate.tryRun!(async () => {
+    called = true;
+  });
+  await holder.query('select pg_advisory_unlock($1)', [STORAGE_REMOVE_LOCK_KEY]);
+  expect(ok).toBe(false);
+  expect(called).toBe(false);
   expect(pool.totalCount - pool.idleCount).toBe(0);
 });

@@ -34,6 +34,7 @@ export async function discardUncommittedFile(
   deps: { db: Db; storage: Storage },
   id: string,
   path: string,
+  log?: { warn: (msg: string) => void },
 ): Promise<void> {
   await deps.db.transaction(async (tx) => {
     const [row] = await tx
@@ -41,7 +42,11 @@ export async function discardUncommittedFile(
       .from(templates)
       .where(eq(templates.id, id))
       .for('update');
-    if (row?.filePath !== path) await deps.storage.remove(path);
+    if (row?.filePath === path) return;
+    // Под блокировкой строки не ждём бэкап: сирота безвреден, блокировка строки — нет.
+    if (!(await deps.storage.removeIfIdle(path))) {
+      log?.warn(`идёт бэкап — файл-сирота оставлен: ${path}`);
+    }
   });
 }
 

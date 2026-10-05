@@ -1,5 +1,6 @@
 import { buildApp } from './app';
 import { loadConfig } from './config';
+import pg from 'pg';
 import { createDb, migrateDb } from './db/client';
 import type { AppDeps } from './deps';
 import { fetchFile } from './lib/fetch-file';
@@ -14,13 +15,14 @@ import { migrateTemplateFiles } from './modules/templates/file-migration';
 
 const config = loadConfig(process.env);
 const { db, pool } = createDb(config.databaseUrl);
+const gatePool = new pg.Pool({ connectionString: config.databaseUrl, max: 2 });
 await migrateDb(db);
 
 const carbone = new CarboneClient({ baseUrl: config.carboneUrl });
 const deps: AppDeps = {
   config,
   db,
-  storage: new Storage(config.storageDir, createRemoveGate(pool)),
+  storage: new Storage(config.storageDir, createRemoveGate(gatePool)),
   sources: createSourcePools({ db, config }),
   carbone,
   onlyoffice: createOnlyOfficeCommands({
@@ -42,6 +44,7 @@ async function shutdown(signal: string) {
   stopCleanup();
   await app.close();
   await deps.sources.closeAll();
+  await gatePool.end();
   await pool.end();
   process.exit(0);
 }

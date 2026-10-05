@@ -135,7 +135,7 @@ export async function handleCallback(
     // Транзакция не прошла: новый файл — сирота, убираем.
     if (written) {
       const orphan = written;
-      await discardUncommittedFile(deps, templateId, orphan).catch((e) =>
+      await discardUncommittedFile(deps, templateId, orphan, log).catch((e) =>
         log?.warn({ err: e, filePath: orphan }, 'несохранённый файл шаблона не удалён'),
       );
     }

@@ -26,6 +26,7 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   role: text('role').$type<Role>().notNull(),
   blocked: boolean('blocked').notNull().default(false),
+  sessionVersion: integer('session_version').notNull().default(0),
   createdAt: createdAt(),
 });
 

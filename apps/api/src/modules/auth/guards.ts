@@ -21,9 +21,9 @@ export function makeGuards(deps: AppDeps) {
     const token = req.cookies[SESSION_COOKIE];
     const session = token ? await verifySession(token, deps.config.appSecret) : null;
     if (!session) throw unauthorized();
-    // Роль и блокировка берутся из БД: изменения применяются сразу, без перевыпуска cookie.
+    // Роль, блокировка и версия сессий берутся из БД: изменения применяются сразу, без перевыпуска cookie.
     const [row] = await deps.db.select().from(users).where(eq(users.id, session.id));
-    if (!row || row.blocked) throw unauthorized();
+    if (!row || row.blocked || row.sessionVersion !== session.sv) throw unauthorized();
     req.user = { id: row.id, login: row.login, role: row.role };
   }
 

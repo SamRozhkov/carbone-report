@@ -10,8 +10,12 @@ export interface SessionUser {
   role: Role;
 }
 
-export function signSession(user: SessionUser, secret: Uint8Array): Promise<string> {
-  return new SignJWT({ login: user.login, role: user.role })
+export interface SessionClaims extends SessionUser {
+  sv: number;
+}
+
+export function signSession(user: SessionUser, sv: number, secret: Uint8Array): Promise<string> {
+  return new SignJWT({ login: user.login, role: user.role, sv })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(user.id)
     .setIssuedAt()
@@ -22,12 +26,14 @@ export function signSession(user: SessionUser, secret: Uint8Array): Promise<stri
 export async function verifySession(
   token: string,
   secret: Uint8Array,
-): Promise<SessionUser | null> {
+): Promise<SessionClaims | null> {
   try {
     const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] });
     const role = Role.safeParse(payload.role);
     if (!payload.sub || typeof payload.login !== 'string' || !role.success) return null;
-    return { id: payload.sub, login: payload.login, role: role.data };
+    // Cookie, выпущенные до появления отзыва сессий, не содержат sv и недействительны.
+    if (!Number.isInteger(payload.sv)) return null;
+    return { id: payload.sub, login: payload.login, role: role.data, sv: payload.sv as number };
   } catch {
     return null;
   }

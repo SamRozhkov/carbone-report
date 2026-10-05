@@ -1,11 +1,12 @@
 import { CreateUserBody, IdParams, UpdateUserBody, type UserDto } from '@carbone-reports/shared';
-import { and, asc, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
 import type { App } from '../../app';
 import { reportRuns, users, type UserRow } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { badRequest, conflict, notFound } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
 import { hashPassword } from '../auth/password';
+import { setSessionCookie } from '../auth/routes';
 
 export const toUserDto = (r: UserRow): UserDto => ({
   id: r.id,
@@ -47,7 +48,7 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
   app.patch(
     '/api/users/:id',
     { ...pre, schema: { params: IdParams, body: UpdateUserBody } },
-    async (req) => {
+    async (req, reply) => {
       const me = currentUser(req);
       const { password, role, blocked } = req.body;
       if (req.params.id === me.id && (blocked === true || role === 'user')) {
@@ -58,13 +59,41 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
       if (role !== undefined) patch.role = role;
       if (blocked !== undefined) patch.blocked = blocked;
       if (Object.keys(patch).length === 0) throw badRequest('нет изменений');
+      // Смена пароля, роли или блокировка завершает все выданные сессии пользователя.
+      const revoke = password !== undefined || role !== undefined || blocked !== undefined;
       const [row] = await deps.db
         .update(users)
-        .set(patch)
+        .set(revoke ? { ...patch, sessionVersion: sql`${users.sessionVersion} + 1` } : patch)
         .where(eq(users.id, req.params.id))
         .returning();
       if (!row) throw notFound('пользователь');
+      // Своя запись: текущая вкладка продолжает работать с новой cookie.
+      if (revoke && row.id === me.id) {
+        await setSessionCookie(
+          reply,
+          deps,
+          { id: row.id, login: row.login, role: row.role },
+          row.sessionVersion,
+        );
+      }
       return toUserDto(row);
+    },
+  );
+
+  app.post(
+    '/api/users/:id/sessions/revoke',
+    { ...pre, schema: { params: IdParams } },
+    async (req, reply) => {
+      if (req.params.id === currentUser(req).id) {
+        throw badRequest('нельзя завершить собственные сессии — используйте «Выйти везде»');
+      }
+      const [row] = await deps.db
+        .update(users)
+        .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
+        .where(eq(users.id, req.params.id))
+        .returning({ id: users.id });
+      if (!row) throw notFound('пользователь');
+      return reply.status(204).send();
     },
   );
 

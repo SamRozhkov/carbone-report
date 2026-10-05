@@ -1,13 +1,28 @@
 import { LoginBody } from '@carbone-reports/shared';
-import { eq } from 'drizzle-orm';
-import type { FastifyRequest } from 'fastify';
+import { eq, sql } from 'drizzle-orm';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { App } from '../../app';
 import { users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { AppError } from '../../lib/errors';
 import { currentUser, type Guards } from './guards';
 import { DUMMY_HASH_PROMISE, verifyPassword } from './password';
-import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession } from './session';
+import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession, type SessionUser } from './session';
+
+export async function setSessionCookie(
+  reply: FastifyReply,
+  deps: AppDeps,
+  user: SessionUser,
+  sv: number,
+): Promise<void> {
+  reply.setCookie(SESSION_COOKIE, await signSession(user, sv, deps.config.appSecret), {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: deps.config.cookieSecure,
+    path: '/',
+    maxAge: SESSION_TTL_SECONDS,
+  });
+}
 
 export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): void {
   const loginRateLimit = {
@@ -36,18 +51,21 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
         throw new AppError('INVALID_CREDENTIALS', 401, 'неверный логин или пароль');
       }
       const user = { id: row.id, login: row.login, role: row.role };
-      reply.setCookie(SESSION_COOKIE, await signSession(user, deps.config.appSecret), {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: deps.config.cookieSecure,
-        path: '/',
-        maxAge: SESSION_TTL_SECONDS,
-      });
+      await setSessionCookie(reply, deps, user, row.sessionVersion);
       return user;
     },
   );
 
   app.post('/api/auth/logout', async (_req, reply) => {
+    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    return reply.status(204).send();
+  });
+
+  app.post('/api/auth/logout-all', { preHandler: guards.requireUser }, async (req, reply) => {
+    await deps.db
+      .update(users)
+      .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
+      .where(eq(users.id, currentUser(req).id));
     reply.clearCookie(SESSION_COOKIE, { path: '/' });
     return reply.status(204).send();
   });

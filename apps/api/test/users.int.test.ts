@@ -117,7 +117,7 @@ describe('users', () => {
     expect(r400.statusCode).toBe(400);
   });
 
-  it('понижённый админ получает 403 со старым cookie (роль берётся из БД)', async () => {
+  it('понижение роли завершает сессии: старая cookie даёт 401', async () => {
     const second = await loginAs(t, 'admin');
     const demote = await t.app.inject({
       method: 'PATCH',
@@ -131,6 +131,6 @@ describe('users', () => {
       url: '/api/users',
       headers: { cookie: second.cookie },
     });
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(401);
   });
 });

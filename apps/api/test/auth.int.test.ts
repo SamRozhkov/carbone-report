@@ -115,3 +115,99 @@ describe('auth', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe('отзыв сессий', () => {
+  const me = (cookie: string) =>
+    t.app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
+
+  it('смена пароля админом завершает все сессии пользователя', async () => {
+    const admin = await loginAs(t, 'admin');
+    const u = await loginAs(t, 'user');
+    expect((await me(u.cookie)).statusCode).toBe(200);
+    const r = await t.app.inject({
+      method: 'PATCH',
+      url: `/api/users/${u.user.id}`,
+      headers: { cookie: admin.cookie },
+      payload: { password: 'new-password-1' },
+    });
+    expect(r.statusCode).toBe(200);
+    expect((await me(u.cookie)).statusCode).toBe(401);
+  });
+
+  it('смена роли завершает сессии', async () => {
+    const admin = await loginAs(t, 'admin');
+    const u = await loginAs(t, 'user');
+    await t.app.inject({
+      method: 'PATCH',
+      url: `/api/users/${u.user.id}`,
+      headers: { cookie: admin.cookie },
+      payload: { role: 'admin' },
+    });
+    expect((await me(u.cookie)).statusCode).toBe(401);
+  });
+
+  it('админ меняет собственный пароль: текущая сессия продолжается по новой cookie, старая cookie недействительна', async () => {
+    const admin = await loginAs(t, 'admin');
+    const r = await t.app.inject({
+      method: 'PATCH',
+      url: `/api/users/${admin.user.id}`,
+      headers: { cookie: admin.cookie },
+      payload: { password: 'new-password-2' },
+    });
+    expect(r.statusCode).toBe(200);
+    const fresh = String(r.headers['set-cookie']).split(';')[0]!;
+    expect(fresh).toMatch(/^session=/);
+    expect((await me(fresh)).statusCode).toBe(200);
+    expect((await me(admin.cookie)).statusCode).toBe(401);
+  });
+
+  it('admin завершает сессии пользователя; свои — нельзя; несуществующий — 404', async () => {
+    const admin = await loginAs(t, 'admin');
+    const u = await loginAs(t, 'user');
+    const revoke = (id: string) =>
+      t.app.inject({
+        method: 'POST',
+        url: `/api/users/${id}/sessions/revoke`,
+        headers: { cookie: admin.cookie },
+      });
+    expect((await revoke(u.user.id)).statusCode).toBe(204);
+    expect((await me(u.cookie)).statusCode).toBe(401);
+    expect((await revoke(admin.user.id)).statusCode).toBe(400);
+    expect((await revoke('00000000-0000-4000-8000-000000000000')).statusCode).toBe(404);
+  });
+
+  it('user не может завершать чужие сессии', async () => {
+    const u = await loginAs(t, 'user');
+    const v = await loginAs(t, 'user');
+    const r = await t.app.inject({
+      method: 'POST',
+      url: `/api/users/${v.user.id}/sessions/revoke`,
+      headers: { cookie: u.cookie },
+    });
+    expect(r.statusCode).toBe(403);
+  });
+
+  it('«Выйти везде» завершает все сессии текущего пользователя и очищает cookie', async () => {
+    const u = await loginAs(t, 'user');
+    const r = await t.app.inject({
+      method: 'POST',
+      url: '/api/auth/logout-all',
+      headers: { cookie: u.cookie },
+    });
+    expect(r.statusCode).toBe(204);
+    expect(String(r.headers['set-cookie'])).toMatch(/session=;/);
+    expect((await me(u.cookie)).statusCode).toBe(401);
+  });
+
+  it('cookie без sv (выпущенная до обновления) недействительна', async () => {
+    const u = await loginAs(t, 'user');
+    const { SignJWT } = await import('jose');
+    const legacy = await new SignJWT({ login: u.user.login, role: u.user.role })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(u.user.id)
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .sign(t.deps.config.appSecret);
+    expect((await me(`session=${legacy}`)).statusCode).toBe(401);
+  });
+});

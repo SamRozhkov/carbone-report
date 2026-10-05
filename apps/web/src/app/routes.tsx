@@ -2,7 +2,9 @@ import type { RouteObject } from 'react-router';
 import { Navigate } from 'react-router';
 import { RequireAdmin, RequireUser } from './guards';
 import { Layout } from './Layout';
+import { CategoriesPage } from '../pages/admin/CategoriesPage';
 import { DatasourcesPage } from '../pages/admin/DatasourcesPage';
+import { GroupsPage } from '../pages/admin/GroupsPage';
 import { TemplatesPage } from '../pages/admin/TemplatesPage';
 import { UsersPage } from '../pages/admin/UsersPage';
 import { HistoryPage } from '../pages/HistoryPage';
@@ -40,6 +42,8 @@ export const routes: RouteObject[] = [
               },
               { path: 'datasources', element: <DatasourcesPage /> },
               { path: 'users', element: <UsersPage /> },
+              { path: 'groups', element: <GroupsPage /> },
+              { path: 'categories', element: <CategoriesPage /> },
             ],
           },
         ],

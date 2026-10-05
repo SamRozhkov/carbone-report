@@ -1,8 +1,14 @@
 import type {
+  CategoryBody,
+  CategoryDto,
+  CategoryPatch,
   CreateTemplateBody,
   CreateUserBody,
   DatasourceBody,
   DatasourceDto,
+  GroupBody,
+  GroupDto,
+  GroupPatch,
   LoginBody,
   ParamOptionsResult,
   ParamsInput,
@@ -11,6 +17,7 @@ import type {
   RunQueryResult,
   RunsPage,
   RunsQuery,
+  TemplateAccess,
   TemplateAdminDetails,
   TemplateDetails,
   TemplateParam,
@@ -43,6 +50,27 @@ export const api = {
     update: (id: string, body: UpdateUserBody) => apiJson<UserDto>(`/api/users/${id}`, patch(body)),
     remove: (id: string) => apiJson<void>(`/api/users/${id}`, del),
     revokeSessions: (id: string) => apiJson<void>(`/api/users/${id}/sessions/revoke`, post()),
+    setGroups: (id: string, groupIds: string[]) =>
+      apiJson<string[]>(`/api/users/${id}/groups`, put({ groupIds })),
+  },
+
+  groups: {
+    list: () => apiJson<GroupDto[]>('/api/groups'),
+    create: (body: GroupBody) => apiJson<GroupDto>('/api/groups', post(body)),
+    update: (id: string, body: GroupPatch) => apiJson<GroupDto>(`/api/groups/${id}`, patch(body)),
+    remove: (id: string) => apiJson<void>(`/api/groups/${id}`, del),
+    setMembers: (id: string, userIds: string[]) =>
+      apiJson<GroupDto>(`/api/groups/${id}/members`, put({ userIds })),
+  },
+
+  categories: {
+    list: () => apiJson<CategoryDto[]>('/api/categories'),
+    create: (body: CategoryBody) => apiJson<CategoryDto>('/api/categories', post(body)),
+    update: (id: string, body: CategoryPatch) =>
+      apiJson<CategoryDto>(`/api/categories/${id}`, patch(body)),
+    remove: (id: string) => apiJson<void>(`/api/categories/${id}`, del),
+    setGroups: (id: string, groupIds: string[]) =>
+      apiJson<CategoryDto>(`/api/categories/${id}/groups`, put({ groupIds })),
   },
 
   datasources: {
@@ -88,6 +116,9 @@ export const api = {
       apiBlob(`/api/templates/${id}/preview`, post({ params, mode: 'pdf' })),
     editorConfig: (id: string) => apiJson<Config>(`/api/templates/${id}/editor-config`),
     save: (id: string) => apiJson<void>(`/api/templates/${id}/save`, post()),
+    getAccess: (id: string) => apiJson<TemplateAccess>(`/api/templates/${id}/access`),
+    access: (id: string, body: TemplateAccess) =>
+      apiJson<TemplateAccess>(`/api/templates/${id}/access`, put(body)),
   },
 
   reports: {

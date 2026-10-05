@@ -4,10 +4,12 @@ import {
   ClockArrowRotateLeft,
   Database,
   FileText,
+  Folders,
   Layers,
   Moon,
   Person,
   Persons,
+  PersonsLock,
   Sun,
 } from '@gravity-ui/icons';
 import type { AsideHeaderItem } from '@gravity-ui/navigation';
@@ -66,6 +68,8 @@ export function Layout() {
       item('templates', 'Шаблоны', Layers, '/admin/templates'),
       item('datasources', 'Источники данных', Database, '/admin/datasources'),
       item('users', 'Пользователи', Persons, '/admin/users'),
+      item('groups', 'Группы', PersonsLock, '/admin/groups'),
+      item('categories', 'Категории', Folders, '/admin/categories'),
     );
   }
 

@@ -1,11 +1,13 @@
 import type { Role, UpdateUserBody, UserDto } from '@carbone-reports/shared';
 import { Dialog, Select, Switch, TextInput } from '@gravity-ui/uikit';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/endpoints';
 import { fieldErrors } from '../../api/errors';
+import { ErrorAlert } from '../../components/ErrorAlert';
 import { Field } from '../../components/Field';
 import { GeneralError } from '../../components/GeneralError';
+import { sameIds } from '../../lib/ids';
 
 const ROLE_OPTIONS = [
   { value: 'user', content: 'Пользователь' },
@@ -89,9 +91,11 @@ export function EditUserDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const groups = useQuery({ queryKey: ['groups'], queryFn: api.groups.list });
   const [role, setRole] = useState<Role>(user?.role ?? 'user');
   const [password, setPassword] = useState('');
   const [blocked, setBlocked] = useState(user?.blocked ?? false);
+  const [groupIds, setGroupIds] = useState<string[]>(user?.groupIds ?? []);
   const buildBody = (): UpdateUserBody => {
     const body: UpdateUserBody = {};
     if (user && role !== user.role) body.role = role;
@@ -99,14 +103,20 @@ export function EditUserDialog({
     if (password) body.password = password;
     return body;
   };
-  const changed = Object.keys(buildBody()).length > 0;
+  const groupsChanged = !!user && !sameIds(groupIds, user.groupIds);
+  const changed = Object.keys(buildBody()).length > 0 || groupsChanged;
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const body = buildBody();
-      return Object.keys(body).length ? api.users.update(user!.id, body) : Promise.resolve(user!);
+      if (Object.keys(body).length) await api.users.update(user!.id, body);
+      if (groupsChanged) await api.users.setGroups(user!.id, groupIds);
     },
     onSuccess: async () => {
-      if (changed) await queryClient.invalidateQueries({ queryKey: ['users'] });
+      if (changed) {
+        await Promise.all(
+          [['users'], ['groups']].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+        );
+      }
       onClose();
     },
   });
@@ -123,6 +133,7 @@ export function EditUserDialog({
               options={ROLE_OPTIONS}
               onUpdate={([v]) => setRole((v as Role) ?? role)}
               disabled={isSelf}
+              aria-label="Роль"
               width="max"
             />
           </Field>
@@ -142,6 +153,21 @@ export function EditUserDialog({
             disabled={isSelf}
             content="Заблокирован"
           />
+          <Field label="Группы" group>
+            <Select
+              aria-label="Группы"
+              value={groupIds}
+              onUpdate={setGroupIds}
+              options={(groups.data ?? []).map((g) => ({ value: g.id, content: g.name }))}
+              multiple
+              filterable
+              hasClear
+              loading={groups.isPending}
+              placeholder="нет групп"
+              width="max"
+            />
+          </Field>
+          {groups.error && <ErrorAlert error={groups.error} title="Не удалось загрузить группы" />}
           <GeneralError error={save.error} errors={errors} shown={['password']} />
         </div>
       </Dialog.Body>

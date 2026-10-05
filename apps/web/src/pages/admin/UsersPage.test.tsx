@@ -9,9 +9,22 @@ const users = [
     login: 'admin',
     role: 'admin',
     blocked: false,
+    groupIds: [],
     createdAt: '2026-01-01T00:00:00Z',
   },
-  { id: 'u2', login: 'ivanov', role: 'user', blocked: false, createdAt: '2026-01-02T00:00:00Z' },
+  {
+    id: 'u2',
+    login: 'ivanov',
+    role: 'user',
+    blocked: false,
+    groupIds: ['g1', 'g2'],
+    createdAt: '2026-01-02T00:00:00Z',
+  },
+];
+const groups = [
+  { id: 'g1', name: 'Бухгалтерия', description: '', memberIds: ['u2'], createdAt: '' },
+  { id: 'g2', name: 'Склад', description: '', memberIds: ['u2'], createdAt: '' },
+  { id: 'g3', name: 'Юристы', description: '', memberIds: [], createdAt: '' },
 ];
 
 function row(login: string): HTMLElement {
@@ -196,7 +209,7 @@ describe('UsersPage', () => {
     await userEvent.click(within(row('admin (вы)')).getByRole('button', { name: 'Изменить' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByLabelText('Заблокирован')).toBeDisabled();
-    expect(within(dialog).getByRole('combobox')).toBeDisabled();
+    expect(within(dialog).getByRole('combobox', { name: 'Роль' })).toBeDisabled();
   });
 
   it('сохранение без изменений: нет PATCH, диалог закрывается', async () => {
@@ -271,5 +284,67 @@ describe('UsersPage', () => {
       ).toBe(true),
     );
     expect(await screen.findByText('Сессии пользователя ivanov завершены')).toBeInTheDocument();
+  });
+
+  it('колонка «Группы» показывает названия групп', async () => {
+    mockApi([adminMe, { path: '/api/users', body: users }, { path: '/api/groups', body: groups }]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    expect(screen.getByRole('columnheader', { name: 'Группы' })).toBeInTheDocument();
+    await waitFor(() => expect(row('ivanov')).toHaveTextContent('Бухгалтерия, Склад'));
+  });
+
+  it('редактирование групп: PUT /api/users/:id/groups без PATCH', async () => {
+    const { calls } = mockApi([
+      adminMe,
+      { path: '/api/users', body: users },
+      { path: '/api/groups', body: groups },
+      {
+        method: 'PUT',
+        path: '/api/users/u2/groups',
+        handler: ({ body }) => ({ body: (body as { groupIds: string[] }).groupIds }),
+      },
+    ]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    await userEvent.click(within(row('ivanov')).getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('group', { name: 'Группы' })).toBeInTheDocument();
+    const combo = within(dialog).getByRole('combobox', { name: 'Группы' });
+    await waitFor(() => expect(combo).toHaveTextContent('Бухгалтерия'));
+    await userEvent.click(combo);
+    await userEvent.click(await screen.findByRole('option', { name: 'Юристы' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+    expect(calls.find((c) => c.method === 'PUT')).toEqual({
+      method: 'PUT',
+      path: '/api/users/u2/groups',
+      body: { groupIds: ['g1', 'g2', 'g3'] },
+    });
+  });
+
+  it('пароль и группы: PATCH, затем PUT groups', async () => {
+    const { calls } = mockApi([
+      adminMe,
+      { path: '/api/users', body: users },
+      { path: '/api/groups', body: groups },
+      { method: 'PATCH', path: '/api/users/u2', body: users[1] },
+      { method: 'PUT', path: '/api/users/u2/groups', body: ['g2'] },
+    ]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    await userEvent.click(within(row('ivanov')).getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Новый пароль'), 'newpass123');
+    const combo = within(dialog).getByRole('combobox', { name: 'Группы' });
+    await waitFor(() => expect(combo).toHaveTextContent('Бухгалтерия'));
+    await userEvent.click(combo);
+    await userEvent.click(await screen.findByRole('option', { name: 'Бухгалтерия' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const writes = calls.filter((c) => c.method === 'PATCH' || c.method === 'PUT');
+    expect(writes.map((c) => c.method)).toEqual(['PATCH', 'PUT']);
+    expect(writes[1]?.body).toEqual({ groupIds: ['g2'] });
   });
 });

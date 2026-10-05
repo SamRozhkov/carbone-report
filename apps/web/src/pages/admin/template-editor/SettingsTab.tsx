@@ -1,12 +1,23 @@
-import type { OutputFormat, TemplateAdminDetails } from '@carbone-reports/shared';
-import { Button, Select, Text, TextArea, TextInput, useToaster } from '@gravity-ui/uikit';
+import type { OutputFormat, TemplateAccess, TemplateAdminDetails } from '@carbone-reports/shared';
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Loader,
+  Select,
+  Text,
+  TextArea,
+  TextInput,
+  useToaster,
+} from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { api } from '../../../api/endpoints';
 import { errorMessage, fieldErrors } from '../../../api/errors';
 import { ErrorAlert } from '../../../components/ErrorAlert';
 import { Field } from '../../../components/Field';
 import { GeneralError } from '../../../components/GeneralError';
+import { sameIds } from '../../../lib/ids';
 import { applyTemplate } from './editorState';
 
 const SHOWN = ['name', 'description', 'datasourceId', 'defaultOutput'];
@@ -114,6 +125,7 @@ export function SettingsTab({ template }: { template: TemplateAdminDetails }) {
           Сохранить настройки
         </Button>
       </div>
+      <AccessSection templateId={template.id} />
       <div className="cr-field" style={{ marginTop: 16 }}>
         <Text variant="subheader-1">Заменить файл шаблона</Text>
         <Text color="secondary" variant="caption-2">
@@ -133,5 +145,134 @@ export function SettingsTab({ template }: { template: TemplateAdminDetails }) {
         />
       </div>
     </div>
+  );
+}
+
+const NO_CATEGORY = '__none__';
+
+const sameAccess = (a: TemplateAccess, b: TemplateAccess) =>
+  a.public === b.public && a.categoryId === b.categoryId && sameIds(a.groupIds, b.groupIds);
+
+/** Кто видит шаблон: «доступно всем», категория и группы (правило — в access.ts на сервере). */
+function AccessSection({ templateId }: { templateId: string }) {
+  const queryClient = useQueryClient();
+  const { add } = useToaster();
+  const headingId = useId();
+  const access = useQuery({
+    queryKey: ['template-access', templateId],
+    queryFn: () => api.templates.getAccess(templateId),
+  });
+  const categories = useQuery({ queryKey: ['categories'], queryFn: api.categories.list });
+  const groups = useQuery({ queryKey: ['groups'], queryFn: api.groups.list });
+  const [baseline, setBaseline] = useState<TemplateAccess | undefined>(undefined);
+  const [form, setForm] = useState<TemplateAccess | undefined>(undefined);
+  const dirty = !!form && !!baseline && !sameAccess(form, baseline);
+  // Новые данные с сервера подхватываем, только если нет несохранённых правок.
+  if (access.data && access.data !== baseline && !dirty) {
+    setBaseline(access.data);
+    setForm(access.data);
+  }
+
+  const save = useMutation({
+    mutationFn: (body: TemplateAccess) => api.templates.access(templateId, body),
+    onSuccess: async (saved) => {
+      queryClient.setQueryData(['template-access', templateId], saved);
+      setBaseline(saved);
+      setForm(saved);
+      add({ name: `tpl-access-${Date.now()}`, title: 'Доступ сохранён', theme: 'success' });
+      await Promise.all(
+        [['templates'], ['categories']].map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey }),
+        ),
+      );
+    },
+  });
+  const errors = fieldErrors(save.error);
+  const set = (patch: Partial<TemplateAccess>) => {
+    save.reset();
+    setForm((f) => (f ? { ...f, ...patch } : f));
+  };
+
+  const category = form?.categoryId
+    ? categories.data?.find((c) => c.id === form.categoryId)
+    : undefined;
+  // Без данных о выбранной категории вывод сделать нельзя — предупреждение не показываем.
+  const categoryKnown = !form?.categoryId || !!category;
+  const adminOnly =
+    !!form &&
+    categoryKnown &&
+    !form.public &&
+    form.groupIds.length === 0 &&
+    !(category && (category.public || category.groupIds.length > 0));
+
+  return (
+    <section aria-labelledby={headingId} className="cr-form" style={{ marginTop: 16 }}>
+      <Text variant="subheader-2" id={headingId}>
+        Доступ
+      </Text>
+      <ErrorAlert error={access.error} title="Не удалось загрузить настройки доступа" />
+      {categories.error && (
+        <ErrorAlert error={categories.error} title="Не удалось загрузить категории" />
+      )}
+      {groups.error && <ErrorAlert error={groups.error} title="Не удалось загрузить группы" />}
+      {access.isPending && <Loader size="s" />}
+      {form && (
+        <>
+          <Field label="Категория" error={errors.categoryId}>
+            <Select
+              aria-label="Категория"
+              value={[form.categoryId ?? NO_CATEGORY]}
+              onUpdate={([v]) => set({ categoryId: !v || v === NO_CATEGORY ? null : v })}
+              options={[
+                { value: NO_CATEGORY, content: 'Без категории' },
+                ...(categories.data ?? []).map((c) => ({ value: c.id, content: c.name })),
+              ]}
+              loading={categories.isPending}
+              filterable
+              width="max"
+            />
+          </Field>
+          <Field label="Видимость" error={errors.public} group>
+            <Checkbox
+              checked={form.public}
+              onUpdate={(v) => set({ public: v })}
+              content="Доступно всем"
+            />
+          </Field>
+          <Field
+            label="Группы"
+            hint="группы, которым виден шаблон, помимо доступа через категорию"
+            group
+          >
+            <Select
+              aria-label="Группы"
+              value={form.groupIds}
+              onUpdate={(v) => set({ groupIds: v })}
+              options={(groups.data ?? []).map((g) => ({ value: g.id, content: g.name }))}
+              multiple
+              filterable
+              hasClear
+              loading={groups.isPending}
+              placeholder="нет групп"
+              width="max"
+            />
+          </Field>
+          {adminOnly && (
+            <Alert theme="warning" message="Шаблон сейчас доступен только администраторам" />
+          )}
+          <GeneralError error={save.error} errors={errors} shown={['categoryId', 'public']} />
+          <div>
+            <Button
+              view="action"
+              onClick={() => save.mutate(form)}
+              loading={save.isPending}
+              disabled={!dirty}
+            >
+              Сохранить доступ
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
   );
 }

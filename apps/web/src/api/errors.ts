@@ -26,3 +26,8 @@ export function fieldErrors(e: unknown): Record<string, string> {
   }
   return out;
 }
+
+/** 409 (название занято): текст для показа у поля «Название». */
+export function conflictMessage(e: unknown): string | undefined {
+  return e instanceof ApiRequestError && e.status === 409 ? e.message : undefined;
+}

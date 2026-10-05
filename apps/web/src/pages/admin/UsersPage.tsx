@@ -18,6 +18,8 @@ export function UsersPage() {
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const users = useQuery({ queryKey: ['users'], queryFn: api.users.list });
+  const groups = useQuery({ queryKey: ['groups'], queryFn: api.groups.list });
+  const groupName = new Map((groups.data ?? []).map((g) => [g.id, g.name]));
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<UserDto | null>(null);
   const [deleting, setDeleting] = useState<UserDto | null>(null);
@@ -86,6 +88,15 @@ export function UsersPage() {
         ) : (
           <Label theme="success">активен</Label>
         ),
+    },
+    {
+      id: 'groups',
+      name: 'Группы',
+      template: (u) =>
+        u.groupIds
+          .map((id) => groupName.get(id))
+          .filter(Boolean)
+          .join(', ') || '—',
     },
     { id: 'createdAt', name: 'Создан', template: (u) => formatDate(u.createdAt) },
     {

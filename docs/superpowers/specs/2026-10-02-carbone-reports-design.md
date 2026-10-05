@@ -410,3 +410,51 @@ scripts/smoke.ts            сквозная проверка работающе
 4. `GET /onlyoffice/healthcheck` → `true`. `GET /onlyoffice/web-apps/apps/api/documents/api.js` → 200.
 5. Цепочка OnlyOffice → api: из `GET /api/templates/:id/editor-config` берётся `document.url`. Затем `POST /onlyoffice/converter`, подписанный `ONLYOFFICE_JWT_SECRET`, с `url` = `document.url` и `outputtype: pdf`. Ожидается `endConvert: true` и `fileUrl`. Это проверяет сеть между сервисами, разрешение приватных IP и общий JWT.
 6. Скрипт удаляет созданные им шаблон и источник данных.
+
+## 14. Демо-данные, E2E и строгая CSP (План 3)
+
+Утверждено 2026-10-05. Уточняет §10 (демо-профиль) и §11 (E2E smoke).
+
+### 14.1 Демо-профиль
+- Сервис `demo-db` (`postgres:17-alpine`, `profiles: [demo]`, без опубликованных портов) с данными из `demo/seed.sql`. SQL монтируется в `/docker-entrypoint-initdb.d` и выполняется при первом создании тома `demo_pgdata`. Таблицы:
+  - `company`: `id`, `name`, `inn`, `address`;
+  - `invoices`: `id`, `company_id`, `number`, `issued_on`;
+  - `invoice_items`: `id`, `invoice_id`, `name`, `qty`, `price`.
+  
+  Счета 1 и 2 содержат по 3 позиции.
+- Пользователь `demo_ro` получает только `SELECT`, его пароль задаётся переменной `DEMO_DB_PASSWORD` (обязательна для профиля). Пароль подставляется в SQL через init-скрипт `demo/init.sh`.
+- `scripts/demo-seed.ts` наполняет стек только через публичный API, под учётной записью админа из `.env`. Скрипт идемпотентен, поиск ведётся по имени.
+  - Создаётся источник «Демо-база» (`demo-db:5432/demo`, пользователь `demo_ro`).
+  - Загружается шаблон «Счёт (демо)»: DOCX, который собирает скрипт. В нём:
+    - заголовок `Счёт № {d.invoice.number} от {d.invoice.issued_on}`;
+    - `{d.company.name}`, `{d.company.address}`;
+    - таблица со строкой `{d.items[i].name} | {d.items[i].qty} | {d.items[i].price}` и маркером `{d.items[i+1]}`.
+  - Настраиваются запросы:
+    - `company` (single): `select c.name, c.inn, c.address from company c join invoices i on i.company_id = c.id where i.id = :invoiceId`;
+    - `invoice` (single): `select number, issued_on from invoices where id = :invoiceId`;
+    - `items` (list): `select name, qty, price from invoice_items where invoice_id = :invoiceId order by id`.
+  - Настраивается параметр `invoiceId`: number, required, по умолчанию 1, подпись «Номер счёта (id)».
+- `pnpm stack:demo` = `docker compose --profile demo up -d --build` + ожидание health + `demo-seed`.
+
+### 14.2 E2E (Playwright, хост)
+- Пакет `e2e/` (`@carbone-reports/e2e`), браузер Chromium, `BASE_URL` по умолчанию `https://localhost:8443`, `ignoreHTTPSErrors`. Логин и пароль админа берутся из `.env`. Запуск: `pnpm e2e` против поднятого `stack:demo`.
+- Общая фикстура:
+  - до загрузки страницы скрипт (`addInitScript`) копит события `securitypolicyviolation`, в том числе внутри iframe того же источника;
+  - после каждого теста проверяется, что нарушений нет;
+  - собираются ошибки консоли.
+- Сценарии:
+  1. **Пользователь.** Админ создаёт пользователя через интерфейс. Пользователь входит, админского меню нет. Он генерирует «Счёт (демо)» в PDF, и iframe предпросмотра загружается. Затем генерирует DOCX: в скачанном файле есть название компании, ИНН и позиции счёта 1. В «Истории» есть запуск.
+  2. **Админ, данные.** «Данные» → выполнить `items` → строки видны. «Предпросмотр» → «Получить данные» → во вкладке «Документ» в дереве тегов есть `{d.company.name}`.
+  3. **OnlyOffice, правка.**
+     - Вкладка «Документ»: редактор загружается за `/onlyoffice/`, ожидается готовность фрейма.
+     - В конец документа вводится `ИНН: {d.company.inn}`.
+     - «Сохранить» → «Сохранено, версия N».
+     - DOCX отчёта содержит ИНН из `demo-db`.
+     - Если ввод в canvas ненадёжен, допускается вставка из буфера обмена.
+  4. **Вкладки.** «Документ» → «Данные» → «Документ»: iframe видим и имеет ненулевой размер.
+  5. **Наблюдение.** Закрыть редактор (уйти со страницы) и через 20 с запросить `editor-config`: фиксируется, сменился ли `document.key`. Результат пишется в аннотацию теста, тест не падает.
+- Тест 3 меняет демо-шаблон, поэтому `demo-seed` умеет заново загружать исходный файл (`--reset-template`, через `PUT /file`). E2E вызывает это в `beforeAll`.
+
+### 14.3 Строгая CSP
+- После зелёного прогона E2E с нулём нарушений `Content-Security-Policy-Report-Only` заменяется на `Content-Security-Policy` с той же политикой, и прогон повторяется.
+- Если найденное нарушение окажется настоящей потребностью (OnlyOffice, Monaco), директива расширяется точечно и с комментарием.

@@ -25,6 +25,19 @@ describe('Storage', () => {
   it('remove игнорирует отсутствующий файл', async () => {
     await expect(storage.remove('nope/none.bin')).resolves.toBeUndefined();
   });
+  it('remove идёт через шлюз, write и read — нет', async () => {
+    const calls: string[] = [];
+    const gated = new Storage(root, async (fn) => {
+      calls.push('gate');
+      return fn();
+    });
+    await gated.write('a/x.txt', Buffer.from('1'));
+    await gated.read('a/x.txt');
+    expect(calls).toEqual([]);
+    await gated.remove('a/x.txt');
+    expect(calls).toEqual(['gate']);
+    expect(await gated.exists('a/x.txt')).toBe(false);
+  });
   it('запрещает выход за корень', () => {
     expect(() => storage.path('../etc/passwd')).toThrow(/недопустимый путь/);
   });

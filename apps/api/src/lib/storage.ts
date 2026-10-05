@@ -2,10 +2,17 @@ import { randomUUID } from 'node:crypto';
 import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 
+/** Обёртка вокруг удаления: бэкап приостанавливает удаления, чтобы дамп и архив совпадали. */
+export type RemoveGate = <T>(fn: () => Promise<T>) => Promise<T>;
+const passThrough: RemoveGate = (fn) => fn();
+
 export class Storage {
   private readonly root: string;
 
-  constructor(root: string) {
+  constructor(
+    root: string,
+    private readonly removeGate: RemoveGate = passThrough,
+  ) {
     this.root = resolve(root);
   }
 
@@ -27,9 +34,10 @@ export class Storage {
     return readFile(this.path(rel));
   }
 
-  /** Удаляет файл или каталог целиком; отсутствие — не ошибка. */
+  /** Удаляет файл или каталог целиком; отсутствие — не ошибка. Ждёт, пока идёт бэкап. */
   async remove(rel: string): Promise<void> {
-    await rm(this.path(rel), { recursive: true, force: true });
+    const abs = this.path(rel);
+    await this.removeGate(() => rm(abs, { recursive: true, force: true }));
   }
 
   async exists(rel: string): Promise<boolean> {

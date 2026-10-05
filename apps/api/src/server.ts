@@ -4,6 +4,7 @@ import { createDb, migrateDb } from './db/client';
 import type { AppDeps } from './deps';
 import { fetchFile } from './lib/fetch-file';
 import { Storage } from './lib/storage';
+import { createRemoveGate } from './lib/storage-gate';
 import { ensureAdmin } from './modules/auth/bootstrap';
 import { CarboneClient } from './modules/carbone/client';
 import { createSourcePools } from './modules/datasources/pools';
@@ -19,7 +20,7 @@ const carbone = new CarboneClient({ baseUrl: config.carboneUrl });
 const deps: AppDeps = {
   config,
   db,
-  storage: new Storage(config.storageDir),
+  storage: new Storage(config.storageDir, createRemoveGate(pool)),
   sources: createSourcePools({ db, config }),
   carbone,
   onlyoffice: createOnlyOfficeCommands({

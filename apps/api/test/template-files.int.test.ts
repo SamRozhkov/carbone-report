@@ -1,6 +1,8 @@
 import { eq, sql } from 'drizzle-orm';
+import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { templates } from '../src/db/schema';
+import { STORAGE_REMOVE_LOCK_KEY } from '../src/lib/storage-gate';
 import { createBlankDocument } from '../src/modules/templates/blank';
 import { migrateTemplateFiles } from '../src/modules/templates/file-migration';
 import { templateFileRef } from '../src/modules/templates/service';
@@ -159,6 +161,30 @@ describe('файлы шаблонов по версиям', () => {
     });
     spy2.mockRestore();
     expect(dup.statusCode).toBe(201);
+  });
+});
+
+describe('шлюз удалений', () => {
+  it('удаление шаблона во время бэкапа ждёт снятия блокировки', async () => {
+    const id = await createTemplate(t, admin, dsId);
+    const path = (await rowOf(id)).filePath;
+    const holder = new pg.Client({ connectionString: t.deps.config.databaseUrl });
+    await holder.connect();
+    try {
+      await holder.query('select pg_advisory_lock($1)', [STORAGE_REMOVE_LOCK_KEY]);
+      const del = t.app.inject({
+        method: 'DELETE',
+        url: `/api/templates/${id}`,
+        headers: { cookie: admin },
+      });
+      await new Promise((r) => setTimeout(r, 300));
+      expect(await t.deps.storage.exists(path)).toBe(true);
+      await holder.query('select pg_advisory_unlock($1)', [STORAGE_REMOVE_LOCK_KEY]);
+      expect((await del).statusCode).toBe(204);
+      expect(await t.deps.storage.exists(path)).toBe(false);
+    } finally {
+      await holder.end();
+    }
   });
 });
 

@@ -84,6 +84,26 @@ services:
     restart: unless-stopped
     logging: *logging
 
+  demo-db:
+    image: postgres:17-alpine
+    profiles: [demo]
+    environment:
+      POSTGRES_USER: demo_owner
+      # Пустое значение не мешает прод-стеку без профиля demo; сам demo-db без пароля не стартует.
+      POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD:-}
+      POSTGRES_DB: demo
+      DEMO_DB_PASSWORD: ${DEMO_DB_PASSWORD:-}
+    volumes:
+      - demo_pgdata:/var/lib/postgresql/data
+      - ./demo/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U demo_owner -d demo']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging: *logging
+
   carbone:
     image: carbone/carbone-ee:full-5.15.3-fonts
     volumes:
@@ -114,6 +134,7 @@ services:
 volumes:
   storage:
   pgdata:
+  demo_pgdata:
   carbone_templates:
   oo_data:
   oo_lib:

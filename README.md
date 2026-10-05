@@ -95,7 +95,12 @@ pnpm stack:down     # остановить
 
 Первый запуск E2E: `pnpm --filter @carbone-reports/e2e exec playwright install chromium`.
 Отчёт — `e2e/report/index.html`; при падении trace сохраняется в `e2e/test-results/`.
-E2E меняет демо-шаблон и сам восстанавливает его; вручную: `pnpm demo:seed -- --reset-template`.
+E2E меняет демо-шаблон. Перед каждым прогоном он сам восстанавливает исходный файл, запросы и параметры (`e2e/global-setup.ts`); после прогона шаблон остаётся изменённым. Вручную: `pnpm demo:seed -- --reset-template`.
+Пароль `DEMO_DB_PASSWORD` задаётся ролям демо-БД только при первом создании тома. Если вы поменяли его позже, пересоздайте том демо-БД (другие тома не трогаются):
+
+```bash
+docker compose --profile demo rm -sf demo-db && docker volume rm carbone-reports_demo_pgdata && pnpm stack:demo
+```
 
 ## Безопасность источников данных
 

@@ -99,16 +99,26 @@ export function fallbackStore(opts: FallbackStoreOptions): FastifyRateLimitStore
         this.local[method](key, cb, timeWindow, max);
         return;
       }
-      this.primary[method](
-        key,
-        (err, res) => {
-          if (!err) return cb(null, res);
-          this.trip(err);
-          this.local[method](key, cb, timeWindow, max);
-        },
-        timeWindow,
-        max,
-      );
+      let answered = false;
+      try {
+        this.primary[method](
+          key,
+          (err, res) => {
+            answered = true;
+            if (!err) return cb(null, res);
+            this.trip(err);
+            this.local[method](key, cb, timeWindow, max);
+          },
+          timeWindow,
+          max,
+        );
+      } catch (e) {
+        // ioredis может бросить синхронно, не вызвав колбэк: то же, что ошибка Redis.
+        // Если колбэк уже был вызван, исключение не от Redis — второй ответ не нужен.
+        if (answered) throw e;
+        this.trip(e instanceof Error ? e : new Error(String(e)));
+        this.local[method](key, cb, timeWindow, max);
+      }
     }
 
     private trip(err: Error) {
@@ -118,7 +128,7 @@ export function fallbackStore(opts: FallbackStoreOptions): FastifyRateLimitStore
         this.breaker.lastWarn = now;
         opts.log?.warn(
           { err: err.message, retryInMs: breakMs },
-          'Redis недоступен — лимит входа считается в памяти экземпляра',
+          'Redis недоступен — лимиты запросов считаются в памяти экземпляра',
         );
       }
     }

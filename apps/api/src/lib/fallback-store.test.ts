@@ -13,6 +13,8 @@ function fakeRedis() {
   const counts = new Map<string, number>();
   const r = {
     down: false,
+    /** Команда бросает синхронно, не вызывая колбэк. */
+    throws: false,
     keys: [] as string[],
     defineCommand: vi.fn(),
     rateLimit(
@@ -24,6 +26,7 @@ function fakeRedis() {
       cb: (err: Error | null, res?: [number, number]) => void,
     ) {
       r.keys.push(key);
+      if (r.throws) throw new Error('sync boom');
       queueMicrotask(() => {
         if (r.down) return cb(new Error('Connection is closed.'));
         const n = (counts.get(key) ?? 0) + 1;
@@ -134,6 +137,20 @@ describe('fallbackStore', () => {
     vi.setSystemTime(1_000_000 + 5_000);
     await call(store, 'a');
     expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('Redis бросает синхронно: вызов уходит в память, автомат размыкается', async () => {
+    const { redis, store, warn } = setup();
+    redis.throws = true;
+    expect(await call(store, 'x')).toMatchObject({ current: 1 });
+    expect(localIncr).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toMatchObject({ err: 'sync boom' });
+    expect(warn.mock.calls[0]?.[1]).toBe(
+      'Redis недоступен — лимиты запросов считаются в памяти экземпляра',
+    );
+    expect(await call(store, 'x')).toMatchObject({ current: 2 });
+    expect(redis.keys).toHaveLength(1);
   });
 
   it('child для маршрута: ключ как у RedisStore.child, автомат общий с корнем и соседями', async () => {

@@ -89,8 +89,15 @@ describe('auth', () => {
 
   it('11-я неудачная попытка входа за минуту для одного логина → 429, другие логины не затронуты', async () => {
     const { user } = await loginAs(t, 'user');
+    // Свой адрес: попытки этого теста не тратят общий лимит по IP (30 в минуту) для
+    // остальных входов этого файла.
     const attempt = (login: string, password: string) =>
-      t.app.inject({ method: 'POST', url: '/api/auth/login', payload: { login, password } });
+      t.app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        headers: { 'x-forwarded-for': '10.9.0.1' },
+        payload: { login, password },
+      });
     // loginAs уже сделал 1 запрос; добиваем до лимита (10) неверными паролями.
     for (let i = 0; i < 9; i++) expect((await attempt(user.login, 'bad')).statusCode).toBe(401);
     const blocked = await attempt(user.login.toUpperCase(), 'bad');

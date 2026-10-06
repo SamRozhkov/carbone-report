@@ -24,6 +24,20 @@ export type { AppDeps };
 /** Токен файлового доступа передаётся в query-параметре t: в логи он не попадает. */
 export const redactToken = (url?: string) => url?.replace(/([?&])t=[^&]*/g, '$1t=***');
 
+/**
+ * Сколько прокси стоит перед API. Сейчас один — nginx: req.ip — последний адрес
+ * X-Forwarded-For, его дописывает nginx; адреса, подставленные клиентом левее, не
+ * учитываются. Если перед nginx появится ещё один прокси, число нужно увеличить.
+ */
+export const TRUSTED_PROXY_HOPS = 1;
+
+/**
+ * Доверие по числу прокси-хопов (как `trustProxy: n` в Fastify 4). Fastify 5.12 число
+ * в `trustProxy` не доверяет ни одному хопу (req.ip — адрес nginx у всех клиентов),
+ * поэтому то же правило задано функцией: хоп 0 — сокет (nginx), ему верим.
+ */
+export const trustProxyHops = (hops: number) => (_addr: string, hop: number) => hop < hops;
+
 export function createFastify() {
   const app = Fastify({
     logger:
@@ -39,6 +53,7 @@ export function createFastify() {
             },
           },
     bodyLimit: 1024 * 1024,
+    trustProxy: trustProxyHops(TRUSTED_PROXY_HOPS),
   }).withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);

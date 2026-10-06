@@ -29,7 +29,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
     max: 10,
     timeWindow: '1 minute',
     hook: 'preHandler' as const,
-    // Ключ — логин, а не IP: за nginx все запросы приходят с одного адреса.
+    // Ключ — логин: подбор пароля к одной учётной записи с любых адресов.
     keyGenerator: (req: FastifyRequest) =>
       String((req.body as { login?: unknown } | undefined)?.login ?? '')
         .trim()
@@ -38,9 +38,37 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
       new AppError('TOO_MANY_ATTEMPTS', 429, 'слишком много попыток входа, повторите через минуту'),
   };
 
+  // Лимит по IP поверх лимита по логину: перебор многих логинов с одного адреса.
+  // Адрес — req.ip, его дописывает nginx (TRUSTED_PROXY_HOPS в createFastify).
+  // createRateLimit 11.2 берёт хранилище плагина (store.child) с тем же запасом в памяти,
+  // а nameSpace из опций читает FallbackStore.child. В типах CreateRateLimitOptions поля
+  // nameSpace нет, поэтому опции передаются через переменную, без проверки лишних полей.
+  const ipLimitOptions = {
+    max: 30,
+    timeWindow: '1 minute',
+    keyGenerator: (req: FastifyRequest) => req.ip,
+    nameSpace: 'cr:rl-ip:',
+  };
+  const ipLimit = app.createRateLimit(ipLimitOptions);
+
   app.post(
     '/api/auth/login',
-    { schema: { body: LoginBody }, config: { rateLimit: loginRateLimit } },
+    {
+      schema: { body: LoginBody },
+      config: { rateLimit: loginRateLimit },
+      // Свой preHandler идёт раньше лимита по логину (плагин дописывает свой хук в конец):
+      // оба считают независимо, отвечает тот, что исчерпан первым.
+      preHandler: async (req) => {
+        const r = await ipLimit(req);
+        if (!r.isAllowed && r.isExceeded) {
+          throw new AppError(
+            'TOO_MANY_ATTEMPTS',
+            429,
+            'слишком много попыток входа с этого адреса, повторите через минуту',
+          );
+        }
+      },
+    },
     async (req, reply) => {
       const [row] = await deps.db.select().from(users).where(eq(users.login, req.body.login));
       const ok = await verifyPassword(

@@ -6,7 +6,7 @@ declare module '@fastify/rate-limit/store/RedisStore.js' {
     continueExceeding: boolean,
     exponentialBackoff: boolean,
     // ioredis-клиент: хранилище регистрирует на нём команды rateLimit/rateLimitRead.
-    redis: unknown,
+    redis: import('ioredis').Redis,
     key?: string,
   ) => FastifyRateLimitStore & { read: FastifyRateLimitStore['incr'] };
   export default RedisStore;

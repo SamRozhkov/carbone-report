@@ -5,7 +5,7 @@ import type {
   TemplateAdminDetails,
   TemplateParam,
 } from '@carbone-reports/shared';
-import { sqlAnyRefs } from '@carbone-reports/shared';
+import { sqlCompareRefs } from '@carbone-reports/shared';
 import { ArrowDown, ArrowUp, Plus, TrashBin } from '@gravity-ui/icons';
 import {
   Button,
@@ -57,17 +57,24 @@ export function sqlRefs(sql: string): string[] {
 
 /** Подсказки о сравнении: множественный параметр — через = any(:имя), одиночный — через = :имя. */
 export function anyHints(sql: string, drafts: Draft[]): string[] {
-  const inAny = new Set(sqlAnyRefs(sql));
-  return sqlRefs(sql).flatMap((n) => {
-    const p = drafts.find((d) => d.name === n && d.type === 'query');
-    if (!p) return [];
-    const label = p.label || n;
-    if (p.multiple && !inAny.has(n))
-      return [`«${label}» — множественный выбор: сравнивайте через = any(:${n})`];
-    if (!p.multiple && inAny.has(n))
-      return [`«${label}» — одно значение: сравнивайте через = :${n}`];
-    return [];
-  });
+  const refs = sqlCompareRefs(sql);
+  const draft = (n: string) => {
+    // Дубликаты имён отклонит сервер при сохранении — подсказку не гадаем.
+    const found = drafts.filter((d) => d.name === n);
+    return found.length === 1 && found[0]!.type === 'query' ? found[0] : undefined;
+  };
+  const hints: string[] = [];
+  for (const n of refs.scalar) {
+    const p = draft(n);
+    if (p?.multiple)
+      hints.push(`«${p.label || n}» — множественный выбор: сравнивайте через = any(:${n})`);
+  }
+  for (const n of refs.any) {
+    const p = draft(n);
+    if (p && !p.multiple)
+      hints.push(`«${p.label || n}» — одно значение: сравнивайте через = :${n}`);
+  }
+  return hints;
 }
 
 const CHECK_SHOWN = 20;
@@ -390,8 +397,8 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
                   />
                   {errorFor(i, 'multiple') && <Text color="danger">{errorFor(i, 'multiple')}</Text>}
                   <Text color="secondary">зависит от: {sqlRefs(d.sql).join(', ') || '—'}</Text>
-                  {anyHints(d.sql, drafts).map((h) => (
-                    <Text key={h} color="warning">
+                  {anyHints(d.sql, drafts).map((h, k) => (
+                    <Text key={k} color="warning">
                       {h}
                     </Text>
                   ))}

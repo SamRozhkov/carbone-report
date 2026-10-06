@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DatasourceBody,
+  sqlCompareRefs,
   ParamsInput,
   TemplateParam,
   TemplateQuery,
@@ -151,5 +152,35 @@ describe('DatasourceBody: SSL', () => {
       }).sslCa,
     ).toContain('BEGIN');
     expect(DatasourceBody.parse({ ...base, sslMode: 'verify', sslCa: '  ' }).sslCa).toBeNull();
+  });
+});
+
+describe('sqlCompareRefs', () => {
+  const r = sqlCompareRefs;
+  it('скалярное сравнение и ровно any(:имя)', () => {
+    expect(r('where a = :a and b >= :b and c != :c and d = any(:d)')).toEqual({
+      scalar: ['a', 'b', 'c'],
+      any: ['d'],
+      missingOperator: false,
+    });
+  });
+  it('массивные формы не считаются скалярным сравнением', () => {
+    const x = r(
+      'where a <> all(:a) and b in (select unnest(:b)) and c = any(:c::int[]) and :d && e',
+    );
+    expect(x.scalar).toEqual([]);
+    expect(x.any).toEqual([]);
+    expect(r('where a = :a::int[]').scalar).toEqual([]);
+    expect(r('where a = :a::int').scalar).toEqual(['a']);
+  });
+  it('комментарии, строки и идентификаторы в кавычках пропускаются', () => {
+    const x = r(`where a = any(:a) -- = :a\n /* = :b */ and s = '= :c' and "x = :d" = 1`);
+    expect(x).toEqual({ scalar: [], any: ['a'], missingOperator: false });
+  });
+  it('any без оператора', () => {
+    expect(r('where a any(:a)').missingOperator).toBe(true);
+    expect(r('where a in any(:a)').missingOperator).toBe(true);
+    expect(r('where a = any(:a)').missingOperator).toBe(false);
+    expect(r('where a = ANY (:a)').missingOperator).toBe(false);
   });
 });

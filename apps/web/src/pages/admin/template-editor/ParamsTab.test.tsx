@@ -4,7 +4,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { mockApi, renderWithProviders } from '../../../test/utils';
-import { ParamsTab } from './ParamsTab';
+import { anyHints, ParamsTab } from './ParamsTab';
 import { adminTemplate } from '../../../test/fixtures';
 
 const t = {
@@ -391,6 +391,18 @@ describe('ParamsTab', () => {
     expect(
       screen.getByText('«Один» — одно значение: сравнивайте через = :single'),
     ).toBeInTheDocument();
+  });
+
+  it('anyHints: комментарии, массивные формы, дубликаты имён и не-query параметры без подсказки', () => {
+    const d = (name: string, over: object = {}) =>
+      ({ id: 0, name, label: name, type: 'query', multiple: true, sql: '', ...over }) as never;
+    expect(anyHints('where c = any(:m) -- = :m', [d('m')])).toEqual([]);
+    expect(anyHints('where c <> all(:m)', [d('m')])).toEqual([]);
+    expect(anyHints('where c = :m', [d('m'), d('m')])).toEqual([]);
+    expect(anyHints('where c = :m', [d('m', { type: 'string' })])).toEqual([]);
+    expect(anyHints('where c = :m', [d('m')])).toEqual([
+      '«m» — множественный выбор: сравнивайте через = any(:m)',
+    ]);
   });
 
   it('«Проверить» выполняет options с тестовыми параметрами и показывает варианты', async () => {

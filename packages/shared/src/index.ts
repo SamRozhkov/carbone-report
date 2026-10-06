@@ -358,10 +358,26 @@ export type ApiError = z.infer<typeof ApiError>;
 export const IdParams = z.object({ id: z.uuid('неверный идентификатор') });
 export type IdParams = z.infer<typeof IdParams>;
 
+/** Где SQL сравнивает параметры — для подсказок `= :имя` против `= any(:имя)`. */
+export interface SqlCompareRefs {
+  /** Сразу после оператора сравнения: `= :имя` (без приведения к массиву `::type[]`). */
+  scalar: string[];
+  /** Ровно `any(:имя)`. */
+  any: string[];
+  /** `any(` без оператора перед ним: `col any(...)`, `col in any(...)`. */
+  missingOperator: boolean;
+}
+
 /**
- * Параметры, сравниваемые через `any(:имя)` — так в SQL передаётся массив множественного выбора.
- * Только для подсказок: комментарии и строки не пропускаются.
+ * Разбор регулярками — только для подсказок. Комментарии, строки и идентификаторы в кавычках
+ * вырезаются заранее, чтобы `:имя` в них не учитывалось.
  */
-export function sqlAnyRefs(sql: string): string[] {
-  return [...new Set([...sql.matchAll(/\bany\s*\(\s*:([A-Za-z_]\w*)/gi)].map((m) => m[1]!))];
+export function sqlCompareRefs(sql: string): SqlCompareRefs {
+  const s = sql.replace(/--[^\n]*|\/\*[\s\S]*?\*\/|'(?:[^']|'')*'|"(?:[^"]|"")*"/g, ' ');
+  const names = (re: RegExp) => [...new Set([...s.matchAll(re)].map((m) => m[1]!))];
+  return {
+    scalar: names(/(?:[=<>]|!=)\s*:([A-Za-z_]\w*)\b(?!\s*::[\w\s]*\[)/g),
+    any: names(/\bany\s*\(\s*:([A-Za-z_]\w*)\s*\)/gi),
+    missingOperator: /[\w)\]]\s+any\s*\(/i.test(s),
+  };
 }

@@ -2,7 +2,7 @@
 # Один бэкап: дамп базы и архив хранилища под исключительной advisory-блокировкой
 # (API на это время откладывает удаления файлов — дамп и архив согласованы).
 set -eu
-# shellcheck source=lib.sh
+# shellcheck source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 : "${PGHOST:=postgres}" "${PGUSER:=app}" "${PGDATABASE:=app}" "${LOCK_KEY:=726100001}"
 : "${BACKUP_KEEP:=14}"

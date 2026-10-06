@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-# shellcheck source=lib.sh
+# shellcheck source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 case "${1:-cron}" in
   now) exec /backup/backup.sh ;;

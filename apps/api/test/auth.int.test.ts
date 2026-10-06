@@ -5,6 +5,8 @@ import { ensureAdmin } from '../src/modules/auth/bootstrap';
 import { createTestApp, loginAs, type TestApp } from './helpers';
 
 let t: TestApp;
+// Файл делит одно приложение и подходит к потолку 30 входов в минуту с одного IP:
+// новым тестам с большим числом входов нужен свой X-Forwarded-For.
 beforeAll(async () => {
   t = await createTestApp();
 });

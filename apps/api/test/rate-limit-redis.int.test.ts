@@ -4,8 +4,13 @@ import { afterAll, describe, expect, inject, it } from 'vitest';
 import { createRedis } from '../src/lib/redis';
 import { createTestApp, createTestRedis, loginAs, type TestApp } from './helpers';
 
-const attempt = (t: TestApp, login: string, password: string) =>
-  t.app.inject({ method: 'POST', url: '/api/auth/login', payload: { login, password } });
+const attempt = (t: TestApp, login: string, password: string, xff?: string) =>
+  t.app.inject({
+    method: 'POST',
+    url: '/api/auth/login',
+    ...(xff ? { headers: { 'x-forwarded-for': xff } } : {}),
+    payload: { login, password },
+  });
 
 describe('лимит входа в Redis', () => {
   const clients: Redis[] = [];
@@ -54,6 +59,19 @@ describe('лимит входа в Redis', () => {
       expect(Date.now() - started).toBeLessThan(1000);
     }
     expect(Date.now() - all).toBeLessThan(2000);
+    // Лимит по IP тоже в памяти: 31-я попытка с другим логином с одного адреса — 429 по IP.
+    for (let i = 0; i < 30; i++) {
+      const r = await attempt(t, `ip${i}`, 'bad', '10.9.9.9');
+      expect(r.statusCode).toBe(401);
+    }
+    const ipRes = await attempt(t, 'ip30', 'bad', '10.9.9.9');
+    expect(ipRes.statusCode).toBe(429);
+    expect(ipRes.json()).toMatchObject({
+      error: {
+        code: 'TOO_MANY_ATTEMPTS',
+        message: 'слишком много попыток входа с этого адреса, повторите через минуту',
+      },
+    });
     // Другой логин не задет; вход верным паролем быстрый и без 500.
     const started = Date.now();
     await loginAs(t, 'user');

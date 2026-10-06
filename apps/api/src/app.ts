@@ -28,6 +28,9 @@ export const redactToken = (url?: string) => url?.replace(/([?&])t=[^&]*/g, '$1t
  * Сколько прокси стоит перед API. Сейчас один — nginx: req.ip — последний адрес
  * X-Forwarded-For, его дописывает nginx; адреса, подставленные клиентом левее, не
  * учитываются. Если перед nginx появится ещё один прокси, число нужно увеличить.
+ * Менять нужно именно эту константу, а не `trustProxy`: число в `trustProxy` Fastify 5
+ * не доверяет ни одному хопу, и все клиенты получат адрес nginx. Заголовок
+ * X-Forwarded-Host при доверии тоже учитывается, его задаёт nginx (docker/nginx/common.conf).
  */
 export const TRUSTED_PROXY_HOPS = 1;
 

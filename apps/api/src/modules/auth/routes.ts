@@ -39,14 +39,14 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
   };
 
   // Лимит по IP поверх лимита по логину: перебор многих логинов с одного адреса.
-  // Адрес — req.ip, его дописывает nginx (TRUSTED_PROXY_HOPS в createFastify).
+  // Ключ — стандартный генератор плагина: req.ip (его дописывает nginx, TRUSTED_PROXY_HOPS
+  // в app.ts), адреса IPv6 группируются по подсети /64.
   // createRateLimit 11.2 берёт хранилище плагина (store.child) с тем же запасом в памяти,
   // а nameSpace из опций читает FallbackStore.child. В типах CreateRateLimitOptions поля
   // nameSpace нет, поэтому опции передаются через переменную, без проверки лишних полей.
   const ipLimitOptions = {
     max: 30,
     timeWindow: '1 minute',
-    keyGenerator: (req: FastifyRequest) => req.ip,
     nameSpace: 'cr:rl-ip:',
   };
   const ipLimit = app.createRateLimit(ipLimitOptions);
@@ -58,9 +58,13 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
       config: { rateLimit: loginRateLimit },
       // Свой preHandler идёт раньше лимита по логину (плагин дописывает свой хук в конец):
       // оба считают независимо, отвечает тот, что исчерпан первым.
-      preHandler: async (req) => {
+      preHandler: async (req, reply) => {
         const r = await ipLimit(req);
         if (!r.isAllowed && r.isExceeded) {
+          reply
+            .header('retry-after', r.ttlInSeconds)
+            .header('x-ratelimit-limit', r.max)
+            .header('x-ratelimit-remaining', 0);
           throw new AppError(
             'TOO_MANY_ATTEMPTS',
             429,

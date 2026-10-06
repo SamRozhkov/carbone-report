@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Redis } from 'ioredis';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, inject, it } from 'vitest';
 import { createRedis } from '../src/lib/redis';
 import { createTestApp, createTestRedis, loginAs, type TestApp } from './helpers';
 
@@ -37,21 +37,36 @@ describe('лимит входа в Redis', () => {
     expect(keys).toHaveLength(1);
   });
 
-  it('Redis недоступен: вход работает без лимита, быстро и без 500', async () => {
-    const down = createRedis('redis://127.0.0.1:1', { warn: () => {} });
+  // Redis отвечает ошибкой: лимит считается в памяти экземпляра (11-я попытка — 429), а
+  // автомат после первой ошибки 5 с не обращается к Redis, поэтому запросы не ждут его.
+  async function expectMemoryLimit(redisUrl: string) {
+    const down = createRedis(redisUrl, { warn: () => {} });
     clients.push(down);
     const t = await createTestApp({ redis: down });
     apps.push(t);
 
-    for (let i = 0; i < 12; i++) {
+    const all = Date.now();
+    for (let i = 1; i <= 12; i++) {
       const started = Date.now();
       const res = await attempt(t, 'x', 'bad');
-      expect(res.statusCode).toBe(401);
+      expect(res.statusCode).toBe(i <= 10 ? 401 : 429);
+      if (i > 10) expect(res.json()).toMatchObject({ error: { code: 'TOO_MANY_ATTEMPTS' } });
       expect(Date.now() - started).toBeLessThan(1000);
     }
+    expect(Date.now() - all).toBeLessThan(2000);
+    // Другой логин не задет; вход верным паролем быстрый и без 500.
     const started = Date.now();
-    // loginAs создаёт пользователя и входит верным паролем (ожидает 200).
     await loginAs(t, 'user');
     expect(Date.now() - started).toBeLessThan(1000);
+  }
+
+  it('Redis недоступен: лимит в памяти, 11-я попытка — 429, всё быстро', async () => {
+    await expectMemoryLimit('redis://127.0.0.1:1');
+  });
+
+  it('неверный пароль Redis: лимит в памяти, 11-я попытка — 429, всё быстро', async () => {
+    const url = new URL(inject('redisUrl'));
+    url.password = '0'.repeat(64);
+    await expectMemoryLimit(url.toString());
   });
 });

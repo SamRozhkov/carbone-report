@@ -9,6 +9,7 @@ import {
 } from 'fastify-type-provider-zod';
 import type { AppDeps } from './deps';
 import { registerErrorHandler } from './lib/errors';
+import { fallbackStore } from './lib/fallback-store';
 import { makeGuards } from './modules/auth/guards';
 import { registerAccessRoutes } from './modules/access/routes';
 import { registerAuthRoutes } from './modules/auth/routes';
@@ -50,12 +51,15 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   const app = createFastify();
   registerErrorHandler(app);
   await app.register(cookie);
-  // Счётчики входа общие для всех экземпляров API. Если Redis недоступен, команда
-  // сразу отклоняется (enableOfflineQueue: false) или падает по commandTimeout, и
-  // skipOnError пропускает запрос без лимита (fail-open), а не отвечает 500.
+  // Счётчики входа общие для всех экземпляров API (Redis, ключи cr:rl:). Если Redis
+  // ответил ошибкой (команда сразу отклоняется при enableOfflineQueue: false или падает
+  // по commandTimeout), лимит считается в памяти экземпляра, и 5 с Redis не спрашивается.
+  // Плагин не передаёт redis/nameSpace своему store — они заданы в fallbackStore.
   await app.register(rateLimit, {
     global: false,
-    ...(deps.redis ? { redis: deps.redis, nameSpace: 'cr:rl:', skipOnError: true } : {}),
+    ...(deps.redis
+      ? { store: fallbackStore({ redis: deps.redis, nameSpace: 'cr:rl:', log: app.log }) }
+      : {}),
   });
   await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
   const guards = makeGuards(deps);

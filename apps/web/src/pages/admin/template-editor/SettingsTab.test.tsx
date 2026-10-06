@@ -95,7 +95,7 @@ describe('SettingsTab', () => {
     await userEvent.type(name, '!');
     expect(save()).toBeEnabled();
     expect(screen.getByText('Есть несохранённые изменения')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Отменить' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Отменить изменения настроек' }));
     expect(name).toHaveValue('Счёт');
     expect(save()).toBeDisabled();
     expect(screen.queryByText('Есть несохранённые изменения')).not.toBeInTheDocument();
@@ -116,7 +116,7 @@ describe('SettingsTab', () => {
     renderWithProviders(<Harness />);
     await userEvent.type(await screen.findByLabelText('Название шаблона'), '!');
     await userEvent.click(screen.getByRole('button', { name: 'refresh' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Отменить' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Отменить изменения настроек' }));
     expect(screen.getByLabelText('Название шаблона')).toHaveValue('Новое');
     expect(screen.queryByText(/Шаблон изменился на сервере/)).not.toBeInTheDocument();
   });
@@ -233,7 +233,7 @@ describe('SettingsTab', () => {
       expect(s.getByRole('button', { name: 'Сохранить доступ' })).toBeDisabled();
       await userEvent.click(s.getByRole('checkbox', { name: 'Доступно всем' }));
       expect(s.getByText('Есть несохранённые изменения')).toBeInTheDocument();
-      await userEvent.click(s.getByRole('button', { name: 'Отменить' }));
+      await userEvent.click(s.getByRole('button', { name: 'Отменить изменения доступа' }));
       expect(s.getByRole('checkbox', { name: 'Доступно всем' })).not.toBeChecked();
       expect(s.getByText(WARNING)).toBeInTheDocument();
       expect(s.queryByText('Есть несохранённые изменения')).not.toBeInTheDocument();

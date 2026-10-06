@@ -134,6 +134,7 @@ export function SettingsTab({ template }: { template: TemplateAdminDetails }) {
             <Text color="warning">Есть несохранённые изменения</Text>
             <Button
               view="flat"
+              aria-label="Отменить изменения настроек"
               onClick={() => {
                 save.reset();
                 reseed(template);
@@ -306,7 +307,7 @@ function AccessSection({ templateId }: { templateId: string }) {
             {dirty && (
               <>
                 <Text color="warning">Есть несохранённые изменения</Text>
-                <Button view="flat" onClick={discard}>
+                <Button view="flat" aria-label="Отменить изменения доступа" onClick={discard}>
                   Отменить
                 </Button>
               </>

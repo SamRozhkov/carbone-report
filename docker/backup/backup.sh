@@ -6,6 +6,9 @@ set -eu
 : "${BACKUP_KEEP:=14}"
 BACKUP_KEEP=${BACKUP_KEEP#"${BACKUP_KEEP%%[!0]*}"} # без ведущих нулей: 014 → 14, 08 → 8, 00 → «»
 case $BACKUP_KEEP in ''|*[!0-9]*) echo "BACKUP_KEEP должен быть целым ≥1" >&2; exit 2;; esac
+: "${BACKUP_TIMEOUT:=3600}"
+BACKUP_TIMEOUT=${BACKUP_TIMEOUT#"${BACKUP_TIMEOUT%%[!0]*}"}
+case $BACKUP_TIMEOUT in ''|*[!0-9]*) echo "BACKUP_TIMEOUT должен быть целым числом секунд ≥1" >&2; exit 2;; esac
 PGAPPNAME=backup
 export PGHOST PGUSER PGDATABASE PGAPPNAME
 : "${PGPASSWORD:?не задан PGPASSWORD}"
@@ -31,10 +34,14 @@ fail() {
 # блокировку). В образе tar из busybox: у него нет отдельного кода «файл изменился при чтении»
 # (как exit 1 у GNU tar) — любая ошибка, включая исчезнувший файл и сбой записи архива, даёт 1.
 # Поэтому ненулевой код tar всегда считается сбоем: лучше лишний неудачный бэкап, чем неполный.
+#
+# timeout: каждый шаг ограничен BACKUP_TIMEOUT секунд — зависший pg_dump или tar не держит
+# блокировку (и отложенные удаления API) бесконечно. По истечении срока процесс получает TERM,
+# маркер не пишется, и запуск считается сбоем; блокировка снимается unlock или закрытием сессии.
 psql -v ON_ERROR_STOP=1 -q -o /dev/null <<SQL || fail "psql"
 select pg_advisory_lock($LOCK_KEY);
-\! pg_dump -Fc -f "$dir/db.dump" && touch "$dir/.dump-ok"
-\! tar -czf "$dir/storage.tar.gz" --exclude='*.tmp' -C /data . && touch "$dir/.storage-ok"
+\! timeout "$BACKUP_TIMEOUT" pg_dump -Fc -f "$dir/db.dump" && touch "$dir/.dump-ok"
+\! timeout "$BACKUP_TIMEOUT" tar -czf "$dir/storage.tar.gz" --exclude='*.tmp' -C /data . && touch "$dir/.storage-ok"
 select pg_advisory_unlock($LOCK_KEY);
 SQL
 

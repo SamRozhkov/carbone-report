@@ -168,6 +168,7 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
       BACKUP_CRON: ${BACKUP_CRON:-0 3 * * *}
       BACKUP_KEEP: ${BACKUP_KEEP:-14}
+      BACKUP_TIMEOUT: ${BACKUP_TIMEOUT:-3600}
       TZ: ${TZ:-Europe/Moscow}
     volumes:
       - ./docker/backup:/backup:ro

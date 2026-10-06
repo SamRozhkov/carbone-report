@@ -19,6 +19,15 @@ case "${1:-cron}" in
     echo "хранилище восстановлено" ;;
   cron)
     : "${BACKUP_CRON:=0 3 * * *}"
+    # Ровно 5 полей: иначе crond молча не выполнит задание (или примет часть команды за поле).
+    # set -f — чтобы «*» не раскрылись в имена файлов при разбиении на поля.
+    set -f
+    # shellcheck disable=SC2086
+    set -- $BACKUP_CRON
+    set +f
+    case "$BACKUP_CRON" in *'
+'*) echo "BACKUP_CRON: ожидается 5 полей cron" >&2; exit 2 ;; esac
+    [ "$#" -eq 5 ] || { echo "BACKUP_CRON: ожидается 5 полей cron" >&2; exit 2; }
     mkdir -p /etc/crontabs
     # crond не передаёт окружение заданиям — сохраняем нужные переменные.
     # export -p (ash) выводит значения в одинарных кавычках с экранированием — файл безопасно

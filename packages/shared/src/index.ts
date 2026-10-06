@@ -376,8 +376,11 @@ export function sqlCompareRefs(sql: string): SqlCompareRefs {
   const s = sql.replace(/--[^\n]*|\/\*[\s\S]*?\*\/|'(?:[^']|'')*'|"(?:[^"]|"")*"/g, ' ');
   const names = (re: RegExp) => [...new Set([...s.matchAll(re)].map((m) => m[1]!))];
   return {
-    scalar: names(/(?:[=<>]|!=)\s*:([A-Za-z_]\w*)\b(?!\s*::[\w\s]*\[)/g),
+    // Оператор не должен быть хвостом @>, ->, #> и т.п.; приведение ::type[] — признак массива.
+    scalar: names(/(?<![-@#~|&])(?:[=<>]|!=)\s*:([A-Za-z_]\w*)\b(?!\s*::\s*[A-Za-z_][\w ]*\[\])/g),
     any: names(/\bany\s*\(\s*:([A-Za-z_]\w*)\s*\)/gi),
-    missingOperator: /[\w)\]]\s+any\s*\(/i.test(s),
+    missingOperator: [...s.matchAll(/(\w+|[)\]])\s+any\s*\(/gi)].some(
+      (m) => !/^(?:i?like|similar)$/i.test(m[1]!),
+    ),
   };
 }

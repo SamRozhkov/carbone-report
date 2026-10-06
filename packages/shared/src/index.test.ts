@@ -172,6 +172,8 @@ describe('sqlCompareRefs', () => {
     expect(x.any).toEqual([]);
     expect(r('where a = :a::int[]').scalar).toEqual([]);
     expect(r('where a = :a::int').scalar).toEqual(['a']);
+    expect(r('where a = :a::int and b[1] = 1').scalar).toEqual(['a']);
+    expect(r('where tags @> :t and data -> :k is not null and j #> :p = 1').scalar).toEqual([]);
   });
   it('комментарии, строки и идентификаторы в кавычках пропускаются', () => {
     const x = r(`where a = any(:a) -- = :a\n /* = :b */ and s = '= :c' and "x = :d" = 1`);
@@ -182,5 +184,6 @@ describe('sqlCompareRefs', () => {
     expect(r('where a in any(:a)').missingOperator).toBe(true);
     expect(r('where a = any(:a)').missingOperator).toBe(false);
     expect(r('where a = ANY (:a)').missingOperator).toBe(false);
+    expect(r('where a like any(:a) or b ilike any(:b)').missingOperator).toBe(false);
   });
 });

@@ -20,6 +20,19 @@ let tplId: string;
 let fetched: Buffer;
 const forceSaved: string[] = [];
 const fetchedUrls: string[] = [];
+interface Deferred {
+  promise: Promise<void>;
+  resolve: () => void;
+}
+function deferred(): Deferred {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+// Заглушка для internal('held'): сообщает о начале скачивания и ждёт сигнала теста.
+let held = { started: deferred(), release: deferred() };
 // Document Server строит ссылку на результат от публичного origin (за nginx — префикс /onlyoffice).
 const CACHE = (name: string) => `/cache/files/data/${name}/output.docx?md5=abc&expires=1`;
 const pub = (name: string) => `https://localhost:8443/onlyoffice${CACHE(name)}`;
@@ -29,6 +42,11 @@ beforeAll(async () => {
   t = await createTestApp({
     fetchFile: async (url) => {
       fetchedUrls.push(url);
+      if (url === internal('held')) {
+        held.started.resolve();
+        await held.release.promise;
+        return Buffer.concat([await createBlankDocument('docx'), Buffer.from('held')]);
+      }
       if (url === internal('slow')) {
         await new Promise((r) => setTimeout(r, 300));
         return Buffer.concat([await createBlankDocument('docx'), Buffer.from('old')]);
@@ -241,20 +259,30 @@ describe('callback hardening', () => {
   });
 
   it('callback не держит блокировку строки во время скачивания: параллельный PATCH шаблона проходит', async () => {
+    held = { started: deferred(), release: deferred() };
     const r0 = await row();
-    const saving = callback({ key: r0.docKey, status: 6, url: pub('slow') }); // fetchFile ждёт 300 мс
-    await new Promise((r) => setTimeout(r, 50));
-    const started = Date.now();
-    const patch = await t.app.inject({
-      method: 'PATCH',
-      url: `/api/templates/${tplId}`,
-      headers: { cookie: admin },
-      payload: { description: 'параллельно' },
+    let settled = false;
+    const saving = callback({ key: r0.docKey, status: 6, url: pub('held') }).finally(() => {
+      settled = true;
     });
-    expect(patch.statusCode).toBe(200);
-    expect(Date.now() - started).toBeLessThan(200);
+    try {
+      await held.started.promise; // скачивание идёт, release ещё не отдан
+      const patch = await t.app.inject({
+        method: 'PATCH',
+        url: `/api/templates/${tplId}`,
+        headers: { cookie: admin },
+        payload: { description: 'параллельно' },
+      });
+      expect(patch.statusCode).toBe(200);
+      expect(settled).toBe(false);
+      expect((await row()).description).toBe('параллельно');
+    } finally {
+      held.release.resolve(); // и при падении — чтобы callback не висел до конца файла
+    }
     expect((await saving).statusCode).toBe(200);
-    expect((await row()).version).toBe(r0.version + 1);
+    const r1 = await row();
+    expect(r1.version).toBe(r0.version + 1);
+    expect((await t.deps.storage.read(r1.filePath)).subarray(-4).toString()).toBe('held');
   });
 
   it('ключ сменился за время скачивания: файл выбрасывается, версия не растёт', async () => {

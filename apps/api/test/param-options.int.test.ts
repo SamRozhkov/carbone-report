@@ -150,6 +150,17 @@ beforeAll(async () => {
       param({ name: 'bad', label: 'Плохой', sql: 'selec id from regions' }),
       param({ name: 'many', label: 'Много', sql: 'select g from generate_series(1, 1001) g' }),
       param({ name: 'note', label: 'Заметка', type: 'string' }),
+      param({
+        name: 'regs',
+        label: 'Регионы',
+        sql: 'select id as value, name as label from regions order by id',
+        multiple: true,
+      }),
+      param({
+        name: 'byRegs',
+        label: 'Города регионов',
+        sql: 'select id as value, name as label from cities where region_id = :regs',
+      }),
     ],
   );
 });
@@ -206,6 +217,15 @@ describe('варианты параметров', () => {
     const g = await render(badTplId, { bad: 1 });
     expect(g.statusCode).toBe(400);
     expect(g.json().error.code).toBe('SQL_ERROR');
+  });
+
+  it('множественный родитель сравнивается через = → в ошибке подсказка про = any(:имя)', async () => {
+    const r = await options(badTplId, 'byRegs', { regs: [1, 2] });
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error.code).toBe('SQL_ERROR');
+    expect(r.json().error.message).toContain(
+      'параметр :regs — множественный выбор: сравнивайте через = any(:regs)',
+    );
   });
 
   it('больше 1000 вариантов → 400 TOO_MANY_OPTIONS', async () => {

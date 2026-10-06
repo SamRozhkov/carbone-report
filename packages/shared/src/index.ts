@@ -357,3 +357,11 @@ export type ApiError = z.infer<typeof ApiError>;
 
 export const IdParams = z.object({ id: z.uuid('неверный идентификатор') });
 export type IdParams = z.infer<typeof IdParams>;
+
+/**
+ * Параметры, сравниваемые через `any(:имя)` — так в SQL передаётся массив множественного выбора.
+ * Только для подсказок: комментарии и строки не пропускаются.
+ */
+export function sqlAnyRefs(sql: string): string[] {
+  return [...new Set([...sql.matchAll(/\bany\s*\(\s*:([A-Za-z_]\w*)/gi)].map((m) => m[1]!))];
+}

@@ -5,6 +5,7 @@ import type {
   TemplateAdminDetails,
   TemplateParam,
 } from '@carbone-reports/shared';
+import { sqlAnyRefs } from '@carbone-reports/shared';
 import { ArrowDown, ArrowUp, Plus, TrashBin } from '@gravity-ui/icons';
 import {
   Button,
@@ -52,6 +53,21 @@ const TYPE_OPTIONS: { value: ParamType; content: string }[] = [
 /** Ссылки :имя в SQL (без приведений ::type). Только подсказка — зависимости определяет сервер. */
 export function sqlRefs(sql: string): string[] {
   return [...new Set([...sql.matchAll(/(?<![:\w]):([A-Za-z_]\w*)/g)].map((m) => m[1]!))];
+}
+
+/** Подсказки о сравнении: множественный параметр — через = any(:имя), одиночный — через = :имя. */
+export function anyHints(sql: string, drafts: Draft[]): string[] {
+  const inAny = new Set(sqlAnyRefs(sql));
+  return sqlRefs(sql).flatMap((n) => {
+    const p = drafts.find((d) => d.name === n && d.type === 'query');
+    if (!p) return [];
+    const label = p.label || n;
+    if (p.multiple && !inAny.has(n))
+      return [`«${label}» — множественный выбор: сравнивайте через = any(:${n})`];
+    if (!p.multiple && inAny.has(n))
+      return [`«${label}» — одно значение: сравнивайте через = :${n}`];
+    return [];
+  });
 }
 
 const CHECK_SHOWN = 20;
@@ -374,6 +390,11 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
                   />
                   {errorFor(i, 'multiple') && <Text color="danger">{errorFor(i, 'multiple')}</Text>}
                   <Text color="secondary">зависит от: {sqlRefs(d.sql).join(', ') || '—'}</Text>
+                  {anyHints(d.sql, drafts).map((h) => (
+                    <Text key={h} color="warning">
+                      {h}
+                    </Text>
+                  ))}
                   <QueryCheck
                     templateId={template.id}
                     name={d.name}

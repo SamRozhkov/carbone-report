@@ -347,6 +347,52 @@ describe('ParamsTab', () => {
     expect(await screen.findByRole('textbox', { name: 'По умолчанию' })).toHaveValue('3, 4');
   });
 
+  it('подсказка: множественный родитель через = → = any(:имя); одиночный в any → = :имя', () => {
+    const q = withQuery.params[1]!;
+    const tpl = {
+      ...t,
+      params: [
+        {
+          ...q,
+          name: 'company',
+          label: 'Компания',
+          sql: 'select 1',
+          multiple: true,
+          dependsOn: [],
+        },
+        { ...q, name: 'single', label: 'Один', sql: 'select 1', dependsOn: [] },
+        {
+          ...q,
+          name: 'inv',
+          label: 'Счёт',
+          sql: 'select 1 where c = :company',
+          dependsOn: ['company'],
+        },
+        {
+          ...q,
+          name: 'ok',
+          label: 'Ок',
+          sql: 'select 1 where c = any(:company)',
+          dependsOn: ['company'],
+        },
+        {
+          ...q,
+          name: 'rev',
+          label: 'Обр',
+          sql: 'select 1 where c = any(:single)',
+          dependsOn: ['single'],
+        },
+      ],
+    } as TemplateAdminDetails;
+    renderWithProviders(<ParamsTab template={tpl} />);
+    expect(
+      screen.getAllByText('«Компания» — множественный выбор: сравнивайте через = any(:company)'),
+    ).toHaveLength(1);
+    expect(
+      screen.getByText('«Один» — одно значение: сравнивайте через = :single'),
+    ).toBeInTheDocument();
+  });
+
   it('«Проверить» выполняет options с тестовыми параметрами и показывает варианты', async () => {
     localStorage.setItem('cr-test-params-t1', JSON.stringify({ from: '2026-01-01' }));
     const { calls } = mockApi([

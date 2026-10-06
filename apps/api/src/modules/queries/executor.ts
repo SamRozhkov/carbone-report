@@ -11,6 +11,7 @@ import Cursor from 'pg-cursor';
 import type { Deadline } from '../../lib/deadline';
 import { AppError } from '../../lib/errors';
 import type { QueryResult } from './build-data';
+import { sqlParamHint } from './sql-hints';
 import { parseSqlParams, SqlParamError } from './sql-params';
 
 export interface QueryLimits {
@@ -35,7 +36,7 @@ function isConnectionError(e: unknown): boolean {
   return !code || code.startsWith('08') || ['57P01', '57P02', '57P03'].includes(code);
 }
 
-function mapPgError(key: string, e: unknown): unknown {
+function mapPgError(key: string, e: unknown, hint?: string): unknown {
   if (isConnectionError(e)) return e;
   const code = (e as { code?: string }).code;
   if (code === '57014') return new AppError('TIMEOUT', 504, 'превышено время ожидания');
@@ -46,7 +47,8 @@ function mapPgError(key: string, e: unknown): unknown {
       `запрос "${key}": запись запрещена — запросы выполняются только на чтение`,
     );
   }
-  return new AppError('SQL_ERROR', 400, `запрос "${key}": ${(e as Error).message}`);
+  const msg = `запрос "${key}": ${(e as Error).message}`;
+  return new AppError('SQL_ERROR', 400, hint ? `${msg} (${hint})` : msg);
 }
 
 interface TxState {
@@ -190,7 +192,7 @@ async function readQuery(
     }
     // Ошибка pg: cursor.close() после неё читает ReadyForQuery и на оборванном соединении
     // не завершится никогда — не закрываем.
-    throw mapPgError(key, e);
+    throw mapPgError(key, e, sqlParamHint(sql, parsed.names, params, e));
   }
   await cursor.close().catch(() => {});
   return result;

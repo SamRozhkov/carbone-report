@@ -14,6 +14,7 @@ describe('loadConfig', () => {
     expect(c.queryTimeoutMs).toBe(30000);
     expect(c.queryMaxRows).toBe(100000);
     expect(c.renderTimeoutMs).toBe(120000);
+    expect(c.reportTimeoutMs).toBe(120000);
     expect(c.reportRetentionDays).toBe(30);
     expect(c.tz).toBe('Europe/Moscow');
     expect(c.carboneUrl).toBe('http://carbone:4000');
@@ -28,6 +29,7 @@ describe('loadConfig', () => {
   });
   it('приводит числа из строк', () => {
     expect(loadConfig({ ...base, QUERY_MAX_ROWS: '10' }).queryMaxRows).toBe(10);
+    expect(loadConfig({ ...base, REPORT_TIMEOUT_MS: '5000' }).reportTimeoutMs).toBe(5000);
   });
   it('падает с понятной ошибкой на коротком ENCRYPTION_KEY', () => {
     expect(() => loadConfig({ ...base, ENCRYPTION_KEY: 'abc' })).toThrow(/ENCRYPTION_KEY/);

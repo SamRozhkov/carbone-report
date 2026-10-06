@@ -395,3 +395,132 @@ describe('инструменты админа', () => {
     expect(r.headers['content-disposition']).toMatch(/^inline;/);
   });
 });
+
+describe('общий срок формирования отчёта', () => {
+  const MSG = 'превышено время формирования отчёта';
+  let s: TestApp;
+  let sAdmin: string;
+  let sUser: string;
+  let sDs: string;
+  const carboneTimeouts: number[] = [];
+
+  // Поддельный Carbone, который отвечает только через 2 с.
+  const slowCarbone: CarboneRenderer = {
+    async render(_tpl, _data, opts) {
+      carboneTimeouts.push(opts.timeoutMs ?? 0);
+      await new Promise((r) => setTimeout(r, 2000));
+      return Buffer.from('поздно');
+    },
+  };
+
+  beforeAll(async () => {
+    s = await createTestApp(
+      { carbone: slowCarbone },
+      { reportTimeoutMs: 800, queryTimeoutMs: 30000 },
+    );
+    sAdmin = (await loginAs(s, 'admin')).cookie;
+    sUser = (await loginAs(s, 'user')).cookie;
+    const src = await createSourceDatabase('create table t(id int); insert into t values (1);');
+    const ds = await s.app.inject({
+      method: 'POST',
+      url: '/api/datasources',
+      headers: { cookie: sAdmin },
+      payload: { name: 'slow', ...src, sslMode: 'disable' },
+    });
+    sDs = ds.json().id;
+  });
+  afterAll(() => s.close());
+
+  const renderIn = (id: string) =>
+    s.app.inject({
+      method: 'POST',
+      url: `/api/reports/${id}/render`,
+      headers: { cookie: sUser },
+      payload: { params: {}, format: 'pdf' },
+    });
+
+  const errorRuns = async () =>
+    (
+      await s.app.inject({
+        method: 'GET',
+        url: '/api/runs?status=error',
+        headers: { cookie: sUser },
+      })
+    ).json().items as { templateId: string; status: string; error: string }[];
+
+  it('медленный Carbone → 504 до 1,5 с и запуск со status=error', async () => {
+    const id = await createTemplate(s, sAdmin, sDs, {
+      public: true,
+      queries: [{ key: 'q', mode: 'list', sql: 'select id from t' }],
+    });
+    const started = Date.now();
+    const r = await renderIn(id);
+    const elapsed = Date.now() - started;
+    expect(r.statusCode).toBe(504);
+    expect(r.json().error.message).toBe(MSG);
+    expect(elapsed).toBeLessThan(1500);
+    // Таймаут Carbone ограничен остатком срока.
+    expect(carboneTimeouts.at(-1)).toBeGreaterThanOrEqual(1);
+    expect(carboneTimeouts.at(-1)).toBeLessThanOrEqual(800);
+    const run = (await errorRuns()).find((x) => x.templateId === id);
+    expect(run).toMatchObject({ status: 'error', error: MSG });
+  });
+
+  it('медленный SQL (pg_sleep(2), QUERY_TIMEOUT_MS=30000) → 504 до 1,5 с и запуск со status=error', async () => {
+    const id = await createTemplate(s, sAdmin, sDs, {
+      public: true,
+      queries: [{ key: 'slow', mode: 'list', sql: 'select pg_sleep(2)' }],
+    });
+    const started = Date.now();
+    const r = await renderIn(id);
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(r.statusCode).toBe(504);
+    expect(r.json().error.message).toBe(MSG);
+    const run = (await errorRuns()).find((x) => x.templateId === id);
+    expect(run).toMatchObject({ status: 'error', error: MSG });
+  });
+
+  it('медленный SQL в варианте параметра → 504 до 1,5 с', async () => {
+    const id = await createTemplate(s, sAdmin, sDs, {
+      public: true,
+      params: [
+        {
+          name: 'p',
+          label: 'P',
+          type: 'query',
+          required: true,
+          defaultValue: null,
+          options: null,
+          sql: 'select 1 as value, pg_sleep(2)::text as label',
+          multiple: false,
+        },
+      ],
+    });
+    const started = Date.now();
+    const r = await s.app.inject({
+      method: 'POST',
+      url: `/api/reports/${id}/render`,
+      headers: { cookie: sUser },
+      payload: { params: { p: 1 }, format: 'pdf' },
+    });
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(r.statusCode).toBe(504);
+    expect(r.json().error.message).toBe(MSG);
+  });
+
+  it('preview: медленный SQL → 504 до 1,5 с', async () => {
+    const id = await createTemplate(s, sAdmin, sDs, {
+      queries: [{ key: 'slow', mode: 'list', sql: 'select pg_sleep(2)' }],
+    });
+    const started = Date.now();
+    const r = await s.app.inject({
+      method: 'POST',
+      url: `/api/templates/${id}/preview`,
+      headers: { cookie: sAdmin },
+      payload: { params: {}, mode: 'data' },
+    });
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(r.statusCode).toBe(504);
+    expect(r.json().error.message).toBe(MSG);
+  });
+});

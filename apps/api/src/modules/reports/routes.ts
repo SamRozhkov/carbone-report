@@ -16,6 +16,7 @@ import { z } from 'zod';
 import type { App } from '../../app';
 import { reportRuns, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
+import { Deadline } from '../../lib/deadline';
 import { AppError, notFound } from '../../lib/errors';
 import { contentDisposition, MIME } from '../../lib/http';
 import { assertTemplateAccess } from '../access/access';
@@ -47,6 +48,8 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
     '/api/reports/:id/render',
     { preHandler: guards.requireUser, schema: { params: IdParams, body: RenderBody } },
     async (req, reply) => {
+      // Срок отсчитывается от начала обработки запроса.
+      const deadline = new Deadline(deps.config.reportTimeoutMs);
       const user = currentUser(req);
       // До загрузки и до любой записи запуска: недоступный шаблон не оставляет следов в истории.
       await assertTemplateAccess(db, user, req.params.id);
@@ -63,8 +66,8 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         outputFormat: req.body.format,
       };
       try {
-        const { data, params } = await collectReportData(deps, full, req.body.params);
-        const file = await renderReport(deps, full, data, req.body.format);
+        const { data, params } = await collectReportData(deps, full, req.body.params, deadline);
+        const file = await renderReport(deps, full, data, req.body.format, deadline);
         const filePath = `reports/${runId}.${req.body.format}`;
         await storage.write(filePath, file);
         try {
@@ -197,11 +200,12 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
     '/api/templates/:id/preview',
     { preHandler: guards.requireAdmin, schema: { params: IdParams, body: PreviewBody } },
     async (req, reply) => {
+      const deadline = new Deadline(deps.config.reportTimeoutMs);
       await assertTemplateAccess(db, currentUser(req), req.params.id);
       const full = await loadTemplateFull(db, req.params.id);
-      const { data } = await collectReportData(deps, full, req.body.params);
+      const { data } = await collectReportData(deps, full, req.body.params, deadline);
       if (req.body.mode === 'data') return data;
-      const pdf = await renderReport(deps, full, data, 'pdf');
+      const pdf = await renderReport(deps, full, data, 'pdf', deadline);
       return reply
         .header('content-type', MIME.pdf)
         .header('content-disposition', contentDisposition(`${full.row.name}.pdf`, true))

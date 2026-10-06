@@ -20,6 +20,7 @@ const Env = z.object({
   QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
   QUERY_MAX_ROWS: z.coerce.number().int().positive().default(100000),
   RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
+  REPORT_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
   REPORT_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   TZ: z.string().default('Europe/Moscow'),
   PORT: z.coerce.number().int().default(3000),
@@ -41,6 +42,8 @@ export interface Config {
   queryTimeoutMs: number;
   queryMaxRows: number;
   renderTimeoutMs: number;
+  /** Общий срок генерации и предпросмотра: проверка параметров, SQL и Carbone вместе. */
+  reportTimeoutMs: number;
   reportRetentionDays: number;
   tz: string;
   port: number;
@@ -70,6 +73,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     queryTimeoutMs: e.QUERY_TIMEOUT_MS,
     queryMaxRows: e.QUERY_MAX_ROWS,
     renderTimeoutMs: e.RENDER_TIMEOUT_MS,
+    reportTimeoutMs: e.REPORT_TIMEOUT_MS,
     reportRetentionDays: e.REPORT_RETENTION_DAYS,
     tz: e.TZ,
     port: e.PORT,

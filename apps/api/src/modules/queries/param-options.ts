@@ -6,14 +6,16 @@ import type {
   TemplateParam,
 } from '@carbone-reports/shared';
 import type { AppDeps } from '../../deps';
+import type { Deadline } from '../../lib/deadline';
 import { AppError, notFound } from '../../lib/errors';
 import type { TemplateFull } from '../templates/service';
 import { loadParamOptions, type QueryLimits } from './executor';
 import { orderParams, paramRefs } from './param-deps';
 import { checkParam, isEmptyValue } from './params';
 
-const limitsOf = (deps: AppDeps): QueryLimits => ({
-  timeoutMs: deps.config.queryTimeoutMs,
+/** С `deadline` таймаут SQL — не дольше остатка общего срока отчёта. */
+const limitsOf = (deps: AppDeps, deadline?: Deadline): QueryLimits => ({
+  timeoutMs: deadline ? deadline.cap(deps.config.queryTimeoutMs) : deps.config.queryTimeoutMs,
   maxRows: deps.config.queryMaxRows,
 });
 
@@ -27,6 +29,7 @@ export async function validateQueryParams(
   deps: AppDeps,
   full: TemplateFull,
   resolved: Record<string, ParamValue>,
+  deadline?: Deadline,
 ): Promise<void> {
   const order = orderParams(full.params).filter((d) => d.type === 'query');
   const toCheck = order.filter((d) => !isEmptyValue(resolved[d.name]));
@@ -36,7 +39,7 @@ export async function validateQueryParams(
     pool,
     name,
     toCheck.map((def) => ({ def, params: resolved })),
-    limitsOf(deps),
+    limitsOf(deps, deadline),
   );
   const fields: Record<string, string> = {};
   toCheck.forEach((def, i) => {

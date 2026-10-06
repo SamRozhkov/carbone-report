@@ -46,6 +46,7 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     queryTimeoutMs: 2000,
     queryMaxRows: 1000,
     renderTimeoutMs: 5000,
+    reportTimeoutMs: 20000,
     reportRetentionDays: 30,
     tz: 'Europe/Moscow',
     port: 0,
@@ -113,23 +114,25 @@ export async function createTestRedis(keyPrefix = `t_${randomUUID()}:`): Promise
 /**
  * `redis` по умолчанию — свой клиент тестового Redis с уникальным `keyPrefix`
  * (закрывается в `close()`); переданный явно клиент или `null` тест закрывает сам.
+ * `config` — переопределение отдельных значений тестовой конфигурации.
  */
 export async function createTestApp(
   overrides: Partial<Omit<AppDeps, 'config' | 'db' | 'storage'>> = {},
+  config: Partial<Config> = {},
 ): Promise<TestApp> {
   const databaseUrl = await createTestDatabase();
   const storageDir = await mkdtemp(join(tmpdir(), 'cr-test-'));
-  const config = testConfig(databaseUrl, storageDir);
+  const cfg: Config = { ...testConfig(databaseUrl, storageDir), ...config };
   const { db, pool } = createDb(databaseUrl);
   const gatePool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
   gatePool.on('error', () => {});
   await migrateDb(db);
   const ownRedis = 'redis' in overrides ? null : await createTestRedis();
   const deps: AppDeps = {
-    config,
+    config: cfg,
     db,
     storage: new Storage(storageDir, createRemoveGate(gatePool)),
-    sources: createSourcePools({ db, config }),
+    sources: createSourcePools({ db, config: cfg }),
     carbone: { render: notConfigured('carbone') },
     onlyoffice: { forceSave: notConfigured('onlyoffice') },
     fetchFile: notConfigured('fetchFile'),

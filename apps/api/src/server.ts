@@ -4,10 +4,12 @@ import pg from 'pg';
 import { createDb, migrateDb } from './db/client';
 import type { AppDeps } from './deps';
 import { fetchFile } from './lib/fetch-file';
+import { createRedis } from './lib/redis';
 import { Storage } from './lib/storage';
 import { createRemoveGate } from './lib/storage-gate';
 import { ensureAdmin } from './modules/auth/bootstrap';
 import { CarboneClient } from './modules/carbone/client';
+import { redisTemplateCache } from './modules/carbone/template-cache';
 import { createSourcePools } from './modules/datasources/pools';
 import { createOnlyOfficeCommands } from './modules/onlyoffice/commands';
 import { startCleanupTimer } from './modules/reports/cleanup';
@@ -19,7 +21,11 @@ const gatePool = new pg.Pool({ connectionString: config.databaseUrl, max: 2 });
 gatePool.on('error', (err) => console.error('gate pool', err));
 await migrateDb(db);
 
-const carbone = new CarboneClient({ baseUrl: config.carboneUrl });
+// Fastify-логгера ещё нет; ошибки Redis до него пишем в консоль (как ensureAdmin).
+const redis = createRedis(config.redisUrl, {
+  warn: (o, m) => console.warn(m, o),
+});
+const carbone = new CarboneClient({ baseUrl: config.carboneUrl, cache: redisTemplateCache(redis) });
 const deps: AppDeps = {
   config,
   db,
@@ -31,6 +37,7 @@ const deps: AppDeps = {
     secret: config.onlyofficeJwtSecret,
   }),
   fetchFile,
+  redis,
 };
 
 await ensureAdmin(deps, console);
@@ -47,6 +54,7 @@ async function shutdown(signal: string) {
   await deps.sources.closeAll();
   await gatePool.end();
   await pool.end();
+  await redis.quit().catch(() => redis.disconnect());
   process.exit(0);
 }
 process.on('SIGTERM', () => void shutdown('SIGTERM'));

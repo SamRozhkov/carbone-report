@@ -1,5 +1,6 @@
 import type { CarboneRenderer, RenderOptions, TemplateFileRef } from '../../deps';
 import { AppError } from '../../lib/errors';
+import { memoryTemplateCache, type TemplateIdCache, type TemplateIdEntry } from './template-cache';
 
 const VERSION_HEADER = { 'carbone-version': '5' };
 
@@ -12,14 +13,20 @@ export interface CarboneLog {
 export class CarboneClient implements CarboneRenderer {
   private readonly baseUrl: string;
   private readonly fetch: typeof fetch;
-  /** `${templateId}` → { version, carboneId } */
-  private readonly ids = new Map<string, { version: number; carboneId: string }>();
+  /** `${templateId}` → { version, carboneId }; по умолчанию в памяти процесса. */
+  private readonly cache: TemplateIdCache;
 
   /** Логгер задаётся после создания приложения (до него Fastify-логгера нет). */
   log?: CarboneLog;
 
-  constructor(opts: { baseUrl: string; fetch?: typeof fetch; log?: CarboneLog }) {
+  constructor(opts: {
+    baseUrl: string;
+    fetch?: typeof fetch;
+    log?: CarboneLog;
+    cache?: TemplateIdCache;
+  }) {
     this.log = opts.log;
+    this.cache = opts.cache ?? memoryTemplateCache();
     this.baseUrl = opts.baseUrl.replace(/\/$/, '');
     this.fetch = opts.fetch ?? fetch;
   }
@@ -27,7 +34,7 @@ export class CarboneClient implements CarboneRenderer {
   async render(tpl: TemplateFileRef, data: unknown, opts: RenderOptions): Promise<Buffer> {
     const signal = AbortSignal.timeout(opts.timeoutMs);
     try {
-      const cached = this.ids.get(tpl.id);
+      const cached = await this.cachedId(tpl.id);
       let carboneId =
         cached?.version === tpl.version ? cached.carboneId : await this.upload(tpl, signal);
       try {
@@ -72,8 +79,21 @@ export class CarboneClient implements CarboneRenderer {
         `ошибка загрузки шаблона: ${body?.error ?? res.status}`,
       );
     }
-    this.ids.set(tpl.id, { version: tpl.version, carboneId: id });
+    try {
+      await this.cache.set(tpl.id, { version: tpl.version, carboneId: id });
+    } catch {
+      // кэш необязателен: следующий рендер загрузит шаблон снова
+    }
     return id;
+  }
+
+  /** Сбой кэша — промах, а не ошибка генерации. */
+  private async cachedId(templateId: string): Promise<TemplateIdEntry | null> {
+    try {
+      return await this.cache.get(templateId);
+    } catch {
+      return null;
+    }
   }
 
   private async renderWith(

@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Role, TemplateParam, TemplateQuery } from '@carbone-reports/shared';
+import type { Redis } from 'ioredis';
 import pg from 'pg';
 import { inject } from 'vitest';
 import { buildApp, type App } from '../src/app';
@@ -11,6 +12,7 @@ import { createDb, migrateDb } from '../src/db/client';
 import { eq } from 'drizzle-orm';
 import { templates, users, type UserRow } from '../src/db/schema';
 import type { AppDeps } from '../src/deps';
+import { createRedis } from '../src/lib/redis';
 import { Storage } from '../src/lib/storage';
 import { createRemoveGate } from '../src/lib/storage-gate';
 import { createSourcePools } from '../src/modules/datasources/pools';
@@ -39,6 +41,7 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     onlyofficeInternalUrl: 'http://onlyoffice',
     apiInternalUrl: 'http://api:3000',
     carboneUrl: 'http://carbone:4000',
+    redisUrl: inject('redisUrl'),
     storageDir,
     queryTimeoutMs: 2000,
     queryMaxRows: 1000,
@@ -83,6 +86,34 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
+const quietLog = { warn: () => {} };
+
+/**
+ * Клиент тестового Redis с уникальным префиксом ключей: приложения и тесты не видят
+ * ключи друг друга. Ждёт готовности, иначе первые команды отклоняются
+ * (`enableOfflineQueue: false`).
+ */
+export async function createTestRedis(keyPrefix = `t_${randomUUID()}:`): Promise<Redis> {
+  const redis = createRedis(inject('redisUrl'), quietLog, { keyPrefix });
+  if (redis.status !== 'ready') {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        redis.disconnect();
+        reject(new Error('тестовый Redis не готов'));
+      }, 5000);
+      redis.once('ready', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+  return redis;
+}
+
+/**
+ * `redis` по умолчанию — свой клиент тестового Redis с уникальным `keyPrefix`
+ * (закрывается в `close()`); переданный явно клиент или `null` тест закрывает сам.
+ */
 export async function createTestApp(
   overrides: Partial<Omit<AppDeps, 'config' | 'db' | 'storage'>> = {},
 ): Promise<TestApp> {
@@ -93,6 +124,7 @@ export async function createTestApp(
   const gatePool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
   gatePool.on('error', () => {});
   await migrateDb(db);
+  const ownRedis = 'redis' in overrides ? null : await createTestRedis();
   const deps: AppDeps = {
     config,
     db,
@@ -101,6 +133,7 @@ export async function createTestApp(
     carbone: { render: notConfigured('carbone') },
     onlyoffice: { forceSave: notConfigured('onlyoffice') },
     fetchFile: notConfigured('fetchFile'),
+    redis: ownRedis,
     ...overrides,
   };
   const app = await buildApp(deps);
@@ -112,6 +145,7 @@ export async function createTestApp(
       await deps.sources.closeAll();
       await gatePool.end();
       await pool.end();
+      await ownRedis?.quit().catch(() => ownRedis.disconnect());
       await rm(storageDir, { recursive: true, force: true });
     },
   };

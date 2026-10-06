@@ -10,6 +10,7 @@ const Env = z.object({
   ONLYOFFICE_INTERNAL_URL: z.url().default('http://onlyoffice'),
   API_INTERNAL_URL: z.url().default('http://api:3000'),
   CARBONE_URL: z.url().default('http://carbone:4000'),
+  REDIS_URL: z.string().default('redis://redis:6379'),
   ADMIN_LOGIN: z.string().optional(),
   ADMIN_PASSWORD: z
     .string()
@@ -33,6 +34,7 @@ export interface Config {
   onlyofficeInternalUrl: string;
   apiInternalUrl: string;
   carboneUrl: string;
+  redisUrl: string;
   adminLogin?: string;
   adminPassword?: string;
   storageDir: string;
@@ -61,6 +63,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     onlyofficeInternalUrl: e.ONLYOFFICE_INTERNAL_URL.replace(/\/$/, ''),
     apiInternalUrl: e.API_INTERNAL_URL.replace(/\/$/, ''),
     carboneUrl: e.CARBONE_URL.replace(/\/$/, ''),
+    redisUrl: e.REDIS_URL,
     adminLogin: e.ADMIN_LOGIN,
     adminPassword: e.ADMIN_PASSWORD,
     storageDir: e.STORAGE_DIR,

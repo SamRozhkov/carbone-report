@@ -41,6 +41,7 @@ services:
       ONLYOFFICE_INTERNAL_URL: http://onlyoffice
       API_INTERNAL_URL: http://api:3000
       CARBONE_URL: http://carbone:4000
+      REDIS_URL: redis://redis:6379
       STORAGE_DIR: /data
       COOKIE_SECURE: 'true'
       TZ: ${TZ:-Europe/Moscow}
@@ -65,6 +66,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       carbone:
         condition: service_started
     restart: unless-stopped
@@ -85,6 +88,28 @@ services:
       retries: 20
     restart: unless-stopped
     logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    command:
+      [
+        'redis-server',
+        '--save',
+        '',
+        '--appendonly',
+        'no',
+        '--maxmemory',
+        '128mb',
+        '--maxmemory-policy',
+        'volatile-lru',
+      ]
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+    restart: unless-stopped
 
   demo-db:
     image: postgres:17-alpine

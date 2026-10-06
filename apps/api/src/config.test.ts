@@ -19,6 +19,12 @@ describe('loadConfig', () => {
     expect(c.carboneUrl).toBe('http://carbone:4000');
     expect(c.encryptionKey.length).toBe(32);
     expect(c.cookieSecure).toBe(false);
+    expect(c.redisUrl).toBe('redis://redis:6379');
+  });
+  it('берёт REDIS_URL из окружения', () => {
+    expect(loadConfig({ ...base, REDIS_URL: 'redis://localhost:6380' }).redisUrl).toBe(
+      'redis://localhost:6380',
+    );
   });
   it('приводит числа из строк', () => {
     expect(loadConfig({ ...base, QUERY_MAX_ROWS: '10' }).queryMaxRows).toBe(10);

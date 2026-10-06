@@ -1,4 +1,5 @@
 import type { OutputFormat, TemplateExt } from '@carbone-reports/shared';
+import type { Redis } from 'ioredis';
 import type pg from 'pg';
 import type { Config } from './config';
 import type { Db } from './db/client';
@@ -42,4 +43,6 @@ export interface AppDeps {
   carbone: CarboneRenderer;
   onlyoffice: OnlyOfficeCommands;
   fetchFile: FileFetcher;
+  /** Общий Redis (кэш Carbone, лимит входа); null — работать без него. */
+  redis: Redis | null;
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../../lib/errors';
 import { CarboneClient } from './client';
+import { memoryTemplateCache, type TemplateIdCache } from './template-cache';
 
 type Call = { url: string; method: string; headers: Record<string, string>; body: unknown };
 
@@ -71,10 +72,12 @@ describe('CarboneClient', () => {
         return json(200, { success: true, data: { templateId: `id${++uploads}` } });
       return pdf();
     });
-    const client = new CarboneClient({ baseUrl: 'http://c', fetch: fn });
+    const cache = memoryTemplateCache();
+    const client = new CarboneClient({ baseUrl: 'http://c', fetch: fn, cache });
     await client.render(tpl(1), {}, opts);
     await client.render(tpl(1), {}, opts);
     expect(uploads).toBe(1);
+    expect(await cache.get('tpl-1')).toEqual({ version: 1, carboneId: 'id1' });
     await client.render(tpl(2), {}, opts);
     expect(uploads).toBe(2);
   });
@@ -98,6 +101,41 @@ describe('CarboneClient', () => {
     expect(calls.filter((c) => c.url.endsWith('/template'))).toHaveLength(2);
     expect(infos).toHaveLength(1);
     expect(infos[0]!.msg).toContain('загружаем повторно');
+  });
+
+  it('общий кэш: второй клиент не загружает шаблон повторно', async () => {
+    let uploads = 0;
+    const { fn } = fakeFetch((c) =>
+      c.url.endsWith('/template')
+        ? json(200, { success: true, data: { templateId: `id${++uploads}` } })
+        : pdf(),
+    );
+    const cache = memoryTemplateCache();
+    await new CarboneClient({ baseUrl: 'http://c', fetch: fn, cache }).render(tpl(), {}, opts);
+    await new CarboneClient({ baseUrl: 'http://c', fetch: fn, cache }).render(tpl(), {}, opts);
+    expect(uploads).toBe(1);
+  });
+
+  it('ошибки кэша не мешают рендеру: шаблон загружается, результат возвращается', async () => {
+    let uploads = 0;
+    const { fn, calls } = fakeFetch((c) =>
+      c.url.endsWith('/template')
+        ? json(200, { success: true, data: { templateId: `id${++uploads}` } })
+        : pdf(),
+    );
+    const cache: TemplateIdCache = {
+      get: async () => {
+        throw new Error('redis down');
+      },
+      set: async () => {
+        throw new Error('redis down');
+      },
+    };
+    const client = new CarboneClient({ baseUrl: 'http://c', fetch: fn, cache });
+    const out = await client.render(tpl(), {}, opts);
+    expect(out.toString()).toBe('%PDF-1.7 test');
+    expect(uploads).toBe(1);
+    expect(calls.at(-1)!.url).toBe('http://c/render/id1?download=true');
   });
 
   it('ошибка рендера → AppError CARBONE_ERROR 502 с текстом Carbone', async () => {

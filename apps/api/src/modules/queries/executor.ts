@@ -181,9 +181,15 @@ async function readQuery(
   try {
     result = await readAll(cursor, limit, deadline);
   } catch (e) {
-    // cursor.close() после ошибки читает ReadyForQuery и на оборванном соединении не завершится никогда.
-    // Курсор закроет ROLLBACK в withReadOnly.
-    if (e instanceof AppError) throw e;
+    if (e instanceof AppError) {
+      // Наша проверка срока между порциями: соединение исправно, портал приостановлен (Execute без
+      // Sync). Без Close+Sync ROLLBACK в withReadOnly встанет в очередь за курсором и не отправится
+      // никогда — клиент не вернётся в пул.
+      await cursor.close().catch(() => {});
+      throw e;
+    }
+    // Ошибка pg: cursor.close() после неё читает ReadyForQuery и на оборванном соединении
+    // не завершится никогда — не закрываем.
     throw mapPgError(key, e);
   }
   await cursor.close().catch(() => {});
@@ -224,8 +230,9 @@ export function runQueries(
       const limit = q.mode === 'single' ? 1 : limits.maxRows;
       await tx.beforeQuery(limits.deadline, limits.timeoutMs);
       const r = await readQuery(tx.client, q.key, q.sql, params, limit, limits.deadline);
-      limits.deadline?.check();
+      // Сначала guard: попытка выйти из транзакции или снять таймаут обнаруживается всегда.
       await tx.guard(q.key);
+      limits.deadline?.check();
       if (q.mode === 'list' && r.truncated) {
         throw new AppError(
           'TOO_MANY_ROWS',
@@ -310,8 +317,8 @@ export function loadParamOptions(
         MAX_PARAM_OPTIONS,
         limits.deadline,
       );
-      limits.deadline?.check();
       await tx.guard(key);
+      limits.deadline?.check();
       if (r.truncated) {
         throw new AppError(
           'TOO_MANY_OPTIONS',

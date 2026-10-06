@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Deadline } from '../src/lib/deadline';
 import { AppError } from '../src/lib/errors';
 import { poolConfig } from '../src/modules/datasources/pools';
 import { previewQuery, runQueries } from '../src/modules/queries/executor';
@@ -344,4 +345,105 @@ describe('previewQuery', () => {
     const r = await previewQuery(pool, 'src', 'select 1 as a', {}, { ...limits, previewRows: 3 });
     expect(r.truncated).toBe(false);
   });
+});
+
+describe('общий срок (deadline)', () => {
+  const pid = async (p: pg.Pool) =>
+    (
+      await runQueries(
+        p,
+        'src',
+        [{ key: 'pid', mode: 'single', sql: 'select pg_backend_pid() as pid' }],
+        {},
+        limits,
+      )
+    )[0]!.rows[0]!.pid as number;
+
+  /** Срок, который истекает по сигналу теста, не урезая statement_timeout заранее. */
+  class FlipDeadline extends Deadline {
+    expired = false;
+    override remaining(): number {
+      return this.expired ? 0 : super.remaining();
+    }
+  }
+
+  it('срок истёк между порциями FETCH → TIMEOUT, курсор закрыт, соединение вернулось в пул', async () => {
+    const p = new pg.Pool({
+      ...poolConfig({ ...srcConn, sslMode: 'disable', sslCa: null }),
+      max: 1,
+      connectionTimeoutMillis: 2000,
+    });
+    p.on('error', () => {});
+    // statement_timeout у pg-cursor действует до Sync, то есть на всё чтение курсора, и урезан до
+    // остатка срока; поэтому срок «истекает» флагом через 300 мс, пока statement_timeout — 30 с.
+    // Порция в 1000 строк идёт ~0,4 с (10 × pg_sleep(0.04)), запрос целиком — ~2 с: флаг
+    // поднимается посреди чтения, и проверка перед следующим FETCH застаёт приостановленный портал.
+    const deadline = new FlipDeadline(60_000);
+    const flip = setTimeout(() => (deadline.expired = true), 300);
+    try {
+      const e = await err(
+        runQueries(
+          p,
+          'src',
+          [
+            {
+              key: 'slow',
+              mode: 'list',
+              sql: 'select g, pg_sleep(case when g % 100 = 0 then 0.04 else 0 end) from generate_series(1, 5000) g',
+            },
+          ],
+          {},
+          { timeoutMs: 30000, maxRows: 100000, deadline },
+        ),
+      );
+      // Текст срока отчёта, а не statement_timeout: сработала проверка между порциями.
+      expect([e.code, e.status, e.message]).toEqual([
+        'TIMEOUT',
+        504,
+        'превышено время формирования отчёта',
+      ]);
+      // С max: 1 следующий запрос пройдёт, только если клиент освобождён.
+      const [r] = await runQueries(
+        p,
+        'src',
+        [{ key: 'ok', mode: 'single', sql: 'select 1 as x' }],
+        {},
+        limits,
+      );
+      expect(r!.rows).toEqual([{ x: 1 }]);
+      const { rows } = await pool.query<{ n: number }>(
+        `select count(*)::int as n from pg_stat_activity
+         where datname = $1 and state like 'idle in transaction%'`,
+        [srcConn.database],
+      );
+      expect(rows[0]!.n).toBe(0);
+    } finally {
+      clearTimeout(flip);
+      await Promise.race([p.end(), new Promise((r) => setTimeout(r, 1000))]);
+    }
+  }, 15_000);
+
+  it('с активным сроком set_config(statement_timeout) в SQL → SQL_ERROR, соединение не переиспользуется', async () => {
+    const before = await pid(onePool);
+    const e = await err(
+      runQueries(
+        onePool,
+        'src',
+        [
+          {
+            key: 'esc',
+            mode: 'single',
+            sql: "select set_config('statement_timeout','0',true)",
+          },
+        ],
+        {},
+        { ...limits, deadline: new Deadline(5000) },
+      ),
+    );
+    expect([e.code, e.message]).toEqual([
+      'SQL_ERROR',
+      'запрос "esc": управление транзакциями запрещено',
+    ]);
+    expect(await pid(onePool)).not.toBe(before);
+  }, 10_000);
 });

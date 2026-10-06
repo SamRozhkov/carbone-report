@@ -22,7 +22,8 @@ export default defineConfig({
       '/onlyoffice': { target: STACK_URL, ws: true },
     },
   },
-  build: { chunkSizeWarningLimit: 6000 },
+  // Самый большой чанк после Плана 11 (3390.6 kB), округлено вверх до сотни.
+  build: { chunkSizeWarningLimit: 3400 },
   test: {
     environment: 'jsdom',
     globals: true,

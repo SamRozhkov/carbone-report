@@ -53,14 +53,19 @@ describe('Redis', () => {
     const c1 = new CarboneClient({ baseUrl: 'http://c', fetch: fn, cache: redisTemplateCache(a) });
     const c2 = new CarboneClient({ baseUrl: 'http://c', fetch: fn, cache: redisTemplateCache(b) });
     expect((await c1.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
+    // Запись в кэш идёт в фоне (без await) — ждём появления ключа, но не дольше 2 с.
+    const key = `cr:carbone:tpl:${t.id}`;
+    for (let i = 0; i < 40 && !(await b.exists(key)); i++) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
     expect((await c2.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
     expect(counter.uploads).toBe(1);
     // Ключ лежит по ожидаемому имени со сроком жизни 7 дней.
-    expect(JSON.parse((await a.get(`cr:carbone:tpl:${t.id}`))!)).toEqual({
+    expect(JSON.parse((await a.get(key))!)).toEqual({
       version: 1,
       carboneId: 'cid1',
     });
-    const ttl = await a.ttl(`cr:carbone:tpl:${t.id}`);
+    const ttl = await a.ttl(key);
     expect(ttl).toBeGreaterThan(604800 - 60);
     expect(ttl).toBeLessThanOrEqual(604800);
   });

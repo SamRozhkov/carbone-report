@@ -1,5 +1,5 @@
 #!/bin/sh
-# Восстановление из каталога бэкапа: БД app и том storage. Останавливает api и web.
+# Восстановление из каталога бэкапа: БД app и том storage. Останавливает api и web, очищает Redis.
 set -eu
 dir=${1:?использование: scripts/restore.sh backups/<каталог>}
 dir=$(cd "$dir" && pwd)
@@ -40,6 +40,7 @@ refuse_if_manual_backup
 bk=$(docker compose --profile backup ps -q --status running backup)
 
 echo "Будут ЗАМЕНЕНЫ база app и файлы хранилища (том $volume) данными из $(basename "$dir")."
+echo "Redis (кэш шаблонов Carbone и счётчики попыток входа) будет очищен."
 [ -z "$bk" ] || echo "Бэкап по расписанию (сервис backup) будет приостановлен на время восстановления."
 printf 'Введите restore для продолжения: '
 read -r answer || answer=
@@ -49,6 +50,11 @@ read -r answer || answer=
 # → storage (и хранилище) → finished.
 phase=none
 bk_stopped=
+redis_flushed=
+# Кэш Carbone в Redis (cr:carbone:tpl:<id> → {version, carboneId}) после замены базы устаревает:
+# номер версии шаблона из бэкапа может совпасть с закэшированным, и отчёт молча сформируется по
+# старому шаблону в Carbone. Всё в Redis одноразовое (кэш и счётчики), поэтому он очищается целиком.
+redis_hint="docker compose exec -T redis redis-cli FLUSHALL (или docker compose restart redis)"
 on_exit() {
   [ "$1" -ne 0 ] || return 0
   if [ "$phase" != none ] && [ "$phase" != finished ]; then
@@ -63,6 +69,9 @@ on_exit() {
       esac
       echo "Дальше: устраните причину и запустите restore.sh снова"
       echo "или верните стек как есть: docker compose up -d --wait api web"
+      if [ "$phase" = db ] || { [ "$phase" = storage ] && [ -z "$redis_flushed" ]; }; then
+        echo "Если возвращаете стек как есть, сначала очистите устаревший кэш Redis: $redis_hint"
+      fi
     } >&2
   fi
   if [ -n "$bk_stopped" ]; then
@@ -101,6 +110,15 @@ phase=db
 docker run --rm -v "$volume":/data -v "$PWD/docker/backup":/backup:ro -v "$dir":/restore:ro \
   --entrypoint /backup/entrypoint.sh postgres:17-alpine restore-storage
 phase=storage
+# api остановлен — кэш не заполнится заново старыми данными до запуска. Redis без снимков на диск,
+# так что запуск (если он был остановлен) тоже даёт пустую базу, но FLUSHALL выполняется всегда.
+if docker compose up -d --wait redis && docker compose exec -T redis redis-cli FLUSHALL; then
+  redis_flushed=1
+  echo "Redis очищен."
+else
+  echo "ВНИМАНИЕ: не удалось очистить Redis — кэш шаблонов Carbone может быть устаревшим." >&2
+  echo "Когда Redis заработает, выполните: $redis_hint" >&2
+fi
 docker compose up -d --wait api web
 phase=finished
 if [ -n "$bk_stopped" ]; then

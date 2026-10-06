@@ -114,6 +114,20 @@ describe('auth', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  it('логин длиннее 256 символов → 400 VALIDATION до лимита попыток', async () => {
+    const login = 'a'.repeat(300);
+    // 11 запросов: если бы лимит попыток срабатывал раньше проверки схемы, последний дал бы 429.
+    for (let i = 0; i < 11; i++) {
+      const res = await t.app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { login, password: 'bad' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error.code).toBe('VALIDATION');
+    }
+  });
 });
 
 describe('отзыв сессий', () => {

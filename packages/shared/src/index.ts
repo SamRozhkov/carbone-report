@@ -100,7 +100,7 @@ export type TemplateQuery = z.infer<typeof TemplateQuery>;
 // ---- DTO ----
 
 export const LoginBody = z.object({
-  login: z.string().min(1),
+  login: z.string().min(1).max(256),
   password: z.string().min(1).max(1024),
 });
 export type LoginBody = z.infer<typeof LoginBody>;

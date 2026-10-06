@@ -13,10 +13,11 @@ import { loadParamOptions, type QueryLimits } from './executor';
 import { orderParams, paramRefs } from './param-deps';
 import { checkParam, isEmptyValue } from './params';
 
-/** С `deadline` таймаут SQL — не дольше остатка общего срока отчёта. */
+/** С `deadline` таймаут SQL — не дольше остатка общего срока отчёта, и срок проверяется между запросами. */
 const limitsOf = (deps: AppDeps, deadline?: Deadline): QueryLimits => ({
   timeoutMs: deadline ? deadline.cap(deps.config.queryTimeoutMs) : deps.config.queryTimeoutMs,
   maxRows: deps.config.queryMaxRows,
+  deadline,
 });
 
 /**

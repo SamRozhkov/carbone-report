@@ -1,6 +1,7 @@
 import { RUNS_PAGE_SIZE } from '@carbone-reports/shared';
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import pg from 'pg';
+import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { reportRuns } from '../src/db/schema';
 import { AppError } from '../src/lib/errors';
 import type { CarboneRenderer } from '../src/deps';
@@ -402,6 +403,7 @@ describe('общий срок формирования отчёта', () => {
   let sAdmin: string;
   let sUser: string;
   let sDs: string;
+  let sDbName: string;
   const carboneTimeouts: number[] = [];
 
   // Поддельный Carbone, который отвечает только через 2 с.
@@ -421,6 +423,7 @@ describe('общий срок формирования отчёта', () => {
     sAdmin = (await loginAs(s, 'admin')).cookie;
     sUser = (await loginAs(s, 'user')).cookie;
     const src = await createSourceDatabase('create table t(id int); insert into t values (1);');
+    sDbName = src.database;
     const ds = await s.app.inject({
       method: 'POST',
       url: '/api/datasources',
@@ -506,6 +509,42 @@ describe('общий срок формирования отчёта', () => {
     expect(Date.now() - started).toBeLessThan(1500);
     expect(r.statusCode).toBe(504);
     expect(r.json().error.message).toBe(MSG);
+    const run = (await errorRuns()).find((x) => x.templateId === id);
+    expect(run).toMatchObject({ status: 'error', error: MSG });
+  });
+
+  it('брошенная по сроку транзакция не выполняет следующие запросы и освобождает соединение', async () => {
+    const id = await createTemplate(s, sAdmin, sDs, {
+      public: true,
+      queries: [
+        { key: 'a', mode: 'list', sql: 'select pg_sleep(0.6)' },
+        { key: 'b', mode: 'list', sql: 'select pg_sleep(0.6)' },
+      ],
+    });
+    const r = await renderIn(id);
+    expect(r.statusCode).toBe(504);
+    expect(r.json().error.message).toBe(MSG);
+    // Без остановки по сроку второй pg_sleep(0.6) идёт ещё ~0,4 с после ответа.
+    const admin = new pg.Client({ connectionString: inject('pgUri') });
+    await admin.connect();
+    try {
+      await expect
+        .poll(
+          async () =>
+            (
+              await admin.query<{ n: number }>(
+                `select count(*)::int as n from pg_stat_activity
+                 where datname = $1 and state = 'active' and query like '%pg_sleep%'
+                   and pid <> pg_backend_pid()`,
+                [sDbName],
+              )
+            ).rows[0]!.n,
+          { timeout: 250, interval: 25 },
+        )
+        .toBe(0);
+    } finally {
+      await admin.end();
+    }
   });
 
   it('preview: медленный SQL → 504 до 1,5 с', async () => {

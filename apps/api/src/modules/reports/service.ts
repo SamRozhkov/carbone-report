@@ -6,7 +6,7 @@ import {
 } from '@carbone-reports/shared';
 import type { AppDeps } from '../../deps';
 import { type Deadline, reportTimeout } from '../../lib/deadline';
-import { badRequest } from '../../lib/errors';
+import { AppError, badRequest } from '../../lib/errors';
 import { buildReportData } from '../queries/build-data';
 import { runQueries } from '../queries/executor';
 import { validateQueryParams } from '../queries/param-options';
@@ -38,15 +38,20 @@ async function collect(
     // VALIDATION отсюда, как и от resolveParams, не создаёт запуск с ошибкой (см. reports/routes).
     await validateQueryParams(deps, full, params, deadline);
     if (full.queries.length === 0) return { data: buildReportData([], params), params };
+    deadline?.check();
     const { pool, name } = await deps.sources.get(full.row.datasourceId);
+    deadline?.check();
     const results = await runQueries(pool, name, full.queries, params, {
       timeoutMs: deadline ? deadline.cap(deps.config.queryTimeoutMs) : deps.config.queryTimeoutMs,
       maxRows: deps.config.queryMaxRows,
+      deadline,
     });
     return { data: buildReportData(results, params), params };
   } catch (e) {
-    // statement_timeout, урезанный до остатка срока, — это истечение срока отчёта, а не ошибка SQL.
-    if (deadline && deadline.remaining() <= 0) throw reportTimeout();
+    // Ошибка SQL после истечения срока (statement_timeout, урезанный до остатка срока, и т. п.) —
+    // это истечение срока отчёта, а не ошибка SQL. Настоящая VALIDATION остаётся VALIDATION.
+    const validation = e instanceof AppError && e.code === 'VALIDATION';
+    if (deadline && !validation && deadline.remaining() <= 0) throw reportTimeout();
     throw e;
   }
 }

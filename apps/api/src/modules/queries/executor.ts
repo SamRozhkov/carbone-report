@@ -8,6 +8,7 @@ import {
 } from '@carbone-reports/shared';
 import type pg from 'pg';
 import Cursor from 'pg-cursor';
+import type { Deadline } from '../../lib/deadline';
 import { AppError } from '../../lib/errors';
 import type { QueryResult } from './build-data';
 import { parseSqlParams, SqlParamError } from './sql-params';
@@ -15,6 +16,13 @@ import { parseSqlParams, SqlParamError } from './sql-params';
 export interface QueryLimits {
   timeoutMs: number;
   maxRows: number;
+  /**
+   * Общий срок отчёта. statement_timeout действует на каждый оператор, а не на транзакцию:
+   * перед каждым запросом он урезается до остатка срока, а срок проверяется перед каждым запросом
+   * и каждой порцией FETCH, чтобы брошенная по сроку транзакция не продолжала работу и сразу
+   * вернула соединение в пул.
+   */
+  deadline?: Deadline;
 }
 
 type Row = Record<string, unknown>;
@@ -50,6 +58,11 @@ interface Tx {
   client: pg.PoolClient;
   /** Проверяет, что запрос пользователя не вышел из READ ONLY транзакции (COMMIT/ROLLBACK/END [AND CHAIN]). */
   guard(key: string): Promise<void>;
+  /**
+   * С общим сроком: перед запросом проверить срок и урезать statement_timeout до остатка
+   * (SET LOCAL в начале транзакции считался от её начала). guard принимает новое значение.
+   */
+  beforeQuery(deadline: Deadline | undefined, timeoutMs: number): Promise<void>;
 }
 
 async function withReadOnly<T>(
@@ -86,6 +99,15 @@ async function withReadOnly<T>(
     ).rows[0]!;
     return await fn({
       client,
+      beforeQuery: async (deadline, timeoutMs) => {
+        if (!deadline) return;
+        deadline.check();
+        const { rows } = await client.query<{ st: string }>(
+          "select pg_catalog.set_config('statement_timeout', $1, true) as st",
+          [String(Math.floor(deadline.cap(timeoutMs)))],
+        );
+        base.st = rows[0]!.st;
+      },
       guard: async (key) => {
         const { rows } = await client.query<TxState & { ro: string }>(
           "select pg_catalog.transaction_timestamp()::text as ts, pg_catalog.current_setting('transaction_read_only') as ro, pg_catalog.current_setting('statement_timeout') as st",
@@ -137,7 +159,9 @@ async function readQuery(
   sql: string,
   params: Record<string, ParamValue>,
   limit: number,
+  deadline?: Deadline,
 ): Promise<{ columns: string[]; rows: Row[]; truncated: boolean }> {
+  deadline?.check();
   let parsed;
   try {
     parsed = parseSqlParams(sql);
@@ -155,9 +179,11 @@ async function readQuery(
   const cursor = client.query(new Cursor(parsed.text, values));
   let result: { columns: string[]; rows: Row[]; truncated: boolean };
   try {
-    result = await readAll(cursor, limit);
+    result = await readAll(cursor, limit, deadline);
   } catch (e) {
     // cursor.close() после ошибки читает ReadyForQuery и на оборванном соединении не завершится никогда.
+    // Курсор закроет ROLLBACK в withReadOnly.
+    if (e instanceof AppError) throw e;
     throw mapPgError(key, e);
   }
   await cursor.close().catch(() => {});
@@ -167,10 +193,12 @@ async function readQuery(
 async function readAll(
   cursor: Cursor,
   limit: number,
+  deadline?: Deadline,
 ): Promise<{ columns: string[]; rows: Row[]; truncated: boolean }> {
   const rows: Row[] = [];
   let columns: string[] = [];
   for (;;) {
+    deadline?.check();
     const size = Math.min(1000, limit + 1 - rows.length);
     const batch = await readBatch(cursor, size);
     if (columns.length === 0 && batch.fields) columns = batch.fields.map((f) => f.name);
@@ -194,7 +222,9 @@ export function runQueries(
     const results: QueryResult[] = [];
     for (const q of queries) {
       const limit = q.mode === 'single' ? 1 : limits.maxRows;
-      const r = await readQuery(tx.client, q.key, q.sql, params, limit);
+      await tx.beforeQuery(limits.deadline, limits.timeoutMs);
+      const r = await readQuery(tx.client, q.key, q.sql, params, limit, limits.deadline);
+      limits.deadline?.check();
       await tx.guard(q.key);
       if (q.mode === 'list' && r.truncated) {
         throw new AppError(
@@ -271,7 +301,16 @@ export function loadParamOptions(
     for (const { def, params } of items) {
       const key = `параметр "${def.label}"`;
       // readQuery читает limit + 1 строку: truncated — вариантов больше MAX_PARAM_OPTIONS.
-      const r = await readQuery(tx.client, key, def.sql!, params, MAX_PARAM_OPTIONS);
+      await tx.beforeQuery(limits.deadline, limits.timeoutMs);
+      const r = await readQuery(
+        tx.client,
+        key,
+        def.sql!,
+        params,
+        MAX_PARAM_OPTIONS,
+        limits.deadline,
+      );
+      limits.deadline?.check();
       await tx.guard(key);
       if (r.truncated) {
         throw new AppError(

@@ -77,7 +77,7 @@ describe('ReportsPage', () => {
     expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(0);
   });
 
-  it('шаблоны сгруппированы по категориям: порядок sortOrder, «Прочие» в конце', async () => {
+  it('шаблоны сгруппированы по категориям: порядок sortOrder, «Без категории» в конце', async () => {
     mockApi([
       userMe,
       {
@@ -93,12 +93,12 @@ describe('ReportsPage', () => {
     renderRoute('/reports');
     await screen.findByText('Счёт');
     const headings = screen.getAllByRole('heading', { level: 2 });
-    expect(headings.map((h) => h.textContent)).toEqual(['Продажи', 'Финансы', 'Прочие']);
+    expect(headings.map((h) => h.textContent)).toEqual(['Продажи', 'Финансы', 'Без категории']);
     const financeSection = screen.getByRole('region', { name: 'Финансы' });
     expect(within(financeSection).getByText('Счёт')).toBeInTheDocument();
     expect(within(financeSection).getByText('Акт сверки')).toBeInTheDocument();
     expect(
-      within(screen.getByRole('region', { name: 'Прочие' })).getByText('Сводка'),
+      within(screen.getByRole('region', { name: 'Без категории' })).getByText('Сводка'),
     ).toBeInTheDocument();
   });
 
@@ -119,12 +119,39 @@ describe('ReportsPage', () => {
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
       'Склад',
       'Финансы',
-      'Прочие',
+      'Без категории',
     ]);
     await userEvent.type(screen.getByLabelText('Поиск отчётов'), 'сч');
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
       'Финансы',
     ]);
     expect(screen.queryByText('Остатки')).not.toBeInTheDocument();
+  });
+
+  it('категория «Прочие» — обычный раздел; шаблоны без категории — «Без категории» последним', async () => {
+    mockApi([
+      userMe,
+      {
+        path: '/api/templates',
+        body: [
+          tpl('t1', 'Сводка', null),
+          tpl('t2', 'Разное', { id: 'c9', name: 'Прочие', sortOrder: 99 }),
+          tpl('t3', 'Счёт', finance),
+        ],
+      },
+    ]);
+    renderRoute('/reports');
+    await screen.findByText('Счёт');
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Финансы',
+      'Прочие',
+      'Без категории',
+    ]);
+    expect(
+      within(screen.getByRole('region', { name: 'Прочие' })).getByText('Разное'),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: 'Без категории' })).getByText('Сводка'),
+    ).toBeInTheDocument();
   });
 });

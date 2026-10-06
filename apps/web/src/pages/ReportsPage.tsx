@@ -9,7 +9,7 @@ import { ErrorAlert } from '../components/ErrorAlert';
 import { PageHeader } from '../components/PageHeader';
 import { formatDate } from '../lib/format';
 
-const OTHER = 'Прочие';
+const NO_CATEGORY = 'Без категории';
 
 interface Section {
   key: string;
@@ -17,7 +17,7 @@ interface Section {
   items: TemplateSummary[];
 }
 
-/** Разделы каталога: категории по sortOrder и имени, шаблоны без категории — последним разделом. */
+/** Разделы каталога: категории по sortOrder и имени, шаблоны без категории — последним разделом «Без категории»; категория «Прочие» — обычная. */
 function sectionsOf(list: TemplateSummary[]): Section[] {
   const byKey = new Map<string, Section & { sortOrder: number }>();
   for (const t of list) {
@@ -26,7 +26,7 @@ function sectionsOf(list: TemplateSummary[]): Section[] {
     if (!s) {
       s = t.category
         ? { key, title: t.category.name, sortOrder: t.category.sortOrder, items: [] }
-        : { key, title: OTHER, sortOrder: 0, items: [] };
+        : { key, title: NO_CATEGORY, sortOrder: 0, items: [] };
       byKey.set(key, s);
     }
     s.items.push(t);

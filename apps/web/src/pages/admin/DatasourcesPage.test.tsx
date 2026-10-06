@@ -312,4 +312,43 @@ describe('DatasourcesPage', () => {
     ).toBeChecked();
     expect(within(dialog).getByLabelText('CA-сертификат (PEM)')).toBeInTheDocument();
   });
+
+  it('пустой порт: ошибка «укажите порт» у поля, запрос не отправляется', async () => {
+    const { calls } = mockApi([
+      adminMe,
+      { path: '/api/datasources', body: [] },
+      { method: 'POST', path: '/api/datasources', status: 201, body: ds },
+    ]);
+    const dialog = await openCreate();
+    const port = within(dialog).getByLabelText('Порт');
+    expect(port).toHaveValue('5432');
+    await userEvent.clear(port);
+    expect(port).toHaveValue('');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    expect(await within(dialog).findByText('укажите порт')).toBeInTheDocument();
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Проверить соединение' }));
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+
+    await userEvent.type(port, '5433');
+    expect(within(dialog).queryByText('укажите порт')).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(
+        calls.find((c) => c.method === 'POST' && c.path === '/api/datasources')?.body,
+      ).toMatchObject({ port: 5433 }),
+    );
+  });
+
+  it('редактирование: очищенный порт остаётся пустым, а не 5432', async () => {
+    mockApi([adminMe, { path: '/api/datasources', body: [{ ...ds, port: 6543 }] }]);
+    renderRoute('/admin/datasources');
+    await screen.findByText('Склад');
+    await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    const port = within(dialog).getByLabelText('Порт');
+    expect(port).toHaveValue('6543');
+    await userEvent.clear(port);
+    expect(port).toHaveValue('');
+  });
 });

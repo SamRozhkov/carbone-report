@@ -17,7 +17,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export function formatRunParams(params: ParamsInput): string {
   const parts = Object.entries(params)
     .filter(([, v]) => v !== null && v !== undefined)
-    .map(([k, v]) => `${k}: ${v === true ? 'да' : v === false ? 'нет' : String(v)}`);
+    .map(
+      ([k, v]) =>
+        `${k}: ${v === true ? 'да' : v === false ? 'нет' : Array.isArray(v) ? `«${v.join(', ')}»` : String(v)}`,
+    );
   return parts.length ? parts.join(', ') : '—';
 }
 

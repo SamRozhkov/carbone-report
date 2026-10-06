@@ -152,4 +152,10 @@ describe('formatRunParams', () => {
     );
     expect(formatRunParams({})).toBe('—');
   });
+
+  it('массив — через запятую в «ёлочках»', () => {
+    expect(formatRunParams({ ids: [1, 2], from: '2026-01-01' })).toBe(
+      'ids: «1, 2», from: 2026-01-01',
+    );
+  });
 });

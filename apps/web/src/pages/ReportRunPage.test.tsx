@@ -226,4 +226,47 @@ describe('ReportRunPage', () => {
       }),
     );
   });
+  it('пока грузятся варианты SQL-параметров, «Сформировать» неактивна', async () => {
+    const withQuery = {
+      ...template,
+      params: [
+        {
+          name: 'region',
+          label: 'Регион',
+          type: 'query',
+          required: false,
+          defaultValue: null,
+          options: null,
+          sql: null,
+          multiple: false,
+          dependsOn: [],
+        },
+      ],
+    };
+    mockApi([
+      userMe,
+      { path: '/api/templates/t1', body: withQuery },
+      {
+        method: 'POST',
+        path: '/api/templates/t1/params/region/options',
+        body: { options: [{ value: 7, label: 'Север' }] },
+      },
+    ]);
+    // Ответ на варианты задерживается до release().
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const impl = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      if (String(input).includes('/options')) await gate;
+      return impl(input, init);
+    });
+    renderRoute('/reports/t1');
+    const button = await screen.findByRole('button', { name: 'Сформировать' });
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(screen.getByText('Загружаются варианты параметров…')).toBeInTheDocument();
+    release();
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(screen.queryByText('Загружаются варианты параметров…')).not.toBeInTheDocument();
+  });
 });

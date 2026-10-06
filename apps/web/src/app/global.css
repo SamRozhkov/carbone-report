@@ -70,6 +70,12 @@ body {
   align-items: start;
 }
 
+.cr-run-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .cr-pdf {
   width: 100%;
   height: calc(100vh - 220px);

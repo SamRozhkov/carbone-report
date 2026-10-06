@@ -9,7 +9,7 @@ import { DatePicker } from '@gravity-ui/date-components';
 import { dateTimeParse } from '@gravity-ui/date-utils';
 import { Checkbox, NumberInput, Select, Text, TextInput } from '@gravity-ui/uikit';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/errors';
 import { isEmptyParam } from '../lib/params';
@@ -147,6 +147,23 @@ function sameValue(a: ParamValue, b: ParamValue): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/** Задержка запроса вариантов после ввода в текстовый/числовой родитель. */
+const OPTIONS_DEBOUNCE_MS = 400;
+
+/**
+ * Значение, отстающее от входного на delay мс после последнего изменения.
+ * Сравнивается по JSON: новый объект с тем же содержимым не перезапускает таймер.
+ */
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const key = JSON.stringify(value);
+  const [debounced, setDebounced] = useState(key);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(key), delay);
+    return () => clearTimeout(t);
+  }, [key, delay]);
+  return JSON.parse(debounced) as T;
+}
+
 interface QueryParamFieldProps {
   templateId: string;
   param: TemplateParamDto;
@@ -154,6 +171,8 @@ interface QueryParamFieldProps {
   params: TemplateParamDto[];
   values: ParamsInput;
   onChange: (v: ParamValue) => void;
+  /** Грузятся ли варианты (включая ожидание debounce). Вызывается при изменении. */
+  onLoadingChange: (loading: boolean) => void;
   error?: string;
   disabled?: boolean;
 }
@@ -165,6 +184,7 @@ function QueryParamField({
   params,
   values,
   onChange,
+  onLoadingChange,
   error,
   disabled,
 }: QueryParamFieldProps) {
@@ -177,18 +197,37 @@ function QueryParamField({
   );
   const parentsReady = missing.length === 0;
 
+  // Текст и числа набираются посимвольно: запрос — после паузы в вводе, а не на каждый символ.
+  const debounce = param.dependsOn.some((n) => {
+    const type = params.find((p) => p.name === n)?.type;
+    return type === 'string' || type === 'number';
+  });
+  const debouncedParams = useDebouncedValue(parentParams, debounce ? OPTIONS_DEBOUNCE_MS : 0);
+  const queryParams = debounce ? debouncedParams : parentParams;
+  // Пока ключ запроса отстаёт от родителей, варианты устарели: считаем, что они грузятся.
+  const pendingDebounce = JSON.stringify(queryParams) !== JSON.stringify(parentParams);
+
   const options = useQuery({
-    queryKey: ['param-options', templateId, param.name, parentParams],
-    queryFn: () => api.templates.paramOptions(templateId, param.name, parentParams),
-    enabled: parentsReady,
+    queryKey: ['param-options', templateId, param.name, queryParams],
+    queryFn: () => api.templates.paramOptions(templateId, param.name, queryParams),
+    enabled: parentsReady && !pendingDebounce,
   });
   const data = parentsReady ? options.data : undefined;
   const waiting = parentsReady ? (data?.waitingFor ?? []) : missing;
+  const loading = parentsReady && (options.isFetching || pendingDebounce);
+
+  const onLoadingRef = useRef(onLoadingChange);
+  onLoadingRef.current = onLoadingChange;
+  useEffect(() => {
+    onLoadingRef.current(loading);
+  }, [loading]);
+  useEffect(() => () => onLoadingRef.current(false), []);
 
   // Варианты сменились — убираем значения, которых в них больше нет. onChange только при изменении.
+  // Пока ждём debounce, варианты относятся к прежним родителям — ничего не сбрасываем.
   const allowedKey = !parentsReady
     ? '[]'
-    : data
+    : data && !pendingDebounce
       ? JSON.stringify(data.options.map((o) => String(o.value)))
       : null;
   const onChangeRef = useRef(onChange);
@@ -226,7 +265,7 @@ function QueryParamField({
         multiple={param.multiple}
         filterable
         hasClear={!param.required}
-        loading={parentsReady && options.isFetching}
+        loading={loading}
         disabled={!parentsReady || disabled}
         width="max"
         validationState={shownError ? 'invalid' : undefined}
@@ -242,6 +281,8 @@ export interface ParamFormProps {
   onChange: (v: ParamsInput) => void;
   errors?: Record<string, string>;
   disabled?: boolean;
+  /** Грузятся ли варианты хотя бы одного SQL-параметра. Вызывается при изменении. */
+  onOptionsLoadingChange?: (loading: boolean) => void;
 }
 
 export function ParamForm({
@@ -251,6 +292,7 @@ export function ParamForm({
   onChange,
   errors,
   disabled,
+  onOptionsLoadingChange,
 }: ParamFormProps) {
   // Несколько полей могут сбросить значения в одном коммите: копим изменения поверх последних.
   const latest = useRef(values);
@@ -258,6 +300,19 @@ export function ParamForm({
   const set = (name: string, v: ParamValue) => {
     latest.current = { ...latest.current, [name]: v };
     onChange(latest.current);
+  };
+  // Поля сообщают о своей загрузке; наверх уходит только смена общего флага.
+  const loadingFields = useRef(new Set<string>());
+  const anyLoading = useRef(false);
+  const onLoadingRef = useRef(onOptionsLoadingChange);
+  onLoadingRef.current = onOptionsLoadingChange;
+  const setFieldLoading = (name: string, loading: boolean) => {
+    if (loading) loadingFields.current.add(name);
+    else loadingFields.current.delete(name);
+    const next = loadingFields.current.size > 0;
+    if (next === anyLoading.current) return;
+    anyLoading.current = next;
+    onLoadingRef.current?.(next);
   };
   return (
     <div className="cr-form">
@@ -272,6 +327,7 @@ export function ParamForm({
             error={errors?.[p.name]}
             disabled={disabled}
             onChange={(v) => set(p.name, v)}
+            onLoadingChange={(l) => setFieldLoading(p.name, l)}
           />
         ) : (
           <ParamField

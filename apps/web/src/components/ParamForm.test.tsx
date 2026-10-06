@@ -2,7 +2,7 @@ import type { ParamsInput, TemplateParamDto } from '@carbone-reports/shared';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mockApi, renderWithProviders, type MockResponse, type MockRoute } from '../test/utils';
 import { ParamField, ParamForm } from './ParamForm';
 
@@ -275,6 +275,75 @@ describe('ParamForm: SQL-список', () => {
     );
     const msg = await screen.findByText('ошибка SQL: relation "x" does not exist');
     expect(msg).toHaveAttribute('data-testid', 'field-error');
+  });
+});
+
+describe('ParamForm: debounce зависимых вариантов', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const prefixParam: TemplateParamDto = {
+    name: 'prefix',
+    label: 'Префикс',
+    type: 'string',
+    required: false,
+    defaultValue: null,
+    options: null,
+    sql: null,
+    multiple: false,
+    dependsOn: [],
+  };
+  // Вариант «msk» есть только у пустого префикса и у «abc»: промежуточные «a», «ab» его бы сбросили.
+  const cityByPrefix = (p: ParamsInput) => ({
+    body: {
+      options: p.prefix === null || p.prefix === 'abc' ? [{ value: 'msk', label: 'Москва' }] : [],
+    },
+  });
+
+  it('текстовый родитель: запрос через 400 мс после ввода, один; значение не сбрасывается', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = vi.fn();
+    const { calls } = mockApi([optionsRoute({ city: cityByPrefix })]);
+    renderWithProviders(
+      <QHarness
+        params={[prefixParam, q('city', 'Город', ['prefix'])]}
+        initial={{ prefix: null, city: 'msk' }}
+        onChange={onChange}
+      />,
+    );
+    await screen.findByText('Москва');
+    const cityCalls = () => calls.filter((c) => c.path.endsWith('/city/options'));
+    expect(cityCalls()).toHaveLength(1);
+
+    await user.type(screen.getByRole('textbox', { name: 'Префикс' }), 'abc');
+    await vi.advanceTimersByTimeAsync(300);
+    expect(cityCalls()).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(150);
+    await waitFor(() => expect(cityCalls()).toHaveLength(2));
+    expect(cityCalls()[1]?.body).toEqual({ params: { prefix: 'abc' } });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(cityCalls()).toHaveLength(2);
+    expect(onChange).toHaveBeenLastCalledWith({ prefix: 'abc', city: 'msk' });
+    expect(onChange).not.toHaveBeenCalledWith(expect.objectContaining({ city: null }));
+  });
+
+  it('onOptionsLoadingChange: true пока варианты грузятся, затем false; без повторов', async () => {
+    const onLoading = vi.fn();
+    mockApi([optionsRoute({ region: regions })]);
+    renderWithProviders(
+      <ParamForm
+        templateId="t1"
+        params={[qParams[0]!]}
+        values={{ region: null }}
+        onChange={() => {}}
+        onOptionsLoadingChange={onLoading}
+      />,
+    );
+    await waitFor(() => expect(onLoading).toHaveBeenLastCalledWith(false));
+    expect(onLoading.mock.calls).toEqual([[true], [false]]);
   });
 });
 

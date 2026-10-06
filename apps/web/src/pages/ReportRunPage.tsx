@@ -27,6 +27,7 @@ export function ReportRunPage() {
   const [values, setValues] = useState<ParamsInput>({});
   const [format, setFormat] = useState<OutputFormat>('pdf');
   const [run, setRun] = useState<{ id: string; format: OutputFormat } | null>(null);
+  const [optionsLoading, setOptionsLoading] = useState(false);
 
   // Форма строится заново, если шаблон сменился или админ изменил его описание.
   const version = t ? `${t.id}:${t.updatedAt}` : '';
@@ -90,6 +91,7 @@ export function ReportRunPage() {
             onChange={setValues}
             errors={errors}
             disabled={render.isPending}
+            onOptionsLoadingChange={setOptionsLoading}
           />
           <div className="cr-field">
             <Text variant="subheader-1">Формат</Text>
@@ -107,10 +109,17 @@ export function ReportRunPage() {
               message={unmatched.map(([k, m]) => (k === '_' ? m : `${k}: ${m}`)).join('; ')}
             />
           )}
-          <div>
-            <Button view="action" size="l" type="submit" loading={render.isPending}>
+          <div className="cr-run-actions">
+            <Button
+              view="action"
+              size="l"
+              type="submit"
+              loading={render.isPending}
+              disabled={optionsLoading}
+            >
               Сформировать
             </Button>
+            {optionsLoading && <Text color="secondary">Загружаются варианты параметров…</Text>}
           </div>
         </form>
         <div>

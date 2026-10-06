@@ -94,11 +94,12 @@ services:
   redis:
     image: redis:7-alpine
     # Пароль подставляет shell внутри контейнера, поэтому его нет в команде (docker inspect).
+    # Не-hex пароль ломает REDIS_URL у api: контейнер выходит с кодом 1 до запуска сервера.
     command:
       [
         'sh',
         '-c',
-        'exec redis-server --requirepass "$$REDIS_PASSWORD" --save "" --appendonly no --maxmemory 128mb --maxmemory-policy volatile-lru',
+        'case "$$REDIS_PASSWORD" in ""|*[!0-9a-fA-F]*) echo "REDIS_PASSWORD: только шестнадцатеричные символы (openssl rand -hex 32)" >&2; exit 1;; esac; exec redis-server --requirepass "$$REDIS_PASSWORD" --save "" --appendonly no --maxmemory 128mb --maxmemory-policy volatile-lru',
       ]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?задайте REDIS_PASSWORD в .env}

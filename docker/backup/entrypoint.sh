@@ -1,5 +1,7 @@
 #!/bin/sh
 set -eu
+# shellcheck source=lib.sh
+. "$(dirname "$0")/lib.sh"
 case "${1:-cron}" in
   now) exec /backup/backup.sh ;;
   restore-storage)
@@ -28,6 +30,8 @@ case "${1:-cron}" in
     case "$BACKUP_CRON" in *'
 '*) echo "BACKUP_CRON: ожидается 5 полей cron" >&2; exit 2 ;; esac
     [ "$#" -eq 5 ] || { echo "BACKUP_CRON: ожидается 5 полей cron" >&2; exit 2; }
+    # Та же проверка, что в backup.sh: неверный срок виден сразу при старте, а не в 3 часа ночи.
+    check_backup_timeout
     mkdir -p /etc/crontabs
     # crond не передаёт окружение заданиям — сохраняем нужные переменные.
     # export -p (ash) выводит значения в одинарных кавычках с экранированием — файл безопасно

@@ -2,13 +2,13 @@
 # Один бэкап: дамп базы и архив хранилища под исключительной advisory-блокировкой
 # (API на это время откладывает удаления файлов — дамп и архив согласованы).
 set -eu
+# shellcheck source=lib.sh
+. "$(dirname "$0")/lib.sh"
 : "${PGHOST:=postgres}" "${PGUSER:=app}" "${PGDATABASE:=app}" "${LOCK_KEY:=726100001}"
 : "${BACKUP_KEEP:=14}"
 BACKUP_KEEP=${BACKUP_KEEP#"${BACKUP_KEEP%%[!0]*}"} # без ведущих нулей: 014 → 14, 08 → 8, 00 → «»
 case $BACKUP_KEEP in ''|*[!0-9]*) echo "BACKUP_KEEP должен быть целым ≥1" >&2; exit 2;; esac
-: "${BACKUP_TIMEOUT:=3600}"
-BACKUP_TIMEOUT=${BACKUP_TIMEOUT#"${BACKUP_TIMEOUT%%[!0]*}"}
-case $BACKUP_TIMEOUT in ''|*[!0-9]*) echo "BACKUP_TIMEOUT должен быть целым числом секунд ≥1" >&2; exit 2;; esac
+check_backup_timeout
 PGAPPNAME=backup
 export PGHOST PGUSER PGDATABASE PGAPPNAME
 : "${PGPASSWORD:?не задан PGPASSWORD}"
@@ -37,11 +37,12 @@ fail() {
 #
 # timeout: каждый шаг ограничен BACKUP_TIMEOUT секунд — зависший pg_dump или tar не держит
 # блокировку (и отложенные удаления API) бесконечно. По истечении срока процесс получает TERM,
-# маркер не пишется, и запуск считается сбоем; блокировка снимается unlock или закрытием сессии.
+# а если он не завершился и через 60 с — KILL (-k 60). Маркер не пишется, и запуск считается
+# сбоем; блокировка снимается unlock или закрытием сессии.
 psql -v ON_ERROR_STOP=1 -q -o /dev/null <<SQL || fail "psql"
 select pg_advisory_lock($LOCK_KEY);
-\! timeout "$BACKUP_TIMEOUT" pg_dump -Fc -f "$dir/db.dump" && touch "$dir/.dump-ok"
-\! timeout "$BACKUP_TIMEOUT" tar -czf "$dir/storage.tar.gz" --exclude='*.tmp' -C /data . && touch "$dir/.storage-ok"
+\! timeout -k 60 "$BACKUP_TIMEOUT" pg_dump -Fc -f "$dir/db.dump" && touch "$dir/.dump-ok"
+\! timeout -k 60 "$BACKUP_TIMEOUT" tar -czf "$dir/storage.tar.gz" --exclude='*.tmp' -C /data . && touch "$dir/.storage-ok"
 select pg_advisory_unlock($LOCK_KEY);
 SQL
 

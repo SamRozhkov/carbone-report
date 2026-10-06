@@ -2,7 +2,8 @@ import { loader } from '@monaco-editor/react';
 // Только ядро редактора, SQL и JSON (§22.8): полный 'monaco-editor' тянет все языки и воркеры css/html/ts.
 import * as monaco from 'monaco-editor/editor/editor.api';
 // Возможности редактора из полного пакета, нужные для правки SQL: поиск, скобки, буфер обмена,
-// контекстное меню, комментарии, сворачивание, подсказки при наведении, операции со строками и словами.
+// контекстное меню, комментарии, сворачивание, подсказки при наведении, операции со строками и словами,
+// автодополнение (SuggestController), сообщение о read-only, Ctrl+M (Tab выходит из редактора).
 import 'monaco-editor/features/codicon/register';
 import 'monaco-editor/features/find/register';
 import 'monaco-editor/features/bracketMatching/register';
@@ -15,6 +16,9 @@ import 'monaco-editor/features/linesOperations/register';
 import 'monaco-editor/features/multicursor/register';
 import 'monaco-editor/features/wordHighlighter/register';
 import 'monaco-editor/features/wordOperations/register';
+import 'monaco-editor/editor/contrib/suggest/browser/suggestController';
+import 'monaco-editor/features/readOnlyMessage/register';
+import 'monaco-editor/features/toggleTabFocusMode/register';
 import 'monaco-editor/languages/definitions/sql/register';
 import 'monaco-editor/language/json/monaco.contribution';
 import editorWorker from 'monaco-editor/editor/editor.worker?worker';

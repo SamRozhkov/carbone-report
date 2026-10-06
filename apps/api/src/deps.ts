@@ -43,6 +43,6 @@ export interface AppDeps {
   carbone: CarboneRenderer;
   onlyoffice: OnlyOfficeCommands;
   fetchFile: FileFetcher;
-  /** Общий Redis (кэш Carbone, лимит входа); null — работать без него. */
+  /** Общий Redis (кэш Carbone, лимит входа); null — кэш промахивается, лимиты считаются в памяти экземпляра. */
   redis: Redis | null;
 }

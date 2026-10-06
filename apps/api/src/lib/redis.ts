@@ -24,7 +24,10 @@ export function createRedis(url: string, log: RedisLog, opts: { keyPrefix?: stri
     const now = Date.now();
     if (now - lastLog > 30_000) {
       lastLog = now;
-      log.warn({ err: err.message }, 'Redis недоступен — кэш и лимит входа работают без него');
+      log.warn(
+        { err: err.message },
+        'Redis недоступен — кэш промахивается, лимиты считаются в памяти экземпляра',
+      );
     }
   });
   return redis;

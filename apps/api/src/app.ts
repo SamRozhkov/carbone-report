@@ -50,7 +50,13 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   const app = createFastify();
   registerErrorHandler(app);
   await app.register(cookie);
-  await app.register(rateLimit, { global: false });
+  // Счётчики входа общие для всех экземпляров API. Если Redis недоступен, команда
+  // сразу отклоняется (enableOfflineQueue: false) или падает по commandTimeout, и
+  // skipOnError пропускает запрос без лимита (fail-open), а не отвечает 500.
+  await app.register(rateLimit, {
+    global: false,
+    ...(deps.redis ? { redis: deps.redis, nameSpace: 'cr:rl:', skipOnError: true } : {}),
+  });
   await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
   const guards = makeGuards(deps);
 

@@ -79,10 +79,14 @@ export class CarboneClient implements CarboneRenderer {
         `ошибка загрузки шаблона: ${body?.error ?? res.status}`,
       );
     }
+    // Запись в кэш не ждём: зависший Redis не должен задерживать рендер.
+    // Кэш необязателен — при сбое следующий рендер загрузит шаблон снова.
     try {
-      await this.cache.set(tpl.id, { version: tpl.version, carboneId: id });
+      void Promise.resolve(this.cache.set(tpl.id, { version: tpl.version, carboneId: id })).catch(
+        () => {},
+      );
     } catch {
-      // кэш необязателен: следующий рендер загрузит шаблон снова
+      // синхронная ошибка реализации кэша — тоже не ошибка генерации
     }
     return id;
   }

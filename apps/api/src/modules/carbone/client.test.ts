@@ -138,6 +138,32 @@ describe('CarboneClient', () => {
     expect(calls.at(-1)!.url).toBe('http://c/render/id1?download=true');
   });
 
+  it('зависший cache.set не задерживает рендер', async () => {
+    const { fn } = fakeFetch((c) =>
+      c.url.endsWith('/template')
+        ? json(200, { success: true, data: { templateId: 'id1' } })
+        : pdf(),
+    );
+    let setCalls = 0;
+    const cache: TemplateIdCache = {
+      get: async () => null,
+      set: () => {
+        setCalls++;
+        return new Promise<void>(() => {});
+      },
+    };
+    const client = new CarboneClient({ baseUrl: 'http://c', fetch: fn, cache });
+    const started = Date.now();
+    const out = await Promise.race([
+      client.render(tpl(), {}, opts),
+      new Promise<'hung'>((r) => setTimeout(() => r('hung'), 500)),
+    ]);
+    expect(out).not.toBe('hung');
+    expect(out.toString()).toBe('%PDF-1.7 test');
+    expect(Date.now() - started).toBeLessThan(200);
+    expect(setCalls).toBe(1);
+  });
+
   it('ошибка рендера → AppError CARBONE_ERROR 502 с текстом Carbone', async () => {
     const { fn } = fakeFetch((c) =>
       c.url.endsWith('/template')

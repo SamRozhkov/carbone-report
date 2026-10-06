@@ -116,6 +116,7 @@ export const templates = pgTable('templates', {
   docKey: text('doc_key').notNull(),
   defaultOutput: text('default_output').$type<OutputFormat>().notNull().default('pdf'),
   lastSaveError: text('last_save_error'),
+  lastSaveErrorAt: timestamp('last_save_error_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
   categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),

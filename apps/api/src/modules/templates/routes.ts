@@ -245,6 +245,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
             updatedAt: new Date(),
             updatedBy: currentUser(req).id,
             lastSaveError: null,
+            lastSaveErrorAt: null,
           })
           .where(eq(templates.id, cur.id))
           .returning();

@@ -271,6 +271,8 @@ export const TemplateAdminDetails = TemplateDetails.extend({
   version: z.number(),
   queries: z.array(TemplateQuery),
   lastSaveError: z.string().nullable(),
+  /** Момент последней ошибки сохранения OnlyOffice (ISO); новая ошибка — новая метка. */
+  lastSaveErrorAt: z.string().nullable(),
 });
 export type TemplateAdminDetails = z.infer<typeof TemplateAdminDetails>;
 

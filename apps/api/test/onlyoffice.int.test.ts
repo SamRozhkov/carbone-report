@@ -8,6 +8,7 @@ import {
   createTemplate,
   createTestApp,
   loginAs,
+  multipart,
   type TestApp,
 } from './helpers';
 
@@ -242,6 +243,55 @@ describe('callback', () => {
     expect(d.json().lastSaveError).toBe('OnlyOffice не смог сохранить документ');
     await callback({ key, status: 6, url: pub('f.docx') });
     expect((await row()).lastSaveError).toBeNull();
+  });
+
+  const adminDetails = async () =>
+    (
+      await t.app.inject({
+        method: 'GET',
+        url: `/api/templates/${tplId}`,
+        headers: { cookie: admin },
+      })
+    ).json();
+
+  it('повтор той же ошибки (status 3) даёт новую lastSaveErrorAt; успешное сохранение обнуляет оба поля', async () => {
+    const key = (await row()).docKey;
+    await callback({ key, status: 3 });
+    const first = await adminDetails();
+    await callback({ key, status: 3 });
+    const second = await adminDetails();
+    expect(second.lastSaveError).toBe(first.lastSaveError);
+    expect(first.lastSaveErrorAt).toEqual(expect.stringMatching(/^\d{4}-\d\d-\d\dT[\d:.]+Z$/));
+    expect(Date.parse(second.lastSaveErrorAt)).toBeGreaterThan(Date.parse(first.lastSaveErrorAt));
+    await callback({ key, status: 6, url: pub('f.docx') });
+    const after = await adminDetails();
+    expect(after.lastSaveError).toBeNull();
+    expect(after.lastSaveErrorAt).toBeNull();
+  });
+
+  it('метка ошибки строго растёт, даже если часы не сдвинулись', async () => {
+    const key = (await row()).docKey;
+    const future = new Date(Date.now() + 3_600_000);
+    await t.deps.db
+      .update(templates)
+      .set({ lastSaveError: 'прежняя', lastSaveErrorAt: future })
+      .where(eq(templates.id, tplId));
+    await callback({ key, status: 7 });
+    expect((await row()).lastSaveErrorAt!.getTime()).toBe(future.getTime() + 1);
+  });
+
+  it('замена файла обнуляет lastSaveError и lastSaveErrorAt', async () => {
+    await callback({ key: (await row()).docKey, status: 3 });
+    expect((await row()).lastSaveErrorAt).not.toBeNull();
+    const mp = multipart({}, { name: 'new.docx', data: await createBlankDocument('docx') });
+    const r = await t.app.inject({
+      method: 'PUT',
+      url: `/api/templates/${tplId}/file`,
+      headers: { cookie: admin, ...mp.headers },
+      payload: mp.payload,
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ lastSaveError: null, lastSaveErrorAt: null });
   });
 });
 

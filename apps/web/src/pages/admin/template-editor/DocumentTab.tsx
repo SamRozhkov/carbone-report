@@ -120,11 +120,12 @@ export function DocumentTab({
           });
           return;
         }
-        if (t.lastSaveError && t.lastSaveError !== base.lastSaveError) {
+        // Новая ошибка — новая метка времени; текст не сравниваем: повтор той же ошибки тоже провал (§22.7).
+        if (t.lastSaveErrorAt !== null && t.lastSaveErrorAt !== base.lastSaveErrorAt) {
           add({
             name: toastName('doc-save'),
             title: 'Сохранение не удалось',
-            content: t.lastSaveError,
+            content: t.lastSaveError ?? '',
             theme: 'danger',
           });
           return;

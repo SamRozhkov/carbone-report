@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Redis } from 'ioredis';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, inject, it } from 'vitest';
 import { createRedis } from '../src/lib/redis';
 import { CarboneClient } from '../src/modules/carbone/client';
 import { redisTemplateCache } from '../src/modules/carbone/template-cache';
@@ -36,6 +36,27 @@ const opts = {
   timezone: 'Europe/Moscow',
   timeoutMs: 5000,
 };
+
+/** Адрес тестового Redis с другим паролем (`null` — без пароля). */
+function redisUrlWithPassword(password: string | null): string {
+  const url = new URL(inject('redisUrl'));
+  url.username = '';
+  url.password = password ?? '';
+  return url.toString();
+}
+
+/** Клиент, который пишет предупреждения в массив, и ожидание первого предупреждения. */
+function loggedRedis(url: string) {
+  const warns: { o: object; m: string }[] = [];
+  const redis = createRedis(url, { warn: (o, m) => warns.push({ o, m }) });
+  const firstWarn = async () => {
+    for (let i = 0; i < 60 && warns.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return warns[0];
+  };
+  return { redis, warns, firstWarn };
+}
 
 describe('Redis', () => {
   const clients: Redis[] = [];
@@ -89,6 +110,55 @@ describe('Redis', () => {
     // Повторные ошибки соединения не засоряют лог.
     await new Promise((r) => setTimeout(r, 300));
     expect(warns.length).toBeLessThanOrEqual(1);
+  });
+
+  it('тестовый Redis требует пароль: адрес из global-setup его содержит', () => {
+    expect(new URL(inject('redisUrl')).password).toMatch(/^[0-9a-f]{32,}$/);
+  });
+
+  it('клиент без пароля: Redis отвечает NOAUTH, кэш считается промахом, рендер проходит', async () => {
+    const { redis, firstWarn } = loggedRedis(redisUrlWithPassword(null));
+    clients.push(redis);
+    // ioredis сообщает об отказе аутентификации событием `error` (проверка готовности
+    // получает NOAUTH) и переподключается; пока клиент не готов, команды отклоняются сразу.
+    const warn = await firstWarn();
+    expect(warn).toBeDefined();
+    expect(JSON.stringify(warn!.o)).toContain('NOAUTH');
+    await expect(redis.get('k')).rejects.toThrow();
+    const { fn, counter } = fakeCarbone();
+    const client = new CarboneClient({
+      baseUrl: 'http://c',
+      fetch: fn,
+      cache: redisTemplateCache(redis),
+    });
+    const t = tpl();
+    expect((await client.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
+    expect((await client.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
+    expect(counter.uploads).toBe(2);
+  });
+
+  it('клиент с неверным паролем: WRONGPASS в журнале, рендер проходит быстро', async () => {
+    const { redis, warns, firstWarn } = loggedRedis(redisUrlWithPassword('0'.repeat(64)));
+    clients.push(redis);
+    const { fn, counter } = fakeCarbone();
+    const client = new CarboneClient({
+      baseUrl: 'http://c',
+      fetch: fn,
+      cache: redisTemplateCache(redis),
+    });
+    const t = tpl();
+    const started = Date.now();
+    expect((await client.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
+    expect((await client.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(counter.uploads).toBe(2);
+    const warn = await firstWarn();
+    expect(warn).toBeDefined();
+    expect(warn!.m).toContain('Redis недоступен');
+    expect(JSON.stringify(warn!.o)).toContain('WRONGPASS');
+    // Повторные ошибки аутентификации (ioredis переподключается) не засоряют лог.
+    await new Promise((r) => setTimeout(r, 300));
+    expect(warns.length).toBe(1);
   });
 
   it('createTestApp по умолчанию даёт приложению Redis с отдельным префиксом', async () => {

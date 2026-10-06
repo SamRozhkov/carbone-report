@@ -112,6 +112,7 @@ docker run --rm -v "$volume":/data -v "$PWD/docker/backup":/backup:ro -v "$dir":
 phase=storage
 # api остановлен — кэш не заполнится заново старыми данными до запуска. Redis без снимков на диск,
 # так что запуск (если он был остановлен) тоже даёт пустую базу, но FLUSHALL выполняется всегда.
+# Пароль redis-cli берёт из REDISCLI_AUTH в окружении контейнера redis; скрипт его не читает.
 if docker compose up -d --wait redis && docker compose exec -T redis redis-cli FLUSHALL; then
   redis_flushed=1
   echo "Redis очищен."

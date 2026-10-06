@@ -41,7 +41,7 @@ services:
       ONLYOFFICE_INTERNAL_URL: http://onlyoffice
       API_INTERNAL_URL: http://api:3000
       CARBONE_URL: http://carbone:4000
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD в .env}@redis:6379
       STORAGE_DIR: /data
       COOKIE_SECURE: 'true'
       TZ: ${TZ:-Europe/Moscow}
@@ -52,6 +52,7 @@ services:
       REPORT_RETENTION_DAYS: ${REPORT_RETENTION_DAYS:-30}
     volumes:
       - storage:/data
+    networks: [default, cache]
     healthcheck:
       test:
         [
@@ -92,23 +93,24 @@ services:
 
   redis:
     image: redis:7-alpine
+    # Пароль подставляет shell внутри контейнера, поэтому его нет в команде (docker inspect).
     command:
       [
-        'redis-server',
-        '--save',
-        '',
-        '--appendonly',
-        'no',
-        '--maxmemory',
-        '128mb',
-        '--maxmemory-policy',
-        'volatile-lru',
+        'sh',
+        '-c',
+        'exec redis-server --requirepass "$$REDIS_PASSWORD" --save "" --appendonly no --maxmemory 128mb --maxmemory-policy volatile-lru',
       ]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?задайте REDIS_PASSWORD в .env}
+      # redis-cli в контейнере (healthcheck, restore.sh) берёт пароль отсюда.
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?задайте REDIS_PASSWORD в .env}
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 20
+    # Только внутренняя сеть cache: Redis доступен одному api.
+    networks: [cache]
     logging: *logging
     restart: unless-stopped
 
@@ -179,6 +181,11 @@ services:
         condition: service_healthy
     logging: *logging
     restart: unless-stopped
+
+networks:
+  # Внутренняя сеть без выхода наружу: только api и redis.
+  cache:
+    internal: true
 
 volumes:
   storage:

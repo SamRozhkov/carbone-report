@@ -316,7 +316,7 @@ describe('callback hardening', () => {
       settled = true;
     });
     try {
-      await held.started.promise; // скачивание идёт, release ещё не отдан
+      await Promise.race([held.started.promise, saving]); // saving раньше started — ранняя ошибка callback, не виснем
       const patch = await t.app.inject({
         method: 'PATCH',
         url: `/api/templates/${tplId}`,
@@ -328,6 +328,7 @@ describe('callback hardening', () => {
       expect((await row()).description).toBe('параллельно');
     } finally {
       held.release.resolve(); // и при падении — чтобы callback не висел до конца файла
+      await saving.catch(() => {});
     }
     expect((await saving).statusCode).toBe(200);
     const r1 = await row();

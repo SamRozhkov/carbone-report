@@ -4,6 +4,7 @@ import type pg from 'pg';
 import type { Config } from './config';
 import type { Db } from './db/client';
 import type { Storage } from './lib/storage';
+import type { LdapAuthenticator } from './modules/auth/ldap';
 
 export interface TemplateFileRef {
   id: string;
@@ -45,4 +46,6 @@ export interface AppDeps {
   fetchFile: FileFetcher;
   /** Общий Redis (кэш Carbone, лимит входа); null — кэш промахивается, лимиты считаются в памяти экземпляра. */
   redis: Redis | null;
+  /** null, если LDAP не настроен (LDAP_ENABLED=false) — вход только по локальному паролю. */
+  ldap: LdapAuthenticator | null;
 }

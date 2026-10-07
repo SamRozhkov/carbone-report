@@ -51,6 +51,7 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     tz: 'Europe/Moscow',
     port: 0,
     cookieSecure: false,
+    ldap: null,
   };
 }
 
@@ -137,6 +138,7 @@ export async function createTestApp(
     onlyoffice: { forceSave: notConfigured('onlyoffice') },
     fetchFile: notConfigured('fetchFile'),
     redis: ownRedis,
+    ldap: null,
     ...overrides,
   };
   const app = await buildApp(deps);

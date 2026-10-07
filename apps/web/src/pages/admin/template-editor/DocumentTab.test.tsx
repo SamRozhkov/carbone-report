@@ -46,6 +46,15 @@ describe('DocumentTab', () => {
     expect(mounts.count).toBe(1);
   });
 
+  it('ссылка «Справка по синтаксису» открывает /admin/help в новой вкладке', async () => {
+    mockApi([{ path: '/api/templates/t1/editor-config', body: config }]);
+    renderWithProviders(<DocumentTab {...base} />);
+    const link = await screen.findByRole('link', { name: 'Справка по синтаксису' });
+    expect(link).toHaveAttribute('href', '/admin/help');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener');
+  });
+
   it('сохранение: forcesave и ожидание новой версии', async () => {
     let gets = 0;
     const { calls } = mockApi([

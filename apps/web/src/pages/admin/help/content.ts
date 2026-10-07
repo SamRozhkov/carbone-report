@@ -19,6 +19,8 @@ export interface HelpExample {
   sql?: { key: string; mode: QueryMode; text: string };
   /** Отключено в бесплатной версии: Carbone отвечает ошибкой. */
   unavailable?: true;
+  /** Показан как «так нельзя»: кнопки «Копировать» нет. */
+  antiPattern?: true;
 }
 
 /** Недоступное без проверяемого тега: что происходит и что делать вместо. */
@@ -102,7 +104,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         template: "Период с {d.params.from:formatD('DD.MM.YYYY')}",
         data: j({ params: { from: '2026-03-01' } }),
         result: 'Период с 01.03.2026',
-        note: "Параметры отчёта лежат в `d.params` под своими именами. Теги `{c.…}` в нашей системе не заполняются, кроме `{c.now}` — момента формирования: `{c.now:formatD('DD.MM.YYYY')}`.",
+        note: "Параметры отчёта лежат в `d.params` под своими именами. Теги `{c.…}` система сама не заполняет, кроме `{c.now}` — момента формирования: `{c.now:formatD('DD.MM.YYYY')}`. Свои значения в `c` можно записать только через `:set` (см. раздел «Итоги и группировка»).",
       },
       {
         id: 'basics-ifempty',
@@ -368,6 +370,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
       {
         id: 'cond-table-row',
+        antiPattern: true,
         title: 'hideBegin в строке таблицы (так нельзя)',
         template: L(
           '| Марка | Кол-во |',
@@ -511,6 +514,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
       {
         id: 'totals-set-sum',
+        antiPattern: true,
         title: 'Сумма через :set (неверно)',
         template: '{d.zero:set(c.total)}{d.cars[].qty:add(c.total):set(c.total)}Итого: {c.total}',
         data: j({ zero: 0, cars: CARS }),

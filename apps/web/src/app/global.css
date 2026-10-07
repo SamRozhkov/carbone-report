@@ -150,6 +150,12 @@ body {
   border-radius: 8px;
 }
 
+.cr-help-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .cr-help-label {
   display: flex;
   align-items: center;

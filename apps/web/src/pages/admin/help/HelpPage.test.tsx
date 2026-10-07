@@ -51,6 +51,36 @@ describe('HelpPage', () => {
     expect(await screen.findByText(`Скопировано: ${e.title}`)).toBeInTheDocument();
   });
 
+  it('антипримеры без кнопки «Копировать», у обычной карточки она есть', async () => {
+    renderWithProviders(<HelpPage />);
+    const all = HELP_SECTIONS.flatMap((s) => s.examples);
+    const anti = all.filter((e) => e.antiPattern);
+    expect(anti.map((e) => e.id).sort()).toEqual(['cond-table-row', 'totals-set-sum']);
+    for (const e of anti) {
+      const card = await screen.findByRole('article', { name: e.title });
+      expect(
+        within(card).queryByRole('button', { name: `Копировать тег: ${e.title}` }),
+      ).not.toBeInTheDocument();
+    }
+    const normal = all.find((e) => !e.antiPattern)!;
+    const card = screen.getByRole('article', { name: normal.title });
+    expect(
+      within(card).getByRole('button', { name: `Копировать тег: ${normal.title}` }),
+    ).toBeInTheDocument();
+  });
+
+  it('примеры с таблицей: подсказка про «|» рядом с кнопкой, у остальных её нет', async () => {
+    renderWithProviders(<HelpPage />);
+    const hint = 'в Word вставьте теги в ячейки таблицы; | — только обозначение ячеек';
+    const all = HELP_SECTIONS.flatMap((s) => s.examples).filter((e) => !e.antiPattern);
+    const tableEx = all.find((e) => e.template.split('\n').some((l) => l.startsWith('|')))!;
+    const plain = all.find((e) => !e.template.split('\n').some((l) => l.startsWith('|')))!;
+    const withHint = await screen.findByRole('article', { name: tableEx.title });
+    expect(within(withHint).getByText(hint)).toBeInTheDocument();
+    const without = screen.getByRole('article', { name: plain.title });
+    expect(within(without).queryByText(hint)).not.toBeInTheDocument();
+  });
+
   it('админ: маршрут /admin/help и пункт меню', async () => {
     mockApi([adminMe]);
     renderRoute('/admin/help');

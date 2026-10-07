@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HELP_SECTIONS } from './content';
+import { HELP_INTRO, HELP_SECTIONS } from './content';
 
 const examples = HELP_SECTIONS.flatMap((s) => s.examples);
 const COMMUNITY =
@@ -71,5 +71,26 @@ describe('содержание справки', () => {
       'na-sort-desc',
       'na-txt',
     ]);
+  });
+
+  it('antiPattern — только cond-table-row и totals-set-sum, не в разделе 6', () => {
+    const flagged = HELP_SECTIONS.flatMap((s) => s.examples.map((e) => [s.id, e] as const)).filter(
+      ([, e]) => e.antiPattern,
+    );
+    expect(flagged.map(([, e]) => e.id).sort()).toEqual(['cond-table-row', 'totals-set-sum']);
+    for (const [sid] of flagged) expect(sid).not.toBe('unavailable');
+  });
+
+  it('в тексте с `кодом` чётное число обратных кавычек', () => {
+    const texts = [
+      ...HELP_INTRO,
+      ...HELP_SECTIONS.flatMap((s) => [
+        ...s.intro,
+        ...s.examples.map((e) => e.note ?? ''),
+        ...(s.limits ?? []).map((l) => l.instead),
+      ]),
+    ];
+    expect(texts.length).toBeGreaterThan(10);
+    for (const t of texts) expect((t.match(/`/g) ?? []).length % 2, t).toBe(0);
   });
 });

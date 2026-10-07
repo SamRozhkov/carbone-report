@@ -5,6 +5,7 @@ import { PageHeader } from '../../../components/PageHeader';
 import { useCopy } from '../../../components/useCopy';
 import { HELP_INTRO, HELP_SECTIONS, type HelpExample, type HelpSection } from './content';
 
+const TABLE_HINT = 'в Word вставьте теги в ячейки таблицы; | — только обозначение ячеек';
 const MODE_LABEL = { list: 'Список строк', single: 'Одна строка' } as const;
 
 /** Текст, где `код` в обратных кавычках показывается моноширинным. */
@@ -40,6 +41,7 @@ function Block({ label, action, text }: { label: string; action?: ReactNode; tex
 
 function ExampleCard({ example }: { example: HelpExample }) {
   const copy = useCopy();
+  const hasTableRows = example.template.split('\n').some((l) => l.startsWith('|'));
   return (
     <article id={example.id} className="cr-help-card" aria-label={example.title}>
       <Text variant="subheader-2" as="h3">
@@ -55,15 +57,24 @@ function ExampleCard({ example }: { example: HelpExample }) {
         label="Тег в шаблоне"
         text={example.template}
         action={
-          <Button
-            view="flat"
-            size="xs"
-            aria-label={`Копировать тег: ${example.title}`}
-            onClick={() => void copy(example.template, example.title)}
-          >
-            <Icon data={Copy} size={12} />
-            Копировать
-          </Button>
+          example.antiPattern ? undefined : (
+            <span className="cr-help-actions">
+              {hasTableRows && (
+                <Text variant="caption-2" color="secondary">
+                  {TABLE_HINT}
+                </Text>
+              )}
+              <Button
+                view="flat"
+                size="xs"
+                aria-label={`Копировать тег: ${example.title}`}
+                onClick={() => void copy(example.template, example.title)}
+              >
+                <Icon data={Copy} size={12} />
+                Копировать
+              </Button>
+            </span>
+          )
         }
       />
       <Block label="Данные" text={example.data} />

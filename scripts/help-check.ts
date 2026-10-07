@@ -229,7 +229,10 @@ async function liveCheck(examples: HelpExample[]): Promise<number> {
         ? (communityErrorMessage(r.error) ?? `другая ошибка: ${r.error}`)
         : 'отчёт сформирован, а ожидалась ошибка «disabled in the Community Edition»';
     } else if (r.error || !r.out) got = `ошибка: ${r.error ?? 'пустой ответ'}`;
-    else got = docxText(await documentXml(Buffer.from(r.out, 'base64')));
+    else {
+      got = docxText(await documentXml(Buffer.from(r.out, 'base64')));
+      if (got.trim() === '') got = 'пустой текст документа';
+    }
     if (got === e.result) console.log(`✓ ${e.id}`);
     else {
       bad++;
@@ -241,6 +244,7 @@ async function liveCheck(examples: HelpExample[]): Promise<number> {
 
 async function main(): Promise<void> {
   const examples = HELP_SECTIONS.flatMap((s) => s.examples);
+  if (examples.length === 0) throw new Error('нет примеров для проверки (справка пуста)');
   const self = process.argv.includes('--self-test');
   const bad = self ? await selfTest(examples) : await liveCheck(examples);
   console.log(

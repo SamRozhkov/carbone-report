@@ -1,5 +1,6 @@
 import type { CarboneRenderer, RenderOptions, TemplateFileRef } from '../../deps';
 import { AppError } from '../../lib/errors';
+import { communityErrorMessage } from './community';
 import { memoryTemplateCache, type TemplateIdCache, type TemplateIdEntry } from './template-cache';
 
 const VERSION_HEADER = { 'carbone-version': '5' };
@@ -125,6 +126,9 @@ export class CarboneClient implements CarboneRenderer {
 
     const body = (isJson ? await res.json().catch(() => null) : null) as { error?: string } | null;
     const error = body?.error ?? `HTTP ${res.status}`;
+    // Отключённый в Community форматтер — ошибка шаблона, а не сбой сервиса (§23.4).
+    const community = communityErrorMessage(error);
+    if (community) throw new AppError('CARBONE_COMMUNITY', 400, community);
     if (res.status === 404 || /template not found/i.test(error)) throw new TemplateMissing(error);
     throw new AppError('CARBONE_ERROR', 502, `ошибка генерации: ${error}`);
   }

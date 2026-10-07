@@ -1,4 +1,5 @@
 import {
+  CARBONE_LANG,
   outputFormatsFor,
   type OutputFormat,
   type ParamValue,
@@ -74,7 +75,7 @@ export function renderReport(
   if (deadline && deadline.remaining() <= 0) return Promise.reject(reportTimeout());
   const work = deps.carbone.render(templateFileRef(deps, full.row), data, {
     convertTo: format,
-    lang: 'ru-ru',
+    lang: CARBONE_LANG,
     timezone: deps.config.tz,
     timeoutMs: deadline ? deadline.cap(deps.config.renderTimeoutMs) : deps.config.renderTimeoutMs,
   });

@@ -28,6 +28,9 @@ export function outputFormatsFor(ext: TemplateExt): OutputFormat[] {
   return FORMATS_BY_EXT[ext];
 }
 
+/** Язык Carbone: `ru` даёт русские разделители чисел и рубли в formatC; `ru-ru` — нет (матрица Community, §23.4). */
+export const CARBONE_LANG = 'ru';
+
 export const ParamType = z.enum(['string', 'number', 'date', 'boolean', 'select', 'query']);
 export type ParamType = z.infer<typeof ParamType>;
 

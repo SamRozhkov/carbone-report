@@ -36,7 +36,7 @@ const tpl = (version = 1) => ({
 });
 const opts = {
   convertTo: 'pdf' as const,
-  lang: 'ru-ru',
+  lang: 'ru',
   timezone: 'Europe/Moscow',
   timeoutMs: 1000,
 };
@@ -60,7 +60,7 @@ describe('CarboneClient', () => {
     expect(JSON.parse(String(calls[1]!.body))).toEqual({
       data: { a: 1 },
       convertTo: 'pdf',
-      lang: 'ru-ru',
+      lang: 'ru',
       timezone: 'Europe/Moscow',
     });
   });
@@ -175,6 +175,28 @@ describe('CarboneClient', () => {
     expect(e).toBeInstanceOf(AppError);
     expect([e.code, e.status]).toEqual(['CARBONE_ERROR', 502]);
     expect(e.message).toContain('formatter "foo" does not exist');
+  });
+
+  it('форматтер отключён в Community → CARBONE_COMMUNITY 400 с именем из ответа', async () => {
+    const { fn } = fakeFetch((c) =>
+      c.url.endsWith('/template')
+        ? json(200, { success: true, data: { templateId: 'x' } })
+        : json(500, {
+            success: false,
+            error:
+              'Unable to generate the document. Error: Formatter "aggSum" is disabled in the Community Edition. Source: "{d.cars[].qty:aggSum}"',
+            code: 'w101',
+            data: { renderId: '' },
+          }),
+    );
+    const e = await new CarboneClient({ baseUrl: 'http://c', fetch: fn })
+      .render(tpl(), {}, opts)
+      .catch((x) => x);
+    expect(e).toBeInstanceOf(AppError);
+    expect([e.code, e.status]).toEqual(['CARBONE_COMMUNITY', 400]);
+    expect(e.message).toBe(
+      'в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»',
+    );
   });
 
   it('Carbone недоступен → CARBONE_ERROR 502', async () => {

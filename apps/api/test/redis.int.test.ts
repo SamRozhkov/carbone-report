@@ -32,7 +32,7 @@ const tpl = () => ({
 });
 const opts = {
   convertTo: 'pdf' as const,
-  lang: 'ru-ru',
+  lang: 'ru',
   timezone: 'Europe/Moscow',
   timeoutMs: 5000,
 };

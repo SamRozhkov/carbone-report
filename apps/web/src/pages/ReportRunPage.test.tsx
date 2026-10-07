@@ -114,6 +114,24 @@ describe('ReportRunPage', () => {
     expect(await screen.findByText('шаблон не найден')).toBeInTheDocument();
   });
 
+  it('ошибка Community показывается как есть', async () => {
+    const message =
+      'в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
+    mockApi([
+      userMe,
+      { path: '/api/templates/t1', body: template },
+      {
+        method: 'POST',
+        path: '/api/reports/t1/render',
+        status: 400,
+        body: { error: { code: 'CARBONE_COMMUNITY', message } },
+      },
+    ]);
+    renderRoute('/reports/t1');
+    await userEvent.click(await screen.findByRole('button', { name: 'Сформировать' }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+  });
+
   it('состояние не утекает между шаблонами', async () => {
     mockApi([
       userMe,

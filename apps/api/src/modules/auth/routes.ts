@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { LoginBody } from '@carbone-reports/shared';
+import { LoginBody, type Features } from '@carbone-reports/shared';
 import { eq, sql } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { App } from '../../app';
@@ -44,6 +44,12 @@ async function provisionLdapUser(deps: AppDeps, login: string): Promise<UserRow 
 }
 
 export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): void {
+  // Признак включённых функций для меню web (§26.3): в ответах входа и /api/auth/me.
+  const withFeatures = (user: SessionUser): SessionUser & { features: Features } => ({
+    ...user,
+    features: { backups: deps.backupAgent !== null },
+  });
+
   const loginRateLimit = {
     max: 10,
     timeWindow: '1 minute',
@@ -109,7 +115,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
         }
         const user = { id: ldapUser.id, login: ldapUser.login, role: ldapUser.role };
         await setSessionCookie(reply, deps, user, ldapUser.sessionVersion);
-        return user;
+        return withFeatures(user);
       }
 
       const ok = await verifyPassword(row?.passwordHash ?? (await DUMMY_HASH_PROMISE), password);
@@ -118,7 +124,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
       }
       const user = { id: row.id, login: row.login, role: row.role };
       await setSessionCookie(reply, deps, user, row.sessionVersion);
-      return user;
+      return withFeatures(user);
     },
   );
 
@@ -136,5 +142,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
     return reply.status(204).send();
   });
 
-  app.get('/api/auth/me', { preHandler: guards.requireUser }, async (req) => currentUser(req));
+  app.get('/api/auth/me', { preHandler: guards.requireUser }, async (req) =>
+    withFeatures(currentUser(req)),
+  );
 }

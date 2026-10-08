@@ -177,3 +177,44 @@ describe('loadConfig', () => {
     ).toThrow('LDAP_URL: нужен URL вида ldap://host:389 или ldaps://host:636');
   });
 });
+
+describe('loadConfig: агент бэкапа', () => {
+  const token = 'b'.repeat(32);
+  it('без BACKUP_AGENT_URL функция выключена (токен без адреса не мешает)', () => {
+    expect(loadConfig(base).backupAgent).toBeNull();
+    expect(
+      loadConfig({ ...base, BACKUP_AGENT_URL: '', BACKUP_AGENT_TOKEN: token }).backupAgent,
+    ).toBeNull();
+  });
+  it('адрес и токен; завершающий / убирается', () => {
+    expect(
+      loadConfig({
+        ...base,
+        BACKUP_AGENT_URL: 'http://backup-agent:8080/',
+        BACKUP_AGENT_TOKEN: token,
+      }).backupAgent,
+    ).toEqual({ url: 'http://backup-agent:8080', token });
+  });
+  it('адрес без токена или короткий токен — ошибка; значение токена в сообщение не попадает', () => {
+    expect(() => loadConfig({ ...base, BACKUP_AGENT_URL: 'http://backup-agent:8080' })).toThrow(
+      'BACKUP_AGENT_TOKEN: обязателен при BACKUP_AGENT_URL',
+    );
+    let message = '';
+    try {
+      loadConfig({
+        ...base,
+        BACKUP_AGENT_URL: 'http://backup-agent:8080',
+        BACKUP_AGENT_TOKEN: 'short-secret-token',
+      });
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toContain('BACKUP_AGENT_TOKEN: минимум 32 символа');
+    expect(message).not.toContain('short-secret-token');
+  });
+  it('адрес — только http(s)-URL', () => {
+    expect(() =>
+      loadConfig({ ...base, BACKUP_AGENT_URL: 'backup:8080', BACKUP_AGENT_TOKEN: token }),
+    ).toThrow('BACKUP_AGENT_URL: нужен URL, например http://backup-agent:8080');
+  });
+});

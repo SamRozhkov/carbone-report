@@ -7,6 +7,8 @@ import {
   TemplateParam,
   TemplateQuery,
   outputFormatsFor,
+  BACKUP_NAME_RE,
+  RecoveryBody,
 } from './index';
 
 describe('TemplateQuery', () => {
@@ -192,5 +194,22 @@ describe('sqlCompareRefs', () => {
     expect(r('where a = any(:a)').missingOperator).toBe(false);
     expect(r('where a = ANY (:a)').missingOperator).toBe(false);
     expect(r('where a like any(:a) or b ilike any(:b)').missingOperator).toBe(false);
+  });
+});
+
+describe('бэкапы', () => {
+  it('BACKUP_NAME_RE — шаблон имени из §26.1', () => {
+    expect(BACKUP_NAME_RE.test('2026-10-08T03-00-00Z')).toBe(true);
+    expect(BACKUP_NAME_RE.test('pre-restore-2026-10-08T03-00-00Z')).toBe(true);
+    for (const bad of ['2026-10-08T03-00-00Z.partial', '../x', '2026-10-08 03-00-00Z', ''])
+      expect(BACKUP_NAME_RE.test(bad)).toBe(false);
+  });
+  it('RecoveryBody: код и цель same | pre-restore', () => {
+    expect(RecoveryBody.parse({ code: ' ABCD-EFGH-IJKL ', target: 'same' })).toEqual({
+      code: 'ABCD-EFGH-IJKL',
+      target: 'same',
+    });
+    expect(RecoveryBody.safeParse({ code: '', target: 'same' }).success).toBe(false);
+    expect(RecoveryBody.safeParse({ code: 'X', target: 'other' }).success).toBe(false);
   });
 });

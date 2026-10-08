@@ -55,6 +55,15 @@ const Env = z
       .default('(uid=%s)'),
     LDAP_DEFAULT_ROLE: z.enum(['admin', 'user']).default('user'),
     LDAP_TLS_REJECT_UNAUTHORIZED: z.enum(['true', 'false']).default('true'),
+    // Агент бэкапа (§26.3): без адреса управление бэкапами в админке выключено.
+    BACKUP_AGENT_URL: z
+      .string()
+      .refine(
+        (v) => v === '' || (/^https?:\/\//.test(v) && URL.canParse(v)),
+        'нужен URL, например http://backup-agent:8080',
+      )
+      .optional(),
+    BACKUP_AGENT_TOKEN: z.string().optional(),
   })
   .superRefine((v, ctx) => {
     if (v.LDAP_ENABLED !== 'true') return;
@@ -86,6 +95,18 @@ const Env = z
     for (const k of S3_REQUIRED)
       if (!e[k])
         ctx.addIssue({ code: 'custom', path: [k], message: 'обязателен при STORAGE_BACKEND=s3' });
+  })
+  .superRefine((e, ctx) => {
+    if (!e.BACKUP_AGENT_URL) return;
+    // Только имя переменной и правило — значение токена в сообщение не попадает.
+    if (!e.BACKUP_AGENT_TOKEN)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['BACKUP_AGENT_TOKEN'],
+        message: 'обязателен при BACKUP_AGENT_URL',
+      });
+    else if (e.BACKUP_AGENT_TOKEN.length < 32)
+      ctx.addIssue({ code: 'custom', path: ['BACKUP_AGENT_TOKEN'], message: 'минимум 32 символа' });
   });
 
 /** Настройки S3 (STORAGE_BACKEND=s3). Ключи доступа не логируются. */
@@ -128,6 +149,8 @@ export interface Config {
   port: number;
   cookieSecure: boolean;
   ldap: LdapConfig | null;
+  /** Агент бэкапа; null — управление бэкапами выключено. Токен не логируется. */
+  backupAgent: { url: string; token: string } | null;
 }
 
 export interface LdapConfig {
@@ -196,5 +219,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
             tlsRejectUnauthorized: e.LDAP_TLS_REJECT_UNAUTHORIZED === 'true',
           }
         : null,
+    backupAgent: e.BACKUP_AGENT_URL
+      ? { url: e.BACKUP_AGENT_URL.replace(/\/$/, ''), token: e.BACKUP_AGENT_TOKEN! }
+      : null,
   };
 }

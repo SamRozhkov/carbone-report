@@ -395,3 +395,78 @@ export function sqlCompareRefs(sql: string): SqlCompareRefs {
     ),
   };
 }
+
+// ---- Бэкапы (§26) ----
+
+/** Имя бэкапа, из которого можно восстановить (§26.1). */
+export const BACKUP_NAME_RE = /^(pre-restore-)?\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$/;
+
+export const BackupNameParams = z.object({
+  name: z.string().regex(BACKUP_NAME_RE, 'неверное имя бэкапа'),
+});
+export type BackupNameParams = z.infer<typeof BackupNameParams>;
+
+export interface BackupDto {
+  name: string;
+  /** ISO-время UTC. */
+  createdAt: string;
+  dbSize: number | null;
+  storageSize: number | null;
+  lastMigration: string | null;
+  kind: 'regular' | 'pre-restore';
+  status: 'ok' | 'partial';
+}
+
+export type BackupPhase =
+  | 'backup'
+  | 'verify'
+  | 'pre-backup'
+  | 'maintenance'
+  | 'db'
+  | 'migrate'
+  | 'storage'
+  | 'redis'
+  | 'done';
+
+/** Цели повтора в состоянии «требуется восстановление» (§26.4). */
+export interface RecoveryTargets {
+  backup: string;
+  preRestore: string | null;
+}
+
+export interface BackupOperationDto {
+  id: string;
+  type: 'backup' | 'restore';
+  /** cron | логин | recovery-code */
+  requestedBy: string;
+  backup: string | null;
+  phase: BackupPhase;
+  status: 'running' | 'succeeded' | 'failed';
+  startedAt: string;
+  finishedAt: string | null;
+  error: string | null;
+  /** Хвост журнала операции, до 500 строк. */
+  log: string[];
+  recovery: RecoveryTargets | null;
+}
+
+export type MaintenanceStatus =
+  | { active: false }
+  | {
+      active: true;
+      phase: BackupPhase;
+      startedAt: string;
+      backup: string;
+      recovery: RecoveryTargets | null;
+    };
+
+export const RecoveryBody = z.object({
+  code: z.string().trim().min(1, 'введите код восстановления').max(64),
+  target: z.enum(['same', 'pre-restore']),
+});
+export type RecoveryBody = z.infer<typeof RecoveryBody>;
+
+/** Включённые функции — в ответах /api/auth/me и /api/auth/login. */
+export interface Features {
+  backups: boolean;
+}

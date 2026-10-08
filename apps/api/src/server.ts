@@ -10,6 +10,7 @@ import { createRunFileGate } from './lib/run-file-gate';
 import { createRemoveGate } from './lib/storage-gate';
 import { ensureAdmin } from './modules/auth/bootstrap';
 import { createLdapAuthenticator } from './modules/auth/ldap';
+import { createAgentClient } from './modules/backups/agent-client';
 import { CarboneClient } from './modules/carbone/client';
 import { redisTemplateCache } from './modules/carbone/template-cache';
 import { createSourcePools } from './modules/datasources/pools';
@@ -18,11 +19,19 @@ import { startCleanupTimer } from './modules/reports/cleanup';
 import { migrateTemplateFiles } from './modules/templates/file-migration';
 
 const config = loadConfig(process.env);
-const { db, pool } = createDb(config.databaseUrl);
-const gatePool = new pg.Pool({ connectionString: config.databaseUrl, max: 2 });
+const { db, pool } = createDb(config.databaseUrl, (err) => console.error('db pool', err.message));
+const gatePool = new pg.Pool({
+  connectionString: config.databaseUrl,
+  max: 2,
+  application_name: 'api',
+});
 gatePool.on('error', (err) => console.error('gate pool', err));
 // Сборки файлов запусков: соединение держится всё время рендера, поэтому пул свой и небольшой.
-const runFilePool = new pg.Pool({ connectionString: config.databaseUrl, max: 3 });
+const runFilePool = new pg.Pool({
+  connectionString: config.databaseUrl,
+  max: 3,
+  application_name: 'api',
+});
 runFilePool.on('error', (err) => console.error('run file pool', err));
 await migrateDb(db);
 // До buildApp и listen: с s3 нет бакета (и S3_CREATE_BUCKET=false) — API не запускается.
@@ -48,6 +57,7 @@ const deps: AppDeps = {
   fetchFile,
   redis,
   ldap: config.ldap ? createLdapAuthenticator(config.ldap, console) : null,
+  backupAgent: config.backupAgent ? createAgentClient(config.backupAgent) : null,
 };
 
 await ensureAdmin(deps, console);

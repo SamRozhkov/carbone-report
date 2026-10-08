@@ -63,6 +63,7 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     port: 0,
     cookieSecure: false,
     ldap: null,
+    backupAgent: null,
   };
 }
 
@@ -242,6 +243,7 @@ export async function createTestApp(
     fetchFile: notConfigured('fetchFile'),
     redis: ownRedis,
     ldap: null,
+    backupAgent: null,
     ...overrides,
   };
   const app = await buildApp(deps);

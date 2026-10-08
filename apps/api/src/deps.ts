@@ -6,6 +6,7 @@ import type { Db } from './db/client';
 import type { RunFileGate } from './lib/run-file-gate';
 import type { Storage } from './lib/storage';
 import type { LdapAuthenticator } from './modules/auth/ldap';
+import type { AgentClient } from './modules/backups/agent-client';
 
 export interface TemplateFileRef {
   id: string;
@@ -51,4 +52,6 @@ export interface AppDeps {
   redis: Redis | null;
   /** null, если LDAP не настроен (LDAP_ENABLED=false) — вход только по локальному паролю. */
   ldap: LdapAuthenticator | null;
+  /** Агент бэкапа (§26.3); null — управление бэкапами в админке выключено. */
+  backupAgent: AgentClient | null;
 }

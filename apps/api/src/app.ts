@@ -15,6 +15,7 @@ import { registerAccessRoutes } from './modules/access/routes';
 import { registerAuthRoutes } from './modules/auth/routes';
 import { registerDatasourceRoutes } from './modules/datasources/routes';
 import { registerBackupRoutes } from './modules/backups/routes';
+import { registerMaintenance } from './modules/maintenance/routes';
 import { registerOnlyOfficeRoutes } from './modules/onlyoffice/routes';
 import { registerReportRoutes } from './modules/reports/routes';
 import { registerTemplateRoutes } from './modules/templates/routes';
@@ -69,6 +70,8 @@ export type App = ReturnType<typeof createFastify>;
 export async function buildApp(deps: AppDeps): Promise<App> {
   const app = createFastify();
   registerErrorHandler(app);
+  // До всех маршрутов: во время восстановления из бэкапа API отвечает 503 (§26.3).
+  registerMaintenance(app, deps);
   await app.register(cookie);
   // Счётчики входа общие для всех экземпляров API (Redis, ключи cr:rl:). Если Redis
   // ответил ошибкой (команда сразу отклоняется при enableOfflineQueue: false или падает

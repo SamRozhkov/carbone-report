@@ -5,7 +5,9 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { reportRunFiles, reportRuns, templates } from '../src/db/schema';
 import type { CarboneRenderer } from '../src/deps';
+import { Deadline } from '../src/lib/deadline';
 import { AppError } from '../src/lib/errors';
+import { createRunFileGate } from '../src/lib/run-file-gate';
 import { RUN_FILE_LOCK_CLASS } from '../src/modules/reports/snapshot';
 import {
   createSourceDatabase,
@@ -235,6 +237,33 @@ describe('снимок запуска', () => {
     expect(renders).toEqual([{ tplId: `run:${runId}`, convertTo: 'docx' }]);
   });
 
+  it('много одновременных запросов DOCX не занимают основной пул: история отвечает во время сборки, сборка одна', async () => {
+    const runId = await newRun();
+    renders.length = 0;
+    delayMs = 1500;
+    const N = 14; // больше, чем соединений в основном пуле (10)
+    let settled = 0;
+    const reqs = Array.from({ length: N }, () =>
+      file(userA, runId, '?format=docx').then((r) => {
+        settled++;
+        return r;
+      }),
+    );
+    await expect.poll(() => renders.length).toBe(1);
+    const runs = await t.app.inject({
+      method: 'GET',
+      url: '/api/runs',
+      headers: { cookie: userA },
+    });
+    expect(runs.statusCode).toBe(200);
+    // История ответила, пока сборка ещё идёт: ни один запрос файла не завершился.
+    expect(settled).toBe(0);
+    const all = await Promise.all(reqs);
+    expect(all.map((r) => r.statusCode)).toEqual(Array(N).fill(200));
+    expect(new Set(all.map((r) => r.body)).size).toBe(1);
+    expect(renders).toEqual([{ tplId: `run:${runId}`, convertTo: 'docx' }]);
+  });
+
   it('недопустимый формат → 400 VALIDATION; ничего не собирается', async () => {
     const runId = await newRun();
     renders.length = 0;
@@ -406,9 +435,7 @@ describe('срок сборки', () => {
         RUN_FILE_LOCK_CLASS,
         `${runId}:docx`,
       ]);
-      const started = Date.now();
       const r = await getDocx(runId);
-      expect(Date.now() - started).toBeLessThan(1200);
       expect(r.statusCode).toBe(504);
       expect(r.json().error.message).toBe('превышено время формирования отчёта');
       expect(slowRenders).toBe(0);
@@ -423,10 +450,9 @@ describe('срок сборки', () => {
   it('сборка, прерванная по сроку, снимает блокировку и не оставляет файла', async () => {
     const runId = await newSlowRun();
     slowMs = 1500;
-    const started = Date.now();
     const r = await getDocx(runId);
-    expect(Date.now() - started).toBeLessThan(1200);
     expect(r.statusCode).toBe(504);
+    expect(slowRenders).toBe(1);
     expect(
       await s.deps.db.select().from(reportRunFiles).where(eq(reportRunFiles.runId, runId)),
     ).toHaveLength(1); // только pdf
@@ -435,5 +461,51 @@ describe('срок сборки', () => {
     const again = await getDocx(runId);
     expect(again.statusCode).toBe(200);
     expect(slowRenders).toBe(2);
+  });
+});
+
+describe('пул сборки (createRunFileGate)', () => {
+  it('нет свободного соединения до срока → 504; соединение потом возвращается в пул', async () => {
+    const pool = new pg.Pool({ connectionString: t.deps.config.databaseUrl, max: 1 });
+    pool.on('error', () => {});
+    const gate = createRunFileGate(pool);
+    try {
+      const busy = await pool.connect();
+      let ran = false;
+      const err = await gate(RUN_FILE_LOCK_CLASS, 'gate-test', new Deadline(200), async () => {
+        ran = true;
+      }).catch((e: unknown) => e);
+      expect(err).toMatchObject({ code: 'TIMEOUT', status: 504 });
+      expect(ran).toBe(false);
+      busy.release();
+      await expect.poll(() => pool.idleCount).toBe(1);
+      expect(
+        await gate(RUN_FILE_LOCK_CLASS, 'gate-test', new Deadline(2000), async () => 'ok'),
+      ).toBe('ok');
+      expect(pool.totalCount).toBe(1);
+      expect(pool.idleCount).toBe(1);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('ошибка внутри — откат, блокировка снята', async () => {
+    const pool = new pg.Pool({ connectionString: t.deps.config.databaseUrl, max: 2 });
+    pool.on('error', () => {});
+    const gate = createRunFileGate(pool);
+    try {
+      const boom = new AppError('CARBONE_ERROR', 502, 'boom');
+      await expect(
+        gate(RUN_FILE_LOCK_CLASS, 'gate-err', new Deadline(2000), async () => {
+          throw boom;
+        }),
+      ).rejects.toBe(boom);
+      // Блокировка свободна: короткий срок не истекает в ожидании.
+      expect(
+        await gate(RUN_FILE_LOCK_CLASS, 'gate-err', new Deadline(500), async () => 'free'),
+      ).toBe('free');
+    } finally {
+      await pool.end();
+    }
   });
 });

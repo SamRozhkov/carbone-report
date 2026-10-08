@@ -1,10 +1,9 @@
 import { posix } from 'node:path';
 import { outputFormatsFor, TemplateExt, type OutputFormat } from '@carbone-reports/shared';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { reportRunFiles, reportRuns, type RunRow } from '../../db/schema';
 import type { AppDeps, TemplateFileRef } from '../../deps';
-import { isLockTimeout } from '../../lib/db-errors';
-import { type Deadline, reportTimeout } from '../../lib/deadline';
+import type { Deadline } from '../../lib/deadline';
 import { AppError } from '../../lib/errors';
 import { renderReport } from './service';
 
@@ -12,6 +11,7 @@ import { renderReport } from './service';
  * Класс advisory-блокировок «сборка файла запуска». Ключ — пара int4 (класс, hashtext('<runId>:<формат>')):
  * пространство пар не пересекается с bigint-ключом бэкапа STORAGE_REMOVE_LOCK_KEY (lib/storage-gate.ts).
  * Блокировка живёт в общей БД, поэтому одна сборка на запуск и формат соблюдается для любого числа экземпляров API.
+ * Берётся на отдельном пуле (lib/run-file-gate.ts), не на основном.
  */
 export const RUN_FILE_LOCK_CLASS = 726100002;
 
@@ -138,6 +138,12 @@ export async function renderFromSnapshot(
   );
 }
 
+/**
+ * Сборки в этом процессе: одновременные запросы того же запуска и формата ждут один промис
+ * и не занимают соединений. Между экземплярами API — advisory-блокировка (runFileGate).
+ */
+const inFlight = new Map<string, Promise<Buffer>>();
+
 /** Готовый файл формата или сборка из снимка под блокировкой; всё — в пределах `deadline`. */
 export async function ensureRunFile(
   deps: AppDeps,
@@ -150,7 +156,16 @@ export async function ensureRunFile(
     .from(reportRunFiles)
     .where(and(eq(reportRunFiles.runId, run.id), eq(reportRunFiles.format, format)));
   if (ready) return readSnapshotFile(deps, ready.filePath);
-  return deadline.race(buildRunFile(deps, run, format, deadline));
+  const key = `${run.id}:${format}`;
+  let build = inFlight.get(key);
+  if (!build) {
+    // Срок общей сборки — срок запроса, который её начал; каждый ждущий ограничен ещё и своим сроком.
+    build = buildRunFile(deps, run, format, deadline).finally(() => inFlight.delete(key));
+    // Ждущие могли уйти по своему сроку: отказ сборки не должен стать необработанным.
+    build.catch(() => {});
+    inFlight.set(key, build);
+  }
+  return deadline.race(build);
 }
 
 async function buildRunFile(
@@ -160,42 +175,25 @@ async function buildRunFile(
   deadline: Deadline,
 ): Promise<Buffer> {
   const ext = snapshotExt(run.filePath!);
-  try {
-    return await deps.db.transaction(async (tx) => {
-      // Ждать чужую сборку — не дольше остатка срока; set_config(..., true) действует до конца транзакции.
-      const wait = `${deadline.cap(deps.config.reportTimeoutMs)}ms`;
-      await tx.execute(sql`select set_config('lock_timeout', ${wait}, true)`);
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(${RUN_FILE_LOCK_CLASS}::int, hashtext(${`${run.id}:${format}`}::text))`,
-      );
-      // FOR SHARE: очистка и удаление пользователя ждут конца сборки и удаляют каталог уже с новым файлом.
-      const [cur] = await tx
-        .select({ fileDeleted: reportRuns.fileDeleted })
-        .from(reportRuns)
-        .where(eq(reportRuns.id, run.id))
-        .for('share');
-      if (!cur || cur.fileDeleted) throw snapshotGone();
-      // Пока ждали блокировку, файл мог собрать другой запрос.
-      const [done] = await tx
-        .select({ filePath: reportRunFiles.filePath })
-        .from(reportRunFiles)
-        .where(and(eq(reportRunFiles.runId, run.id), eq(reportRunFiles.format, format)));
-      if (done) return await readSnapshotFile(deps, done.filePath);
-      const file = await renderFromSnapshot(
-        deps,
-        run.id,
-        ext,
-        run.templateVersion,
-        format,
-        deadline,
-      );
-      const out = snapshotPaths(run.id, ext).out(format);
-      await deps.storage.write(out, file);
-      await tx.insert(reportRunFiles).values({ runId: run.id, format, filePath: out });
-      return file;
-    });
-  } catch (e) {
-    if (isLockTimeout(e)) throw reportTimeout();
-    throw e;
-  }
+  // Отдельный небольшой пул: сборка не держит соединения основного пула всё время рендера.
+  return deps.runFileGate(RUN_FILE_LOCK_CLASS, `${run.id}:${format}`, deadline, async (tx) => {
+    // FOR SHARE: очистка и удаление пользователя ждут конца сборки и удаляют каталог уже с новым файлом.
+    const [cur] = await tx
+      .select({ fileDeleted: reportRuns.fileDeleted })
+      .from(reportRuns)
+      .where(eq(reportRuns.id, run.id))
+      .for('share');
+    if (!cur || cur.fileDeleted) throw snapshotGone();
+    // Пока ждали блокировку, файл мог собрать другой экземпляр API.
+    const [done] = await tx
+      .select({ filePath: reportRunFiles.filePath })
+      .from(reportRunFiles)
+      .where(and(eq(reportRunFiles.runId, run.id), eq(reportRunFiles.format, format)));
+    if (done) return readSnapshotFile(deps, done.filePath);
+    const file = await renderFromSnapshot(deps, run.id, ext, run.templateVersion, format, deadline);
+    const out = snapshotPaths(run.id, ext).out(format);
+    await deps.storage.write(out, file);
+    await tx.insert(reportRunFiles).values({ runId: run.id, format, filePath: out });
+    return file;
+  });
 }

@@ -69,9 +69,6 @@ services:
       LDAP_USER_FILTER: ${LDAP_USER_FILTER:-(uid=%s)}
       LDAP_DEFAULT_ROLE: ${LDAP_DEFAULT_ROLE:-user}
       LDAP_TLS_REJECT_UNAUTHORIZED: ${LDAP_TLS_REJECT_UNAUTHORIZED:-true}
-    volumes:
-      - storage:/data
-    networks: [default, cache]
     networks: [default, cache, s3]
     healthcheck:
       test:

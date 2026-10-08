@@ -20,7 +20,6 @@ const Env = z
       .string()
       .refine((v) => v === '' || v.length >= 8, 'ADMIN_PASSWORD: минимум 8 символов')
       .optional(),
-    STORAGE_DIR: z.string().default('/data'),
     STORAGE_BACKEND: z.enum(['local', 's3'], { error: 'ожидается local или s3' }).default('local'),
     STORAGE_DIR: z.string().default('/data'),
     // Пустая строка из .env — «не задано» (для S3_ENDPOINT — AWS S3).
@@ -73,7 +72,6 @@ const Env = z
         path: ['LDAP_BASE_DN'],
       });
     }
-  });
   })
   .superRefine((e, ctx) => {
     if (e.STORAGE_BACKEND !== 's3') return;

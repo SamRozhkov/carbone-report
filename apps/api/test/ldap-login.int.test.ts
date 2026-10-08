@@ -49,13 +49,11 @@ describe('вход через LDAP', () => {
         },
       },
     );
-    await t.deps.db
-      .insert(users)
-      .values({
-        login: 'suschestvuet',
-        passwordHash: await hashPassword('local-pass'),
-        role: 'admin',
-      });
+    await t.deps.db.insert(users).values({
+      login: 'suschestvuet',
+      passwordHash: await hashPassword('local-pass'),
+      role: 'admin',
+    });
     const res = await login(t, { login: 'suschestvuet', password: 'любой' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ login: 'suschestvuet', role: 'admin' });
@@ -96,14 +94,12 @@ describe('вход через LDAP', () => {
         },
       },
     );
-    await t.deps.db
-      .insert(users)
-      .values({
-        login: 'zabloki',
-        passwordHash: await hashPassword('x'),
-        role: 'user',
-        blocked: true,
-      });
+    await t.deps.db.insert(users).values({
+      login: 'zabloki',
+      passwordHash: await hashPassword('x'),
+      role: 'user',
+      blocked: true,
+    });
     const res = await login(t, { login: 'zabloki', password: 'что угодно' });
     expect(res.statusCode).toBe(401);
   });

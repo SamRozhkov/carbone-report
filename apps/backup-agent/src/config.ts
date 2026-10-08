@@ -1,0 +1,77 @@
+import { z } from 'zod';
+import { checkCron } from './cron';
+
+const Env = z.object({
+  BACKUP_AGENT_TOKEN: z.string({ error: 'обязателен' }).min(32, 'минимум 32 символа'),
+  BACKUP_AGENT_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
+  REDIS_URL: z.string({ error: 'обязателен' }).min(1, 'обязателен'),
+  STORAGE_BACKEND: z.enum(['local', 's3'], { error: 'ожидается local или s3' }).default('local'),
+  BACKUP_CRON: z.string().default('0 3 * * *'),
+  TZ: z.string().min(1).default('UTC'),
+  BACKUPS_DIR: z.string().min(1).default('/backups'),
+  BACKUP_SCRIPTS_DIR: z.string().min(1).default('/backup'),
+  MIGRATIONS_DIR: z.string().min(1).default('/agent/drizzle'),
+  // Для тестов: задержка перед pg_terminate_backend (§26.2: 3 с) и период повтора флага (5 с).
+  BACKUP_AGENT_TERMINATE_DELAY_MS: z.coerce.number().int().min(0).default(3000),
+  BACKUP_AGENT_REASSERT_MS: z.coerce.number().int().min(100).default(5000),
+});
+
+export interface AgentConfig {
+  /** Не логируется и не попадает в сообщения об ошибках. */
+  token: string;
+  port: number;
+  redisUrl: string;
+  storageBackend: 'local' | 's3';
+  cron: string;
+  tz: string;
+  /** Каталог бэкапов (том BACKUP_DIR). */
+  backupsDir: string;
+  /** Скрипты docker/backup в образе. */
+  scriptsDir: string;
+  /** Миграции apps/api/drizzle того же коммита. */
+  migrationsDir: string;
+  terminateDelayMs: number;
+  reassertMs: number;
+}
+
+export function loadAgentConfig(env: NodeJS.ProcessEnv): AgentConfig {
+  const r = Env.safeParse(env);
+  if (!r.success) {
+    // Только имена переменных и правила — значения (токен) в сообщение не попадают.
+    const msg = r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
+    throw new Error(`Неверная конфигурация агента: ${msg}`);
+  }
+  const e = r.data;
+  return {
+    token: e.BACKUP_AGENT_TOKEN,
+    port: e.BACKUP_AGENT_PORT,
+    redisUrl: e.REDIS_URL,
+    storageBackend: e.STORAGE_BACKEND,
+    cron: checkCron(e.BACKUP_CRON, e.TZ),
+    tz: e.TZ,
+    backupsDir: e.BACKUPS_DIR,
+    scriptsDir: e.BACKUP_SCRIPTS_DIR,
+    migrationsDir: e.MIGRATIONS_DIR,
+    terminateDelayMs: e.BACKUP_AGENT_TERMINATE_DELAY_MS,
+    reassertMs: e.BACKUP_AGENT_REASSERT_MS,
+  };
+}
+
+export interface PgConnection {
+  host: string;
+  port: number;
+  user: string;
+  database: string;
+  password?: string;
+}
+
+/** Подключение агента к базе приложения: те же PG* и умолчания, что у backup.sh. */
+export function pgConnection(env: NodeJS.ProcessEnv): PgConnection {
+  return {
+    host: env.PGHOST || 'postgres',
+    port: Number(env.PGPORT || 5432),
+    user: env.PGUSER || 'app',
+    database: env.PGDATABASE || 'app',
+    password: env.PGPASSWORD,
+  };
+}

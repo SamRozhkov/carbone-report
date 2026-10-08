@@ -1,4 +1,5 @@
 import {
+  Archive,
   ArrowRightFromSquare,
   ArrowRightToSquare,
   CircleQuestion,
@@ -71,6 +72,8 @@ export function Layout() {
       item('users', 'Пользователи', Persons, '/admin/users'),
       item('groups', 'Группы', PersonsLock, '/admin/groups'),
       item('categories', 'Категории', Folders, '/admin/categories'),
+      // §26.3: пункт есть, только если API настроен на агент бэкапа.
+      ...(me.features?.backups ? [item('backups', 'Бэкапы', Archive, '/admin/backups')] : []),
       item('help', 'Справка по шаблонам', CircleQuestion, '/admin/help'),
     );
   }

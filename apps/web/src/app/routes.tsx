@@ -2,6 +2,7 @@ import type { RouteObject } from 'react-router';
 import { Navigate } from 'react-router';
 import { RequireAdmin, RequireUser } from './guards';
 import { Layout } from './Layout';
+import { BackupsPage } from '../pages/admin/BackupsPage';
 import { CategoriesPage } from '../pages/admin/CategoriesPage';
 import { DatasourcesPage } from '../pages/admin/DatasourcesPage';
 import { GroupsPage } from '../pages/admin/GroupsPage';
@@ -44,6 +45,7 @@ export const routes: RouteObject[] = [
               { path: 'users', element: <UsersPage /> },
               { path: 'groups', element: <GroupsPage /> },
               { path: 'categories', element: <CategoriesPage /> },
+              { path: 'backups', element: <BackupsPage /> },
               {
                 path: 'help',
                 // Справка — отдельный чанк: в основном бандле она не нужна.

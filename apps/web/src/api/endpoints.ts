@@ -1,4 +1,6 @@
 import type {
+  BackupDto,
+  BackupOperationDto,
   CategoryBody,
   CategoryDto,
   CategoryPatch,
@@ -10,6 +12,7 @@ import type {
   GroupDto,
   GroupPatch,
   LoginBody,
+  MaintenanceStatus,
   OutputFormat,
   ParamOptionsResult,
   ParamsInput,
@@ -27,6 +30,7 @@ import type {
   UpdateTemplateBody,
   UpdateUserBody,
   UserDto,
+  RecoveryBody,
 } from '@carbone-reports/shared';
 import type { Config } from '@onlyoffice/doceditor-types';
 import { apiBlob, apiJson } from './client';
@@ -134,6 +138,25 @@ export const api = {
       const qs = sp.toString();
       return apiJson<RunsPage>(`/api/runs${qs ? `?${qs}` : ''}`);
     },
+  },
+
+  backups: {
+    list: () => apiJson<BackupDto[]>('/api/admin/backups'),
+    create: () => apiJson<{ operationId: string }>('/api/admin/backups', post()),
+    restore: (name: string) =>
+      apiJson<{ operationId: string }>(
+        `/api/admin/backups/${encodeURIComponent(name)}/restore`,
+        post(),
+      ),
+    /** null — операций ещё не было (204): данные запроса TanStack Query не могут быть undefined. */
+    operation: async () =>
+      (await apiJson<BackupOperationDto | undefined>('/api/admin/backups/operation')) ?? null,
+  },
+
+  maintenance: {
+    status: () => apiJson<MaintenanceStatus>('/api/maintenance'),
+    retry: (body: RecoveryBody) =>
+      apiJson<{ operationId: string }>('/api/maintenance/retry', post(body)),
   },
 };
 

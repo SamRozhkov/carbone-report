@@ -3,6 +3,8 @@ import { checkCron } from './cron';
 
 const Env = z.object({
   BACKUP_AGENT_TOKEN: z.string({ error: 'обязателен' }).min(32, 'минимум 32 символа'),
+  // §26.1: слушать только сеть backup — compose задаёт сетевой псевдоним backup-agent.
+  BACKUP_AGENT_HOST: z.string().min(1).default('0.0.0.0'),
   BACKUP_AGENT_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
   REDIS_URL: z.string({ error: 'обязателен' }).min(1, 'обязателен'),
   STORAGE_BACKEND: z.enum(['local', 's3'], { error: 'ожидается local или s3' }).default('local'),
@@ -19,6 +21,8 @@ const Env = z.object({
 export interface AgentConfig {
   /** Не логируется и не попадает в сообщения об ошибках. */
   token: string;
+  /** Адрес прослушивания HTTP. */
+  host: string;
   port: number;
   redisUrl: string;
   storageBackend: 'local' | 's3';
@@ -44,6 +48,7 @@ export function loadAgentConfig(env: NodeJS.ProcessEnv): AgentConfig {
   const e = r.data;
   return {
     token: e.BACKUP_AGENT_TOKEN,
+    host: e.BACKUP_AGENT_HOST,
     port: e.BACKUP_AGENT_PORT,
     redisUrl: e.REDIS_URL,
     storageBackend: e.STORAGE_BACKEND,

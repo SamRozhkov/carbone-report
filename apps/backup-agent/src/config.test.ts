@@ -17,7 +17,14 @@ describe('loadAgentConfig', () => {
       migrationsDir: '/agent/drizzle',
       terminateDelayMs: 3000,
       reassertMs: 5000,
+      host: '0.0.0.0',
     });
+  });
+
+  it('BACKUP_AGENT_HOST задаёт адрес прослушивания', () => {
+    expect(loadAgentConfig({ ...base, BACKUP_AGENT_HOST: 'backup-agent' }).host).toBe(
+      'backup-agent',
+    );
   });
 
   it('без токена агент не стартует', () => {

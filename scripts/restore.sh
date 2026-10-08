@@ -1,9 +1,16 @@
 #!/bin/sh
-# Восстановление из каталога бэкапа: БД app и том storage. Останавливает api и web, очищает Redis.
+# Восстановление из каталога бэкапа: БД app и файлы хранилища. Останавливает api и web, очищает Redis.
+# Хранилище — по STORAGE_BACKEND (по умолчанию s3, как у стека): s3 — бакет в сервисе s3 через сервис backup
+# (rclone sync); local — том storage установки до Плана 14: STORAGE_BACKEND=local scripts/restore.sh …
 set -eu
 dir=${1:?использование: scripts/restore.sh backups/<каталог>}
 dir=$(cd "$dir" && pwd)
 cd "$(dirname "$0")/.." # корень проекта compose
+backend=${STORAGE_BACKEND:-s3}
+case $backend in
+  s3|local) ;;
+  *) echo "STORAGE_BACKEND: ожидается local или s3" >&2; exit 2 ;;
+esac
 for f in db.dump storage.tar.gz manifest.txt; do [ -f "$dir/$f" ] || { echo "нет $dir/$f" >&2; exit 1; }; done
 
 echo "Проверка контрольных сумм…"
@@ -13,16 +20,21 @@ for f in db.dump storage.tar.gz; do
   [ "$want" = "$got" ] || { echo "контрольная сумма $f не совпадает" >&2; exit 1; }
 done
 
-# Полное имя тома storage этого проекта. «docker compose run -v storage:/data» не годится:
-# compose сливает его с «storage:/data:ro» сервиса backup, и том остаётся только для чтения.
 project=$(docker compose config | sed -n 's/^name: //p')
 [ -n "$project" ] || { echo "не удалось прочитать конфигурацию compose — проверьте .env" >&2; exit 1; }
-volume=$(docker volume ls -q --filter "label=com.docker.compose.project=$project" \
-  --filter label=com.docker.compose.volume=storage)
-[ -n "$volume" ] && [ "$(echo "$volume" | wc -l)" -eq 1 ] || {
-  echo "не найден том storage проекта $project (запустите стек)" >&2
-  exit 1
-}
+if [ "$backend" = local ]; then
+  # Полное имя тома storage этого проекта: «docker compose run -v storage:/data» compose сливает
+  # с монтированием сервиса, поэтому том передаётся docker run по имени.
+  volume=$(docker volume ls -q --filter "label=com.docker.compose.project=$project" \
+    --filter label=com.docker.compose.volume=storage)
+  [ -n "$volume" ] && [ "$(echo "$volume" | wc -l)" -eq 1 ] || {
+    echo "не найден том storage проекта $project" >&2
+    exit 1
+  }
+  target="том $volume"
+else
+  target="бакет S3 в сервисе s3"
+fi
 
 # Ручной бэкап («run --rm backup now») — отдельный одноразовый контейнер сервиса backup.
 # Его нельзя прервать без потери копии, поэтому восстановление ждёт его окончания.
@@ -39,7 +51,7 @@ refuse_if_manual_backup
 # архив посреди замены файлов, и ротация будет доверять такой копии.
 bk=$(docker compose --profile backup ps -q --status running backup)
 
-echo "Будут ЗАМЕНЕНЫ база app и файлы хранилища (том $volume) данными из $(basename "$dir")."
+echo "Будут ЗАМЕНЕНЫ база app и файлы хранилища ($target) данными из $(basename "$dir")."
 echo "Redis (кэш шаблонов Carbone и счётчики попыток входа) будет очищен."
 [ -z "$bk" ] || echo "Бэкап по расписанию (сервис backup) будет приостановлен на время восстановления."
 printf 'Введите restore для продолжения: '
@@ -105,10 +117,16 @@ docker compose exec -T postgres sh -ec '
   psql -U app -d app -1 -v ON_ERROR_STOP=1 -q -f /tmp/restore-pre.sql -f /tmp/restore.sql
 '
 phase=db
-# Тот же entrypoint, что у сервиса backup (режим restore-storage), но том — на запись.
-# Образ должен совпадать с image сервиса backup в docker-compose.yml.
-docker run --rm -v "$volume":/data -v "$PWD/docker/backup":/backup:ro -v "$dir":/restore:ro \
-  --entrypoint /backup/entrypoint.sh postgres:17-alpine restore-storage
+if [ "$backend" = local ]; then
+  # Тот же entrypoint, что у сервиса backup (режим restore-storage, STORAGE_BACKEND по умолчанию local),
+  # но том — на запись.
+  docker run --rm -v "$volume":/data -v "$PWD/docker/backup":/backup:ro -v "$dir":/restore:ro \
+    --entrypoint /backup/entrypoint.sh postgres:17-alpine restore-storage
+else
+  # Сервис backup: настройки S3 и сеть s3 из compose; бакет создан API при первом старте.
+  docker compose up -d --wait s3
+  docker compose --profile backup run --rm -T --no-deps -v "$dir":/restore:ro backup restore-storage
+fi
 phase=storage
 # api остановлен — кэш не заполнится заново старыми данными до запуска. Redis без снимков на диск,
 # так что запуск (если он был остановлен) тоже даёт пустую базу, но FLUSHALL выполняется всегда.

@@ -28,7 +28,7 @@ case "${1:-cron}" in
       tmp=$(mktemp -d)
       trap 'rm -rf "$tmp"' EXIT
       tar -xzf "$a" -C "$tmp"
-      rclone sync "$tmp" "s3:$S3_BUCKET"
+      rclone sync --checksum "$tmp" "s3:$S3_BUCKET"
     fi
     echo "хранилище восстановлено ($STORAGE_BACKEND)" ;;
   cron)

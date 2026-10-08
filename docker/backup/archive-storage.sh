@@ -18,10 +18,27 @@ case $STORAGE_BACKEND in
   s3)
     s3_env
     tmp="$dir/.s3-copy"
-    trap 'rm -rf "$tmp"' EXIT
+    pid=
+    # trap sh выполняется только после возврата текущей foreground-команды, поэтому rclone и tar
+    # запускаются в фоне и ожидаются через wait: TERM от timeout прерывает wait сразу, cleanup
+    # убивает дочерний процесс и удаляет временный каталог (KILL через 60 с уже не успевает).
+    cleanup() {
+      if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; fi
+      rm -rf "$tmp"
+    }
+    # run: команда в фоне; код возврата — код команды (при TERM wait прерывается, trap завершает скрипт).
+    run() {
+      "$@" &
+      pid=$!
+      rc=0
+      wait "$pid" || rc=$?
+      pid=
+      return "$rc"
+    }
+    trap cleanup EXIT
     trap 'exit 143' TERM
     trap 'exit 130' INT
     mkdir "$tmp"
-    rclone copy "s3:$S3_BUCKET" "$tmp"
-    tar -czf "$dir/storage.tar.gz" -C "$tmp" . ;;
+    run rclone copy --checksum "s3:$S3_BUCKET" "$tmp"
+    run tar -czf "$dir/storage.tar.gz" -C "$tmp" . ;;
 esac

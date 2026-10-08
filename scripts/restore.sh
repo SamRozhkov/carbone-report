@@ -107,6 +107,14 @@ refuse_if_manual_backup
 # с более новой схемой лишние таблицы и миграции помешали бы восстановлению.
 # SQL сначала пишется в файл: если pg_restore упадёт на середине, psql не закоммитит обрезанный
 # скрипт. psql -1 с несколькими -f (PostgreSQL ≥15) оборачивает их в одну транзакцию.
+if [ "$backend" = s3 ]; then
+  # Проверка до изменений: сервис s3 запущен, настройки backup верны, бакет читается.
+  # При сбое восстановление останавливается, база не тронута.
+  docker compose up -d --wait s3
+  docker compose --profile backup run --rm -T --no-deps --entrypoint sh backup -c \
+    '[ "${STORAGE_BACKEND:-local}" = s3 ] || { echo "в сервисе backup STORAGE_BACKEND должен быть s3" >&2; exit 2; }
+     . /backup/lib.sh && check_storage_backend && s3_env && rclone -q lsf --max-depth 1 "s3:$S3_BUCKET" >/dev/null'
+fi
 phase=restoring
 docker compose cp "$dir/db.dump" postgres:/tmp/restore.dump
 docker compose exec -T postgres sh -ec '
@@ -124,7 +132,7 @@ if [ "$backend" = local ]; then
     --entrypoint /backup/entrypoint.sh postgres:17-alpine restore-storage
 else
   # Сервис backup: настройки S3 и сеть s3 из compose; бакет создан API при первом старте.
-  docker compose up -d --wait s3
+  # s3 и конфигурация проверены заранее (перед заменой базы).
   docker compose --profile backup run --rm -T --no-deps -v "$dir":/restore:ro backup restore-storage
 fi
 phase=storage

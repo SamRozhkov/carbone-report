@@ -44,6 +44,13 @@ export const routes: RouteObject[] = [
               { path: 'users', element: <UsersPage /> },
               { path: 'groups', element: <GroupsPage /> },
               { path: 'categories', element: <CategoriesPage /> },
+              {
+                path: 'help',
+                // Справка — отдельный чанк: в основном бандле она не нужна.
+                lazy: async () => ({
+                  Component: (await import('../pages/admin/help/HelpPage')).HelpPage,
+                }),
+              },
             ],
           },
         ],

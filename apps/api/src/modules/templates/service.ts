@@ -153,6 +153,7 @@ export const toAdminDetails = (f: TemplateFull): TemplateAdminDetails => ({
   version: f.row.version,
   queries: f.queries,
   lastSaveError: f.row.lastSaveError,
+  lastSaveErrorAt: f.row.lastSaveErrorAt?.toISOString() ?? null,
 });
 
 export function templateFileRef(deps: AppDeps, row: TemplateRow): TemplateFileRef {

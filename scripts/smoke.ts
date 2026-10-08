@@ -79,17 +79,19 @@ async function carboneRestart(templateId: string): Promise<void> {
   console.log(
     'ВНИМАНИЕ: контейнер carbone будет пересоздан, том carbone_templates (кэш шаблонов) удалён',
   );
+  let lastRunId = '';
   const renderOnce = async (): Promise<string | null> => {
     const r = await api(`/api/reports/${templateId}/render`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ params: {}, format: 'pdf' }),
+      body: JSON.stringify({ params: {} }),
     });
     if (r.status === 502 || r.status === 503)
       throw new Retryable(`генерация: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
     if (r.status !== 201)
       throw new Error(`генерация: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
     const { runId } = (await r.json()) as { runId: string };
+    lastRunId = runId;
     const f = await api(`/api/runs/${runId}/file`);
     assert(f.status === 200, `файл отчёта: HTTP ${f.status}`);
     return f.headers.get('content-type');
@@ -109,8 +111,10 @@ async function carboneRestart(templateId: string): Promise<void> {
       }
     }
   };
+  let beforeRunId = '';
   await step('Carbone: отчёт до пересоздания контейнера', async () => {
     await renderOnce();
+    beforeRunId = lastRunId;
   });
   await step(
     'Carbone: пересоздание контейнера и удаление тома carbone_templates (кэш шаблонов)',
@@ -139,6 +143,10 @@ async function carboneRestart(templateId: string): Promise<void> {
   await step('Carbone: отчёт после пересоздания — шаблон загружен повторно', async () => {
     const type = await renderWithRetry();
     assert(type === 'application/pdf', `content-type: ${type}`);
+    // id копии шаблона запуска закэширован под ключом run:<runId>, а Carbone его уже не знает:
+    // API должен загрузить копию снимка повторно.
+    const docx = await api(`/api/runs/${beforeRunId}/file?format=docx`);
+    assert(docx.status === 200, `DOCX запуска до пересоздания: HTTP ${docx.status}`);
   });
 }
 
@@ -276,11 +284,11 @@ async function main() {
       await api(`/api/reports/${templateId}/render`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ params: {}, format }),
+        body: JSON.stringify({ params: {} }),
       }),
       201,
     );
-    const r = await api(`/api/runs/${runId}/file`);
+    const r = await api(`/api/runs/${runId}/file?format=${format}`);
     assert(r.status === 200, `скачивание: HTTP ${r.status}`);
     return Buffer.from(await r.arrayBuffer());
   }

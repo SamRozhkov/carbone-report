@@ -50,9 +50,8 @@ test('OnlyOffice: правка шаблона, сохранение, новые 
 
   const { runId } = await api.post<{ runId: string }>(`/api/reports/${templateId}/render`, {
     params: { invoiceId: 1 },
-    format: 'docx',
   });
-  const file = await api.ctx.get(`/api/runs/${runId}/file`);
+  const file = await api.ctx.get(`/api/runs/${runId}/file?format=docx`);
   const text = await docxText(Buffer.from(await file.body()));
   expect(text).toContain('ИНН: 7701234567');
   expect(text).not.toContain('{d.');

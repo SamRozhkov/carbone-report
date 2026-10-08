@@ -28,9 +28,13 @@ test('зависимые SQL-списки: «Компания» → «Счёт»
   await page.getByRole('option', { name: 'СЧ-002', exact: true }).click();
   await expect(invoice).toContainText('СЧ-002');
 
-  await page.getByRole('radio', { name: 'DOCX' }).click();
-  const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Сформировать' }).click();
+  await expect(page.getByTitle('Предпросмотр отчёта')).toBeVisible();
+  const downloadPromise = page.waitForEvent('download');
+  await page
+    .getByRole('group', { name: 'Сохранить как' })
+    .getByRole('button', { name: 'DOCX' })
+    .click();
   const download = await downloadPromise;
   const text = await docxText(await readFile((await download.path())!));
   for (const s of ['СЧ-002', 'АО «Лютик»', 'Стол офисный']) expect(text).toContain(s);

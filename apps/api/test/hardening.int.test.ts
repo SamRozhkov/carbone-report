@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { reportRuns, users } from '../src/db/schema';
+import { reportRunFiles, reportRuns, users } from '../src/db/schema';
 import { AppError } from '../src/lib/errors';
 import type { CarboneRenderer } from '../src/deps';
 import {
@@ -121,6 +121,41 @@ describe('удаление пользователя', () => {
     expect(await t.deps.db.select().from(users).where(eq(users.id, victim.user.id))).toHaveLength(
       0,
     );
+  });
+
+  it('удаляет каталоги снимков запусков пользователя', async () => {
+    const victim = await loginAs(t, 'user');
+    const id = crypto.randomUUID();
+    const dir = `reports/${id}`;
+    await t.deps.storage.write(`${dir}/data.json`, Buffer.from('{}'));
+    await t.deps.storage.write(`${dir}/template.docx`, Buffer.from('tpl'));
+    await t.deps.storage.write(`${dir}/out.pdf`, Buffer.from('pdf'));
+    await t.deps.db.insert(reportRuns).values({
+      id,
+      templateId: null,
+      templateName: 'x',
+      templateVersion: 1,
+      userId: victim.user.id,
+      params: {},
+      status: 'ok',
+      snapshot: true,
+      filePath: `${dir}/template.docx`,
+      durationMs: 1,
+    });
+    await t.deps.db
+      .insert(reportRunFiles)
+      .values({ runId: id, format: 'pdf', filePath: `${dir}/out.pdf` });
+    const r = await t.app.inject({
+      method: 'DELETE',
+      url: `/api/users/${victim.user.id}`,
+      headers: { cookie: admin.cookie },
+    });
+    expect(r.statusCode).toBe(204);
+    for (const f of ['data.json', 'template.docx', 'out.pdf'])
+      expect(await t.deps.storage.exists(`${dir}/${f}`)).toBe(false);
+    expect(
+      await t.deps.db.select().from(reportRunFiles).where(eq(reportRunFiles.runId, id)),
+    ).toHaveLength(0);
   });
 });
 

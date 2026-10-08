@@ -1,22 +1,11 @@
 import { ArrowsRotateRight, Copy } from '@gravity-ui/icons';
-import { Button, Icon, Text, useToaster } from '@gravity-ui/uikit';
+import { Button, Icon, Text } from '@gravity-ui/uikit';
+import { useCopy } from '../../../components/useCopy';
 import type { TagNode } from '../../../lib/tagTree';
 import { buildTagTree } from '../../../lib/tagTree';
 
-let toastSeq = 0;
-
 function TagRow({ tag, hint }: { tag: string; hint?: string }) {
-  const { add } = useToaster();
-  const copy = async () => {
-    // Имя уникально для каждого события, иначе Toaster склеит повторные уведомления.
-    const name = `tag-copy-${++toastSeq}`;
-    try {
-      await navigator.clipboard.writeText(tag);
-      add({ name, title: `Скопировано: ${tag}`, theme: 'success', autoHiding: 2000 });
-    } catch {
-      add({ name, title: 'Не удалось скопировать — выделите тег вручную', theme: 'warning' });
-    }
-  };
+  const copy = useCopy();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <Text variant="code-1">{tag}</Text>
@@ -30,7 +19,7 @@ function TagRow({ tag, hint }: { tag: string; hint?: string }) {
         size="xs"
         aria-label={`Скопировать ${tag}`}
         title="Скопировать"
-        onClick={copy}
+        onClick={() => void copy(tag)}
       >
         <Icon data={Copy} size={12} />
       </Button>

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { templates, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
@@ -66,11 +66,15 @@ export async function handleCallback(
   // Колбэк от закрытой сессии (ключ уже сменился) не должен затирать новую версию.
   if (cb.key !== current.docKey) return;
 
-  // Ошибка пишется, только если сессия всё ещё текущая.
+  // Ошибка пишется, только если сессия всё ещё текущая. Метка строго растёт: повтор той же ошибки
+  // в ту же миллисекунду (ISO хранит мс) всё равно отличим от прежней (§22.7).
   const setError = (msg: string) =>
     deps.db
       .update(templates)
-      .set({ lastSaveError: msg })
+      .set({
+        lastSaveError: msg,
+        lastSaveErrorAt: sql`greatest(now(), ${templates.lastSaveErrorAt} + interval '1 millisecond')`,
+      })
       .where(and(eq(templates.id, templateId), eq(templates.docKey, cb.key)));
 
   if (cb.status === 3 || cb.status === 7) {
@@ -127,6 +131,7 @@ export async function handleCallback(
           updatedAt: new Date(),
           updatedBy: await existingUserId(tx, cb.users?.[0]),
           lastSaveError: null,
+          lastSaveErrorAt: null,
           ...(cb.status === 2 ? { docKey: randomUUID() } : {}),
         })
         .where(eq(templates.id, row.id));

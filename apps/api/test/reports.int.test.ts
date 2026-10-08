@@ -1,10 +1,9 @@
 import { RUNS_PAGE_SIZE } from '@carbone-reports/shared';
-import { eq } from 'drizzle-orm';
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
-import { reportRuns } from '../src/db/schema';
+import { afterAll, beforeAll, describe, expect, inject, it, vi } from 'vitest';
 import { AppError } from '../src/lib/errors';
 import type { CarboneRenderer } from '../src/deps';
+import { CarboneClient } from '../src/modules/carbone/client';
 import {
   createSourceDatabase,
   createTemplate,
@@ -20,13 +19,44 @@ let userB: string;
 let dsId: string;
 let tplId: string;
 let carboneFails = false;
+let carboneCommunity = false;
+/** Настоящий клиент Carbone для отдельного теста (читает файл шаблона из хранилища сам). */
+let liveCarbone: CarboneRenderer | null = null;
+
+const COMMUNITY_MESSAGE =
+  'в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
+
+/** Настоящий клиент против поддельного Carbone, который отвечает ошибкой Community (как в матрице). */
+const communityCarbone = new CarboneClient({
+  baseUrl: 'http://carbone',
+  fetch: (async (input: RequestInfo | URL) =>
+    String(input).endsWith('/template')
+      ? Response.json({ success: true, data: { templateId: 'community' } })
+      : Response.json(
+          {
+            success: false,
+            error:
+              'Unable to generate the document. Error: Formatter "aggSum" is disabled in the Community Edition. Source: "{d.orders[].total:aggSum}"',
+            code: 'w101',
+          },
+          { status: 500 },
+        )) as typeof fetch,
+});
 
 // Поддельный Carbone возвращает JSON того, что ему передали.
 const carbone: CarboneRenderer = {
   async render(tpl, data, opts) {
     if (carboneFails) throw new AppError('CARBONE_ERROR', 502, 'ошибка генерации: boom');
+    if (carboneCommunity) return communityCarbone.render(tpl, data, opts);
+    if (liveCarbone) return liveCarbone.render(tpl, data, opts);
     return Buffer.from(
-      JSON.stringify({ version: tpl.version, data, convertTo: opts.convertTo, tz: opts.timezone }),
+      JSON.stringify({
+        version: tpl.version,
+        data,
+        convertTo: opts.convertTo,
+        lang: opts.lang,
+        tz: opts.timezone,
+      }),
     );
   },
 };
@@ -96,6 +126,7 @@ describe('генерация', () => {
         params: { from: '2026-02-01' },
       },
       convertTo: 'pdf',
+      lang: 'ru',
       tz: 'Europe/Moscow',
     });
   });
@@ -127,9 +158,16 @@ describe('генерация', () => {
     expect(after.json().total).toBe(before.json().total);
   });
 
-  it('формат, недоступный для шаблона → 400', async () => {
+  it('format в теле игнорируется: 201, файл по умолчанию — PDF', async () => {
     const r = await render(userA, tplId, { params: { from: '2026-01-01' }, format: 'xlsx' });
-    expect(r.statusCode).toBe(400);
+    expect(r.statusCode).toBe(201);
+    const file = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${r.json().runId}/file`,
+      headers: { cookie: userA },
+    });
+    expect(file.headers['content-type']).toBe('application/pdf');
+    expect(JSON.parse(file.body).convertTo).toBe('pdf');
   });
 
   it('ошибка Carbone → 502 и запись со status=error', async () => {
@@ -145,6 +183,27 @@ describe('генерация', () => {
     expect(runs.json().items[0]).toMatchObject({
       status: 'error',
       error: 'ошибка генерации: boom',
+      fileAvailable: false,
+    });
+  });
+
+  it('форматтер недоступен в Community → 400 CARBONE_COMMUNITY и запись со status=error', async () => {
+    carboneCommunity = true;
+    const r = await render(userA, tplId, { params: { from: '2026-01-01' }, format: 'pdf' }).finally(
+      () => {
+        carboneCommunity = false;
+      },
+    );
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error).toEqual({ code: 'CARBONE_COMMUNITY', message: COMMUNITY_MESSAGE });
+    const runs = await t.app.inject({
+      method: 'GET',
+      url: '/api/runs?status=error',
+      headers: { cookie: userA },
+    });
+    expect(runs.json().items[0]).toMatchObject({
+      status: 'error',
+      error: COMMUNITY_MESSAGE,
       fileAvailable: false,
     });
   });
@@ -220,8 +279,7 @@ describe('история', () => {
   it('файл отчёта удалён с диска → 410', async () => {
     const r = await render(userA, tplId, { params: { from: '2026-01-01' }, format: 'pdf' });
     const runId = r.json().runId;
-    const [run] = await t.deps.db.select().from(reportRuns).where(eq(reportRuns.id, runId));
-    await t.deps.storage.remove(run!.filePath!);
+    await t.deps.storage.remove(`reports/${runId}`);
     const file = await t.app.inject({
       method: 'GET',
       url: `/api/runs/${runId}/file`,
@@ -394,6 +452,57 @@ describe('инструменты админа', () => {
     });
     expect(r.headers['content-type']).toBe('application/pdf');
     expect(r.headers['content-disposition']).toMatch(/^inline;/);
+
+    expect(JSON.parse(r.body)).toMatchObject({ convertTo: 'pdf', lang: 'ru' });
+  });
+
+  it('preview: форматтер недоступен в Community → 400 CARBONE_COMMUNITY', async () => {
+    carboneCommunity = true;
+    const r = await t.app
+      .inject({
+        method: 'POST',
+        url: `/api/templates/${tplId}/preview`,
+        headers: { cookie: admin },
+        payload: { params: { from: '2026-01-01' }, mode: 'pdf' },
+      })
+      .finally(() => {
+        carboneCommunity = false;
+      });
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error).toEqual({ code: 'CARBONE_COMMUNITY', message: COMMUNITY_MESSAGE });
+  });
+});
+
+describe('сбой хранилища при чтении шаблона', () => {
+  it('preview: не CARBONE_ERROR 502, а 500 INTERNAL с записью в журнал', async () => {
+    const fetchCalls: string[] = [];
+    liveCarbone = new CarboneClient({
+      baseUrl: 'http://carbone',
+      fetch: (async (input: RequestInfo | URL) => {
+        fetchCalls.push(String(input));
+        return Response.json({ success: true, data: { templateId: 'x' } });
+      }) as typeof fetch,
+    });
+    const cause = Object.assign(new Error('S3: socket hang up'), { name: 'TimeoutError' });
+    const read = vi.spyOn(t.deps.storage, 'read').mockRejectedValue(cause);
+    const logged = vi.spyOn(t.app.log, 'error');
+    try {
+      const r = await t.app.inject({
+        method: 'POST',
+        url: `/api/templates/${tplId}/preview`,
+        headers: { cookie: admin },
+        payload: { params: { from: '2026-01-01' }, mode: 'pdf' },
+      });
+      expect(r.statusCode).toBe(500);
+      expect(r.json().error).toEqual({ code: 'INTERNAL', message: 'внутренняя ошибка сервера' });
+      expect(read).toHaveBeenCalled();
+      expect(fetchCalls).toEqual([]);
+      expect(logged).toHaveBeenCalledWith(cause);
+    } finally {
+      liveCarbone = null;
+      read.mockRestore();
+      logged.mockRestore();
+    }
   });
 });
 

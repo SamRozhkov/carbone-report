@@ -95,6 +95,7 @@ describe('вход и защита маршрутов', () => {
     expect(await screen.findByText('Пользователи')).toBeInTheDocument();
     expect(screen.getByText('Источники данных')).toBeInTheDocument();
     expect(screen.getByText('Шаблоны')).toBeInTheDocument();
+    expect(screen.getByText('Справка по шаблонам')).toBeInTheDocument();
   });
 
   it('401 из любого запроса посреди работы → на /login с текущим путём', async () => {

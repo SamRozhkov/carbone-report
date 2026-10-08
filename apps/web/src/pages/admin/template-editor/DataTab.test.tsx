@@ -113,10 +113,11 @@ describe('DataTab', () => {
     renderWithProviders(<DataTab {...props} />);
     await userEvent.click(await screen.findByRole('button', { name: 'Добавить запрос' }));
     expect(screen.getByLabelText('Ключ запроса')).toHaveValue('query1');
+    await userEvent.click(screen.getByRole('button', { name: /company/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Удалить запрос' }));
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить запросы' }));
     await waitFor(() => expect(calls.length).toBe(1));
-    expect((calls[0]!.body as { key: string }[]).map((q) => q.key)).toEqual(['company', 'orders']);
+    expect((calls[0]!.body as { key: string }[]).map((q) => q.key)).toEqual(['orders', 'query1']);
   });
 
   const validation = (details: unknown) => ({
@@ -134,6 +135,7 @@ describe('DataTab', () => {
     ]);
     renderWithProviders(<DataTab {...props} />);
     await screen.findByLabelText('Ключ запроса');
+    await userEvent.type(screen.getByLabelText('SQL'), ' ');
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить запросы' }));
     expect(await screen.findByText(/Запрос «orders»: sql пустой/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /orders.*ошибка/ })).toBeInTheDocument();
@@ -154,6 +156,23 @@ describe('DataTab', () => {
     await userEvent.click(screen.getByRole('button', { name: /orders/ }));
     expect(screen.queryByText(/Результат запроса/)).not.toBeInTheDocument();
     expect(screen.queryByText('7')).not.toBeInTheDocument();
+  });
+
+  it('без изменений сохранить нельзя; «Отменить» возвращает сохранённые запросы', async () => {
+    mockApi([]);
+    renderWithProviders(<DataTab {...props} />);
+    const save = () => screen.getByRole('button', { name: 'Сохранить запросы' });
+    await screen.findByLabelText('SQL');
+    expect(save()).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('SQL'), 'X');
+    await userEvent.click(screen.getByRole('button', { name: 'Добавить запрос' }));
+    expect(save()).toBeEnabled();
+    expect(screen.getByText('Есть несохранённые изменения')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Отменить' }));
+    expect(screen.queryByRole('button', { name: /query1/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /company/ }));
+    expect(screen.getByLabelText('SQL')).toHaveValue('select 1 as name');
+    expect(save()).toBeDisabled();
   });
 
   describe('обновление шаблона', () => {

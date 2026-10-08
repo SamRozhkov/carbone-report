@@ -116,6 +116,20 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
     setSelectedId(next[Math.max(0, selectedIdx - 1)]?.id);
   };
 
+  const discard = () => {
+    save.reset();
+    run.reset();
+    reseed(template);
+  };
+  const dirtyNote = dirty && (
+    <>
+      <Text color="warning">Есть несохранённые изменения</Text>
+      <Button view="flat" onClick={discard}>
+        Отменить
+      </Button>
+    </>
+  );
+
   // Ошибки сервера приходят по позиции запроса ('1.sql'); раскладываем по запросам.
   const errors = fieldErrors(save.error);
   const errorsOf = (i: number): Record<string, string> => {
@@ -238,21 +252,6 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
                 <Icon data={Play} />
                 Выполнить
               </Button>
-              <Button view="action" onClick={() => save.mutate()} loading={save.isPending}>
-                Сохранить запросы
-              </Button>
-              {dirty && stale && (
-                <Text color="warning">
-                  Шаблон изменился на сервере — сохранение перезапишет изменения
-                </Text>
-              )}
-              {dirty && <Text color="warning">Есть несохранённые изменения</Text>}
-            </div>
-          </>
-        ) : (
-          <>
-            <Text color="secondary">Запросов нет — добавьте первый.</Text>
-            <div>
               <Button
                 view="action"
                 onClick={() => save.mutate()}
@@ -261,6 +260,27 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
               >
                 Сохранить запросы
               </Button>
+              {dirty && stale && (
+                <Text color="warning">
+                  Шаблон изменился на сервере — сохранение перезапишет изменения
+                </Text>
+              )}
+              {dirtyNote}
+            </div>
+          </>
+        ) : (
+          <>
+            <Text color="secondary">Запросов нет — добавьте первый.</Text>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Button
+                view="action"
+                onClick={() => save.mutate()}
+                loading={save.isPending}
+                disabled={!dirty}
+              >
+                Сохранить запросы
+              </Button>
+              {dirtyNote}
             </div>
           </>
         )}

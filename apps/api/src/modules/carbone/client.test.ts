@@ -36,7 +36,7 @@ const tpl = (version = 1) => ({
 });
 const opts = {
   convertTo: 'pdf' as const,
-  lang: 'ru-ru',
+  lang: 'ru',
   timezone: 'Europe/Moscow',
   timeoutMs: 1000,
 };
@@ -60,7 +60,7 @@ describe('CarboneClient', () => {
     expect(JSON.parse(String(calls[1]!.body))).toEqual({
       data: { a: 1 },
       convertTo: 'pdf',
-      lang: 'ru-ru',
+      lang: 'ru',
       timezone: 'Europe/Moscow',
     });
   });
@@ -177,6 +177,28 @@ describe('CarboneClient', () => {
     expect(e.message).toContain('formatter "foo" does not exist');
   });
 
+  it('форматтер отключён в Community → CARBONE_COMMUNITY 400 с именем из ответа', async () => {
+    const { fn } = fakeFetch((c) =>
+      c.url.endsWith('/template')
+        ? json(200, { success: true, data: { templateId: 'x' } })
+        : json(500, {
+            success: false,
+            error:
+              'Unable to generate the document. Error: Formatter "aggSum" is disabled in the Community Edition. Source: "{d.cars[].qty:aggSum}"',
+            code: 'w101',
+            data: { renderId: '' },
+          }),
+    );
+    const e = await new CarboneClient({ baseUrl: 'http://c', fetch: fn })
+      .render(tpl(), {}, opts)
+      .catch((x) => x);
+    expect(e).toBeInstanceOf(AppError);
+    expect([e.code, e.status]).toEqual(['CARBONE_COMMUNITY', 400]);
+    expect(e.message).toBe(
+      'в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»',
+    );
+  });
+
   it('Carbone недоступен → CARBONE_ERROR 502', async () => {
     const fn = (async () => {
       throw new TypeError('fetch failed');
@@ -186,6 +208,69 @@ describe('CarboneClient', () => {
       .catch((x) => x);
     expect([e.code, e.status]).toEqual(['CARBONE_ERROR', 502]);
     expect(e.message).toBe('сервис генерации недоступен');
+    // Причина — в журнал (обработчик ошибок пишет internal).
+    expect(e.internal).toBeInstanceOf(TypeError);
+  });
+
+  it('сбой чтения шаблона из хранилища поднимается как есть, а не CARBONE_ERROR', async () => {
+    const { fn, calls } = fakeFetch(() => pdf());
+    const cause = Object.assign(new Error('S3: connect ETIMEDOUT'), { name: 'TimeoutError' });
+    const e = await new CarboneClient({ baseUrl: 'http://c', fetch: fn })
+      .render(
+        {
+          ...tpl(),
+          read: async () => {
+            throw cause;
+          },
+        },
+        {},
+        opts,
+      )
+      .catch((x) => x);
+    expect(e).toBe(cause);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('нет файла шаблона (ENOENT) — ошибка с code ENOENT как есть', async () => {
+    const { fn } = fakeFetch(() => pdf());
+    const enoent = Object.assign(new Error('ENOENT: нет объекта'), { code: 'ENOENT' });
+    const e = await new CarboneClient({ baseUrl: 'http://c', fetch: fn })
+      .render(
+        {
+          ...tpl(),
+          read: async () => {
+            throw enoent;
+          },
+        },
+        {},
+        opts,
+      )
+      .catch((x) => x);
+    expect(e).toBe(enoent);
+  });
+
+  it('сбой чтения при повторной загрузке (Carbone потерял шаблон) — тоже как есть', async () => {
+    const { fn } = fakeFetch((c) =>
+      c.url.endsWith('/template')
+        ? json(200, { success: true, data: { templateId: 'x' } })
+        : json(404, { success: false, error: 'Template not found' }),
+    );
+    const cache = memoryTemplateCache();
+    await cache.set('tpl-1', { version: 1, carboneId: 'old' });
+    const cause = new Error('S3 недоступен');
+    const e = await new CarboneClient({ baseUrl: 'http://c', fetch: fn, cache })
+      .render(
+        {
+          ...tpl(),
+          read: async () => {
+            throw cause;
+          },
+        },
+        {},
+        opts,
+      )
+      .catch((x) => x);
+    expect(e).toBe(cause);
   });
 
   it('таймаут → TIMEOUT 504', async () => {

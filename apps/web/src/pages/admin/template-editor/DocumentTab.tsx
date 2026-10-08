@@ -1,5 +1,5 @@
 import { FloppyDisk, Tag } from '@gravity-ui/icons';
-import { Alert, Button, Icon, Loader, Text, useToaster } from '@gravity-ui/uikit';
+import { Alert, Button, Icon, Link, Loader, Text, useToaster } from '@gravity-ui/uikit';
 import { DocumentEditor } from '@onlyoffice/document-editor-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -120,11 +120,12 @@ export function DocumentTab({
           });
           return;
         }
-        if (t.lastSaveError && t.lastSaveError !== base.lastSaveError) {
+        // Новая ошибка — новая метка времени; текст не сравниваем: повтор той же ошибки тоже провал (§22.7).
+        if (t.lastSaveErrorAt !== null && t.lastSaveErrorAt !== base.lastSaveErrorAt) {
           add({
             name: toastName('doc-save'),
             title: 'Сохранение не удалось',
-            content: t.lastSaveError,
+            content: t.lastSaveError ?? '',
             theme: 'danger',
           });
           return;
@@ -195,6 +196,10 @@ export function DocumentTab({
           <Icon data={Tag} />
           Теги
         </Button>
+        {/* Новая вкладка: документ OnlyOffice в этой вкладке остаётся открытым (§23.1). */}
+        <Link href="/admin/help" target="_blank" rel="noopener">
+          Справка по синтаксису
+        </Link>
         <Text color="secondary" variant="caption-2">
           Изменения попадают в шаблон по кнопке «Сохранить» или автоматически после закрытия
           редактора.

@@ -2,17 +2,35 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { Storage } from './storage';
+import { checkKey, LocalStorage } from './storage';
 
 let root: string;
-let storage: Storage;
+let storage: LocalStorage;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'storage-'));
-  storage = new Storage(root);
+  storage = new LocalStorage(root);
 });
 afterEach(() => rm(root, { recursive: true, force: true }));
 
-describe('Storage', () => {
+describe('checkKey', () => {
+  it.each([
+    'templates/t1/v3.docx',
+    'reports/r1/out.pdf',
+    'a',
+    'a.b/c..d',
+    'templates/t1/orphan.tmp',
+  ])('допускает %j', (key) => {
+    expect(checkKey(key)).toBe(key);
+  });
+  it.each(['', '/etc/passwd', '..', '.', '../x', 'a/..', 'a/./b', 'a\\b', 'a//b', 'a/'])(
+    'отклоняет %j той же ошибкой, что выход за корень',
+    (key) => {
+      expect(() => checkKey(key)).toThrow(`недопустимый путь: ${key}`);
+    },
+  );
+});
+
+describe('LocalStorage', () => {
   it('пишет и читает, создавая каталоги', async () => {
     await storage.write('templates/a.docx', Buffer.from('hello'));
     expect((await storage.read('templates/a.docx')).toString()).toBe('hello');
@@ -22,23 +40,30 @@ describe('Storage', () => {
     await storage.write('reports/x.pdf', Buffer.from('1'));
     expect(await readdir(join(root, 'reports'))).toEqual(['x.pdf']);
   });
-  it('remove игнорирует отсутствующий файл', async () => {
-    await expect(storage.remove('nope/none.bin')).resolves.toBeUndefined();
+  it('remove удаляет каталог целиком, а не только файлы в нём', async () => {
+    await storage.write('templates/t1/v1.docx', Buffer.from('1'));
+    await storage.write('templates/t1/v2.docx', Buffer.from('2'));
+    await storage.remove('templates/t1');
+    expect(await readdir(join(root, 'templates'))).toEqual([]);
   });
-  it('remove идёт через шлюз, write и read — нет', async () => {
-    const calls: string[] = [];
-    const gated = new Storage(root, async (fn) => {
-      calls.push('gate');
-      return fn();
-    });
-    await gated.write('a/x.txt', Buffer.from('1'));
-    await gated.read('a/x.txt');
-    expect(calls).toEqual([]);
-    await gated.remove('a/x.txt');
-    expect(calls).toEqual(['gate']);
-    expect(await gated.exists('a/x.txt')).toBe(false);
+  it('exists: файл — true, каталог — false (как префикс на S3)', async () => {
+    await storage.write('reports/r1/out.pdf', Buffer.from('1'));
+    expect(await storage.exists('reports/r1/out.pdf')).toBe(true);
+    expect(await storage.exists('reports/r1')).toBe(false);
+    expect(await storage.exists('reports/r1/out.pdf/x')).toBe(false);
   });
-  it('запрещает выход за корень', () => {
-    expect(() => storage.path('../etc/passwd')).toThrow(/недопустимый путь/);
+  it('read ключа под файлом (ENOTDIR) — ошибка с code ENOENT, как NoSuchKey на S3', async () => {
+    await storage.write('a', Buffer.from('файл'));
+    await expect(storage.read('a/b')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  it('запрещает выход за корень во всех методах', async () => {
+    const ops = [
+      () => storage.read('../etc/passwd'),
+      () => storage.write('../x', Buffer.from('1')),
+      () => storage.exists('../x'),
+      () => storage.remove('../x'),
+      () => storage.removeUngated('../x'),
+    ];
+    for (const op of ops) await expect(op()).rejects.toThrow(/недопустимый путь/);
   });
 });

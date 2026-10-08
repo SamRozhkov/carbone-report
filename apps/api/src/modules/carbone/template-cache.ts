@@ -14,14 +14,20 @@ export interface TemplateIdCache {
 const KEY_PREFIX = 'cr:carbone:tpl:';
 const TTL_SECONDS = 7 * 24 * 3600;
 
-export function memoryTemplateCache(): TemplateIdCache {
+/** Снимки кэшируются по запуску (`run:<runId>`), поэтому кэш в памяти ограничен; Redis-ключи живут TTL_SECONDS. */
+export const MEMORY_CACHE_LIMIT = 1000;
+
+export function memoryTemplateCache(limit = MEMORY_CACHE_LIMIT): TemplateIdCache {
+  // Map хранит порядок вставки: первый ключ — самый давний.
   const ids = new Map<string, TemplateIdEntry>();
   return {
     async get(id) {
       return ids.get(id) ?? null;
     },
     async set(id, v) {
+      ids.delete(id);
       ids.set(id, v);
+      if (ids.size > limit) ids.delete(ids.keys().next().value!);
     },
   };
 }

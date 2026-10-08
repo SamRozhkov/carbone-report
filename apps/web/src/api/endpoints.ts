@@ -10,6 +10,7 @@ import type {
   GroupDto,
   GroupPatch,
   LoginBody,
+  OutputFormat,
   ParamOptionsResult,
   ParamsInput,
   RenderBody,
@@ -136,6 +137,14 @@ export const api = {
   },
 };
 
-export const runFileUrl = (runId: string, inline = false) =>
-  `/api/runs/${runId}/file${inline ? '?inline=1' : ''}`;
+export const runFileUrl = (
+  runId: string,
+  opts: { format?: OutputFormat; inline?: boolean } = {},
+) => {
+  const sp = new URLSearchParams();
+  if (opts.format) sp.set('format', opts.format);
+  if (opts.inline) sp.set('inline', '1');
+  const qs = sp.toString();
+  return `/api/runs/${runId}/file${qs ? `?${qs}` : ''}`;
+};
 export const templateDownloadUrl = (id: string) => `/api/templates/${id}/download`;

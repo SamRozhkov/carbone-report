@@ -120,10 +120,30 @@ export function SettingsTab({ template }: { template: TemplateAdminDetails }) {
         <Text color="warning">Шаблон изменился на сервере — сохранение перезапишет изменения</Text>
       )}
       <GeneralError error={save.error} errors={errors} shown={SHOWN} />
-      <div>
-        <Button view="action" onClick={() => save.mutate()} loading={save.isPending}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <Button
+          view="action"
+          onClick={() => save.mutate()}
+          loading={save.isPending}
+          disabled={!dirty}
+        >
           Сохранить настройки
         </Button>
+        {dirty && (
+          <>
+            <Text color="warning">Есть несохранённые изменения</Text>
+            <Button
+              view="flat"
+              aria-label="Отменить изменения настроек"
+              onClick={() => {
+                save.reset();
+                reseed(template);
+              }}
+            >
+              Отменить
+            </Button>
+          </>
+        )}
       </div>
       <AccessSection templateId={template.id} />
       <div className="cr-field" style={{ marginTop: 16 }}>
@@ -191,6 +211,13 @@ function AccessSection({ templateId }: { templateId: string }) {
   const set = (patch: Partial<TemplateAccess>) => {
     save.reset();
     setForm((f) => (f ? { ...f, ...patch } : f));
+  };
+  // «Отменить»: к последнему сохранённому доступу (ответ сервера, иначе прежний baseline).
+  const discard = () => {
+    save.reset();
+    const saved = access.data ?? baseline;
+    setBaseline(saved);
+    setForm(saved);
   };
 
   const category = form?.categoryId
@@ -268,7 +295,7 @@ function AccessSection({ templateId }: { templateId: string }) {
             />
           )}
           <GeneralError error={save.error} errors={errors} shown={['categoryId', 'public']} />
-          <div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Button
               view="action"
               onClick={() => save.mutate(form)}
@@ -277,6 +304,14 @@ function AccessSection({ templateId }: { templateId: string }) {
             >
               Сохранить доступ
             </Button>
+            {dirty && (
+              <>
+                <Text color="warning">Есть несохранённые изменения</Text>
+                <Button view="flat" aria-label="Отменить изменения доступа" onClick={discard}>
+                  Отменить
+                </Button>
+              </>
+            )}
           </div>
         </>
       )}

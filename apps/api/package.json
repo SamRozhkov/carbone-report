@@ -8,15 +8,18 @@
     "build": "tsup",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "test:int": "vitest run --config vitest.int.config.ts",
+    "test:int": "vitest run --config vitest.int.config.ts && pnpm run test:int:s3",
+    "test:int:s3": "TEST_STORAGE_BACKEND=s3 vitest run --config vitest.int.config.ts test/templates.int.test.ts test/onlyoffice.int.test.ts test/run-files.int.test.ts test/cleanup.int.test.ts test/hardening.int.test.ts",
     "typecheck": "tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1147.0",
     "@carbone-reports/shared": "workspace:*",
     "@fastify/cookie": "^11.1.2",
     "@fastify/multipart": "^10.1.2",
     "@fastify/rate-limit": "^11.2.0",
+    "@smithy/node-http-handler": "^4.12.1",
     "argon2": "^0.45.1",
     "drizzle-orm": "^0.45.3",
     "fastify": "^5.12.5",
@@ -38,6 +41,7 @@
     "testcontainers": "^12.2.0",
     "tsup": "^8.5.1",
     "tsx": "^4.23.15",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "yaml": "^2.9.1"
   }
 }

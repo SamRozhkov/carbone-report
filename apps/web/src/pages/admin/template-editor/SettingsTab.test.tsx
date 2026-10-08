@@ -85,6 +85,42 @@ describe('SettingsTab', () => {
     expect(screen.getByText(/Шаблон изменился на сервере/)).toBeInTheDocument();
   });
 
+  it('без изменений сохранить нельзя; «Отменить» возвращает сохранённое состояние', async () => {
+    mockApi([{ path: '/api/datasources', body: [] }]);
+    renderWithProviders(<SettingsTab template={t} />);
+    const name = await screen.findByLabelText('Название шаблона');
+    const save = () => screen.getByRole('button', { name: 'Сохранить настройки' });
+    expect(save()).toBeDisabled();
+    expect(screen.queryByText('Есть несохранённые изменения')).not.toBeInTheDocument();
+    await userEvent.type(name, '!');
+    expect(save()).toBeEnabled();
+    expect(screen.getByText('Есть несохранённые изменения')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Отменить изменения настроек' }));
+    expect(name).toHaveValue('Счёт');
+    expect(save()).toBeDisabled();
+    expect(screen.queryByText('Есть несохранённые изменения')).not.toBeInTheDocument();
+  });
+
+  it('«Отменить» после обновления шаблона на сервере берёт свежую версию', async () => {
+    mockApi([{ path: '/api/datasources', body: [] }]);
+    const next = { ...t, name: 'Новое', updatedAt: '2026-02-01T00:00:00Z' };
+    function Harness() {
+      const [tpl, setTpl] = useState(t);
+      return (
+        <>
+          <button onClick={() => setTpl(next)}>refresh</button>
+          <SettingsTab template={tpl} />
+        </>
+      );
+    }
+    renderWithProviders(<Harness />);
+    await userEvent.type(await screen.findByLabelText('Название шаблона'), '!');
+    await userEvent.click(screen.getByRole('button', { name: 'refresh' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Отменить изменения настроек' }));
+    expect(screen.getByLabelText('Название шаблона')).toHaveValue('Новое');
+    expect(screen.queryByText(/Шаблон изменился на сервере/)).not.toBeInTheDocument();
+  });
+
   describe('раздел «Доступ»', () => {
     const groups = [
       { id: 'g1', name: 'Бухгалтерия', description: '', memberIds: [], createdAt: '' },
@@ -187,6 +223,22 @@ describe('SettingsTab', () => {
       await waitFor(() => expect(s.getByRole('checkbox', { name: 'Доступно всем' })).toBeChecked());
       expect(s.getByRole('combobox', { name: 'Группы' })).toHaveTextContent('Бухгалтерия');
       expect(s.queryByText(WARNING)).not.toBeInTheDocument();
+    });
+
+    it('«Отменить» возвращает сохранённый доступ; без изменений сохранить нельзя', async () => {
+      const { calls } = mockApi(routes({ public: false, categoryId: null, groupIds: [] }));
+      renderWithProviders(<SettingsTab template={t} />);
+      const s = await section();
+      await s.findByText(WARNING);
+      expect(s.getByRole('button', { name: 'Сохранить доступ' })).toBeDisabled();
+      await userEvent.click(s.getByRole('checkbox', { name: 'Доступно всем' }));
+      expect(s.getByText('Есть несохранённые изменения')).toBeInTheDocument();
+      await userEvent.click(s.getByRole('button', { name: 'Отменить изменения доступа' }));
+      expect(s.getByRole('checkbox', { name: 'Доступно всем' })).not.toBeChecked();
+      expect(s.getByText(WARNING)).toBeInTheDocument();
+      expect(s.queryByText('Есть несохранённые изменения')).not.toBeInTheDocument();
+      expect(s.getByRole('button', { name: 'Сохранить доступ' })).toBeDisabled();
+      expect(calls.some((c) => c.method === 'PUT')).toBe(false);
     });
   });
 });

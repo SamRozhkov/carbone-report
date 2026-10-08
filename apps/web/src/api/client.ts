@@ -1,3 +1,5 @@
+import { filenameFromDisposition } from '../lib/download';
+
 export class ApiRequestError extends Error {
   constructor(
     readonly status: number,
@@ -75,4 +77,16 @@ export async function apiJson<T>(path: string, opts?: RequestOptions): Promise<T
 export async function apiBlob(path: string, opts?: RequestOptions): Promise<Blob> {
   const res = await send(path, opts);
   return res.blob();
+}
+
+/** Файл и его имя из Content-Disposition; ошибка API — ApiRequestError с сообщением сервера. */
+export async function apiFile(
+  path: string,
+  opts?: RequestOptions,
+): Promise<{ blob: Blob; filename?: string }> {
+  const res = await send(path, opts);
+  return {
+    blob: await res.blob(),
+    filename: filenameFromDisposition(res.headers.get('content-disposition')),
+  };
 }

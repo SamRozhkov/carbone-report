@@ -16,6 +16,7 @@ describe('база данных', () => {
     expect(r.rows.map((x) => x.table_name)).toEqual(
       expect.arrayContaining([
         'datasources',
+        'report_run_files',
         'report_runs',
         'template_params',
         'template_queries',

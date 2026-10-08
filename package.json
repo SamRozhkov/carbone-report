@@ -19,6 +19,7 @@
     "demo:seed": "tsx scripts/demo-seed.ts --insecure --wait",
     "stack:down": "docker compose --profile demo -f docker-compose.yml -f docker-compose.dev.yml down",
     "stack:smoke": "tsx scripts/smoke.ts",
+    "help:check": "tsx scripts/help-check.ts",
     "e2e": "pnpm --filter @carbone-reports/e2e e2e"
   },
   "devDependencies": {

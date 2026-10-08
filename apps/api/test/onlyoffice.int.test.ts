@@ -8,6 +8,7 @@ import {
   createTemplate,
   createTestApp,
   loginAs,
+  multipart,
   type TestApp,
 } from './helpers';
 
@@ -20,6 +21,19 @@ let tplId: string;
 let fetched: Buffer;
 const forceSaved: string[] = [];
 const fetchedUrls: string[] = [];
+interface Deferred {
+  promise: Promise<void>;
+  resolve: () => void;
+}
+function deferred(): Deferred {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+// Заглушка для internal('held'): сообщает о начале скачивания и ждёт сигнала теста.
+let held = { started: deferred(), release: deferred() };
 // Document Server строит ссылку на результат от публичного origin (за nginx — префикс /onlyoffice).
 const CACHE = (name: string) => `/cache/files/data/${name}/output.docx?md5=abc&expires=1`;
 const pub = (name: string) => `https://localhost:8443/onlyoffice${CACHE(name)}`;
@@ -29,6 +43,11 @@ beforeAll(async () => {
   t = await createTestApp({
     fetchFile: async (url) => {
       fetchedUrls.push(url);
+      if (url === internal('held')) {
+        held.started.resolve();
+        await held.release.promise;
+        return Buffer.concat([await createBlankDocument('docx'), Buffer.from('held')]);
+      }
       if (url === internal('slow')) {
         await new Promise((r) => setTimeout(r, 300));
         return Buffer.concat([await createBlankDocument('docx'), Buffer.from('old')]);
@@ -225,6 +244,55 @@ describe('callback', () => {
     await callback({ key, status: 6, url: pub('f.docx') });
     expect((await row()).lastSaveError).toBeNull();
   });
+
+  const adminDetails = async () =>
+    (
+      await t.app.inject({
+        method: 'GET',
+        url: `/api/templates/${tplId}`,
+        headers: { cookie: admin },
+      })
+    ).json();
+
+  it('повтор той же ошибки (status 3) даёт новую lastSaveErrorAt; успешное сохранение обнуляет оба поля', async () => {
+    const key = (await row()).docKey;
+    await callback({ key, status: 3 });
+    const first = await adminDetails();
+    await callback({ key, status: 3 });
+    const second = await adminDetails();
+    expect(second.lastSaveError).toBe(first.lastSaveError);
+    expect(first.lastSaveErrorAt).toEqual(expect.stringMatching(/^\d{4}-\d\d-\d\dT[\d:.]+Z$/));
+    expect(Date.parse(second.lastSaveErrorAt)).toBeGreaterThan(Date.parse(first.lastSaveErrorAt));
+    await callback({ key, status: 6, url: pub('f.docx') });
+    const after = await adminDetails();
+    expect(after.lastSaveError).toBeNull();
+    expect(after.lastSaveErrorAt).toBeNull();
+  });
+
+  it('метка ошибки строго растёт, даже если часы не сдвинулись', async () => {
+    const key = (await row()).docKey;
+    const future = new Date(Date.now() + 3_600_000);
+    await t.deps.db
+      .update(templates)
+      .set({ lastSaveError: 'прежняя', lastSaveErrorAt: future })
+      .where(eq(templates.id, tplId));
+    await callback({ key, status: 7 });
+    expect((await row()).lastSaveErrorAt!.getTime()).toBe(future.getTime() + 1);
+  });
+
+  it('замена файла обнуляет lastSaveError и lastSaveErrorAt', async () => {
+    await callback({ key: (await row()).docKey, status: 3 });
+    expect((await row()).lastSaveErrorAt).not.toBeNull();
+    const mp = multipart({}, { name: 'new.docx', data: await createBlankDocument('docx') });
+    const r = await t.app.inject({
+      method: 'PUT',
+      url: `/api/templates/${tplId}/file`,
+      headers: { cookie: admin, ...mp.headers },
+      payload: mp.payload,
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ lastSaveError: null, lastSaveErrorAt: null });
+  });
 });
 
 describe('callback hardening', () => {
@@ -241,20 +309,31 @@ describe('callback hardening', () => {
   });
 
   it('callback не держит блокировку строки во время скачивания: параллельный PATCH шаблона проходит', async () => {
+    held = { started: deferred(), release: deferred() };
     const r0 = await row();
-    const saving = callback({ key: r0.docKey, status: 6, url: pub('slow') }); // fetchFile ждёт 300 мс
-    await new Promise((r) => setTimeout(r, 50));
-    const started = Date.now();
-    const patch = await t.app.inject({
-      method: 'PATCH',
-      url: `/api/templates/${tplId}`,
-      headers: { cookie: admin },
-      payload: { description: 'параллельно' },
+    let settled = false;
+    const saving = callback({ key: r0.docKey, status: 6, url: pub('held') }).finally(() => {
+      settled = true;
     });
-    expect(patch.statusCode).toBe(200);
-    expect(Date.now() - started).toBeLessThan(200);
+    try {
+      await Promise.race([held.started.promise, saving]); // saving раньше started — ранняя ошибка callback, не виснем
+      const patch = await t.app.inject({
+        method: 'PATCH',
+        url: `/api/templates/${tplId}`,
+        headers: { cookie: admin },
+        payload: { description: 'параллельно' },
+      });
+      expect(patch.statusCode).toBe(200);
+      expect(settled).toBe(false);
+      expect((await row()).description).toBe('параллельно');
+    } finally {
+      held.release.resolve(); // и при падении — чтобы callback не висел до конца файла
+      await saving.catch(() => {});
+    }
     expect((await saving).statusCode).toBe(200);
-    expect((await row()).version).toBe(r0.version + 1);
+    const r1 = await row();
+    expect(r1.version).toBe(r0.version + 1);
+    expect((await t.deps.storage.read(r1.filePath)).subarray(-4).toString()).toBe('held');
   });
 
   it('ключ сменился за время скачивания: файл выбрасывается, версия не растёт', async () => {

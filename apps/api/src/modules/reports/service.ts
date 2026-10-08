@@ -1,17 +1,17 @@
 import {
-  outputFormatsFor,
+  CARBONE_LANG,
   type OutputFormat,
   type ParamValue,
   type ParamsInput,
 } from '@carbone-reports/shared';
-import type { AppDeps } from '../../deps';
+import type { AppDeps, TemplateFileRef } from '../../deps';
 import { type Deadline, reportTimeout } from '../../lib/deadline';
-import { AppError, badRequest } from '../../lib/errors';
+import { AppError } from '../../lib/errors';
 import { buildReportData } from '../queries/build-data';
 import { runQueries } from '../queries/executor';
 import { validateQueryParams } from '../queries/param-options';
 import { resolveParams } from '../queries/params';
-import { templateFileRef, type TemplateFull } from '../templates/service';
+import type { TemplateFull } from '../templates/service';
 
 /**
  * Параметры, строгая проверка вариантов и SQL отчёта. С `deadline` таймаут SQL — не дольше
@@ -56,25 +56,22 @@ async function collect(
   }
 }
 
-export function assertFormat(full: TemplateFull, format: OutputFormat): void {
-  if (!outputFormatsFor(full.row.fileExt).includes(format)) {
-    throw badRequest(`формат ${format} недоступен для шаблона .${full.row.fileExt}`);
-  }
-}
-
-/** Рендер в Carbone. С `deadline` таймаут Carbone — не дольше остатка срока, ожидание ограничено сроком. */
+/**
+ * Рендер в Carbone. С `deadline` таймаут Carbone — не дольше остатка срока, ожидание ограничено сроком.
+ * `tpl` — живой файл шаблона (предпросмотр админа) или копия из снимка запуска.
+ */
 export function renderReport(
   deps: AppDeps,
-  full: TemplateFull,
+  tpl: TemplateFileRef,
   data: unknown,
   format: OutputFormat,
   deadline?: Deadline,
 ): Promise<Buffer> {
   // Срок уже истёк — не нагружать Carbone заведомо прерванной задачей.
   if (deadline && deadline.remaining() <= 0) return Promise.reject(reportTimeout());
-  const work = deps.carbone.render(templateFileRef(deps, full.row), data, {
+  const work = deps.carbone.render(tpl, data, {
     convertTo: format,
-    lang: 'ru-ru',
+    lang: CARBONE_LANG,
     timezone: deps.config.tz,
     timeoutMs: deadline ? deadline.cap(deps.config.renderTimeoutMs) : deps.config.renderTimeoutMs,
   });

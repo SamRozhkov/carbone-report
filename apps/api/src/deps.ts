@@ -3,6 +3,7 @@ import type { Redis } from 'ioredis';
 import type pg from 'pg';
 import type { Config } from './config';
 import type { Db } from './db/client';
+import type { RunFileGate } from './lib/run-file-gate';
 import type { Storage } from './lib/storage';
 import type { LdapAuthenticator } from './modules/auth/ldap';
 
@@ -40,6 +41,8 @@ export interface AppDeps {
   config: Config;
   db: Db;
   storage: Storage;
+  /** Сборка файла запуска под advisory-блокировкой на отдельном небольшом пуле. */
+  runFileGate: RunFileGate;
   sources: SourcePools;
   carbone: CarboneRenderer;
   onlyoffice: OnlyOfficeCommands;

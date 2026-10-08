@@ -28,6 +28,9 @@ export function outputFormatsFor(ext: TemplateExt): OutputFormat[] {
   return FORMATS_BY_EXT[ext];
 }
 
+/** Язык Carbone: `ru` даёт русские разделители чисел и рубли в formatC; `ru-ru` — нет (матрица Community, §23.4). */
+export const CARBONE_LANG = 'ru';
+
 export const ParamType = z.enum(['string', 'number', 'date', 'boolean', 'select', 'query']);
 export type ParamType = z.infer<typeof ParamType>;
 
@@ -271,6 +274,8 @@ export const TemplateAdminDetails = TemplateDetails.extend({
   version: z.number(),
   queries: z.array(TemplateQuery),
   lastSaveError: z.string().nullable(),
+  /** Момент последней ошибки сохранения OnlyOffice (ISO); новая ошибка — новая метка. */
+  lastSaveErrorAt: z.string().nullable(),
 });
 export type TemplateAdminDetails = z.infer<typeof TemplateAdminDetails>;
 
@@ -299,7 +304,8 @@ export const ParamOptionsBody = z.object({ params: ParamsInput });
 export type ParamOptionsBody = z.infer<typeof ParamOptionsBody>;
 export type ParamOptionsResult = { options: SelectOptionValue[]; waitingFor?: string[] };
 
-export const RenderBody = z.object({ params: ParamsInput, format: OutputFormat });
+/** Формата при формировании нет (§24.4): лишний `format` zod отбрасывает. */
+export const RenderBody = z.object({ params: ParamsInput });
 export type RenderBody = z.infer<typeof RenderBody>;
 
 export const PreviewBody = z.object({ params: ParamsInput, mode: z.enum(['data', 'pdf']) });
@@ -323,10 +329,15 @@ export const RunDto = z.object({
   userId: z.string(),
   userLogin: z.string(),
   params: ParamsInput,
-  outputFormat: OutputFormat,
+  /** Формат запуска до Плана 13; у запусков со снимком — null. */
+  outputFormat: OutputFormat.nullable(),
   status: z.enum(['ok', 'error']),
   error: z.string().nullable(),
   fileAvailable: z.boolean(),
+  /** Форматы, доступные для скачивания (§24.4). */
+  formats: z.array(OutputFormat),
+  /** Уже собранные форматы. */
+  readyFormats: z.array(OutputFormat),
   durationMs: z.number(),
   createdAt: z.string(),
 });

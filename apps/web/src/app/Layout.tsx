@@ -1,6 +1,7 @@
 import {
   ArrowRightFromSquare,
   ArrowRightToSquare,
+  CircleQuestion,
   ClockArrowRotateLeft,
   Database,
   FileText,
@@ -70,6 +71,7 @@ export function Layout() {
       item('users', 'Пользователи', Persons, '/admin/users'),
       item('groups', 'Группы', PersonsLock, '/admin/groups'),
       item('categories', 'Категории', Folders, '/admin/categories'),
+      item('help', 'Справка по шаблонам', CircleQuestion, '/admin/help'),
     );
   }
 

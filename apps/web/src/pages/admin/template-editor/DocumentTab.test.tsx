@@ -46,6 +46,15 @@ describe('DocumentTab', () => {
     expect(mounts.count).toBe(1);
   });
 
+  it('ссылка «Справка по синтаксису» открывает /admin/help в новой вкладке', async () => {
+    mockApi([{ path: '/api/templates/t1/editor-config', body: config }]);
+    renderWithProviders(<DocumentTab {...base} />);
+    const link = await screen.findByRole('link', { name: 'Справка по синтаксису' });
+    expect(link).toHaveAttribute('href', '/admin/help');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener');
+  });
+
   it('сохранение: forcesave и ожидание новой версии', async () => {
     let gets = 0;
     const { calls } = mockApi([
@@ -144,7 +153,14 @@ describe('DocumentTab', () => {
       { method: 'POST', path: '/api/templates/t1/save', status: 204 },
       {
         path: '/api/templates/t1',
-        handler: () => ({ body: { ...t, lastSaveError: 'old', version: ++gets >= 3 ? 4 : 3 } }),
+        handler: () => ({
+          body: {
+            ...t,
+            lastSaveError: 'old',
+            lastSaveErrorAt: '2026-01-10T10:00:00.000Z',
+            version: ++gets >= 3 ? 4 : 3,
+          },
+        }),
       },
     ]);
     renderWithProviders(<DocumentTab {...base} pollMs={5} pollTimeoutMs={2000} />);
@@ -154,20 +170,51 @@ describe('DocumentTab', () => {
     expect(screen.queryByText('Сохранение не удалось')).not.toBeInTheDocument();
   });
 
-  it('новая ошибка сохранения (отличается от прежней) → тост об ошибке', async () => {
+  it('повтор той же ошибки с новой меткой времени → «Сохранение не удалось», а не таймаут', async () => {
     let gets = 0;
     mockApi([
       { path: '/api/templates/t1/editor-config', body: config },
       { method: 'POST', path: '/api/templates/t1/save', status: 204 },
       {
         path: '/api/templates/t1',
-        handler: () => ({ body: { ...t, lastSaveError: ++gets >= 2 ? 'new' : 'old' } }),
+        handler: () => ({
+          body: {
+            ...t,
+            lastSaveError: 'OnlyOffice не смог сохранить документ',
+            lastSaveErrorAt: ++gets >= 2 ? '2026-01-10T10:05:00.000Z' : '2026-01-10T10:00:00.000Z',
+          },
+        }),
       },
     ]);
     renderWithProviders(<DocumentTab {...base} pollMs={5} pollTimeoutMs={2000} />);
     await screen.findByTestId('oo');
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
     expect(await screen.findByText('Сохранение не удалось')).toBeInTheDocument();
+    expect(screen.getByText('OnlyOffice не смог сохранить документ')).toBeInTheDocument();
+    expect(screen.queryByText(/не подтвердил сохранение/)).not.toBeInTheDocument();
+  });
+
+  it('другой текст ошибки при прежней метке — не новая ошибка', async () => {
+    let gets = 0;
+    mockApi([
+      { path: '/api/templates/t1/editor-config', body: config },
+      { method: 'POST', path: '/api/templates/t1/save', status: 204 },
+      {
+        path: '/api/templates/t1',
+        handler: () => ({
+          body: {
+            ...t,
+            lastSaveError: ++gets >= 2 ? 'new' : 'old',
+            lastSaveErrorAt: '2026-01-10T10:00:00.000Z',
+          },
+        }),
+      },
+    ]);
+    renderWithProviders(<DocumentTab {...base} pollMs={5} pollTimeoutMs={200} />);
+    await screen.findByTestId('oo');
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(await screen.findByText(/не подтвердил сохранение/)).toBeInTheDocument();
+    expect(screen.queryByText('Сохранение не удалось')).not.toBeInTheDocument();
   });
 
   function bumpHarness() {

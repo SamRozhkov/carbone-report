@@ -1,10 +1,21 @@
 import type { CarboneRenderer, RenderOptions, TemplateFileRef } from '../../deps';
 import { AppError } from '../../lib/errors';
+import { communityErrorMessage } from './community';
 import { memoryTemplateCache, type TemplateIdCache, type TemplateIdEntry } from './template-cache';
 
 const VERSION_HEADER = { 'carbone-version': '5' };
 
 class TemplateMissing extends Error {}
+
+/**
+ * Сбой чтения файла шаблона из хранилища — не сбой Carbone: render поднимает причину как есть
+ * (ENOENT обрабатывают вызывающие, прочие ошибки — 500 с записью в журнал).
+ */
+class TemplateReadFailed extends Error {
+  constructor(readonly reason: unknown) {
+    super('не удалось прочитать файл шаблона');
+  }
+}
 
 export interface CarboneLog {
   info(obj: object, msg: string): void;
@@ -49,17 +60,25 @@ export class CarboneClient implements CarboneRenderer {
         return await this.renderWith(carboneId, data, opts, signal);
       }
     } catch (e) {
+      if (e instanceof TemplateReadFailed) throw e.reason;
       if (e instanceof AppError) throw e;
       if (e instanceof TemplateMissing)
         throw new AppError('CARBONE_ERROR', 502, 'ошибка генерации: шаблон не найден');
       if (signal.aborted) throw new AppError('TIMEOUT', 504, 'превышено время ожидания');
-      throw new AppError('CARBONE_ERROR', 502, 'сервис генерации недоступен');
+      throw new AppError('CARBONE_ERROR', 502, 'сервис генерации недоступен', undefined, e);
     }
   }
 
   private async upload(tpl: TemplateFileRef, signal: AbortSignal): Promise<string> {
+    // Файл читается до запроса к Carbone; его ошибка не выдаётся за недоступность Carbone.
+    let file: Buffer;
+    try {
+      file = await tpl.read();
+    } catch (e) {
+      throw new TemplateReadFailed(e);
+    }
     const form = new FormData();
-    form.append('template', new Blob([new Uint8Array(await tpl.read())]), `template.${tpl.ext}`);
+    form.append('template', new Blob([new Uint8Array(file)]), `template.${tpl.ext}`);
     const res = await this.fetch(`${this.baseUrl}/template`, {
       method: 'POST',
       headers: VERSION_HEADER,
@@ -125,6 +144,9 @@ export class CarboneClient implements CarboneRenderer {
 
     const body = (isJson ? await res.json().catch(() => null) : null) as { error?: string } | null;
     const error = body?.error ?? `HTTP ${res.status}`;
+    // Отключённый в Community форматтер — ошибка шаблона, а не сбой сервиса (§23.4).
+    const community = communityErrorMessage(error);
+    if (community) throw new AppError('CARBONE_COMMUNITY', 400, community);
     if (res.status === 404 || /template not found/i.test(error)) throw new TemplateMissing(error);
     throw new AppError('CARBONE_ERROR', 502, `ошибка генерации: ${error}`);
   }

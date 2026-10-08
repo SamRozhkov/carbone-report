@@ -32,17 +32,31 @@ export function DatasourceDialog({
   const [form, setForm] = useState({
     name: datasource?.name ?? '',
     host: datasource?.host ?? '',
-    port: datasource?.port ?? 5432,
+    port: (datasource?.port ?? 5432) as number | null,
     database: datasource?.database ?? '',
     username: datasource?.username ?? '',
     password: '',
     sslMode: (datasource?.sslMode ?? 'disable') as SslMode,
     sslCa: datasource?.sslCa ?? '',
   });
+  // Пустой порт не подменяем на 5432: при сохранении — ошибка у поля, запрос не уходит (§22.5).
+  const [portMissing, setPortMissing] = useState(false);
   const body = (): DatasourceBody => {
-    const { password, sslCa, ...rest } = form;
-    const base = { ...rest, sslCa: form.sslMode === 'verify' && sslCa.trim() ? sslCa : null };
+    const { password, sslCa, port, ...rest } = form;
+    if (port === null) throw new Error('порт не указан'); // withPort не пускает сюда без порта
+    const base = {
+      ...rest,
+      port,
+      sslCa: form.sslMode === 'verify' && sslCa.trim() ? sslCa : null,
+    };
     return password ? { ...base, password } : base;
+  };
+  const withPort = (action: () => void) => () => {
+    if (form.port === null) {
+      setPortMissing(true);
+      return;
+    }
+    action();
   };
 
   const savedOnly = editing && !form.password;
@@ -97,12 +111,17 @@ export function DatasourceDialog({
         <div className="cr-form">
           {text('name', 'Название')}
           {text('host', 'Хост')}
-          <Field label="Порт" error={errors.port}>
+          <Field label="Порт" error={portMissing ? 'укажите порт' : errors.port}>
             <NumberInput
               value={form.port}
-              onUpdate={(v) => set('port', v ?? 5432)}
+              onUpdate={(v) => {
+                setPortMissing(false);
+                set('port', v);
+              }}
               min={1}
               max={65535}
+              validationState={portMissing || errors.port ? 'invalid' : undefined}
+              controlProps={{ 'aria-label': 'Порт' }}
             />
           </Field>
           {text('database', 'База данных')}
@@ -146,7 +165,7 @@ export function DatasourceDialog({
           )}
           <div>
             <Button
-              onClick={() => test.mutate()}
+              onClick={withPort(() => test.mutate())}
               loading={test.isPending}
               disabled={savedOnly && connDirty}
             >
@@ -170,7 +189,7 @@ export function DatasourceDialog({
         </div>
       </Dialog.Body>
       <Dialog.Footer
-        onClickButtonApply={() => save.mutate()}
+        onClickButtonApply={withPort(() => save.mutate())}
         onClickButtonCancel={onClose}
         textButtonApply="Сохранить"
         textButtonCancel="Отмена"

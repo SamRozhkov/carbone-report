@@ -1,10 +1,12 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import type { RunDto } from '@carbone-reports/shared';
+import { describe, expect, it, vi } from 'vitest';
+import * as download from '../lib/download';
 import { adminMe, mockApi, renderRoute, userMe } from '../test/utils';
 import { formatRunParams } from './HistoryPage';
 
-const run = (over: Record<string, unknown>) => ({
+const run = (over: Partial<RunDto>): RunDto => ({
   id: 'r1',
   templateId: 't1',
   templateName: 'Счёт',
@@ -16,6 +18,8 @@ const run = (over: Record<string, unknown>) => ({
   status: 'ok',
   error: null,
   fileAvailable: true,
+  formats: ['pdf'],
+  readyFormats: ['pdf'],
   durationMs: 1200,
   createdAt: '2026-01-31T09:05:00',
   ...over,
@@ -34,8 +38,15 @@ describe('HistoryPage', () => {
         path: '/api/runs',
         body: page([
           run({}),
-          run({ id: 'r2', status: 'error', error: 'запрос "x": ошибка', fileAvailable: false }),
-          run({ id: 'r3', fileAvailable: false }),
+          run({
+            id: 'r2',
+            status: 'error',
+            error: 'запрос "x": ошибка',
+            fileAvailable: false,
+            formats: [],
+            readyFormats: [],
+          }),
+          run({ id: 'r3', fileAvailable: false, formats: [], readyFormats: [] }),
         ]),
       },
     ]);
@@ -51,6 +62,42 @@ describe('HistoryPage', () => {
     expect(calls.find((c) => c.path.startsWith('/api/runs'))?.path).toBe('/api/runs?page=1');
   });
 
+  it('запуск со снимком: меню «Скачать» со всеми форматами; выбранный формат скачивается', async () => {
+    const spy = vi.spyOn(download, 'triggerDownload').mockImplementation(() => {});
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:run');
+    const { calls } = mockApi([
+      userMe,
+      { path: '/api/templates', body: [] },
+      {
+        path: '/api/runs',
+        body: page([
+          run({
+            outputFormat: null,
+            formats: ['pdf', 'docx', 'odt'],
+            readyFormats: ['pdf', 'docx'],
+          }),
+        ]),
+      },
+      {
+        path: '/api/runs/r1/file',
+        raw: 'DOCX',
+        headers: {
+          'content-disposition': `attachment; filename="x.docx"; filename*=UTF-8''%D0%A1%D1%87%D1%91%D1%82%202026-01-31.docx`,
+        },
+      },
+    ]);
+    renderRoute('/history');
+    // Колонка «Формат» — уже собранные форматы.
+    expect(await screen.findByText('PDF, DOCX')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Скачать' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Скачать' }));
+    for (const f of ['PDF', 'DOCX', 'ODT']) {
+      expect(await screen.findByRole('menuitem', { name: f })).toBeInTheDocument();
+    }
+    await userEvent.click(screen.getByRole('menuitem', { name: 'DOCX' }));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('blob:run', 'Счёт 2026-01-31.docx'));
+    expect(calls.some((c) => c.path === '/api/runs/r1/file?format=docx')).toBe(true);
+  });
   it('admin: колонка пользователя, фильтры из URL уходят в запрос', async () => {
     const { calls } = mockApi([
       adminMe,

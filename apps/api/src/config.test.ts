@@ -124,4 +124,56 @@ describe('loadConfig', () => {
       }),
     ).toThrow('S3_ENDPOINT: нужен URL, например http://s3:8333');
   });
+
+  it('LDAP выключен по умолчанию', () => {
+    expect(loadConfig(base).ldap).toBeNull();
+  });
+  it('LDAP_ENABLED=true без LDAP_URL и LDAP_BASE_DN — понятная ошибка с именами переменных', () => {
+    expect(() => loadConfig({ ...base, LDAP_ENABLED: 'true' })).toThrow(
+      'Неверная конфигурация: LDAP_URL: задайте при LDAP_ENABLED=true; LDAP_BASE_DN: задайте при LDAP_ENABLED=true',
+    );
+  });
+  it('LDAP_USER_FILTER без %s отклоняется', () => {
+    expect(() =>
+      loadConfig({
+        ...base,
+        LDAP_ENABLED: 'true',
+        LDAP_URL: 'ldap://dc:389',
+        LDAP_BASE_DN: 'dc=example,dc=local',
+        LDAP_USER_FILTER: '(uid=fry)',
+      }),
+    ).toThrow('LDAP_USER_FILTER: должен содержать %s');
+  });
+  it('собирает настройки LDAP; пустой LDAP_BIND_DN из .env — анонимный поиск', () => {
+    const c = loadConfig({
+      ...base,
+      LDAP_ENABLED: 'true',
+      LDAP_URL: 'ldaps://dc:636',
+      LDAP_BIND_DN: '',
+      LDAP_BIND_PASSWORD: '',
+      LDAP_BASE_DN: 'dc=example,dc=local',
+      LDAP_USER_FILTER: '(sAMAccountName=%s)',
+      LDAP_DEFAULT_ROLE: 'admin',
+      LDAP_TLS_REJECT_UNAUTHORIZED: 'false',
+    });
+    expect(c.ldap).toEqual({
+      url: 'ldaps://dc:636',
+      bindDn: undefined,
+      bindPassword: undefined,
+      baseDn: 'dc=example,dc=local',
+      userFilter: '(sAMAccountName=%s)',
+      defaultRole: 'admin',
+      tlsRejectUnauthorized: false,
+    });
+  });
+  it('LDAP_URL — только ldap:// или ldaps://', () => {
+    expect(() =>
+      loadConfig({
+        ...base,
+        LDAP_ENABLED: 'true',
+        LDAP_URL: 'dc.example.local',
+        LDAP_BASE_DN: 'dc=example,dc=local',
+      }),
+    ).toThrow('LDAP_URL: нужен URL вида ldap://host:389 или ldaps://host:636');
+  });
 });

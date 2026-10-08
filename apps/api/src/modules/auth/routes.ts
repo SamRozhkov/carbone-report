@@ -99,7 +99,10 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
       // LDAP пробуем первым, если включён и локальный аккаунт не заблокирован.
       // Неудача (неверный пароль, сервер недоступен) — не ошибка: откатываемся
       // на локальный пароль, чтобы встроенный admin не терял доступ при сбое LDAP.
-      if (deps.ldap && !row?.blocked && (await deps.ldap.authenticate(login, password))) {
+      // Встроенный ADMIN_LOGIN входит только по локальному паролю: иначе пользователь
+      // каталога с тем же логином получил бы его учётную запись.
+      const ldap = !row?.blocked && login !== deps.config.adminLogin ? deps.ldap : null;
+      if (ldap && (await ldap.authenticate(login, password))) {
         const ldapUser = row ?? (await provisionLdapUser(deps, login));
         if (!ldapUser || ldapUser.blocked) {
           throw new AppError('INVALID_CREDENTIALS', 401, 'неверный логин или пароль');

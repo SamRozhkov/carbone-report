@@ -112,4 +112,38 @@ describe('вход через LDAP', () => {
     const res = await login(t, { login: 'only-local', password: 'secret123' });
     expect(res.statusCode).toBe(200);
   });
+
+  it('ADMIN_LOGIN не входит через LDAP — только по локальному паролю', async () => {
+    const calls: string[] = [];
+    t = await createTestApp(
+      {
+        ldap: {
+          authenticate: async (l) => {
+            calls.push(l);
+            return true;
+          },
+        },
+      },
+      {
+        adminLogin: 'admin',
+        ldap: {
+          url: '',
+          baseDn: '',
+          userFilter: '(uid=%s)',
+          defaultRole: 'user',
+          tlsRejectUnauthorized: true,
+        },
+      },
+    );
+    await t.deps.db
+      .insert(users)
+      .values({ login: 'admin', passwordHash: await hashPassword('local-secret'), role: 'admin' });
+    // Пользователь каталога с логином admin не получает встроенную учётную запись.
+    const viaLdap = await login(t, { login: 'admin', password: 'пароль-из-каталога' });
+    expect(viaLdap.statusCode).toBe(401);
+    expect(calls).toEqual([]);
+    const local = await login(t, { login: 'admin', password: 'local-secret' });
+    expect(local.statusCode).toBe(200);
+    expect(calls).toEqual([]);
+  });
 });

@@ -51,25 +51,32 @@ const Env = z
     LDAP_BASE_DN: z.string().optional(),
     LDAP_USER_FILTER: z
       .string()
-      .refine((v) => v.includes('%s'), 'LDAP_USER_FILTER: должен содержать %s')
+      .refine((v) => v.includes('%s'), 'должен содержать %s')
       .default('(uid=%s)'),
     LDAP_DEFAULT_ROLE: z.enum(['admin', 'user']).default('user'),
     LDAP_TLS_REJECT_UNAUTHORIZED: z.enum(['true', 'false']).default('true'),
   })
   .superRefine((v, ctx) => {
     if (v.LDAP_ENABLED !== 'true') return;
+    // Имя переменной добавляет path (сообщение собирается как «<path>: <message>»).
     if (!v.LDAP_URL) {
       ctx.addIssue({
         code: 'custom',
-        message: 'LDAP_URL: задайте при LDAP_ENABLED=true',
         path: ['LDAP_URL'],
+        message: 'задайте при LDAP_ENABLED=true',
+      });
+    } else if (!/^ldaps?:\/\/[^/]/.test(v.LDAP_URL)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['LDAP_URL'],
+        message: 'нужен URL вида ldap://host:389 или ldaps://host:636',
       });
     }
     if (!v.LDAP_BASE_DN) {
       ctx.addIssue({
         code: 'custom',
-        message: 'LDAP_BASE_DN: задайте при LDAP_ENABLED=true',
         path: ['LDAP_BASE_DN'],
+        message: 'задайте при LDAP_ENABLED=true',
       });
     }
   })
@@ -180,8 +187,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
       e.LDAP_ENABLED === 'true'
         ? {
             url: e.LDAP_URL!,
-            bindDn: e.LDAP_BIND_DN,
-            bindPassword: e.LDAP_BIND_PASSWORD,
+            // Пустые значения из .env (${LDAP_BIND_DN:-} в compose) — анонимный поиск.
+            bindDn: e.LDAP_BIND_DN || undefined,
+            bindPassword: e.LDAP_BIND_PASSWORD || undefined,
             baseDn: e.LDAP_BASE_DN!,
             userFilter: e.LDAP_USER_FILTER,
             defaultRole: e.LDAP_DEFAULT_ROLE,

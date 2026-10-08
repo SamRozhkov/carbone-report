@@ -31,22 +31,46 @@ export function escapeLdapFilter(input: string): string {
   return escaped.split('\u0000').join('\\00');
 }
 
+/**
+ * Фильтр поиска: экранированный логин подставляется во все `%s` шаблона. Подстановка —
+ * функцией: в строке замены `String.replace` символы `$&`, `` $` ``, `$'` и `$$` — шаблоны,
+ * и логин с ними изменил бы фильтр уже после экранирования.
+ */
+export function buildLdapFilter(template: string, login: string): string {
+  const escaped = escapeLdapFilter(login);
+  return template.replaceAll('%s', () => escaped);
+}
+
+/** Сроки по умолчанию: молчащий сервер LDAP не должен подвешивать вход (LDAP опрашивается первым). */
+export interface LdapTimeouts {
+  /** Установка TCP/TLS-соединения, мс. */
+  connectTimeoutMs?: number;
+  /** Ответ на каждую операцию (bind, search), мс. */
+  timeoutMs?: number;
+}
+
 export function createLdapAuthenticator(
   config: LdapConfig,
   log: { warn(msg: string): void },
+  { connectTimeoutMs = 5_000, timeoutMs = 10_000 }: LdapTimeouts = {},
 ): LdapAuthenticator {
-  const filterTemplate = config.userFilter;
   // tlsOptions имеет смысл только для ldaps://; на обычном ldap:// одно его
   // наличие в опциях клиента ломает соединение — контроллер домена рвёт его
   // (ECONNRESET) ещё на bind, хотя сам tlsOptions формально ни на что не влияет.
   const tlsOptions = config.url.startsWith('ldaps://')
     ? { rejectUnauthorized: config.tlsRejectUnauthorized }
     : undefined;
+  const clientOptions = (): ConstructorParameters<typeof Client>[0] => ({
+    url: config.url,
+    tlsOptions,
+    connectTimeout: connectTimeoutMs,
+    timeout: timeoutMs,
+  });
   return {
     async authenticate(login, password) {
       if (!isUsablePassword(password)) return false;
-      const filter = filterTemplate.replace('%s', escapeLdapFilter(login));
-      const searchClient = new Client({ url: config.url, tlsOptions });
+      const filter = buildLdapFilter(config.userFilter, login);
+      const searchClient = new Client(clientOptions());
       let userDn: string;
       try {
         if (config.bindDn) {
@@ -66,7 +90,7 @@ export function createLdapAuthenticator(
         await searchClient.unbind().catch(() => {});
       }
 
-      const userClient = new Client({ url: config.url, tlsOptions });
+      const userClient = new Client(clientOptions());
       try {
         await userClient.bind(userDn, password);
         return true;

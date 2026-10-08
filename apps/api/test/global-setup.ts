@@ -3,10 +3,10 @@ import { fileURLToPath } from 'node:url';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
 import type { TestProject } from 'vitest/node';
-import { S3_IMAGE } from './images';
+import { S3_ENTRYPOINT_SOURCE, S3_ENTRYPOINT_TARGET, S3_IMAGE } from './images';
 
 /** Тот же скрипт запуска SeaweedFS, что монтирует сервис s3 в docker-compose.yml. */
-const S3_ENTRYPOINT = fileURLToPath(new URL('../../../docker/s3/entrypoint.sh', import.meta.url));
+const S3_ENTRYPOINT = fileURLToPath(new URL(`../../../${S3_ENTRYPOINT_SOURCE}`, import.meta.url));
 
 declare module 'vitest' {
   export interface ProvidedContext {
@@ -35,9 +35,9 @@ export default async function setup(project: TestProject) {
     new GenericContainer(S3_IMAGE)
       .withEnvironment({ S3_ACCESS_KEY_ID: s3Key, S3_SECRET_ACCESS_KEY: s3Secret })
       .withCopyFilesToContainer([
-        { source: S3_ENTRYPOINT, target: '/s3-entrypoint.sh', mode: 0o755 },
+        { source: S3_ENTRYPOINT, target: S3_ENTRYPOINT_TARGET, mode: 0o755 },
       ])
-      .withEntrypoint(['/s3-entrypoint.sh'])
+      .withEntrypoint([S3_ENTRYPOINT_TARGET])
       .withExposedPorts(8333)
       .withWaitStrategy(Wait.forHttp('/healthz', 8333))
       .start(),

@@ -3,8 +3,14 @@ import { createServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
-import { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parse } from 'yaml';
 import { createS3Client, S3Storage } from '../src/lib/s3-storage';
 import { LocalStorage, type RemoveGate, type Storage } from '../src/lib/storage';
 import { createRemoveGate, STORAGE_REMOVE_LOCK_KEY } from '../src/lib/storage-gate';
@@ -16,7 +22,7 @@ import {
   testS3Settings,
   type TestBucket,
 } from './helpers';
-import { S3_IMAGE } from './images';
+import { S3_ENTRYPOINT_SOURCE, S3_ENTRYPOINT_TARGET, S3_IMAGE } from './images';
 
 /** Контракт Storage (§25.5): один набор для каждой реализации. */
 interface Backend {
@@ -297,9 +303,33 @@ describe('S3Storage: особенности S3', () => {
     await expect(storage.write('../x', Buffer.from('1'))).rejects.toThrow(
       'недопустимый путь: ../x',
     );
+    await expect(storage.read('/abs/x')).rejects.toThrow('недопустимый путь: /abs/x');
     await expect(storage.remove('a//b')).rejects.toThrow('недопустимый путь: a//b');
+    await expect(storage.removeUngated('a/../b')).rejects.toThrow('недопустимый путь: a/../b');
     await expect(storage.exists('a\\b')).rejects.toThrow('недопустимый путь: a\\b');
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it('S3: DeleteObjects вернул Errors — remove бросает ошибку с числом и первым ключом', async () => {
+    const sent: unknown[] = [];
+    vi.spyOn(b.client, 'send').mockImplementation((async (cmd: unknown) => {
+      sent.push(cmd);
+      if (cmd instanceof DeleteObjectCommand) return {};
+      if (cmd instanceof ListObjectsV2Command)
+        return { Contents: [{ Key: 'r/k/a' }, { Key: 'r/k/b' }], IsTruncated: false };
+      if (cmd instanceof DeleteObjectsCommand)
+        return {
+          Errors: [
+            { Key: 'r/k/a', Code: 'AccessDenied' },
+            { Key: 'r/k/b', Code: 'InternalError' },
+          ],
+        };
+      throw new Error('неожиданная команда');
+    }) as never);
+    await expect(storage.remove('r/k')).rejects.toThrow(
+      'S3: не удалось удалить объектов: 2, например r/k/a (AccessDenied)',
+    );
+    expect(sent.filter((c) => c instanceof DeleteObjectsCommand)).toHaveLength(1);
   });
 });
 
@@ -337,9 +367,23 @@ describe('S3Storage: таймауты клиента', () => {
   });
 });
 
-it('SeaweedFS в testcontainers — тот же образ и скрипт запуска, что у сервиса s3 в docker-compose.yml', async () => {
-  const compose = await readFile(new URL('../../../docker-compose.yml', import.meta.url), 'utf8');
-  expect(compose).toContain(`image: ${S3_IMAGE}\n`);
-  expect(compose).toContain("entrypoint: ['/s3-entrypoint.sh']");
-  expect(compose).toContain('- ./docker/s3/entrypoint.sh:/s3-entrypoint.sh:ro');
+it('сервис s3 в docker-compose.yml: внутренняя сеть без портов, ключи обязательны, тот же образ и скрипт, что в тестах', async () => {
+  const compose = parse(
+    await readFile(new URL('../../../docker-compose.yml', import.meta.url), 'utf8'),
+    { merge: true },
+  ) as {
+    'x-s3-env': Record<string, string>;
+    services: Record<string, Record<string, unknown>>;
+    networks: Record<string, { internal?: boolean } | null>;
+  };
+  const s3 = compose.services.s3!;
+  expect(s3).not.toHaveProperty('ports');
+  expect(s3.networks).toEqual(['s3']);
+  expect(compose.networks.s3?.internal).toBe(true);
+  for (const env of [compose['x-s3-env'], s3.environment as Record<string, string>])
+    for (const k of ['S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'])
+      expect(env[k]).toMatch(new RegExp(`^\\$\\{${k}:\\?`));
+  expect(s3.image).toBe(S3_IMAGE);
+  expect(s3.entrypoint).toEqual([S3_ENTRYPOINT_TARGET]);
+  expect(s3.volumes).toContain(`./${S3_ENTRYPOINT_SOURCE}:${S3_ENTRYPOINT_TARGET}:ro`);
 });

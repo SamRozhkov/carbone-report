@@ -14,7 +14,14 @@ PGAPPNAME=backup
 export PGHOST PGUSER PGDATABASE PGAPPNAME
 : "${PGPASSWORD:?не задан PGPASSWORD}"
 
-name=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+# BACKUP_NAME задаёт агент для бэкапа перед восстановлением (pre-restore-<время>). Ротация
+# BACKUP_KEEP ниже такие каталоги не трогает: pre-restore-* ротирует агент (последние 3).
+name=${BACKUP_NAME:-$(date -u +%Y-%m-%dT%H-%M-%SZ)}
+case $name in
+  [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]-[0-9][0-9]-[0-9][0-9]Z) ;;
+  pre-restore-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]-[0-9][0-9]-[0-9][0-9]Z) ;;
+  *) echo "BACKUP_NAME: ожидается ГГГГ-ММ-ДДTЧЧ-ММ-ССZ или pre-restore-ГГГГ-ММ-ДДTЧЧ-ММ-ССZ" >&2; exit 2 ;;
+esac
 dir="/backups/$name.partial"
 mkdir -p /backups
 mkdir "$dir"

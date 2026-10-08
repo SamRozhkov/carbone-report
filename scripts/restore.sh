@@ -1,5 +1,6 @@
 #!/bin/sh
-# Восстановление из каталога бэкапа: БД app и файлы хранилища. Останавливает api и web, очищает Redis.
+# Восстановление из каталога бэкапа: БД app и файлы хранилища. Останавливает api, web и агент бэкапа
+# (сервис backup), очищает Redis. Аварийный путь: обычно восстановление запускается из админки («Бэкапы»).
 # Хранилище — по STORAGE_BACKEND (по умолчанию s3, как у стека): s3 — бакет в сервисе s3 через сервис backup
 # (rclone sync); local — том storage, только если api в compose сам работает с STORAGE_BACKEND=local:
 # STORAGE_BACKEND=local scripts/restore.sh …
@@ -60,13 +61,14 @@ refuse_if_manual_backup() {
 }
 refuse_if_manual_backup
 
-# Бэкап по расписанию на время восстановления приостанавливается: иначе он может снять
-# архив посреди замены файлов, и ротация будет доверять такой копии.
-bk=$(docker compose --profile backup ps -q --status running backup)
+# Агент бэкапа (сервис backup: расписание и операции из админки) на время восстановления
+# останавливается: он не снимет копию посреди замены файлов и не вернёт флаг обслуживания.
+bk=$(docker compose ps -q --status running backup)
 
 echo "Будут ЗАМЕНЕНЫ база app и файлы хранилища ($target) данными из $(basename "$dir")."
 echo "Redis (кэш шаблонов Carbone и счётчики попыток входа) будет очищен."
-[ -z "$bk" ] || echo "Бэкап по расписанию (сервис backup) будет приостановлен на время восстановления."
+[ -z "$bk" ] || echo "Агент бэкапа (сервис backup) будет остановлен на время восстановления."
+echo "Незавершённое восстановление из админки (если есть) будет отмечено как выполненное этим скриптом."
 printf 'Введите restore для продолжения: '
 read -r answer || answer=
 [ "$answer" = restore ] || { echo "отменено"; exit 1; }
@@ -100,14 +102,14 @@ on_exit() {
     } >&2
   fi
   if [ -n "$bk_stopped" ]; then
-    docker compose --profile backup start backup >&2 || echo "не удалось запустить сервис backup" >&2
+    docker compose start backup >&2 || echo "не удалось запустить сервис backup" >&2
   fi
 }
 trap 'on_exit $?' EXIT
 trap 'exit 130' INT TERM
 
 if [ -n "$bk" ]; then
-  docker compose --profile backup stop backup
+  docker compose stop backup
   bk_stopped=1
 fi
 phase=stopped
@@ -119,7 +121,7 @@ if [ "$backend" = s3 ]; then
   # Проверка до изменений: сервис s3 запущен, настройки backup верны, бакет читается.
   # При сбое восстановление останавливается, база не тронута.
   docker compose up -d --wait s3
-  docker compose --profile backup run --rm -T --no-deps --entrypoint sh backup -c \
+  docker compose run --rm -T --no-deps --entrypoint sh backup -c \
     '[ "${STORAGE_BACKEND:-local}" = s3 ] || { echo "в сервисе backup STORAGE_BACKEND должен быть s3" >&2; exit 2; }
      . /backup/lib.sh && check_storage_backend && s3_env && rclone -q lsf --max-depth 1 "s3:$S3_BUCKET" >/dev/null'
 fi
@@ -146,9 +148,15 @@ if [ "$backend" = local ]; then
 else
   # Сервис backup: настройки S3 и сеть s3 из compose; бакет создан API при первом старте.
   # s3 и конфигурация проверены заранее (перед заменой базы).
-  docker compose --profile backup run --rm -T --no-deps -v "$dir":/restore:ro backup restore-storage
+  docker compose run --rm -T --no-deps -v "$dir":/restore:ro backup restore-storage
 fi
 phase=storage
+# §26.4: восстановление из админки, прерванное сбоем, закрыто этим скриптом — агент после запуска
+# не вернёт флаг обслуживания. Сам флаг в Redis снимает FLUSHALL ниже.
+docker compose run --rm -T --no-deps --entrypoint node backup /agent/dist/main.js resolve-external || {
+  echo "не удалось отметить восстановление из админки в state.json: агент может снова включить обслуживание" >&2
+  exit 1
+}
 # api остановлен — кэш не заполнится заново старыми данными до запуска. Redis без снимков на диск,
 # так что запуск (если он был остановлен) тоже даёт пустую базу, но FLUSHALL выполняется всегда.
 # Пароль redis-cli берёт из REDISCLI_AUTH в окружении контейнера redis; скрипт его не читает.
@@ -163,7 +171,7 @@ docker compose up -d --wait api web
 phase=finished
 if [ -n "$bk_stopped" ]; then
   bk_stopped=
-  docker compose --profile backup start backup ||
-    echo "не удалось запустить сервис backup: docker compose --profile backup up -d backup" >&2
+  docker compose start backup ||
+    echo "не удалось запустить сервис backup: docker compose up -d backup" >&2
 fi
 echo "Восстановление завершено."

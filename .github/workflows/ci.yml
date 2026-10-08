@@ -41,8 +41,9 @@ jobs:
   integration:
     name: Интеграционные тесты
     runs-on: ubuntu-latest
-    # Два прогона: все файлы на local, затем выбранные потоки на S3 (SeaweedFS в testcontainers).
-    timeout-minutes: 30
+    # API: все файлы на local, затем выбранные потоки на S3 (SeaweedFS в testcontainers).
+    # Агент бэкапа: сборка образа docker/backup/Dockerfile и тесты в контейнере.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

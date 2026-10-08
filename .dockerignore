@@ -11,3 +11,6 @@ docs
 **/.env*
 !.env.example
 **/.DS_Store
+backups
+e2e/report
+e2e/test-results

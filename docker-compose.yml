@@ -52,6 +52,10 @@ services:
       API_INTERNAL_URL: http://api:3000
       CARBONE_URL: http://carbone:4000
       REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD в .env}@redis:6379
+      # Агент бэкапа (сервис backup) — только во внутренней сети backup, псевдоним backup-agent:
+      # бэкапы и восстановление из админки.
+      BACKUP_AGENT_URL: http://backup-agent:8080
+      BACKUP_AGENT_TOKEN: ${BACKUP_AGENT_TOKEN:?задайте BACKUP_AGENT_TOKEN в .env}
       <<: *s3-env
       S3_CREATE_BUCKET: 'true'
       COOKIE_SECURE: 'true'
@@ -69,7 +73,7 @@ services:
       LDAP_USER_FILTER: ${LDAP_USER_FILTER:-(uid=%s)}
       LDAP_DEFAULT_ROLE: ${LDAP_DEFAULT_ROLE:-user}
       LDAP_TLS_REJECT_UNAUTHORIZED: ${LDAP_TLS_REJECT_UNAUTHORIZED:-true}
-    networks: [default, cache, s3]
+    networks: [default, cache, s3, backup]
     healthcheck:
       test:
         [
@@ -129,7 +133,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-    # Только внутренняя сеть cache: Redis доступен одному api.
+    # Только внутренняя сеть cache: Redis доступен api и агенту бэкапа (флаг обслуживания).
     networks: [cache]
     logging: *logging
     restart: unless-stopped
@@ -206,25 +210,44 @@ services:
 
   backup:
     image: ${BACKUP_IMAGE:-carbone-reports-backup}
-    # postgres:17-alpine + rclone (режим s3); скрипты монтируются из docker/backup.
+    # Агент бэкапа (apps/backup-agent): расписание BACKUP_CRON, бэкапы и восстановление из админки.
+    # postgres:17-alpine + rclone + Node; скрипты docker/backup и миграции apps/api/drizzle — в образе,
+    # поэтому контекст сборки — корень репозитория.
     build:
-      context: ./docker/backup
-    profiles: [backup]
-    entrypoint: ['/backup/entrypoint.sh']
-    command: ['cron']
+      context: .
+      dockerfile: docker/backup/Dockerfile
+    command: ['agent']
     environment:
       <<: *s3-env
       PGPASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD в .env}@redis:6379
+      BACKUP_AGENT_TOKEN: ${BACKUP_AGENT_TOKEN:?задайте BACKUP_AGENT_TOKEN в .env}
+      # §26.1: HTTP агента слушает только адрес в сети backup (псевдоним backup-agent есть только там).
+      BACKUP_AGENT_HOST: backup-agent
       BACKUP_CRON: ${BACKUP_CRON:-0 3 * * *}
       BACKUP_KEEP: ${BACKUP_KEEP:-14}
       BACKUP_TIMEOUT: ${BACKUP_TIMEOUT:-3600}
       TZ: ${TZ:-Europe/Moscow}
     volumes:
-      - ./docker/backup:/backup:ro
       - ${BACKUP_DIR:-./backups}:/backups
-    networks: [default, s3]
+    # default — postgres; s3 — бакет; cache — Redis (флаг обслуживания); backup — HTTP агента для api.
+    # Порт 8080 наружу не публикуется.
+    networks:
+      default:
+      s3:
+      cache:
+      backup:
+        aliases: [backup-agent]
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://backup-agent:8080/health']
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 15s
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       s3:
         condition: service_healthy
@@ -232,10 +255,13 @@ services:
     restart: unless-stopped
 
 networks:
-  # Внутренние сети без выхода наружу: cache — api и redis; s3 — api, backup и s3.
+  # Внутренние сети без выхода наружу: cache — api, redis и backup; s3 — api, backup и s3;
+  # backup — api и агент бэкапа.
   cache:
     internal: true
   s3:
+    internal: true
+  backup:
     internal: true
 
 # Прежний том storage (файлы до Плана 14) больше не объявлен и не монтируется: после переноса

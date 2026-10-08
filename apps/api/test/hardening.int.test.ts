@@ -151,7 +151,8 @@ describe('удаление пользователя', () => {
       headers: { cookie: admin.cookie },
     });
     expect(r.statusCode).toBe(204);
-    expect(await t.deps.storage.exists(dir)).toBe(false);
+    for (const f of ['data.json', 'template.docx', 'out.pdf'])
+      expect(await t.deps.storage.exists(`${dir}/${f}`)).toBe(false);
     expect(
       await t.deps.db.select().from(reportRunFiles).where(eq(reportRunFiles.runId, id)),
     ).toHaveLength(0);

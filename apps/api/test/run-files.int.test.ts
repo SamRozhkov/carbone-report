@@ -371,7 +371,8 @@ describe('снимок запуска', () => {
       outputFormat: null,
       filePath: null,
     });
-    await expect.poll(() => t.deps.storage.exists(`reports/${run!.id}`)).toBe(false);
+    await expect.poll(() => t.deps.storage.exists(`reports/${run!.id}/data.json`)).toBe(false);
+    expect(await t.deps.storage.exists(`reports/${run!.id}/template.docx`)).toBe(false);
     expect(await listed(userA, run!.id)).toMatchObject({ formats: [], readyFormats: [] });
   });
 });

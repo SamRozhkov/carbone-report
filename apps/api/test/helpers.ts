@@ -13,7 +13,7 @@ import { eq } from 'drizzle-orm';
 import { templates, users, type UserRow } from '../src/db/schema';
 import type { AppDeps } from '../src/deps';
 import { createRedis } from '../src/lib/redis';
-import { Storage } from '../src/lib/storage';
+import { LocalStorage } from '../src/lib/storage';
 import { createRunFileGate } from '../src/lib/run-file-gate';
 import { createRemoveGate } from '../src/lib/storage-gate';
 import { createSourcePools } from '../src/modules/datasources/pools';
@@ -134,7 +134,7 @@ export async function createTestApp(
   const deps: AppDeps = {
     config: cfg,
     db,
-    storage: new Storage(storageDir, createRemoveGate(gatePool)),
+    storage: new LocalStorage(storageDir, createRemoveGate(gatePool)),
     runFileGate: createRunFileGate(runFilePool),
     sources: createSourcePools({ db, config: cfg }),
     carbone: { render: notConfigured('carbone') },

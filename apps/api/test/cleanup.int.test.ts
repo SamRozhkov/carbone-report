@@ -110,7 +110,8 @@ describe('cleanupOldReports', () => {
     const old = await snapshotRun(45);
     const fresh = await snapshotRun(2);
     expect(await cleanupOldReports(t.deps)).toBe(1);
-    expect(await t.deps.storage.exists(old.dir)).toBe(false);
+    for (const f of ['data.json', 'template.docx', 'out.pdf'])
+      expect(await t.deps.storage.exists(`${old.dir}/${f}`)).toBe(false);
     expect(await t.deps.storage.exists(`${fresh.dir}/out.pdf`)).toBe(true);
     const filesOf = (id: string) =>
       t.deps.db.select().from(reportRunFiles).where(eq(reportRunFiles.runId, id));

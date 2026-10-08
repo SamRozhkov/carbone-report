@@ -5,7 +5,7 @@ import { createDb, migrateDb } from './db/client';
 import type { AppDeps } from './deps';
 import { fetchFile } from './lib/fetch-file';
 import { createRedis } from './lib/redis';
-import { Storage } from './lib/storage';
+import { LocalStorage } from './lib/storage';
 import { createRunFileGate } from './lib/run-file-gate';
 import { createRemoveGate } from './lib/storage-gate';
 import { ensureAdmin } from './modules/auth/bootstrap';
@@ -33,7 +33,7 @@ const carbone = new CarboneClient({ baseUrl: config.carboneUrl, cache: redisTemp
 const deps: AppDeps = {
   config,
   db,
-  storage: new Storage(config.storageDir, createRemoveGate(gatePool)),
+  storage: new LocalStorage(config.storageDir, createRemoveGate(gatePool)),
   runFileGate: createRunFileGate(runFilePool),
   sources: createSourcePools({ db, config }),
   carbone,

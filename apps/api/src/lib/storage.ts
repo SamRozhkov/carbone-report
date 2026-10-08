@@ -1,12 +1,42 @@
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 
 /** Обёртка вокруг удаления: бэкап приостанавливает удаления, чтобы дамп и архив совпадали. */
 export type RemoveGate = <T>(fn: () => Promise<T>) => Promise<T>;
-const passThrough: RemoveGate = (fn) => fn();
+export const passThrough: RemoveGate = (fn) => fn();
 
-export class Storage {
+/**
+ * Файлы приложения. Ключ — относительный путь вида `templates/<id>/v3.docx` (см. `checkKey`).
+ * Реализации: `LocalStorage` (каталог на диске) и `S3Storage` (бакет S3, `lib/s3-storage.ts`).
+ */
+export interface Storage {
+  /** Файл целиком; нет файла — ошибка с `code = 'ENOENT'`. */
+  read(key: string): Promise<Buffer>;
+  /** Атомарная запись: читатель видит прежнее или новое содержимое целиком. */
+  write(key: string, data: Buffer): Promise<void>;
+  /** Удаляет `key` и всё под `key/`; отсутствие — не ошибка. Ждёт, пока идёт бэкап. */
+  remove(key: string): Promise<void>;
+  /** Как `remove`, но без шлюза: вызывающий уже держит разделяемую блокировку бэкапа. */
+  removeUngated(key: string): Promise<void>;
+  /** Есть ли файл (объект) с этим ключом; «каталог» (префикс) — false. */
+  exists(key: string): Promise<boolean>;
+}
+
+/**
+ * Допустимый ключ: непустые сегменты через «/», без «.», «..» и «\». Пустой ключ, ведущий и
+ * завершающий «/» и «//» дают пустой сегмент. Ошибка — та же, что раньше у выхода за корень.
+ */
+export function checkKey(key: string): string {
+  const bad =
+    key === '' ||
+    key.includes('\\') ||
+    key.split('/').some((s) => s === '' || s === '.' || s === '..');
+  if (bad) throw new Error(`недопустимый путь: ${key}`);
+  return key;
+}
+
+export class LocalStorage implements Storage {
   private readonly root: string;
 
   constructor(
@@ -16,41 +46,42 @@ export class Storage {
     this.root = resolve(root);
   }
 
-  path(rel: string): string {
-    const abs = resolve(this.root, rel);
-    if (!abs.startsWith(this.root + sep)) throw new Error(`недопустимый путь: ${rel}`);
+  private abs(key: string): string {
+    const abs = resolve(this.root, checkKey(key));
+    // checkKey уже не пускает за корень; проверка пути остаётся второй линией защиты.
+    if (!abs.startsWith(this.root + sep)) throw new Error(`недопустимый путь: ${key}`);
     return abs;
   }
 
-  async write(rel: string, data: Buffer): Promise<void> {
-    const abs = this.path(rel);
+  async write(key: string, data: Buffer): Promise<void> {
+    const abs = this.abs(key);
     await mkdir(dirname(abs), { recursive: true });
     const tmp = `${abs}.${randomUUID()}.tmp`;
     await writeFile(tmp, data);
     await rename(tmp, abs);
   }
 
-  read(rel: string): Promise<Buffer> {
-    return readFile(this.path(rel));
+  async read(key: string): Promise<Buffer> {
+    return readFile(this.abs(key));
   }
 
-  /** Удаляет файл или каталог целиком; отсутствие — не ошибка. Ждёт, пока идёт бэкап. */
-  async remove(rel: string): Promise<void> {
-    const abs = this.path(rel);
+  async remove(key: string): Promise<void> {
+    const abs = this.abs(key);
     await this.removeGate(() => rm(abs, { recursive: true, force: true }));
   }
 
-  /** Удаление без шлюза: вызывающий уже держит разделяемую блокировку бэкапа. Путь проверяется. */
-  async removeUngated(rel: string): Promise<void> {
-    await rm(this.path(rel), { recursive: true, force: true });
+  async removeUngated(key: string): Promise<void> {
+    await rm(this.abs(key), { recursive: true, force: true });
   }
 
-  async exists(rel: string): Promise<boolean> {
+  async exists(key: string): Promise<boolean> {
+    const abs = this.abs(key);
     try {
-      await access(this.path(rel));
-      return true;
-    } catch {
-      return false;
+      return (await stat(abs)).isFile();
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') return false;
+      throw e;
     }
   }
 }

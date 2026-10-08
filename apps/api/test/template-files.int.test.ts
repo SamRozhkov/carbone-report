@@ -1,3 +1,5 @@
+import { access } from 'node:fs/promises';
+import { join } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -120,7 +122,10 @@ describe('файлы шаблонов по версиям', () => {
     expect(r.statusCode).toBe(204);
     expect(await t.deps.storage.exists(`templates/${id}/v1.docx`)).toBe(false);
     expect(await t.deps.storage.exists(`templates/${id}/orphan.tmp`)).toBe(false);
-    expect(await t.deps.storage.exists(`templates/${id}`)).toBe(false);
+    // Каталог версий исчез целиком (rm -rf), а не только файлы в нём.
+    await expect(access(join(t.deps.config.storageDir, 'templates', id))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 
   it('дублирование копирует текущую версию в templates/<новый id>/v1', async () => {

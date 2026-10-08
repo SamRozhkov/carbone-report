@@ -19,6 +19,7 @@
     "@fastify/cookie": "^11.1.2",
     "@fastify/multipart": "^10.1.2",
     "@fastify/rate-limit": "^11.2.0",
+    "@smithy/node-http-handler": "^4.12.1",
     "argon2": "^0.45.1",
     "drizzle-orm": "^0.45.3",
     "fastify": "^5.12.5",

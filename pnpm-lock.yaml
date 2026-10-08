@@ -56,6 +56,9 @@ importers:
       '@fastify/rate-limit':
         specifier: ^11.2.0
         version: 11.2.0
+      '@smithy/node-http-handler':
+        specifier: ^4.12.1
+        version: 4.12.1
       argon2:
         specifier: ^0.45.1
         version: 0.45.1

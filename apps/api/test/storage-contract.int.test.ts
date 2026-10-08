@@ -1,10 +1,11 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
 import { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { S3Storage } from '../src/lib/s3-storage';
+import { createS3Client, S3Storage } from '../src/lib/s3-storage';
 import { LocalStorage, type RemoveGate, type Storage } from '../src/lib/storage';
 import { createRemoveGate, STORAGE_REMOVE_LOCK_KEY } from '../src/lib/storage-gate';
 import {
@@ -12,6 +13,7 @@ import {
   createTestDatabase,
   listKeys,
   testBucketName,
+  testS3Settings,
   type TestBucket,
 } from './helpers';
 import { S3_IMAGE } from './images';
@@ -279,6 +281,40 @@ describe('S3Storage: особенности S3', () => {
     await expect(storage.remove('a//b')).rejects.toThrow('недопустимый путь: a//b');
     await expect(storage.exists('a\\b')).rejects.toThrow('недопустимый путь: a\\b');
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe('S3Storage: таймауты клиента', () => {
+  it('сервер принял соединение и молчит — read отклоняется по requestTimeout, а не висит', async () => {
+    const sockets = new Set<Socket>();
+    // Принимает соединение и ничего не отвечает (как зависший S3).
+    const server = createServer((s) => {
+      sockets.add(s);
+      s.on('close', () => sockets.delete(s));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const { port } = server.address() as { port: number };
+    const settings = testS3Settings('hung', { endpoint: `http://127.0.0.1:${port}` });
+    // Повторы SDK (3 попытки) остаются: общий срок — несколько requestTimeout, а не бесконечность.
+    const client = createS3Client(settings, {
+      connectionTimeoutMs: 200,
+      requestTimeoutMs: 300,
+    });
+    try {
+      const started = Date.now();
+      const err = await Promise.race([
+        new S3Storage(client, settings.bucket).read('templates/t1/v1.docx').catch((e: Error) => e),
+        new Promise<'hung'>((r) => setTimeout(() => r('hung'), 5_000)),
+      ]);
+      expect(err).not.toBe('hung');
+      expect(err).toBeInstanceOf(Error);
+      expect((err as { code?: string }).code).not.toBe('ENOENT');
+      expect(Date.now() - started).toBeLessThan(3_000);
+    } finally {
+      client.destroy();
+      for (const s of sockets) s.destroy();
+      await new Promise((r) => server.close(r));
+    }
   });
 });
 

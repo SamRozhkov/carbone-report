@@ -10,6 +10,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import type { S3Settings } from '../config';
 import { checkKey, passThrough, type RemoveGate, type Storage } from './storage';
 
@@ -25,8 +26,28 @@ function enoent(key: string, cause: unknown): NodeJS.ErrnoException {
   return Object.assign(new Error(`ENOENT: нет объекта ${key}`, { cause }), { code: 'ENOENT' });
 }
 
-export function createS3Client(s: S3Settings): S3Client {
+/** Таймауты HTTP-запроса к S3, мс. */
+export interface S3Timeouts {
+  /** Установка TCP-соединения. */
+  connectionTimeoutMs: number;
+  /** Тишина в сокете после отправки запроса. */
+  requestTimeoutMs: number;
+}
+
+export const S3_TIMEOUTS: S3Timeouts = { connectionTimeoutMs: 5_000, requestTimeoutMs: 60_000 };
+
+/**
+ * Клиент S3 с таймаутами: по умолчанию у SDK их нет, и зависший S3 держал бы шлюз удаления,
+ * блокировки в БД и старт API. Без throwOnRequestTimeout requestTimeout лишь пишет предупреждение.
+ * Таймаут — повторяемая ошибка: SDK делает до 3 попыток, общий срок — до 3 × requestTimeout.
+ */
+export function createS3Client(s: S3Settings, t: S3Timeouts = S3_TIMEOUTS): S3Client {
   return new S3Client({
+    requestHandler: new NodeHttpHandler({
+      connectionTimeout: t.connectionTimeoutMs,
+      requestTimeout: t.requestTimeoutMs,
+      throwOnRequestTimeout: true,
+    }),
     region: s.region,
     endpoint: s.endpoint,
     forcePathStyle: s.forcePathStyle,

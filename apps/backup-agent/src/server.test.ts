@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OperationView } from './agent';
-import { buildServer, type AgentApi } from './server';
+import { buildServer, listenRetrying, type AgentApi } from './server';
 
 const TOKEN = 'k'.repeat(40);
 const auth = { authorization: `Bearer ${TOKEN}` };
@@ -160,5 +160,50 @@ describe('маршруты', () => {
 
     r = await call({ code: 'X' });
     expect(r.statusCode).toBe(400);
+  });
+});
+
+describe('listenRetrying', () => {
+  const dnsError = (code: string) =>
+    Object.assign(new Error(`getaddrinfo ${code} backup-agent`), { code });
+  const noSleep = async () => {};
+
+  it('имя ещё не разрешается — повтор с журналом, затем успех', async () => {
+    const lines: string[] = [];
+    let n = 0;
+    const listen = vi.fn(async () => {
+      n += 1;
+      if (n <= 2) throw dnsError(n === 1 ? 'EAI_AGAIN' : 'ENOTFOUND');
+    });
+    await listenRetrying(listen, 'backup-agent', (l) => lines.push(l), { sleep: noSleep });
+    expect(listen).toHaveBeenCalledTimes(3);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('адрес BACKUP_AGENT_HOST не разрешается: backup-agent (EAI_AGAIN)');
+  });
+
+  it('не разрешается все попытки — понятная ошибка; паузы между попытками', async () => {
+    const sleeps: number[] = [];
+    const listen = vi.fn(async () => {
+      throw dnsError('ENOTFOUND');
+    });
+    await expect(
+      listenRetrying(listen, 'backup-agent', () => {}, {
+        sleep: async (ms) => void sleeps.push(ms),
+      }),
+    ).rejects.toThrow(
+      'адрес BACKUP_AGENT_HOST «backup-agent» не разрешается (ENOTFOUND) после 10 попыток',
+    );
+    expect(listen).toHaveBeenCalledTimes(10);
+    expect(sleeps).toEqual(Array(9).fill(1000));
+  });
+
+  it('прочие ошибки (EADDRINUSE) — без повторов', async () => {
+    const listen = vi.fn(async () => {
+      throw Object.assign(new Error('listen EADDRINUSE'), { code: 'EADDRINUSE' });
+    });
+    await expect(listenRetrying(listen, 'x', () => {}, { sleep: noSleep })).rejects.toThrow(
+      'EADDRINUSE',
+    );
+    expect(listen).toHaveBeenCalledTimes(1);
   });
 });

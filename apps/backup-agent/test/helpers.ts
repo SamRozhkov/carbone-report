@@ -94,7 +94,9 @@ export async function startAgent(o: {
   const token = randomBytes(32).toString('hex');
   const p = inject('pg');
   const s3 = inject('s3');
-  const container = await new GenericContainer(inject('agentImage'))
+  // Журнал подключается до start(): если агент не стартовал (wait strategy), его вывод — в ошибке.
+  let logs = '';
+  const builder = new GenericContainer(inject('agentImage'))
     .withNetworkMode(inject('network'))
     .withNetworkAliases(...(o.aliases ?? []))
     .withEnvironment({
@@ -120,11 +122,19 @@ export async function startAgent(o: {
     )
     .withExposedPorts(8080)
     .withWaitStrategy(Wait.forHttp('/health', 8080))
-    .start();
-  let logs = '';
-  (await container.logs()).on('data', (d: Buffer | string) => {
-    logs += d.toString();
-  });
+    .withLogConsumer((stream) => {
+      stream.on('data', (d: Buffer | string) => {
+        logs += d.toString();
+      });
+    });
+  let container: StartedTestContainer;
+  try {
+    container = await builder.start();
+  } catch (e) {
+    throw new Error(`агент не стартовал: ${(e as Error).message}\nвывод контейнера:\n${logs}`, {
+      cause: e,
+    });
+  }
   const base = `http://${container.getHost()}:${container.getMappedPort(8080)}`;
   const agent: StartedAgent = {
     container,

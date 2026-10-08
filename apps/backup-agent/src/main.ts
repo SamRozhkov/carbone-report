@@ -10,7 +10,7 @@ import { bundledMigrationHashes } from './migrations';
 import { fileOpLogs } from './oplog';
 import { createRedactor } from './redact';
 import { run } from './run';
-import { buildServer } from './server';
+import { buildServer, listenRetrying } from './server';
 import { fileStateStore, resolveExternally } from './state';
 import { createSteps } from './steps';
 
@@ -81,7 +81,12 @@ const stopCron = scheduleCron(cfg.cron, cfg.tz, () => {
 });
 
 const app = buildServer({ agent, token: cfg.token, backupsDir: cfg.backupsDir });
-await app.listen({ host: cfg.host, port: cfg.port });
+try {
+  await listenRetrying(() => app.listen({ host: cfg.host, port: cfg.port }), cfg.host, log);
+} catch (e) {
+  console.error(`агент бэкапа не запущен: ${redact((e as Error).message)}`);
+  process.exit(1);
+}
 log(
   `агент бэкапа: ${cfg.host}:${cfg.port}, расписание «${cfg.cron}» (TZ=${cfg.tz}), хранилище ${cfg.storageBackend}, миграций в образе: ${known.length}`,
 );

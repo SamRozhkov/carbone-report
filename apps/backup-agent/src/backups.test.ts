@@ -137,6 +137,16 @@ describe('ротация pre-restore', () => {
     ];
     expect(selectPreRestoreToDelete(names)).toEqual([pre(2), pre(1)]);
   });
+  it('защищённое имя (восстанавливаемый бэкап) не удаляется, остальные — как обычно', () => {
+    const names = [pre(1), pre(2), pre(3), pre(4), pre(5)];
+    expect(selectPreRestoreToDelete(names, 3, pre(1))).toEqual([pre(2)]);
+    expect(selectPreRestoreToDelete(names, 3, pre(4))).toEqual([pre(2), pre(1)]);
+  });
+  it('rotatePreRestore с защищённым именем оставляет его на диске', async () => {
+    for (const d of [1, 2, 3, 4]) await dir(pre(d));
+    expect(await rotatePreRestore(root, 3, pre(1))).toEqual([]);
+    expect((await readdir(root)).sort()).toEqual([pre(1), pre(2), pre(3), pre(4)]);
+  });
   it('rotatePreRestore удаляет каталоги на диске и не трогает обычные бэкапы', async () => {
     for (const d of [1, 2, 3, 4]) await dir(pre(d));
     await dir('2026-10-01T00-00-00Z');

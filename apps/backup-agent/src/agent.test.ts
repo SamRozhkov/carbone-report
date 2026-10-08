@@ -668,4 +668,92 @@ describe('BackupAgent: сбои повтора и повреждённое со�
     expect(await t.agent.recover(first, 'same')).toEqual({ error: 'bad-code', burned: false });
     expect((await t.store.read()).recovery?.codeHash).toBe(hashCode(t.codes[1]!));
   });
+
+  it('повтор по коду упал до фазы db — фаза и время исходного сбоя в recovery не меняются', async () => {
+    const ctl = { failFlag: false };
+    const t = await setup({
+      state: {
+        operation: restoreOp({ status: 'failed', phase: 'storage' }),
+        recovery: recoveryState('AAAA-BBBB-CCCC'),
+      },
+      steps: {
+        setFlag: async (f) => {
+          if (ctl.failFlag) throw new Error('Redis недоступен');
+          t.flags.push(f);
+        },
+      },
+    });
+    ctl.failFlag = true;
+    const n = t.writes.length;
+    expect(await t.agent.recover(t.codes[0]!, 'same')).toHaveProperty('operationId');
+    await t.agent.idle();
+    // Повтор с первой же записи — на фазе maintenance, а не verify.
+    expect(t.writes[n]!.operation).toMatchObject({ status: 'running', phase: 'maintenance' });
+    expect(t.writes.slice(n).map((w) => w.operation!.phase)).not.toContain('verify');
+    expect(await t.agent.operation()).toMatchObject({ status: 'failed', phase: 'maintenance' });
+    expect((await t.store.read()).recovery).toMatchObject({
+      phase: 'storage',
+      startedAt: '2026-10-08T10:00:05.000Z',
+    });
+    expect(t.codes).toHaveLength(2);
+  });
+
+  it('рестарт посреди повтора на фазе maintenance — фаза и время исходного сбоя сохраняются', async () => {
+    const t = await setup({
+      state: {
+        operation: restoreOp({
+          phase: 'maintenance',
+          recoveryOf: B,
+          requestedBy: 'recovery-code',
+          startedAt: '2026-10-08T11:00:00.000Z',
+          maintenanceStartedAt: '2026-10-08T11:00:00.000Z',
+        }),
+        recovery: recoveryState('AAAA-BBBB-CCCC'),
+      },
+    });
+    expect((await t.store.read()).recovery).toMatchObject({
+      phase: 'storage',
+      startedAt: '2026-10-08T10:00:05.000Z',
+    });
+  });
+
+  it('повтор по коду упал на фазе db — recovery получает новую фазу и время повтора', async () => {
+    const t = await setup({
+      state: {
+        operation: restoreOp({ status: 'failed', phase: 'storage' }),
+        recovery: recoveryState('AAAA-BBBB-CCCC'),
+      },
+      steps: { restoreDb: async () => Promise.reject(new Error('psql: ошибка')) },
+    });
+    expect(await t.agent.recover(t.codes[0]!, 'same')).toHaveProperty('operationId');
+    await t.agent.idle();
+    const rec = (await t.store.read()).recovery!;
+    expect(rec.phase).toBe('db');
+    expect(rec.startedAt).not.toBe('2026-10-08T10:00:05.000Z');
+    expect(rec.startedAt).toBe((await t.store.read()).operation!.maintenanceStartedAt);
+  });
+
+  it('замок или журнал не закрылись с ошибкой — агент всё равно освобождается', async () => {
+    const warnings: string[] = [];
+    let releases = 0;
+    const lock: FileLock = {
+      tryAcquire: async () => async () => {
+        releases += 1;
+        throw new Error('EPIPE');
+      },
+    };
+    const logs: OpLogs = {
+      open: async () => ({ write: () => {}, close: async () => Promise.reject(new Error('EIO')) }),
+      tail: async () => [],
+    };
+    const t = await setup({ lock, logs, warnings });
+    expect(await t.agent.startBackup('admin')).toHaveProperty('operationId');
+    await t.agent.idle();
+    expect(releases).toBe(1);
+    expect(warnings.join('\n')).toContain('замок операции не снят: EPIPE');
+    expect(warnings.join('\n')).toContain('журнал операции не закрылся: EIO');
+    expect(await t.agent.startBackup('admin')).toHaveProperty('operationId');
+    await t.agent.idle();
+    expect(releases).toBe(2);
+  });
 });

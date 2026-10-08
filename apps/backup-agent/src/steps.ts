@@ -106,10 +106,12 @@ export function createSteps(d: StepsDeps): Steps {
       }
     },
 
-    async preBackup(out) {
+    async preBackup(source, out) {
       const name = backupName(now(), 'pre-restore-');
+      // backup.sh с BACKUP_NAME=pre-restore-* обычные бэкапы не ротирует (BACKUP_KEEP — только для них).
       await exec(script('backup.sh'), [], out, { BACKUP_NAME: name });
-      for (const old of await rotatePreRestore(cfg.backupsDir)) out(`удалён старый бэкап ${old}`);
+      for (const old of await rotatePreRestore(cfg.backupsDir, undefined, source))
+        out(`удалён старый бэкап ${old}`);
       return name;
     },
 

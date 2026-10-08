@@ -331,6 +331,40 @@ describe('агент бэкапа в образе', () => {
     }
   });
 
+  it('восстановление из самого старого pre-restore: источник не удаляется ротацией, бэкап pre-restore не ротирует обычные', async () => {
+    const preDb = await createAppDatabase();
+    const prePool = hostPool(preDb);
+    // BACKUP_KEEP=1: ротация обычных бэкапов после pre-restore удалила бы 2020-02-01.
+    const a = await startAgent({ db: preDb, bucket: bucketName(), env: { BACKUP_KEEP: '1' } });
+    try {
+      await prePool.query("insert into categories (name) values ('в pre-restore')");
+      const source = 'pre-restore-2020-01-01T00-00-00Z';
+      const made = await a.sh(`BACKUP_NAME=${source} /backup/backup.sh`);
+      expect(made.exitCode, made.output).toBe(0);
+      const regular = ['2020-02-01T00-00-00Z', '2020-02-02T00-00-00Z'];
+      const others = ['pre-restore-2020-01-02T00-00-00Z', 'pre-restore-2020-01-03T00-00-00Z'];
+      const mk = await a.sh(
+        `mkdir -p ${[...regular, ...others].map((n) => `/backups/${n}`).join(' ')}`,
+      );
+      expect(mk.exitCode, mk.output).toBe(0);
+      await prePool.query("insert into categories (name) values ('после pre-restore')");
+
+      // Источник — самый старый из трёх pre-restore: новый pre-restore стал бы четвёртым.
+      expect((await a.call('POST', `/backups/${source}/restore`, {})).status).toBe(202);
+      const op = await a.waitIdle();
+      expect(op, op.log.join('\n')).toMatchObject({ status: 'succeeded', phase: 'done' });
+      expect(await categories(prePool)).toEqual(['в pre-restore']);
+      const names = (await list(a)).map((b) => b.name);
+      expect(names).toContain(source);
+      for (const n of [...regular, ...others]) expect(names).toContain(n);
+      expect(names.filter((n) => n.startsWith('pre-restore-'))).toHaveLength(4);
+      expect(op.log.join('\n')).not.toContain('удалён старый бэкап');
+    } finally {
+      await prePool.end();
+      await a.stop();
+    }
+  });
+
   it('сбой на этапе storage: флаг остаётся и возвращается после удаления, код только в журнале контейнера, повтор по коду', async () => {
     const failDb = await createAppDatabase();
     const failPool = hostPool(failDb);

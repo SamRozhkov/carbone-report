@@ -149,7 +149,7 @@ describe('preBackup, restoreStorage, restoreDb', () => {
     const { steps, calls } = make({}, async (c) => {
       await mkdir(join(root, c.env.BACKUP_NAME!));
     });
-    expect(await steps.preBackup(out)).toBe('pre-restore-2026-10-08T10-00-00Z');
+    expect(await steps.preBackup(NAME, out)).toBe('pre-restore-2026-10-08T10-00-00Z');
     expect(calls[0]).toMatchObject({ cmd: '/backup/backup.sh', args: [] });
     expect(calls[0]!.env.BACKUP_NAME).toBe('pre-restore-2026-10-08T10-00-00Z');
     expect((await readdir(root)).sort()).toEqual(
@@ -159,6 +159,18 @@ describe('preBackup, restoreStorage, restoreDb', () => {
         'pre-restore-2026-10-03T00-00-00Z',
         'pre-restore-2026-10-08T10-00-00Z',
       ].sort(),
+    );
+  });
+
+  it('preBackup из самого старого pre-restore: ротация не удаляет восстанавливаемый бэкап', async () => {
+    const pre = (d: number) => `pre-restore-2026-10-0${d}T00-00-00Z`;
+    for (const d of [1, 2, 3]) await mkdir(join(root, pre(d)));
+    const { steps } = make({}, async (c) => {
+      await mkdir(join(root, c.env.BACKUP_NAME!));
+    });
+    expect(await steps.preBackup(pre(1), out)).toBe('pre-restore-2026-10-08T10-00-00Z');
+    expect((await readdir(root)).sort()).toEqual(
+      [pre(1), pre(2), pre(3), 'pre-restore-2026-10-08T10-00-00Z'].sort(),
     );
   });
 

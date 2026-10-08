@@ -23,6 +23,8 @@ export function flockFile(path: string): FileLock {
         const child = spawn('sh', ['-c', FLOCK_HOLDER_SCRIPT, 'sh', path], {
           stdio: ['pipe', 'pipe', 'inherit'],
         });
+        // Держатель умер (замок снят) — запись в stdin даст EPIPE: не ронять агента.
+        child.stdin.on('error', () => {});
         let settled = false;
         const exited = new Promise<void>((r) => child.once('exit', () => r()));
         child.stdout.once('data', () => {

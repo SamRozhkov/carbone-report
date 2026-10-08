@@ -84,17 +84,30 @@ export async function listBackups(dir: string): Promise<BackupInfo[]> {
   return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.name.localeCompare(a.name));
 }
 
-/** Какие завершённые pre-restore-* удалить, чтобы осталось keep новых. */
-export function selectPreRestoreToDelete(names: string[], keep = PRE_RESTORE_KEEP): string[] {
+/**
+ * Какие завершённые pre-restore-* удалить, чтобы осталось keep новых. protect — бэкап, из которого
+ * сейчас восстанавливают: его ротация не удаляет никогда (иначе восстановление из самого старого
+ * pre-restore удалило бы собственный источник).
+ */
+export function selectPreRestoreToDelete(
+  names: string[],
+  keep = PRE_RESTORE_KEEP,
+  protect: string | null = null,
+): string[] {
   return names
     .filter((n) => PRE_RESTORE_RE.test(n))
     .sort()
     .reverse()
-    .slice(keep);
+    .slice(keep)
+    .filter((n) => n !== protect);
 }
 
-export async function rotatePreRestore(dir: string, keep = PRE_RESTORE_KEEP): Promise<string[]> {
-  const victims = selectPreRestoreToDelete(await readdir(dir), keep);
+export async function rotatePreRestore(
+  dir: string,
+  keep = PRE_RESTORE_KEEP,
+  protect: string | null = null,
+): Promise<string[]> {
+  const victims = selectPreRestoreToDelete(await readdir(dir), keep, protect);
   for (const v of victims) await rm(join(dir, v), { recursive: true, force: true });
   return victims;
 }

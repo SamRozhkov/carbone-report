@@ -24,8 +24,11 @@ export interface MaintenanceFlag {
 export interface Steps {
   backup(out: Out): Promise<void>;
   verify(backup: string, out: Out): Promise<void>;
-  /** Бэкап pre-restore-<время>; возвращает имя каталога. */
-  preBackup(out: Out): Promise<string>;
+  /**
+   * Бэкап pre-restore-<время>; возвращает имя каталога. source — восстанавливаемый бэкап:
+   * ротация pre-restore-* его не удаляет.
+   */
+  preBackup(source: string, out: Out): Promise<string>;
   /** Пауза terminateDelayMs, затем pg_terminate_backend сессий application_name = 'api'. */
   terminateApi(out: Out): Promise<void>;
   restoreDb(backup: string, out: Out): Promise<void>;
@@ -165,7 +168,9 @@ export class BackupAgent {
       'restore',
       'recovery-code',
       backup,
-      { recoveryOf: rec.backup, preRestore: rec.preRestore },
+      // Повтор начинается с фазы maintenance (§26.4): сбой до фазы db не подменяет фазу и время
+      // исходного сбоя в recovery (их показывает экран обслуживания).
+      { recoveryOf: rec.backup, preRestore: rec.preRestore, phase: 'maintenance' },
       (op, out) => this.runRestore(op, out, false),
     );
   }
@@ -250,12 +255,24 @@ export class BackupAgent {
     const held = release;
     this.current = body(op, out)
       .catch((e) => this.d.log(`внутренняя ошибка операции: ${errorText(e)}`))
-      .finally(async () => {
-        await log.close();
-        await held();
-        this.running = null;
-      });
+      .finally(() => this.release(log, held));
     return { operationId: op.id };
+  }
+
+  /** Конец операции: агент освобождается всегда, даже если журнал или замок закрылись с ошибкой. */
+  private async release(log: OpLog, held: Release): Promise<void> {
+    try {
+      await log.close();
+    } catch (e) {
+      this.d.log(`журнал операции не закрылся: ${errorText(e)}`);
+    }
+    try {
+      await held();
+    } catch (e) {
+      this.d.log(`замок операции не снят: ${errorText(e)}`);
+    } finally {
+      this.running = null;
+    }
   }
 
   private async runBackup(op: Operation, out: Out): Promise<void> {
@@ -279,7 +296,7 @@ export class BackupAgent {
         await this.phase(op, 'verify', out);
         await s.verify(backup, out);
         await this.phase(op, 'pre-backup', out);
-        op.preRestore = await s.preBackup(out);
+        op.preRestore = await s.preBackup(backup, out);
         await this.save();
       }
       op.maintenanceStartedAt = this.now().toISOString();
@@ -338,13 +355,15 @@ export class BackupAgent {
   /** Новое состояние «требуется восстановление»; возвращает код (печатается после записи state.json). */
   private newRecovery(op: Operation): string {
     const code = generateCode();
+    // Повтор упал (или прерван) до фазы db: база им не менялась — фаза и время прежнего сбоя остаются.
+    const prev = DB_PHASES.includes(op.phase) ? null : this.state.recovery;
     this.state.recovery = {
       codeHash: hashCode(code),
       attempts: 0,
       backup: op.recoveryOf ?? op.backup!,
       preRestore: op.preRestore,
-      phase: op.phase as RestorePhase,
-      startedAt: op.maintenanceStartedAt ?? op.startedAt,
+      phase: prev?.phase ?? (op.phase as RestorePhase),
+      startedAt: prev?.startedAt ?? op.maintenanceStartedAt ?? op.startedAt,
     };
     return code;
   }

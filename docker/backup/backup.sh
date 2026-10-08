@@ -15,7 +15,8 @@ export PGHOST PGUSER PGDATABASE PGAPPNAME
 : "${PGPASSWORD:?не задан PGPASSWORD}"
 
 # BACKUP_NAME задаёт агент для бэкапа перед восстановлением (pre-restore-<время>). Ротация
-# BACKUP_KEEP ниже такие каталоги не трогает: pre-restore-* ротирует агент (последние 3).
+# BACKUP_KEEP ниже такие каталоги не трогает и после такого бэкапа не запускается вовсе (она могла бы
+# удалить обычный бэкап, из которого сейчас восстанавливают): pre-restore-* ротирует агент (последние 3).
 name=${BACKUP_NAME:-$(date -u +%Y-%m-%dT%H-%M-%SZ)}
 case $name in
   [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]-[0-9][0-9]-[0-9][0-9]Z) ;;
@@ -67,7 +68,8 @@ migration=$(psql -tA -c 'select hash from drizzle.__drizzle_migrations order by 
 mv "$dir" "/backups/$name"
 echo "бэкап $name: готово"
 
-# Ротация: только завершённые каталоги с именем-датой, новые сверху.
+# Ротация BACKUP_KEEP — только после обычного бэкапа (§26.1): только завершённые каталоги с именем-датой, новые сверху.
+case $name in pre-restore-*) exit 0 ;; esac
 # shellcheck disable=SC2012 # имена строго вида дата-время (цифры, T, Z, «-») — ls безопасен
 ls -1d /backups/????-??-??T??-??-??Z 2>/dev/null | sort -r | tail -n +"$((BACKUP_KEEP + 1))" | while read -r old; do
   rm -rf "$old" && echo "удалён старый бэкап $(basename "$old")"

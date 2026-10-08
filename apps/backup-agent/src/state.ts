@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export const RESTORE_PHASES = [
@@ -71,7 +71,7 @@ export const RESOLVED_EXTERNALLY =
   'восстановление завершено вручную (resolved externally): scripts/restore.sh';
 
 /**
- * <dir>/state.json. Запись атомарна: JSON во временный файл рядом и rename — после сбоя на диске
+ * <dir>/state.json. Запись атомарна: JSON во временный файл рядом, fsync и rename — после сбоя на диске
  * либо прежнее, либо новое состояние. Записи одного процесса идут строго по очереди.
  */
 export function fileStateStore(dir: string): StateStore {
@@ -103,7 +103,14 @@ export function fileStateStore(dir: string): StateStore {
       const job = chain.then(async () => {
         await mkdir(dir, { recursive: true });
         const tmp = `${path}.tmp`;
-        await writeFile(tmp, json);
+        // fsync до rename: после сбоя питания под именем state.json не окажется пустой файл.
+        const fh = await open(tmp, 'w');
+        try {
+          await fh.writeFile(json);
+          await fh.sync();
+        } finally {
+          await fh.close();
+        }
         await rename(tmp, path);
       });
       chain = job.catch(() => {});

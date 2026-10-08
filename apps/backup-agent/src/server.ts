@@ -102,3 +102,37 @@ export function buildServer(o: { agent: AgentApi; token: string; backupsDir: str
 
   return app;
 }
+
+const DNS_ERRORS = new Set(['EAI_AGAIN', 'ENOTFOUND']);
+
+/**
+ * listen на имени хоста — один DNS-запрос: если псевдоним сети ещё не разрешается (контейнер только
+ * подключается к сети), listen повторяется attempts раз с паузой delayMs. Прочие ошибки — сразу.
+ * После последней попытки — ошибка с понятным сообщением (main печатает его и выходит с кодом 1).
+ */
+export async function listenRetrying(
+  listen: () => Promise<unknown>,
+  host: string,
+  log: (line: string) => void,
+  o: { attempts?: number; delayMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<void> {
+  const attempts = o.attempts ?? 10;
+  const delayMs = o.delayMs ?? 1000;
+  const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  for (let i = 1; ; i++) {
+    try {
+      await listen();
+      return;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (!code || !DNS_ERRORS.has(code)) throw e;
+      if (i >= attempts)
+        throw new Error(
+          `адрес BACKUP_AGENT_HOST «${host}» не разрешается (${code}) после ${attempts} попыток: проверьте BACKUP_AGENT_HOST и сеть контейнера`,
+          { cause: e },
+        );
+      log(`адрес BACKUP_AGENT_HOST не разрешается: ${host} (${code}), попытка ${i} из ${attempts}`);
+      await sleep(delayMs);
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { filenameFromDisposition } from '../lib/download';
+import { reportMaintenance } from './maintenance';
 
 export class ApiRequestError extends Error {
   constructor(
@@ -63,7 +64,12 @@ async function send(path: string, opts: RequestOptions = {}): Promise<Response> 
     if ((e as Error).name === 'AbortError') throw e;
     throw new ApiRequestError(0, 'NETWORK', 'нет связи с сервером');
   }
-  if (!res.ok) throw await toError(res);
+  if (!res.ok) {
+    const err = await toError(res);
+    // Идёт восстановление из бэкапа: экран обслуживания вместо приложения (MaintenanceGate).
+    if (err.status === 503 && err.code === 'maintenance') reportMaintenance();
+    throw err;
+  }
   return res;
 }
 

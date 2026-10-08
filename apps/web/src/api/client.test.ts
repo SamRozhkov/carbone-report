@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mockApi } from '../test/utils';
 import { apiJson, ApiRequestError } from './client';
+import { isMaintenanceReported, resetMaintenance } from './maintenance';
 
 describe('apiJson', () => {
   it('ошибка сервера в формате {error} → ApiRequestError с кодом, сообщением и details', async () => {
@@ -48,5 +49,29 @@ describe('apiJson', () => {
       code: 'NETWORK',
       message: 'нет связи с сервером',
     });
+  });
+});
+
+describe('режим обслуживания', () => {
+  it('503 с кодом maintenance включает экран обслуживания; другие ошибки — нет', async () => {
+    mockApi([
+      { path: '/api/a', status: 503, body: { error: { code: 'INTERNAL', message: 'x' } } },
+      {
+        path: '/api/b',
+        status: 503,
+        body: {
+          error: { code: 'maintenance', message: 'идёт восстановление из бэкапа, повторите позже' },
+        },
+      },
+    ]);
+    try {
+      await apiJson('/api/a').catch(() => {});
+      expect(isMaintenanceReported()).toBe(false);
+      const err = await apiJson('/api/b').catch((e: unknown) => e);
+      expect(err).toMatchObject({ status: 503, code: 'maintenance' });
+      expect(isMaintenanceReported()).toBe(true);
+    } finally {
+      resetMaintenance();
+    }
   });
 });

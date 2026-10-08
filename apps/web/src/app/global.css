@@ -219,3 +219,19 @@ body {
   font-size: 12px;
   white-space: pre-wrap;
 }
+
+.cr-maintenance {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 560px;
+  padding: 24px;
+  text-align: center;
+}
+
+.cr-maintenance .cr-form {
+  align-items: stretch;
+  width: 100%;
+  text-align: left;
+}

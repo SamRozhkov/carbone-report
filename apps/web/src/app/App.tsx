@@ -2,6 +2,7 @@ import { ThemeProvider, Toaster, ToasterComponent, ToasterProvider } from '@grav
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createBrowserRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
+import { MaintenanceGate } from './MaintenanceGate';
 import { createQueryClient } from './queryClient';
 import { routes } from './routes';
 import { ThemeContext, useThemePreference } from './theme';
@@ -17,7 +18,9 @@ export function App() {
       <ThemeContext.Provider value={{ theme, setTheme }}>
         <ToasterProvider toaster={toaster}>
           <QueryClientProvider client={queryClient}>
-            <RouterProvider router={router} />
+            <MaintenanceGate>
+              <RouterProvider router={router} />
+            </MaintenanceGate>
           </QueryClientProvider>
           <ToasterComponent />
         </ToasterProvider>

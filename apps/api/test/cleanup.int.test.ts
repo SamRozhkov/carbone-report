@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { reportRuns } from '../src/db/schema';
+import { reportRunFiles, reportRuns } from '../src/db/schema';
 import { cleanupOldReports } from '../src/modules/reports/cleanup';
 import { createTestApp, loginAs, type TestApp } from './helpers';
 
@@ -80,5 +80,51 @@ describe('cleanupOldReports', () => {
       headers: { cookie },
     });
     expect(r.statusCode).toBe(410);
+  });
+
+  it('запуск со снимком: удаляется весь каталог и строки report_run_files; скачивание → 410', async () => {
+    const snapshotRun = async (daysAgo: number) => {
+      const id = crypto.randomUUID();
+      const dir = `reports/${id}`;
+      await t.deps.storage.write(`${dir}/data.json`, Buffer.from('{}'));
+      await t.deps.storage.write(`${dir}/template.docx`, Buffer.from('tpl'));
+      await t.deps.storage.write(`${dir}/out.pdf`, Buffer.from('pdf'));
+      await t.deps.db.insert(reportRuns).values({
+        id,
+        templateId: null,
+        templateName: 'x',
+        templateVersion: 1,
+        userId,
+        params: {},
+        status: 'ok',
+        snapshot: true,
+        filePath: `${dir}/template.docx`,
+        durationMs: 1,
+        createdAt: new Date(Date.now() - daysAgo * 86_400_000),
+      });
+      await t.deps.db
+        .insert(reportRunFiles)
+        .values({ runId: id, format: 'pdf', filePath: `${dir}/out.pdf` });
+      return { id, dir };
+    };
+    const old = await snapshotRun(45);
+    const fresh = await snapshotRun(2);
+    expect(await cleanupOldReports(t.deps)).toBe(1);
+    expect(await t.deps.storage.exists(old.dir)).toBe(false);
+    expect(await t.deps.storage.exists(`${fresh.dir}/out.pdf`)).toBe(true);
+    const filesOf = (id: string) =>
+      t.deps.db.select().from(reportRunFiles).where(eq(reportRunFiles.runId, id));
+    expect(await filesOf(old.id)).toHaveLength(0);
+    expect(await filesOf(fresh.id)).toHaveLength(1);
+    const [row] = await t.deps.db.select().from(reportRuns).where(eq(reportRuns.id, old.id));
+    expect(row!.fileDeleted).toBe(true);
+    const cookie = (await loginAs(t, 'admin')).cookie;
+    const r = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${old.id}/file?format=docx`,
+      headers: { cookie },
+    });
+    expect(r.statusCode).toBe(410);
+    expect(r.json().error.message).toBe('файл удалён — сформируйте отчёт заново');
   });
 });

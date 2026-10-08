@@ -15,6 +15,17 @@ describe('memoryTemplateCache', () => {
     await cache.set('a', { version: 2, carboneId: 'x' });
     expect(await cache.get('a')).toEqual({ version: 2, carboneId: 'x' });
   });
+
+  it('держит не больше limit записей: вытесняется самая давняя (ключи снимков — по запуску)', async () => {
+    const cache = memoryTemplateCache(2);
+    await cache.set('run:a', { version: 1, carboneId: 'a' });
+    await cache.set('run:b', { version: 1, carboneId: 'b' });
+    await cache.set('run:a', { version: 1, carboneId: 'a2' }); // повторная запись освежает ключ
+    await cache.set('run:c', { version: 1, carboneId: 'c' });
+    expect(await cache.get('run:b')).toBeNull();
+    expect(await cache.get('run:a')).toEqual({ version: 1, carboneId: 'a2' });
+    expect(await cache.get('run:c')).toEqual({ version: 1, carboneId: 'c' });
+  });
 });
 
 describe('redisTemplateCache', () => {

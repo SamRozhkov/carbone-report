@@ -8,6 +8,7 @@ import { badRequest, conflict, notFound, unauthorized } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
 import { hashPassword } from '../auth/password';
 import { setSessionCookie } from '../auth/routes';
+import { runStoragePath } from '../reports/snapshot';
 
 export const toUserDto = (r: UserRow, groupIds: string[] = []): UserDto => ({
   id: r.id,
@@ -118,8 +119,8 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
     if (req.params.id === currentUser(req).id)
       throw badRequest('нельзя удалить собственную учётную запись');
     // Запуски удаляются каскадом, поэтому пути файлов нужно собрать до удаления пользователя.
-    const files = await deps.db
-      .select({ filePath: reportRuns.filePath })
+    const runs = await deps.db
+      .select({ id: reportRuns.id, filePath: reportRuns.filePath, snapshot: reportRuns.snapshot })
       .from(reportRuns)
       .where(
         and(
@@ -130,12 +131,12 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
       );
     const [row] = await deps.db.delete(users).where(eq(users.id, req.params.id)).returning();
     if (!row) throw notFound('пользователь');
-    for (const f of files) {
+    for (const r of runs) {
+      // Снимок — каталог reports/<runId>/ целиком (§24.5), старый запуск — его файл.
+      const path = runStoragePath(r)!;
       await deps.storage
-        .remove(f.filePath!)
-        .catch((err) =>
-          req.log.warn({ err, filePath: f.filePath }, 'не удалось удалить файл отчёта'),
-        );
+        .remove(path)
+        .catch((err) => req.log.warn({ err, filePath: path }, 'не удалось удалить файл отчёта'));
     }
     return reply.status(204).send();
   });

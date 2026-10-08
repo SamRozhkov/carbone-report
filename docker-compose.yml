@@ -6,6 +6,16 @@ x-logging: &logging
     max-size: '10m'
     max-file: '3'
 
+# Хранилище файлов API и бэкапа: SeaweedFS (сервис s3) во внутренней сети s3; бакет S3_BUCKET создаёт API.
+x-s3-env: &s3-env
+  STORAGE_BACKEND: s3
+  S3_ENDPOINT: http://s3:8333
+  S3_REGION: us-east-1
+  S3_BUCKET: ${S3_BUCKET:-carbone-reports}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?задайте S3_ACCESS_KEY_ID в .env}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?задайте S3_SECRET_ACCESS_KEY в .env}
+  S3_FORCE_PATH_STYLE: 'true'
+
 services:
   web:
     image: ${WEB_IMAGE:-carbone-reports-web}
@@ -42,7 +52,8 @@ services:
       API_INTERNAL_URL: http://api:3000
       CARBONE_URL: http://carbone:4000
       REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD в .env}@redis:6379
-      STORAGE_DIR: /data
+      <<: *s3-env
+      S3_CREATE_BUCKET: 'true'
       COOKIE_SECURE: 'true'
       TZ: ${TZ:-Europe/Moscow}
       QUERY_TIMEOUT_MS: ${QUERY_TIMEOUT_MS:-30000}
@@ -50,9 +61,7 @@ services:
       RENDER_TIMEOUT_MS: ${RENDER_TIMEOUT_MS:-120000}
       REPORT_TIMEOUT_MS: ${REPORT_TIMEOUT_MS:-120000}
       REPORT_RETENTION_DAYS: ${REPORT_RETENTION_DAYS:-30}
-    volumes:
-      - storage:/data
-    networks: [default, cache]
+    networks: [default, cache, s3]
     healthcheck:
       test:
         [
@@ -69,6 +78,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      s3:
         condition: service_healthy
       carbone:
         condition: service_started
@@ -162,12 +173,39 @@ services:
     restart: unless-stopped
     logging: *logging
 
+  s3:
+    # Официальный образ SeaweedFS: master, volume, filer и S3-шлюз в одном процессе (weed mini).
+    # docker/s3/entrypoint.sh создаёт учётную запись S3 из S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY
+    # и включает только S3 (без WebDAV, Admin UI, IAM, Iceberg; без автосоздания бакетов).
+    image: chrislusf/seaweedfs:4.48
+    entrypoint: ['/s3-entrypoint.sh']
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?задайте S3_ACCESS_KEY_ID в .env}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?задайте S3_SECRET_ACCESS_KEY в .env}
+    volumes:
+      - ./docker/s3/entrypoint.sh:/s3-entrypoint.sh:ro
+      - s3_data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:8333/healthz']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    # Только внутренняя сеть s3: хранилище доступно api и backup, порты наружу не публикуются.
+    networks: [s3]
+    restart: unless-stopped
+    logging: *logging
+
   backup:
-    image: postgres:17-alpine
+    image: ${BACKUP_IMAGE:-carbone-reports-backup}
+    # postgres:17-alpine + rclone (режим s3); скрипты монтируются из docker/backup.
+    build:
+      context: ./docker/backup
     profiles: [backup]
     entrypoint: ['/backup/entrypoint.sh']
     command: ['cron']
     environment:
+      <<: *s3-env
       PGPASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
       BACKUP_CRON: ${BACKUP_CRON:-0 3 * * *}
       BACKUP_KEEP: ${BACKUP_KEEP:-14}
@@ -175,23 +213,29 @@ services:
       TZ: ${TZ:-Europe/Moscow}
     volumes:
       - ./docker/backup:/backup:ro
-      - storage:/data:ro
       - ${BACKUP_DIR:-./backups}:/backups
+    networks: [default, s3]
     depends_on:
       postgres:
+        condition: service_healthy
+      s3:
         condition: service_healthy
     logging: *logging
     restart: unless-stopped
 
 networks:
-  # Внутренняя сеть без выхода наружу: только api и redis.
+  # Внутренние сети без выхода наружу: cache — api и redis; s3 — api, backup и s3.
   cache:
     internal: true
+  s3:
+    internal: true
 
+# Прежний том storage (файлы до Плана 14) больше не объявлен и не монтируется: после переноса
+# в SeaweedFS (README, «Файлы в S3-хранилище») его можно удалить вручную; restore.sh находит его по меткам.
 volumes:
-  storage:
   pgdata:
   demo_pgdata:
+  s3_data:
   carbone_templates:
   oo_data:
   oo_lib:

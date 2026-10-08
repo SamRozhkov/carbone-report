@@ -41,7 +41,8 @@ jobs:
   integration:
     name: Интеграционные тесты
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Два прогона: все файлы на local, затем выбранные потоки на S3 (SeaweedFS в testcontainers).
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -70,6 +71,8 @@ jobs:
             dockerfile: docker/api.Dockerfile
           - name: web
             dockerfile: docker/web.Dockerfile
+          - name: backup
+            dockerfile: docker/backup/Dockerfile
     env:
       PUBLISH: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
     steps:

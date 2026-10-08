@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
@@ -14,6 +14,7 @@ import {
   testBucketName,
   type TestBucket,
 } from './helpers';
+import { S3_IMAGE } from './images';
 
 /** Контракт Storage (§25.5): один набор для каждой реализации. */
 interface Backend {
@@ -279,4 +280,11 @@ describe('S3Storage: особенности S3', () => {
     await expect(storage.exists('a\\b')).rejects.toThrow('недопустимый путь: a\\b');
     expect(send).not.toHaveBeenCalled();
   });
+});
+
+it('SeaweedFS в testcontainers — тот же образ и скрипт запуска, что у сервиса s3 в docker-compose.yml', async () => {
+  const compose = await readFile(new URL('../../../docker-compose.yml', import.meta.url), 'utf8');
+  expect(compose).toContain(`image: ${S3_IMAGE}\n`);
+  expect(compose).toContain("entrypoint: ['/s3-entrypoint.sh']");
+  expect(compose).toContain('- ./docker/s3/entrypoint.sh:/s3-entrypoint.sh:ro');
 });

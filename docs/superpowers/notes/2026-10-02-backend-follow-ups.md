@@ -296,3 +296,42 @@
   - `stack:smoke --insecure` пройден; `--carbone-restart` не запускался (пересоздаёт контейнер и удаляет том);
   - E2E 10/10 дважды подряд, упоминаний CSP в выводе нет; снимковые запуски E2E в `report_run_files`: pdf — 6, docx — 5;
   - стек оставлен запущенным.
+
+## Итоги Плана 14 (хранилище S3)
+
+- **API:**
+  - `Storage` — интерфейс (`read`, `write`, `remove`, `removeUngated`, `exists`; `path()` удалён);
+  - реализации `LocalStorage` (прежний класс; `exists` каталога теперь `false`, как префикс на S3) и `S3Storage` (`@aws-sdk/client-s3`);
+  - общая проверка ключа `checkKey`: пустой ключ, ведущий и завершающий `/`, `//`, `.`, `..`, `\` → «недопустимый путь».
+- **S3:**
+  - запись — один `PutObject`; чтение — `GetObject` в `Buffer`;
+  - `NoSuchKey` → `code = 'ENOENT'`, остальные ошибки как есть;
+  - `remove` — `DeleteObject(key)` и постранично `ListObjectsV2(key/)` + `DeleteObjects` ≤ 1000;
+  - контрольные суммы `WHEN_REQUIRED`.
+- **Старт:**
+  - `createStorage` до `buildApp`: `HeadBucket`, при `S3_CREATE_BUCKET=true` — `CreateBucket` («бакет S3_BUCKET создан»), иначе «бакет S3_BUCKET не найден: <имя>…»;
+  - конфигурация требует `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` при `s3`.
+- **Тесты:**
+  - контракт `storage-contract.int.test.ts` на `local` и `s3`;
+  - `s3-startup.int.test.ts`;
+  - `test:int:s3` — второй прогон `templates`, `onlyoffice`, `run-files`, `cleanup`, `hardening` на SeaweedFS (выбран вместо `describe.each`: файлы не меняются);
+  - образ и скрипт запуска SeaweedFS в testcontainers сверяются с compose.
+- **SeaweedFS:**
+  - официальный `chrislusf/seaweedfs:4.48` (`sha256:4e61d15f…`), `weed mini` в одном контейнере, том `s3_data`, сервис `s3`;
+  - учётная запись S3 создаётся при старте из `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` (`docker/s3/entrypoint.sh`), её же используют api и backup;
+  - выключены WebDAV, Admin UI, IAM, Iceberg, Lance, автосоздание бакетов при записи и удаление непустого бакета;
+  - сеть `s3` (`internal`), порты не публикуются;
+  - отдельная учётная запись только для backup (чтение) — возможное улучшение.
+- **Бэкап:**
+  - образ `backup` = `postgres:17-alpine` + `rclone` (`docker/backup/Dockerfile`, CI публикует `carbone-report-backup`), провайдер rclone `SeaweedFS`;
+  - `archive-storage.sh`: `local` — прежний `tar`, `s3` — `rclone copy` во временный каталог и `tar`;
+  - восстановление `s3` — распаковка и `rclone sync`;
+  - `restore.sh` выбирает ветку по `STORAGE_BACKEND` (по умолчанию `s3`).
+- **Живой прогон:**
+  - висячие образы проекта удалены, свободно на диске 14 GiB до сборки и 12 GiB после;
+  - локальный бэкап тома `storage` (148 файлов) восстановлен в бакет: 148 объектов, у всех шаблонов есть файл;
+  - `api` и `s3` healthy, порты `s3` не опубликованы, сеть `s3` внутренняя, у `api` нет тома;
+  - `stack:smoke --insecure` пройден; E2E 10/10 дважды подряд, нарушений CSP 0;
+  - бэкап `s3`: 171 файлов в архиве = объектов в бакете;
+  - после порчи бакета и восстановления: файл шаблона вернулся и совпадает с архивом, лишний объект удалён, файл для OnlyOffice — 200, отчёт сформирован (PDF и DOCX), третий прогон E2E 10/10;
+  - том `carbone-reports_storage` оставлен (удаляется вручную), стек оставлен запущенным.

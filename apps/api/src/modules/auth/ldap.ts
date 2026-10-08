@@ -1,0 +1,80 @@
+import { Client } from 'ldapts';
+import type { LdapConfig } from '../../config';
+
+export interface LdapAuthenticator {
+  /** true — связка логин/пароль подтверждена сервером LDAP. */
+  authenticate(login: string, password: string): Promise<boolean>;
+}
+
+/**
+ * LDAP допускает unauthenticated bind: пустой пароль с валидным DN считается
+ * успехом. Поэтому пустой пароль отклоняем раньше, не доходя до сервера.
+ */
+function isUsablePassword(password: string): boolean {
+  return password.length > 0;
+}
+
+// RFC 4515: экранирование спецсимволов фильтра поиска против LDAP-инъекции.
+export function escapeLdapFilter(input: string): string {
+  const escaped = input.replace(/[\\*()]/g, (c) => {
+    switch (c) {
+      case '\\':
+        return '\\5c';
+      case '*':
+        return '\\2a';
+      case '(':
+        return '\\28';
+      default:
+        return '\\29';
+    }
+  });
+  return escaped.split('\u0000').join('\\00');
+}
+
+export function createLdapAuthenticator(
+  config: LdapConfig,
+  log: { warn(msg: string): void },
+): LdapAuthenticator {
+  const filterTemplate = config.userFilter;
+  // tlsOptions имеет смысл только для ldaps://; на обычном ldap:// одно его
+  // наличие в опциях клиента ломает соединение — контроллер домена рвёт его
+  // (ECONNRESET) ещё на bind, хотя сам tlsOptions формально ни на что не влияет.
+  const tlsOptions = config.url.startsWith('ldaps://')
+    ? { rejectUnauthorized: config.tlsRejectUnauthorized }
+    : undefined;
+  return {
+    async authenticate(login, password) {
+      if (!isUsablePassword(password)) return false;
+      const filter = filterTemplate.replace('%s', escapeLdapFilter(login));
+      const searchClient = new Client({ url: config.url, tlsOptions });
+      let userDn: string;
+      try {
+        if (config.bindDn) {
+          await searchClient.bind(config.bindDn, config.bindPassword ?? '');
+        }
+        const { searchEntries } = await searchClient.search(config.baseDn, {
+          scope: 'sub',
+          filter,
+          attributes: ['dn'],
+        });
+        if (searchEntries.length !== 1) return false;
+        userDn = searchEntries[0]!.dn;
+      } catch (err) {
+        log.warn(`LDAP: поиск пользователя не удался — ${(err as Error).message}`);
+        return false;
+      } finally {
+        await searchClient.unbind().catch(() => {});
+      }
+
+      const userClient = new Client({ url: config.url, tlsOptions });
+      try {
+        await userClient.bind(userDn, password);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        await userClient.unbind().catch(() => {});
+      }
+    },
+  };
+}

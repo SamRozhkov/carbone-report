@@ -1,12 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import { LoginBody } from '@carbone-reports/shared';
 import { eq, sql } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { App } from '../../app';
-import { users } from '../../db/schema';
+import { users, type UserRow } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { AppError } from '../../lib/errors';
 import { currentUser, type Guards } from './guards';
-import { DUMMY_HASH_PROMISE, verifyPassword } from './password';
+import { DUMMY_HASH_PROMISE, hashPassword, verifyPassword } from './password';
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession, type SessionUser } from './session';
 
 export async function setSessionCookie(
@@ -22,6 +23,24 @@ export async function setSessionCookie(
     path: '/',
     maxAge: SESSION_TTL_SECONDS,
   });
+}
+
+/**
+ * Первый успешный вход через LDAP заводит локальную запись (роль — LDAP_DEFAULT_ROLE,
+ * пароль — случайный и неизвестный никому: локальным паролем такой аккаунт не войти,
+ * только через LDAP). Дальше роль, блокировка и группы живут в БД и LDAP не трогает.
+ */
+async function provisionLdapUser(deps: AppDeps, login: string): Promise<UserRow | undefined> {
+  const role = deps.config.ldap?.defaultRole ?? 'user';
+  const [inserted] = await deps.db
+    .insert(users)
+    .values({ login, passwordHash: await hashPassword(randomUUID()), role })
+    .onConflictDoNothing()
+    .returning();
+  if (inserted) return inserted;
+  // Одновременный первый вход того же пользователя в параллельном запросе.
+  const [existing] = await deps.db.select().from(users).where(eq(users.login, login));
+  return existing;
 }
 
 export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): void {
@@ -74,11 +93,23 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
       },
     },
     async (req, reply) => {
-      const [row] = await deps.db.select().from(users).where(eq(users.login, req.body.login));
-      const ok = await verifyPassword(
-        row?.passwordHash ?? (await DUMMY_HASH_PROMISE),
-        req.body.password,
-      );
+      const { login, password } = req.body;
+      const [row] = await deps.db.select().from(users).where(eq(users.login, login));
+
+      // LDAP пробуем первым, если включён и локальный аккаунт не заблокирован.
+      // Неудача (неверный пароль, сервер недоступен) — не ошибка: откатываемся
+      // на локальный пароль, чтобы встроенный admin не терял доступ при сбое LDAP.
+      if (deps.ldap && !row?.blocked && (await deps.ldap.authenticate(login, password))) {
+        const ldapUser = row ?? (await provisionLdapUser(deps, login));
+        if (!ldapUser || ldapUser.blocked) {
+          throw new AppError('INVALID_CREDENTIALS', 401, 'неверный логин или пароль');
+        }
+        const user = { id: ldapUser.id, login: ldapUser.login, role: ldapUser.role };
+        await setSessionCookie(reply, deps, user, ldapUser.sessionVersion);
+        return user;
+      }
+
+      const ok = await verifyPassword(row?.passwordHash ?? (await DUMMY_HASH_PROMISE), password);
       if (!row || !ok || row.blocked) {
         throw new AppError('INVALID_CREDENTIALS', 401, 'неверный логин или пароль');
       }

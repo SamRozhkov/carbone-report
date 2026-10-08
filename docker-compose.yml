@@ -61,6 +61,17 @@ services:
       RENDER_TIMEOUT_MS: ${RENDER_TIMEOUT_MS:-120000}
       REPORT_TIMEOUT_MS: ${REPORT_TIMEOUT_MS:-120000}
       REPORT_RETENTION_DAYS: ${REPORT_RETENTION_DAYS:-30}
+      LDAP_ENABLED: ${LDAP_ENABLED:-false}
+      LDAP_URL: ${LDAP_URL:-}
+      LDAP_BIND_DN: ${LDAP_BIND_DN:-}
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:-}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-}
+      LDAP_USER_FILTER: ${LDAP_USER_FILTER:-(uid=%s)}
+      LDAP_DEFAULT_ROLE: ${LDAP_DEFAULT_ROLE:-user}
+      LDAP_TLS_REJECT_UNAUTHORIZED: ${LDAP_TLS_REJECT_UNAUTHORIZED:-true}
+    volumes:
+      - storage:/data
+    networks: [default, cache]
     networks: [default, cache, s3]
     healthcheck:
       test:

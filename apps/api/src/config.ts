@@ -1,3 +1,4 @@
+import type { Role } from '@carbone-reports/shared';
 import { z } from 'zod';
 
 const S3_REQUIRED = ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const;
@@ -19,6 +20,7 @@ const Env = z
       .string()
       .refine((v) => v === '' || v.length >= 8, 'ADMIN_PASSWORD: минимум 8 символов')
       .optional(),
+    STORAGE_DIR: z.string().default('/data'),
     STORAGE_BACKEND: z.enum(['local', 's3'], { error: 'ожидается local или s3' }).default('local'),
     STORAGE_DIR: z.string().default('/data'),
     // Пустая строка из .env — «не задано» (для S3_ENDPOINT — AWS S3).
@@ -43,6 +45,35 @@ const Env = z
     TZ: z.string().default('Europe/Moscow'),
     PORT: z.coerce.number().int().default(3000),
     COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
+    LDAP_ENABLED: z.enum(['true', 'false']).default('false'),
+    LDAP_URL: z.string().optional(),
+    LDAP_BIND_DN: z.string().optional(),
+    LDAP_BIND_PASSWORD: z.string().optional(),
+    LDAP_BASE_DN: z.string().optional(),
+    LDAP_USER_FILTER: z
+      .string()
+      .refine((v) => v.includes('%s'), 'LDAP_USER_FILTER: должен содержать %s')
+      .default('(uid=%s)'),
+    LDAP_DEFAULT_ROLE: z.enum(['admin', 'user']).default('user'),
+    LDAP_TLS_REJECT_UNAUTHORIZED: z.enum(['true', 'false']).default('true'),
+  })
+  .superRefine((v, ctx) => {
+    if (v.LDAP_ENABLED !== 'true') return;
+    if (!v.LDAP_URL) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'LDAP_URL: задайте при LDAP_ENABLED=true',
+        path: ['LDAP_URL'],
+      });
+    }
+    if (!v.LDAP_BASE_DN) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'LDAP_BASE_DN: задайте при LDAP_ENABLED=true',
+        path: ['LDAP_BASE_DN'],
+      });
+    }
+  });
   })
   .superRefine((e, ctx) => {
     if (e.STORAGE_BACKEND !== 's3') return;
@@ -91,6 +122,19 @@ export interface Config {
   tz: string;
   port: number;
   cookieSecure: boolean;
+  ldap: LdapConfig | null;
+}
+
+export interface LdapConfig {
+  url: string;
+  bindDn?: string;
+  bindPassword?: string;
+  baseDn: string;
+  /** Фильтр поиска пользователя, `%s` — подставляемый логин (например, `(uid=%s)` или `(sAMAccountName=%s)`). */
+  userFilter: string;
+  /** Роль нового локального пользователя при первом успешном входе через LDAP. */
+  defaultRole: Role;
+  tlsRejectUnauthorized: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -134,5 +178,17 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     tz: e.TZ,
     port: e.PORT,
     cookieSecure: e.COOKIE_SECURE === 'true',
+    ldap:
+      e.LDAP_ENABLED === 'true'
+        ? {
+            url: e.LDAP_URL!,
+            bindDn: e.LDAP_BIND_DN,
+            bindPassword: e.LDAP_BIND_PASSWORD,
+            baseDn: e.LDAP_BASE_DN!,
+            userFilter: e.LDAP_USER_FILTER,
+            defaultRole: e.LDAP_DEFAULT_ROLE,
+            tlsRejectUnauthorized: e.LDAP_TLS_REJECT_UNAUTHORIZED === 'true',
+          }
+        : null,
   };
 }

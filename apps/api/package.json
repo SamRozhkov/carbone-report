@@ -26,6 +26,7 @@
     "fastify-type-provider-zod": "^7.0.0",
     "ioredis": "^5.11.1",
     "jose": "^6.2.12",
+    "ldapts": "^9.2.0",
     "jszip": "^3.10.2",
     "pg": "^8.23.1",
     "pg-cursor": "^2.22.1",

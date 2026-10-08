@@ -9,6 +9,7 @@ import { createStorage } from './lib/create-storage';
 import { createRunFileGate } from './lib/run-file-gate';
 import { createRemoveGate } from './lib/storage-gate';
 import { ensureAdmin } from './modules/auth/bootstrap';
+import { createLdapAuthenticator } from './modules/auth/ldap';
 import { CarboneClient } from './modules/carbone/client';
 import { redisTemplateCache } from './modules/carbone/template-cache';
 import { createSourcePools } from './modules/datasources/pools';
@@ -46,6 +47,7 @@ const deps: AppDeps = {
   }),
   fetchFile,
   redis,
+  ldap: config.ldap ? createLdapAuthenticator(config.ldap, console) : null,
 };
 
 await ensureAdmin(deps, console);

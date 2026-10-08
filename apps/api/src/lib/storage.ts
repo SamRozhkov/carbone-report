@@ -62,7 +62,17 @@ export class LocalStorage implements Storage {
   }
 
   async read(key: string): Promise<Buffer> {
-    return readFile(this.abs(key));
+    const abs = this.abs(key);
+    try {
+      return await readFile(abs);
+    } catch (e) {
+      // Часть пути — файл (a/b при файле a): ключа нет, как NoSuchKey у S3Storage.
+      if ((e as NodeJS.ErrnoException).code === 'ENOTDIR')
+        throw Object.assign(new Error(`ENOENT: нет файла ${key}`, { cause: e }), {
+          code: 'ENOENT',
+        });
+      throw e;
+    }
   }
 
   async remove(key: string): Promise<void> {

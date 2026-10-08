@@ -8,11 +8,13 @@
     "build": "tsup",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "test:int": "vitest run --config vitest.int.config.ts",
+    "test:int": "vitest run --config vitest.int.config.ts && pnpm run test:int:s3",
+    "test:int:s3": "TEST_STORAGE_BACKEND=s3 vitest run --config vitest.int.config.ts test/templates.int.test.ts test/onlyoffice.int.test.ts test/run-files.int.test.ts test/cleanup.int.test.ts test/hardening.int.test.ts",
     "typecheck": "tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1147.0",
     "@carbone-reports/shared": "workspace:*",
     "@fastify/cookie": "^11.1.2",
     "@fastify/multipart": "^10.1.2",

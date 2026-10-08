@@ -2,10 +2,18 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { S3Storage } from '../src/lib/s3-storage';
 import { LocalStorage, type RemoveGate, type Storage } from '../src/lib/storage';
 import { createRemoveGate, STORAGE_REMOVE_LOCK_KEY } from '../src/lib/storage-gate';
-import { createTestDatabase } from './helpers';
+import {
+  createTestBucket,
+  createTestDatabase,
+  listKeys,
+  testBucketName,
+  type TestBucket,
+} from './helpers';
 
 /** Контракт Storage (§25.5): один набор для каждой реализации. */
 interface Backend {
@@ -24,7 +32,15 @@ const local: Backend = {
   },
 };
 
-const backends: Backend[] = [local];
+const s3: Backend = {
+  name: 's3',
+  async open(gate) {
+    const b = await createTestBucket();
+    return { storage: new S3Storage(b.client, b.settings.bucket, gate), close: () => b.drop() };
+  },
+};
+
+const backends: Backend[] = [local, s3];
 
 const INVALID_KEYS = ['', '/abs/x', '../x', 'a/../b', '..', '.', 'a/./b', 'a\\b', 'a//b', 'a/'];
 
@@ -72,6 +88,12 @@ describe.each(backends)('Storage: $name', (backend) => {
   it('отсутствующий ключ: read — ошибка с code ENOENT, exists — false', async () => {
     await expect(storage.read('reports/none/out.pdf')).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await storage.exists('reports/none/out.pdf')).toBe(false);
+  });
+
+  it('ключ под ключом-файлом: read — ENOENT, exists — false', async () => {
+    await storage.write('a', Buffer.from('файл'));
+    await expect(storage.read('a/b')).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await storage.exists('a/b')).toBe(false);
   });
 
   it('exists — только для файла (объекта), префикс — false', async () => {
@@ -189,5 +211,72 @@ describe.each(backends)('Storage: $name', (backend) => {
     } finally {
       await gated.close();
     }
+  });
+});
+
+describe('S3Storage: особенности S3', () => {
+  let b: TestBucket;
+  let storage: S3Storage;
+  beforeEach(async () => {
+    b = await createTestBucket();
+    storage = new S3Storage(b.client, b.settings.bucket);
+  });
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await b.drop();
+  });
+
+  it('S3: запись — один PutObject, временных объектов нет', async () => {
+    const send = vi.spyOn(b.client, 'send');
+    await storage.write('templates/t1/v1.docx', Buffer.from('docx'));
+    const cmds = send.mock.calls.map(([c]) => c);
+    expect(cmds).toHaveLength(1);
+    expect(cmds[0]).toBeInstanceOf(PutObjectCommand);
+    expect(await listKeys(b.settings)).toEqual(['templates/t1/v1.docx']);
+  });
+
+  it(
+    'S3: remove постранично — ListObjectsV2 по key/, пачки DeleteObjects не больше 1000',
+    { timeout: 120_000 },
+    async () => {
+      const keys = Array.from(
+        { length: 1001 },
+        (_, i) => `bulk/r/${String(i).padStart(4, '0')}.bin`,
+      );
+      await inBatches(keys, (k) => storage.write(k, Buffer.from('1')));
+      await storage.write('bulk/r0.bin', Buffer.from('сосед'));
+      const send = vi.spyOn(b.client, 'send');
+      await storage.remove('bulk/r');
+      const cmds: unknown[] = send.mock.calls.map(([c]) => c);
+      const lists = cmds.filter(
+        (c): c is ListObjectsV2Command => c instanceof ListObjectsV2Command,
+      );
+      expect(lists.length).toBeGreaterThanOrEqual(2);
+      expect(lists.every((c) => c.input.Prefix === 'bulk/r/')).toBe(true);
+      const sizes = cmds
+        .filter((c): c is DeleteObjectsCommand => c instanceof DeleteObjectsCommand)
+        .map((c) => c.input.Delete?.Objects?.length ?? 0);
+      expect(sizes.reduce((a, n) => a + n, 0)).toBe(1001);
+      expect(Math.max(...sizes)).toBeLessThanOrEqual(1000);
+      expect(await listKeys(b.settings)).toEqual(['bulk/r0.bin']);
+    },
+  );
+
+  it('S3: нет бакета — ошибка S3 как есть, не ENOENT', async () => {
+    const missing = new S3Storage(b.client, testBucketName());
+    const err = await missing.read('templates/t1/v1.docx').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as { code?: string }).code).not.toBe('ENOENT');
+    expect((err as Error).name).toBe('NoSuchBucket');
+  });
+
+  it('S3: недопустимый ключ не доходит до S3', async () => {
+    const send = vi.spyOn(b.client, 'send');
+    await expect(storage.write('../x', Buffer.from('1'))).rejects.toThrow(
+      'недопустимый путь: ../x',
+    );
+    await expect(storage.remove('a//b')).rejects.toThrow('недопустимый путь: a//b');
+    await expect(storage.exists('a\\b')).rejects.toThrow('недопустимый путь: a\\b');
+    expect(send).not.toHaveBeenCalled();
   });
 });

@@ -1,11 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { S3Storage } from '../src/lib/s3-storage';
+import { LocalStorage } from '../src/lib/storage';
 import { createBlankDocument } from '../src/modules/templates/blank';
 import {
   createSourceDatabase,
   createTemplate,
   createTestApp,
+  listKeys,
   loginAs,
   multipart,
+  testStorageBackend,
   type TestApp,
 } from './helpers';
 
@@ -30,7 +34,7 @@ beforeAll(async () => {
 afterAll(() => t.close());
 
 describe('templates', () => {
-  it('создание пустого docx: файл на диске, version=1, outputFormats', async () => {
+  it('создание пустого docx: файл в хранилище, version=1, outputFormats', async () => {
     const r = await t.app.inject({
       method: 'POST',
       url: '/api/templates',
@@ -53,6 +57,13 @@ describe('templates', () => {
       outputFormats: ['pdf', 'docx', 'odt'],
     });
     expect(await t.deps.storage.exists(`templates/${id}/v1.docx`)).toBe(true);
+    // Прогон test:int:s3 — файл действительно в бакете SeaweedFS, а не на диске.
+    if (testStorageBackend === 's3') {
+      expect(t.deps.storage).toBeInstanceOf(S3Storage);
+      expect(await listKeys(t.deps.config.s3!)).toContain(`templates/${id}/v1.docx`);
+    } else {
+      expect(t.deps.storage).toBeInstanceOf(LocalStorage);
+    }
   });
 
   it('user видит список и детали без SQL', async () => {

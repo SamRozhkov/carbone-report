@@ -1,4 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import {
+  CreateBucketCommand,
+  DeleteBucketCommand,
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
+  type S3Client,
+} from '@aws-sdk/client-s3';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,13 +14,14 @@ import type { Redis } from 'ioredis';
 import pg from 'pg';
 import { inject } from 'vitest';
 import { buildApp, type App } from '../src/app';
-import type { Config } from '../src/config';
+import type { Config, S3Settings } from '../src/config';
 import { createDb, migrateDb } from '../src/db/client';
 import { eq } from 'drizzle-orm';
 import { templates, users, type UserRow } from '../src/db/schema';
 import type { AppDeps } from '../src/deps';
 import { createRedis } from '../src/lib/redis';
-import { LocalStorage } from '../src/lib/storage';
+import { createStorage } from '../src/lib/create-storage';
+import { createS3Client } from '../src/lib/s3-storage';
 import { createRunFileGate } from '../src/lib/run-file-gate';
 import { createRemoveGate } from '../src/lib/storage-gate';
 import { createSourcePools } from '../src/modules/datasources/pools';
@@ -44,6 +52,8 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     carboneUrl: 'http://carbone:4000',
     redisUrl: inject('redisUrl'),
     storageDir,
+    storageBackend: 'local',
+    s3: null,
     queryTimeoutMs: 2000,
     queryMaxRows: 1000,
     renderTimeoutMs: 5000,
@@ -112,10 +122,93 @@ export async function createTestRedis(keyPrefix = `t_${randomUUID()}:`): Promise
   return redis;
 }
 
+/** Хранилище интеграционных тестов: local, или s3 при TEST_STORAGE_BACKEND=s3 (pnpm test:int:s3). */
+export const testStorageBackend: 'local' | 's3' =
+  process.env.TEST_STORAGE_BACKEND === 's3' ? 's3' : 'local';
+
+/** Настройки S3 для SeaweedFS из global-setup. */
+export function testS3Settings(bucket: string, over: Partial<S3Settings> = {}): S3Settings {
+  const s3 = inject('s3');
+  return {
+    endpoint: s3.endpoint,
+    region: 'us-east-1',
+    bucket,
+    accessKeyId: s3.accessKeyId,
+    secretAccessKey: s3.secretAccessKey,
+    forcePathStyle: true,
+    createBucket: false,
+    ...over,
+  };
+}
+
+/** Уникальное имя бакета: 3–63 символа, строчные буквы, цифры и «-». */
+export const testBucketName = () => `cr-${randomUUID()}`;
+
+/** Все ключи бакета по алфавиту. */
+export async function listKeys(settings: S3Settings): Promise<string[]> {
+  const client = createS3Client(settings);
+  try {
+    const keys: string[] = [];
+    let token: string | undefined;
+    do {
+      const page = await client.send(
+        new ListObjectsV2Command({ Bucket: settings.bucket, ContinuationToken: token }),
+      );
+      for (const o of page.Contents ?? []) if (o.Key) keys.push(o.Key);
+      token = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (token);
+    return keys.sort();
+  } finally {
+    client.destroy();
+  }
+}
+
+/** Удаляет все объекты бакета и сам бакет. */
+export async function dropTestBucket(settings: S3Settings): Promise<void> {
+  const keys = await listKeys(settings);
+  const client = createS3Client(settings);
+  try {
+    for (let i = 0; i < keys.length; i += 1000) {
+      const Objects = keys.slice(i, i + 1000).map((Key) => ({ Key }));
+      await client.send(
+        new DeleteObjectsCommand({ Bucket: settings.bucket, Delete: { Objects, Quiet: true } }),
+      );
+    }
+    await client.send(new DeleteBucketCommand({ Bucket: settings.bucket }));
+  } finally {
+    client.destroy();
+  }
+}
+
+export interface TestBucket {
+  settings: S3Settings;
+  client: S3Client;
+  drop(): Promise<void>;
+}
+
+/**
+ * Пустой бакет SeaweedFS для теста; drop() удаляет его вместе с объектами (непустой бакет
+ * SeaweedFS удалить не даст: -s3.allowDeleteBucketNotEmpty=false).
+ */
+export async function createTestBucket(): Promise<TestBucket> {
+  const settings = testS3Settings(testBucketName());
+  const client = createS3Client(settings);
+  await client.send(new CreateBucketCommand({ Bucket: settings.bucket }));
+  return {
+    settings,
+    client,
+    async drop() {
+      await dropTestBucket(settings);
+      client.destroy();
+    },
+  };
+}
+
 /**
  * `redis` по умолчанию — свой клиент тестового Redis с уникальным `keyPrefix`
  * (закрывается в `close()`); переданный явно клиент или `null` тест закрывает сам.
  * `config` — переопределение отдельных значений тестовой конфигурации.
+ * Хранилище — по TEST_STORAGE_BACKEND: local (каталог во временной папке) или s3 (свой бакет SeaweedFS).
  */
 export async function createTestApp(
   overrides: Partial<Omit<AppDeps, 'config' | 'db' | 'storage'>> = {},
@@ -123,7 +216,13 @@ export async function createTestApp(
 ): Promise<TestApp> {
   const databaseUrl = await createTestDatabase();
   const storageDir = await mkdtemp(join(tmpdir(), 'cr-test-'));
-  const cfg: Config = { ...testConfig(databaseUrl, storageDir), ...config };
+  const bucket = testStorageBackend === 's3' ? await createTestBucket() : null;
+  const cfg: Config = {
+    ...testConfig(databaseUrl, storageDir),
+    storageBackend: testStorageBackend,
+    s3: bucket?.settings ?? null,
+    ...config,
+  };
   const { db, pool } = createDb(databaseUrl);
   const gatePool = new pg.Pool({ connectionString: databaseUrl, max: 2 });
   gatePool.on('error', () => {});
@@ -134,7 +233,7 @@ export async function createTestApp(
   const deps: AppDeps = {
     config: cfg,
     db,
-    storage: new LocalStorage(storageDir, createRemoveGate(gatePool)),
+    storage: await createStorage(cfg, createRemoveGate(gatePool)),
     runFileGate: createRunFileGate(runFilePool),
     sources: createSourcePools({ db, config: cfg }),
     carbone: { render: notConfigured('carbone') },
@@ -155,6 +254,7 @@ export async function createTestApp(
       await pool.end();
       await ownRedis?.quit().catch(() => ownRedis.disconnect());
       await rm(storageDir, { recursive: true, force: true });
+      await bucket?.drop();
     },
   };
 }

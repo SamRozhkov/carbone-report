@@ -1,31 +1,70 @@
 import { z } from 'zod';
 
-const Env = z.object({
-  DATABASE_URL: z.string({ error: 'DATABASE_URL обязателен' }).min(1, 'DATABASE_URL обязателен'),
-  APP_SECRET: z.string().min(32, 'APP_SECRET: минимум 32 символа'),
-  ENCRYPTION_KEY: z
-    .string()
-    .refine((v) => Buffer.from(v, 'base64').length === 32, 'ENCRYPTION_KEY: 32 байта в base64'),
-  ONLYOFFICE_JWT_SECRET: z.string().min(32, 'ONLYOFFICE_JWT_SECRET: минимум 32 символа'),
-  ONLYOFFICE_INTERNAL_URL: z.url().default('http://onlyoffice'),
-  API_INTERNAL_URL: z.url().default('http://api:3000'),
-  CARBONE_URL: z.url().default('http://carbone:4000'),
-  REDIS_URL: z.string().default('redis://redis:6379'),
-  ADMIN_LOGIN: z.string().optional(),
-  ADMIN_PASSWORD: z
-    .string()
-    .refine((v) => v === '' || v.length >= 8, 'ADMIN_PASSWORD: минимум 8 символов')
-    .optional(),
-  STORAGE_DIR: z.string().default('/data'),
-  QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
-  QUERY_MAX_ROWS: z.coerce.number().int().positive().default(100000),
-  RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
-  REPORT_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
-  REPORT_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
-  TZ: z.string().default('Europe/Moscow'),
-  PORT: z.coerce.number().int().default(3000),
-  COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
-});
+const S3_REQUIRED = ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const;
+
+const Env = z
+  .object({
+    DATABASE_URL: z.string({ error: 'DATABASE_URL обязателен' }).min(1, 'DATABASE_URL обязателен'),
+    APP_SECRET: z.string().min(32, 'APP_SECRET: минимум 32 символа'),
+    ENCRYPTION_KEY: z
+      .string()
+      .refine((v) => Buffer.from(v, 'base64').length === 32, 'ENCRYPTION_KEY: 32 байта в base64'),
+    ONLYOFFICE_JWT_SECRET: z.string().min(32, 'ONLYOFFICE_JWT_SECRET: минимум 32 символа'),
+    ONLYOFFICE_INTERNAL_URL: z.url().default('http://onlyoffice'),
+    API_INTERNAL_URL: z.url().default('http://api:3000'),
+    CARBONE_URL: z.url().default('http://carbone:4000'),
+    REDIS_URL: z.string().default('redis://redis:6379'),
+    ADMIN_LOGIN: z.string().optional(),
+    ADMIN_PASSWORD: z
+      .string()
+      .refine((v) => v === '' || v.length >= 8, 'ADMIN_PASSWORD: минимум 8 символов')
+      .optional(),
+    STORAGE_BACKEND: z.enum(['local', 's3'], { error: 'ожидается local или s3' }).default('local'),
+    STORAGE_DIR: z.string().default('/data'),
+    // Пустая строка из .env — «не задано» (для S3_ENDPOINT — AWS S3).
+    S3_ENDPOINT: z
+      .string()
+      .refine(
+        (v) => v === '' || (/^https?:\/\//.test(v) && URL.canParse(v)),
+        'нужен URL, например http://s3:8333',
+      )
+      .optional(),
+    S3_REGION: z.string().optional(),
+    S3_BUCKET: z.string().optional(),
+    S3_ACCESS_KEY_ID: z.string().optional(),
+    S3_SECRET_ACCESS_KEY: z.string().optional(),
+    S3_FORCE_PATH_STYLE: z.enum(['true', 'false']).default('false'),
+    S3_CREATE_BUCKET: z.enum(['true', 'false']).default('false'),
+    QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+    QUERY_MAX_ROWS: z.coerce.number().int().positive().default(100000),
+    RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
+    REPORT_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
+    REPORT_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+    TZ: z.string().default('Europe/Moscow'),
+    PORT: z.coerce.number().int().default(3000),
+    COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
+  })
+  .superRefine((e, ctx) => {
+    if (e.STORAGE_BACKEND !== 's3') return;
+    // Значения не попадают в сообщение — только имена переменных.
+    for (const k of S3_REQUIRED)
+      if (!e[k])
+        ctx.addIssue({ code: 'custom', path: [k], message: 'обязателен при STORAGE_BACKEND=s3' });
+  });
+
+/** Настройки S3 (STORAGE_BACKEND=s3). Ключи доступа не логируются. */
+export interface S3Settings {
+  /** Не задан — AWS S3 по региону. */
+  endpoint?: string;
+  region: string;
+  bucket: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  /** SeaweedFS, MinIO — true (адрес вида http://host/bucket/key). */
+  forcePathStyle: boolean;
+  /** Создать бакет при старте, если его нет. */
+  createBucket: boolean;
+}
 
 export interface Config {
   databaseUrl: string;
@@ -38,7 +77,11 @@ export interface Config {
   redisUrl: string;
   adminLogin?: string;
   adminPassword?: string;
+  storageBackend: 'local' | 's3';
+  /** Каталог файлов для local. */
   storageDir: string;
+  /** null при local. */
+  s3: S3Settings | null;
   queryTimeoutMs: number;
   queryMaxRows: number;
   renderTimeoutMs: number;
@@ -69,7 +112,20 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     redisUrl: e.REDIS_URL,
     adminLogin: e.ADMIN_LOGIN,
     adminPassword: e.ADMIN_PASSWORD,
+    storageBackend: e.STORAGE_BACKEND,
     storageDir: e.STORAGE_DIR,
+    s3:
+      e.STORAGE_BACKEND === 's3'
+        ? {
+            endpoint: e.S3_ENDPOINT || undefined,
+            region: e.S3_REGION || 'us-east-1',
+            bucket: e.S3_BUCKET!,
+            accessKeyId: e.S3_ACCESS_KEY_ID!,
+            secretAccessKey: e.S3_SECRET_ACCESS_KEY!,
+            forcePathStyle: e.S3_FORCE_PATH_STYLE === 'true',
+            createBucket: e.S3_CREATE_BUCKET === 'true',
+          }
+        : null,
     queryTimeoutMs: e.QUERY_TIMEOUT_MS,
     queryMaxRows: e.QUERY_MAX_ROWS,
     renderTimeoutMs: e.RENDER_TIMEOUT_MS,

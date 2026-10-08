@@ -5,7 +5,7 @@ import { createDb, migrateDb } from './db/client';
 import type { AppDeps } from './deps';
 import { fetchFile } from './lib/fetch-file';
 import { createRedis } from './lib/redis';
-import { LocalStorage } from './lib/storage';
+import { createStorage } from './lib/create-storage';
 import { createRunFileGate } from './lib/run-file-gate';
 import { createRemoveGate } from './lib/storage-gate';
 import { ensureAdmin } from './modules/auth/bootstrap';
@@ -24,6 +24,9 @@ gatePool.on('error', (err) => console.error('gate pool', err));
 const runFilePool = new pg.Pool({ connectionString: config.databaseUrl, max: 3 });
 runFilePool.on('error', (err) => console.error('run file pool', err));
 await migrateDb(db);
+// До buildApp и listen: с s3 нет бакета (и S3_CREATE_BUCKET=false) — API не запускается.
+// Fastify-логгера ещё нет; сообщение о созданном бакете — в консоль (как ensureAdmin).
+const storage = await createStorage(config, createRemoveGate(gatePool), console);
 
 // Fastify-логгера ещё нет; ошибки Redis до него пишем в консоль (как ensureAdmin).
 const redis = createRedis(config.redisUrl, {
@@ -33,7 +36,7 @@ const carbone = new CarboneClient({ baseUrl: config.carboneUrl, cache: redisTemp
 const deps: AppDeps = {
   config,
   db,
-  storage: new LocalStorage(config.storageDir, createRemoveGate(gatePool)),
+  storage,
   runFileGate: createRunFileGate(runFilePool),
   sources: createSourcePools({ db, config }),
   carbone,

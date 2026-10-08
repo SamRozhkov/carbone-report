@@ -52,6 +52,10 @@ describe('LocalStorage', () => {
     expect(await storage.exists('reports/r1')).toBe(false);
     expect(await storage.exists('reports/r1/out.pdf/x')).toBe(false);
   });
+  it('read ключа под файлом (ENOTDIR) — ошибка с code ENOENT, как NoSuchKey на S3', async () => {
+    await storage.write('a', Buffer.from('файл'));
+    await expect(storage.read('a/b')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
   it('запрещает выход за корень во всех методах', async () => {
     const ops = [
       () => storage.read('../etc/passwd'),

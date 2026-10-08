@@ -21,6 +21,8 @@ export interface Storage {
   removeUngated(key: string): Promise<void>;
   /** Есть ли файл (объект) с этим ключом; «каталог» (префикс) — false. */
   exists(key: string): Promise<boolean>;
+  /** Освобождает ресурсы (соединения S3) при остановке; после вызова хранилище не используется. */
+  close?(): Promise<void>;
 }
 
 /**
@@ -94,4 +96,7 @@ export class LocalStorage implements Storage {
       throw e;
     }
   }
+
+  /** Каталог на диске: закрывать нечего. */
+  async close(): Promise<void> {}
 }

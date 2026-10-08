@@ -217,6 +217,18 @@ describe.each(backends)('Storage: $name', (backend) => {
   });
 });
 
+it('LocalStorage: close() — без действий, файлы остаются', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'cr-close-'));
+  try {
+    const storage = new LocalStorage(dir);
+    await storage.write('a/b.txt', Buffer.from('1'));
+    await expect(storage.close()).resolves.toBeUndefined();
+    expect((await storage.read('a/b.txt')).toString()).toBe('1');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 describe('S3Storage: особенности S3', () => {
   let b: TestBucket;
   let storage: S3Storage;
@@ -271,6 +283,13 @@ describe('S3Storage: особенности S3', () => {
     expect(err).toBeInstanceOf(Error);
     expect((err as { code?: string }).code).not.toBe('ENOENT');
     expect((err as Error).name).toBe('NoSuchBucket');
+  });
+
+  it('S3: close() закрывает клиент S3 (destroy)', async () => {
+    const own = createS3Client(b.settings);
+    const destroy = vi.spyOn(own, 'destroy');
+    await new S3Storage(own, b.settings.bucket).close();
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 
   it('S3: недопустимый ключ не доходит до S3', async () => {

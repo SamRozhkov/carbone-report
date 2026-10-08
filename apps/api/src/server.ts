@@ -63,6 +63,7 @@ async function shutdown(signal: string) {
   await gatePool.end();
   await runFilePool.end();
   await pool.end();
+  await deps.storage.close?.();
   await redis.quit().catch(() => redis.disconnect());
   process.exit(0);
 }

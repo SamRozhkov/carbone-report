@@ -89,6 +89,16 @@ export class S3Storage implements Storage {
     }
   }
 
+  /** Закрывает соединения клиента S3 (keep-alive), чтобы остановка процесса не ждала их. */
+  async close(): Promise<void> {
+    this.client.destroy();
+  }
+
+  /**
+   * 404 у HeadObject — и «нет объекта», и «нет бакета»: оба дают false. Это безопасно: бакет
+   * проверяет ensureBucket при старте API, а единственный вызывающий — migrateTemplateFiles
+   * (после старта), где false — лишь пропуск переноса с предупреждением в журнале.
+   */
   async exists(key: string): Promise<boolean> {
     checkKey(key);
     try {

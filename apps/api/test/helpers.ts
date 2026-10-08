@@ -252,6 +252,7 @@ export async function createTestApp(
       await gatePool.end();
       await runFilePool.end();
       await pool.end();
+      await deps.storage.close?.();
       await ownRedis?.quit().catch(() => ownRedis.disconnect());
       await rm(storageDir, { recursive: true, force: true });
       await bucket?.drop();

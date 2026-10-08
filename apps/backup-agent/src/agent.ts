@@ -232,7 +232,10 @@ export class BackupAgent {
     } catch (e) {
       // Операция уже записана как running: без этого она осталась бы running до рестарта агента.
       this.finish(op, 'failed', errorText(e));
+      // Повтор по коду, не начавшийся из-за журнала, тоже меняет код (§26.4): прежний мог уйти в вывод.
+      const code = this.state.recovery ? this.renewCode() : null;
       await this.save().catch(() => {});
+      if (code) this.d.printCode(code);
       this.running = null;
       await release();
       throw e;

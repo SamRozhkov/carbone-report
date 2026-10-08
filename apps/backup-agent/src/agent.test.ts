@@ -647,4 +647,25 @@ describe('BackupAgent: сбои повтора и повреждённое со�
     });
     expect(t.calls).toEqual([]);
   });
+
+  it('повтор по коду: журнал не открылся — новый код, прежний больше не подходит', async () => {
+    const logs: OpLogs = {
+      open: async () => Promise.reject(new Error('диск переполнен')),
+      tail: async () => [],
+    };
+    const t = await setup({
+      logs,
+      state: {
+        operation: restoreOp({ status: 'failed', phase: 'storage' }),
+        recovery: recoveryState('AAAA-BBBB-CCCC'),
+      },
+    });
+    const first = t.codes[0]!; // при старте код заменяется
+    await expect(t.agent.recover(first, 'same')).rejects.toThrow('диск переполнен');
+    expect(t.codes).toHaveLength(2);
+    expect(t.codes[1]).toMatch(CODE_RE);
+    expect(t.codes[1]).not.toBe(first);
+    expect(await t.agent.recover(first, 'same')).toEqual({ error: 'bad-code', burned: false });
+    expect((await t.store.read()).recovery?.codeHash).toBe(hashCode(t.codes[1]!));
+  });
 });

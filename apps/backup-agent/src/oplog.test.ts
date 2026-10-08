@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createWriteStream } from 'node:fs';
 import { fileOpLogs } from './oplog';
 
 let dir: string;
@@ -44,5 +45,16 @@ describe('fileOpLogs', () => {
     expect(files).not.toContain('old00.log');
     expect(files).not.toContain('old01.log');
     expect(files).not.toContain('old02.log');
+  });
+
+  it('сбой записи после открытия: без падения процесса, write — no-op, close завершается', async () => {
+    let stream!: ReturnType<typeof createWriteStream>;
+    const logs = fileOpLogs(dir, 20, 500, (p) => (stream = createWriteStream(p, { flags: 'a' })));
+    const log = await logs.open('e1');
+    log.write('до сбоя');
+    stream.destroy(new Error('ENOSPC: no space left on device'));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(() => log.write('после сбоя')).not.toThrow();
+    await expect(log.close()).resolves.toBeUndefined();
   });
 });

@@ -1,5 +1,5 @@
 import { once } from 'node:events';
-import { createWriteStream } from 'node:fs';
+import { createWriteStream, type WriteStream } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -14,16 +14,35 @@ export interface OpLogs {
 }
 
 /** Журналы операций /backups/.op/<id>.log (§26.1): хранятся последние keep, отдаётся хвост tailLines строк. */
-export function fileOpLogs(dir: string, keep = 20, tailLines = 500): OpLogs {
+export function fileOpLogs(
+  dir: string,
+  keep = 20,
+  tailLines = 500,
+  /** Подмена в тестах: имитация сбоя записи. */
+  createStream: (path: string) => WriteStream = (path) => createWriteStream(path, { flags: 'a' }),
+): OpLogs {
   return {
     async open(id) {
       await mkdir(dir, { recursive: true });
-      const stream = createWriteStream(join(dir, `${id}.log`), { flags: 'a' });
+      const stream = createStream(join(dir, `${id}.log`));
       await once(stream, 'open');
+      // Сбой записи после открытия (ENOSPC/EIO) не должен ронять агента посреди восстановления:
+      // журнал перестаёт писаться, операция продолжается.
+      let broken = false;
+      stream.on('error', () => {
+        broken = true;
+      });
       await prune(dir, keep);
       return {
-        write: (line) => void stream.write(`${line}\n`),
-        close: () => new Promise<void>((resolve) => stream.end(resolve)),
+        write: (line) => {
+          if (!broken) stream.write(`${line}\n`);
+        },
+        close: () =>
+          new Promise<void>((resolve) => {
+            if (broken || stream.destroyed) return resolve();
+            stream.once('error', () => resolve());
+            stream.end(resolve);
+          }),
       };
     },
     async tail(id) {

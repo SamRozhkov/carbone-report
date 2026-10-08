@@ -1,7 +1,8 @@
 #!/bin/sh
 # Восстановление из каталога бэкапа: БД app и файлы хранилища. Останавливает api и web, очищает Redis.
 # Хранилище — по STORAGE_BACKEND (по умолчанию s3, как у стека): s3 — бакет в сервисе s3 через сервис backup
-# (rclone sync); local — том storage установки до Плана 14: STORAGE_BACKEND=local scripts/restore.sh …
+# (rclone sync); local — том storage, только если api в compose сам работает с STORAGE_BACKEND=local:
+# STORAGE_BACKEND=local scripts/restore.sh …
 set -eu
 dir=${1:?использование: scripts/restore.sh backups/<каталог>}
 dir=$(cd "$dir" && pwd)
@@ -23,6 +24,18 @@ done
 project=$(docker compose config | sed -n 's/^name: //p')
 [ -n "$project" ] || { echo "не удалось прочитать конфигурацию compose — проверьте .env" >&2; exit 1; }
 if [ "$backend" = local ]; then
+  # Том storage читает только api в режиме local. Стек из репозитория работает с s3: восстановленные
+  # в том файлы api не увидит, а база будет ссылаться на них. STORAGE_BACKEND сервиса api — из его
+  # блока environment в «docker compose config» (без значения API работает в режиме local).
+  api_config=$(docker compose config api)
+  api_backend=$(printf '%s\n' "$api_config" |
+    sed -n '/^  api:$/,/^ \{0,2\}[^ ]/s/^      STORAGE_BACKEND: *//p' | tr -d "\"'")
+  if [ "${api_backend:-local}" != local ]; then
+    echo "STORAGE_BACKEND=local: сервис api в compose работает с STORAGE_BACKEND=${api_backend} и том storage не читает." >&2
+    echo "Восстановление в режиме local — только для установок, где api запущен с STORAGE_BACKEND=local." >&2
+    echo "Для этого стека запустите без STORAGE_BACKEND (режим s3): scripts/restore.sh $dir" >&2
+    exit 2
+  fi
   # Полное имя тома storage этого проекта: «docker compose run -v storage:/data» compose сливает
   # с монтированием сервиса, поэтому том передаётся docker run по имени.
   volume=$(docker volume ls -q --filter "label=com.docker.compose.project=$project" \
@@ -102,11 +115,6 @@ docker compose stop api web
 docker compose up -d --wait postgres
 # Ручной бэкап мог стартовать, пока шло подтверждение.
 refuse_if_manual_backup
-# База заменяется целиком в ОДНОЙ транзакции: сначала схемы drizzle и public удаляются, затем
-# выполняется SQL из дампа. «pg_restore --clean» удалил бы только объекты из дампа, и в стеке
-# с более новой схемой лишние таблицы и миграции помешали бы восстановлению.
-# SQL сначала пишется в файл: если pg_restore упадёт на середине, psql не закоммитит обрезанный
-# скрипт. psql -1 с несколькими -f (PostgreSQL ≥15) оборачивает их в одну транзакцию.
 if [ "$backend" = s3 ]; then
   # Проверка до изменений: сервис s3 запущен, настройки backup верны, бакет читается.
   # При сбое восстановление останавливается, база не тронута.
@@ -115,6 +123,11 @@ if [ "$backend" = s3 ]; then
     '[ "${STORAGE_BACKEND:-local}" = s3 ] || { echo "в сервисе backup STORAGE_BACKEND должен быть s3" >&2; exit 2; }
      . /backup/lib.sh && check_storage_backend && s3_env && rclone -q lsf --max-depth 1 "s3:$S3_BUCKET" >/dev/null'
 fi
+# База заменяется целиком в ОДНОЙ транзакции: сначала схемы drizzle и public удаляются, затем
+# выполняется SQL из дампа. «pg_restore --clean» удалил бы только объекты из дампа, и в стеке
+# с более новой схемой лишние таблицы и миграции помешали бы восстановлению.
+# SQL сначала пишется в файл: если pg_restore упадёт на середине, psql не закоммитит обрезанный
+# скрипт. psql -1 с несколькими -f (PostgreSQL ≥15) оборачивает их в одну транзакцию.
 phase=restoring
 docker compose cp "$dir/db.dump" postgres:/tmp/restore.dump
 docker compose exec -T postgres sh -ec '

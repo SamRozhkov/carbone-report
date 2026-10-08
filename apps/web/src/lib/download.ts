@@ -8,3 +8,17 @@ export function triggerDownload(url: string, filename?: string): void {
   a.click();
   a.remove();
 }
+
+/** Имя файла из Content-Disposition: сначала `filename*=UTF-8''…` (кириллица), потом `filename="…"`. */
+export function filenameFromDisposition(header: string | null): string | undefined {
+  if (!header) return undefined;
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (star) {
+    try {
+      return decodeURIComponent(star[1]!.trim());
+    } catch {
+      // битая кодировка — пробуем обычное имя
+    }
+  }
+  return /filename="([^"]*)"/i.exec(header)?.[1] || undefined;
+}

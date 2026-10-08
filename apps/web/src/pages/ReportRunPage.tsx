@@ -1,15 +1,15 @@
-import type { OutputFormat, ParamsInput } from '@carbone-reports/shared';
-import { Alert, Button, Loader, SegmentedRadioGroup, Text } from '@gravity-ui/uikit';
+import type { ParamsInput } from '@carbone-reports/shared';
+import { Alert, Button, Loader, Text } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { api, runFileUrl } from '../api/endpoints';
 import { ApiRequestError } from '../api/client';
 import { fieldErrors } from '../api/errors';
+import { useRunDownload } from '../api/useRunDownload';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { PageHeader } from '../components/PageHeader';
 import { ParamForm } from '../components/ParamForm';
-import { triggerDownload } from '../lib/download';
 import { initialValues, pickParams } from '../lib/params';
 
 export function ReportRunRoute() {
@@ -25,25 +25,24 @@ export function ReportRunPage() {
   const t = template.data;
 
   const [values, setValues] = useState<ParamsInput>({});
-  const [format, setFormat] = useState<OutputFormat>('pdf');
-  const [run, setRun] = useState<{ id: string; format: OutputFormat } | null>(null);
+  const [runId, setRunId] = useState<string | null>(null);
   const [optionsLoading, setOptionsLoading] = useState(false);
+  const download = useRunDownload();
+  const resetDownload = download.reset;
 
   // Форма строится заново, если шаблон сменился или админ изменил его описание.
   const version = t ? `${t.id}:${t.updatedAt}` : '';
   useEffect(() => {
     if (!t) return;
     setValues(initialValues(t.params));
-    setFormat(t.defaultOutput);
-    setRun(null);
+    setRunId(null);
+    resetDownload();
   }, [version]);
 
+  // Формата при формировании нет (§24.1): сервер сохраняет снимок и собирает PDF для просмотра.
   const render = useMutation({
     mutationFn: () => api.reports.render(id, { params: pickParams(t!.params, values) }),
-    onSuccess: ({ runId }) => {
-      setRun({ id: runId, format });
-      if (format !== 'pdf') triggerDownload(runFileUrl(runId, { format }));
-    },
+    onSuccess: ({ runId }) => setRunId(runId),
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ['runs'] }),
     onError: (e) => {
       if (e instanceof ApiRequestError && e.code === 'VALIDATION') void template.refetch();
@@ -79,7 +78,8 @@ export function ReportRunPage() {
           className="cr-form"
           onSubmit={(e) => {
             e.preventDefault();
-            setRun(null);
+            setRunId(null);
+            download.reset();
             render.mutate();
           }}
         >
@@ -93,14 +93,6 @@ export function ReportRunPage() {
             disabled={render.isPending}
             onOptionsLoadingChange={setOptionsLoading}
           />
-          <div className="cr-field">
-            <Text variant="subheader-1">Формат</Text>
-            <SegmentedRadioGroup
-              value={format}
-              onUpdate={(v) => setFormat(v as OutputFormat)}
-              options={t.outputFormats.map((f) => ({ value: f, content: f.toUpperCase() }))}
-            />
-          </div>
           <ErrorAlert error={generalError} />
           {unmatched.length > 0 && (
             <Alert
@@ -123,21 +115,36 @@ export function ReportRunPage() {
           </div>
         </form>
         <div>
-          {run && (
+          {runId && (
             <>
               <div className="cr-page-header">
                 <Text variant="subheader-2">Отчёт готов</Text>
-                <Button view="outlined" href={runFileUrl(run.id, { format: run.format })}>
-                  Скачать
-                </Button>
               </div>
-              {run.format === 'pdf' && (
-                <iframe
-                  title="Предпросмотр отчёта"
-                  src={runFileUrl(run.id, { inline: true })}
-                  className="cr-pdf"
-                />
-              )}
+              {/* Просмотр всегда в PDF, для Excel тоже (§24.1). */}
+              <iframe
+                title="Предпросмотр отчёта"
+                src={runFileUrl(runId, { format: 'pdf', inline: true })}
+                className="cr-pdf cr-pdf_run"
+              />
+              <div className="cr-save" role="group" aria-label="Сохранить как">
+                <Text variant="subheader-1">Сохранить как</Text>
+                {t.outputFormats.map((f) => {
+                  const busy = download.pending?.runId === runId && download.pending.format === f;
+                  return (
+                    <Button
+                      key={f}
+                      view={f === t.defaultOutput ? 'action' : 'outlined'}
+                      size="l"
+                      loading={busy}
+                      disabled={!!download.pending && !busy}
+                      onClick={() => download.save({ runId, format: f })}
+                    >
+                      {f.toUpperCase()}
+                    </Button>
+                  );
+                })}
+              </div>
+              <ErrorAlert error={download.error} title="Не удалось сохранить файл" />
             </>
           )}
         </div>

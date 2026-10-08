@@ -2,12 +2,23 @@ import type { ParamsInput, RunDto } from '@carbone-reports/shared';
 import { RUNS_PAGE_SIZE } from '@carbone-reports/shared';
 import { ArrowDownToLine } from '@gravity-ui/icons';
 import type { TableColumnConfig } from '@gravity-ui/uikit';
-import { Button, Icon, Label, Loader, Pagination, Select, Table, Text } from '@gravity-ui/uikit';
+import {
+  Button,
+  DropdownMenu,
+  Icon,
+  Label,
+  Loader,
+  Pagination,
+  Select,
+  Table,
+  Text,
+} from '@gravity-ui/uikit';
 import { useEffect } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
 import { api, runFileUrl } from '../api/endpoints';
 import { useMe } from '../api/session';
+import { useRunDownload } from '../api/useRunDownload';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { PageHeader } from '../components/PageHeader';
 import { formatDateTime, formatDuration } from '../lib/format';
@@ -36,6 +47,7 @@ export function HistoryPage() {
   const rawUserId = sp.get('userId') ?? '';
   const userId = isAdmin && UUID_RE.test(rawUserId) ? rawUserId : '';
 
+  const download = useRunDownload();
   const runs = useQuery({
     queryKey: ['runs', { page, status, templateId, userId }],
     queryFn: () =>
@@ -93,8 +105,12 @@ export function HistoryPage() {
     {
       id: 'format',
       name: 'Формат',
-      template: (r) => r.outputFormat?.toUpperCase() ?? '—',
-      width: 80,
+      // Старый запуск — его формат; запуск со снимком — уже собранные форматы.
+      template: (r) =>
+        (r.outputFormat ? [r.outputFormat] : r.readyFormats)
+          .map((f) => f.toUpperCase())
+          .join(', ') || '—',
+      width: 110,
     },
     {
       id: 'status',
@@ -122,16 +138,51 @@ export function HistoryPage() {
       id: 'file',
       name: '',
       width: 60,
-      template: (r) =>
-        r.fileAvailable ? (
-          <Button view="flat" size="s" href={runFileUrl(r.id)} aria-label="Скачать" title="Скачать">
-            <Icon data={ArrowDownToLine} />
-          </Button>
-        ) : r.status === 'ok' ? (
-          <Text variant="caption-2" color="secondary">
-            файл удалён
-          </Text>
-        ) : null,
+      template: (r) => {
+        if (!r.fileAvailable) {
+          return r.status === 'ok' ? (
+            <Text variant="caption-2" color="secondary">
+              файл удалён
+            </Text>
+          ) : null;
+        }
+        // Старый запуск — одна ссылка, как раньше.
+        if (r.outputFormat) {
+          return (
+            <Button
+              view="flat"
+              size="s"
+              href={runFileUrl(r.id)}
+              aria-label="Скачать"
+              title="Скачать"
+            >
+              <Icon data={ArrowDownToLine} />
+            </Button>
+          );
+        }
+        // Запуск со снимком — меню со всеми форматами (§24.6).
+        return (
+          <DropdownMenu
+            items={r.formats.map((f) => ({
+              text: f.toUpperCase(),
+              action: () => download.save({ runId: r.id, format: f }),
+            }))}
+            renderSwitcher={({ onClick, onKeyDown }) => (
+              <Button
+                view="flat"
+                size="s"
+                aria-label="Скачать"
+                title="Скачать"
+                loading={download.pending?.runId === r.id}
+                onClick={onClick}
+                extraProps={{ onKeyDown }}
+              >
+                <Icon data={ArrowDownToLine} />
+              </Button>
+            )}
+          />
+        );
+      },
     },
   ];
 
@@ -175,6 +226,7 @@ export function HistoryPage() {
         )}
       </div>
       <ErrorAlert error={runs.error} />
+      <ErrorAlert error={download.error} title="Не удалось скачать файл" />
       {runs.isError ? null : runs.isPending ? (
         <Loader />
       ) : (

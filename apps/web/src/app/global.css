@@ -83,6 +83,19 @@ body {
   border-radius: 8px;
 }
 
+/* Под просмотром — ряд «Сохранить как», поэтому просмотр чуть ниже, чем во вкладке «Предпросмотр». */
+.cr-pdf_run {
+  height: calc(100vh - 300px);
+}
+
+.cr-save {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
 .cr-editor-head {
   display: flex;
   align-items: center;

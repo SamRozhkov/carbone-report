@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import * as download from '../lib/download';
@@ -32,40 +32,93 @@ const template = {
   ],
 };
 
+const DISPOSITION = `attachment; filename="____ 2026-01-10.docx"; filename*=UTF-8''%D0%A1%D1%87%D1%91%D1%82%202026-01-10.docx`;
+const COMMUNITY =
+  'в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
+
+/** Задерживает ответы на запросы, чей URL содержит `part`, до release(). */
+function holdRequests(part: string): () => void {
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const fetchMock = vi.mocked(globalThis.fetch);
+  const impl = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation(async (input, init) => {
+    if (String(input).includes(part)) await gate;
+    return impl(input, init);
+  });
+  return release;
+}
+
+async function formAndRender(): Promise<HTMLElement> {
+  await userEvent.type(await screen.findByRole('textbox', { name: 'Компания *' }), 'ООО Ромашка');
+  await userEvent.click(screen.getByRole('button', { name: 'Сформировать' }));
+  return screen.findByRole('group', { name: 'Сохранить как' });
+}
+
 describe('ReportRunPage', () => {
-  it('отправляет только объявленные параметры и выбранный формат; PDF — предпросмотр и ссылка', async () => {
+  it('Word-шаблон: PDF-просмотр, «Сохранить как» PDF/DOCX/ODT, основная — по defaultOutput; тело без format', async () => {
     const { calls } = mockApi([
       userMe,
       { path: '/api/templates/t1', body: template },
       { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
     ]);
     renderRoute('/reports/t1');
-    await userEvent.type(await screen.findByRole('textbox', { name: 'Компания *' }), 'ООО Ромашка');
-    await userEvent.click(screen.getByRole('button', { name: 'Сформировать' }));
+    expect(await screen.findByRole('button', { name: 'Сформировать' })).toBeInTheDocument();
+    // Выбора формата на форме нет.
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.queryByText('Формат')).not.toBeInTheDocument();
 
-    const frame = await screen.findByTitle('Предпросмотр отчёта');
-    expect(frame).toHaveAttribute('src', '/api/runs/r1/file?inline=1');
-    expect(screen.getByRole('link', { name: 'Скачать' })).toHaveAttribute(
-      'href',
-      '/api/runs/r1/file?format=pdf',
+    const group = await formAndRender();
+    expect(screen.getByTitle('Предпросмотр отчёта')).toHaveAttribute(
+      'src',
+      '/api/runs/r1/file?format=pdf&inline=1',
     );
-    const body = calls.find((c) => c.method === 'POST')?.body;
-    expect(body).toEqual({ params: { company: 'ООО Ромашка', limit: 5 } });
+    expect(
+      within(group)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['PDF', 'DOCX', 'ODT']);
+    expect(within(group).getByRole('button', { name: 'PDF' })).toHaveClass('g-button_view_action');
+    expect(within(group).getByRole('button', { name: 'DOCX' })).toHaveClass(
+      'g-button_view_outlined',
+    );
+    expect(within(group).getByRole('button', { name: 'ODT' })).toHaveClass(
+      'g-button_view_outlined',
+    );
+    expect(calls.find((c) => c.method === 'POST')?.body).toEqual({
+      params: { company: 'ООО Ромашка', limit: 5 },
+    });
   });
 
-  it('формат DOCX → скачивание сразу, без предпросмотра', async () => {
-    const spy = vi.spyOn(download, 'triggerDownload').mockImplementation(() => {});
+  it('Excel-шаблон: PDF, XLSX, ODS; основная — XLSX (defaultOutput); просмотр всё равно PDF', async () => {
     mockApi([
       userMe,
-      { path: '/api/templates/t1', body: template },
-      { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r2' } },
+      {
+        path: '/api/templates/t1',
+        body: {
+          ...template,
+          fileExt: 'xlsx',
+          defaultOutput: 'xlsx',
+          outputFormats: ['pdf', 'xlsx', 'ods'],
+        },
+      },
+      { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
     ]);
     renderRoute('/reports/t1');
-    await userEvent.type(await screen.findByRole('textbox', { name: 'Компания *' }), 'X');
-    await userEvent.click(screen.getByRole('radio', { name: 'DOCX' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Сформировать' }));
-    await waitFor(() => expect(spy).toHaveBeenCalledWith('/api/runs/r2/file?format=docx'));
-    expect(screen.queryByTitle('Предпросмотр отчёта')).not.toBeInTheDocument();
+    const group = await formAndRender();
+    expect(
+      within(group)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['PDF', 'XLSX', 'ODS']);
+    expect(within(group).getByRole('button', { name: 'XLSX' })).toHaveClass('g-button_view_action');
+    expect(within(group).getByRole('button', { name: 'PDF' })).toHaveClass(
+      'g-button_view_outlined',
+    );
+    expect(screen.getByTitle('Предпросмотр отчёта')).toHaveAttribute(
+      'src',
+      '/api/runs/r1/file?format=pdf&inline=1',
+    );
   });
 
   it('ошибка параметра — у поля, прочие ошибки — общим сообщением', async () => {
@@ -203,6 +256,88 @@ describe('ReportRunPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Сформировать' }));
     expect(await screen.findByText('ошибка генерации: boom')).toBeInTheDocument();
     expect(screen.queryByTitle('Предпросмотр отчёта')).not.toBeInTheDocument();
+  });
+
+  it('«Сохранить как DOCX»: спиннер на нажатой кнопке до готовности файла, затем triggerDownload', async () => {
+    const spy = vi.spyOn(download, 'triggerDownload').mockImplementation(() => {});
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:run');
+    const { calls } = mockApi([
+      userMe,
+      { path: '/api/templates/t1', body: template },
+      { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
+      { path: '/api/runs/r1/file', raw: 'DOCX', headers: { 'content-disposition': DISPOSITION } },
+    ]);
+    const release = holdRequests('/file?format=docx');
+    renderRoute('/reports/t1');
+    const group = await formAndRender();
+    const docx = within(group).getByRole('button', { name: 'DOCX' });
+    await userEvent.click(docx);
+    await waitFor(() => expect(docx).toHaveClass('g-button_loading'));
+    expect(docx).toBeDisabled();
+    // Пока идёт сборка, остальные кнопки недоступны.
+    expect(within(group).getByRole('button', { name: 'PDF' })).toBeDisabled();
+    expect(spy).not.toHaveBeenCalled();
+    release();
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('blob:run', 'Счёт 2026-01-10.docx'));
+    await waitFor(() => expect(docx).not.toHaveClass('g-button_loading'));
+    expect(within(group).getByRole('button', { name: 'PDF' })).toBeEnabled();
+    expect(calls.some((c) => c.path === '/api/runs/r1/file?format=docx')).toBe(true);
+  });
+
+  it('ошибка сборки показывается под кнопками; просмотр остаётся', async () => {
+    const spy = vi.spyOn(download, 'triggerDownload').mockImplementation(() => {});
+    mockApi([
+      userMe,
+      { path: '/api/templates/t1', body: template },
+      { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
+      {
+        path: '/api/runs/r1/file',
+        status: 400,
+        body: { error: { code: 'CARBONE_COMMUNITY', message: COMMUNITY } },
+      },
+    ]);
+    renderRoute('/reports/t1');
+    const group = await formAndRender();
+    await userEvent.click(within(group).getByRole('button', { name: 'DOCX' }));
+    expect(await screen.findByText(COMMUNITY)).toBeInTheDocument();
+    expect(screen.getByText('Не удалось сохранить файл')).toBeInTheDocument();
+    expect(screen.getByTitle('Предпросмотр отчёта')).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'DOCX' })).toBeEnabled();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('повторное «Сформировать» — новый запуск и новый просмотр; прежняя ошибка сохранения убрана', async () => {
+    let n = 0;
+    mockApi([
+      userMe,
+      { path: '/api/templates/t1', body: template },
+      {
+        method: 'POST',
+        path: '/api/reports/t1/render',
+        handler: () => ({ status: 201, body: { runId: `r${++n}` } }),
+      },
+      {
+        path: '/api/runs/r1/file',
+        status: 410,
+        body: { error: { code: 'GONE', message: 'файл удалён — сформируйте отчёт заново' } },
+      },
+    ]);
+    renderRoute('/reports/t1');
+    const group = await formAndRender();
+    expect(screen.getByTitle('Предпросмотр отчёта')).toHaveAttribute(
+      'src',
+      '/api/runs/r1/file?format=pdf&inline=1',
+    );
+    await userEvent.click(within(group).getByRole('button', { name: 'ODT' }));
+    expect(await screen.findByText('файл удалён — сформируйте отчёт заново')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Сформировать' }));
+    await waitFor(() =>
+      expect(screen.getByTitle('Предпросмотр отчёта')).toHaveAttribute(
+        'src',
+        '/api/runs/r2/file?format=pdf&inline=1',
+      ),
+    );
+    expect(screen.queryByText('файл удалён — сформируйте отчёт заново')).not.toBeInTheDocument();
   });
 
   it('SQL-список: варианты с сервера шаблона, выбранное значение уходит исходного типа', async () => {

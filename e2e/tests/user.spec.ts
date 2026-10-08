@@ -22,7 +22,9 @@ test.afterAll(async () => {
   if (u) await api.del(`/api/users/${u.id}`);
 });
 
-test('пользователь: создание админом, генерация PDF и DOCX, история', async ({ page }) => {
+test('пользователь: создание админом, просмотр PDF, «Сохранить как» DOCX, история', async ({
+  page,
+}) => {
   await loginAdminUi(page);
   await page.goto('/admin/users');
   await page.getByRole('button', { name: 'Добавить пользователя' }).click();
@@ -48,19 +50,28 @@ test('пользователь: создание админом, генерац�
   const frame = page.getByTitle('Предпросмотр отчёта');
   await expect(frame).toBeVisible();
   const pdfUrl = await frame.getAttribute('src');
+  expect(pdfUrl).toMatch(/^\/api\/runs\/[0-9a-f-]{36}\/file\?format=pdf&inline=1$/);
   const pdf = await page.request.get(pdfUrl!);
   expect(pdf.headers()['content-type']).toContain('application/pdf');
   expect((await pdf.body()).subarray(0, 4).toString()).toBe('%PDF');
 
-  await page.getByRole('radio', { name: 'DOCX' }).click();
+  // Выбора формата на форме нет; под просмотром — «Сохранить как» с форматами Word-шаблона.
+  await expect(page.getByRole('radio')).toHaveCount(0);
+  const saveAs = page.getByRole('group', { name: 'Сохранить как' });
+  await expect(saveAs.getByRole('button')).toHaveText(['PDF', 'DOCX', 'ODT']);
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Сформировать' }).click();
+  await saveAs.getByRole('button', { name: 'DOCX' }).click();
   const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^Счёт \(демо\) \d{4}-\d{2}-\d{2}\.docx$/);
   const text = await docxText(await readFile((await download.path())!));
   for (const s of ['СЧ-001', 'ООО «Ромашка»', 'Бумага А4', 'Картридж', 'Ручки шариковые'])
     expect(text).toContain(s);
   expect(text).not.toContain('{d.');
 
+  // История: запуск со снимком — собраны PDF и DOCX, меню «Скачать» со всеми форматами.
   await page.goto('/history');
   await expect(page.getByText('Счёт (демо)').first()).toBeVisible();
+  await expect(page.getByText('PDF, DOCX').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Скачать' }).first().click();
+  await expect(page.getByRole('menuitem')).toHaveText(['PDF', 'DOCX', 'ODT']);
 });

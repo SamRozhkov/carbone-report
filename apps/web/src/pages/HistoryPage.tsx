@@ -90,7 +90,12 @@ export function HistoryPage() {
         );
       },
     },
-    { id: 'format', name: 'Формат', template: (r) => r.outputFormat.toUpperCase(), width: 80 },
+    {
+      id: 'format',
+      name: 'Формат',
+      template: (r) => r.outputFormat?.toUpperCase() ?? '—',
+      width: 80,
+    },
     {
       id: 'status',
       name: 'Результат',

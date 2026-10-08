@@ -3,6 +3,7 @@ import {
   DatasourceBody,
   sqlCompareRefs,
   ParamsInput,
+  RenderBody,
   TemplateParam,
   TemplateQuery,
   outputFormatsFor,
@@ -118,6 +119,12 @@ describe('outputFormatsFor', () => {
   });
   it('для pptx — pdf, pptx', () => {
     expect(outputFormatsFor('pptx')).toEqual(['pdf', 'pptx']);
+  });
+});
+
+describe('RenderBody', () => {
+  it('формата в теле больше нет: пришедший format отбрасывается (§24.4)', () => {
+    expect(RenderBody.parse({ params: { a: 1 }, format: 'docx' })).toEqual({ params: { a: 1 } });
   });
 });
 

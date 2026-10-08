@@ -39,10 +39,10 @@ export function ReportRunPage() {
   }, [version]);
 
   const render = useMutation({
-    mutationFn: () => api.reports.render(id, { params: pickParams(t!.params, values), format }),
+    mutationFn: () => api.reports.render(id, { params: pickParams(t!.params, values) }),
     onSuccess: ({ runId }) => {
       setRun({ id: runId, format });
-      if (format !== 'pdf') triggerDownload(runFileUrl(runId));
+      if (format !== 'pdf') triggerDownload(runFileUrl(runId, { format }));
     },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ['runs'] }),
     onError: (e) => {
@@ -127,14 +127,14 @@ export function ReportRunPage() {
             <>
               <div className="cr-page-header">
                 <Text variant="subheader-2">Отчёт готов</Text>
-                <Button view="outlined" href={runFileUrl(run.id)}>
+                <Button view="outlined" href={runFileUrl(run.id, { format: run.format })}>
                   Скачать
                 </Button>
               </div>
               {run.format === 'pdf' && (
                 <iframe
                   title="Предпросмотр отчёта"
-                  src={runFileUrl(run.id, true)}
+                  src={runFileUrl(run.id, { inline: true })}
                   className="cr-pdf"
                 />
               )}

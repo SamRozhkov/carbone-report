@@ -1,8 +1,6 @@
 import { RUNS_PAGE_SIZE } from '@carbone-reports/shared';
-import { eq } from 'drizzle-orm';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
-import { reportRuns } from '../src/db/schema';
 import { AppError } from '../src/lib/errors';
 import type { CarboneRenderer } from '../src/deps';
 import { CarboneClient } from '../src/modules/carbone/client';
@@ -157,9 +155,16 @@ describe('генерация', () => {
     expect(after.json().total).toBe(before.json().total);
   });
 
-  it('формат, недоступный для шаблона → 400', async () => {
+  it('format в теле игнорируется: 201, файл по умолчанию — PDF', async () => {
     const r = await render(userA, tplId, { params: { from: '2026-01-01' }, format: 'xlsx' });
-    expect(r.statusCode).toBe(400);
+    expect(r.statusCode).toBe(201);
+    const file = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${r.json().runId}/file`,
+      headers: { cookie: userA },
+    });
+    expect(file.headers['content-type']).toBe('application/pdf');
+    expect(JSON.parse(file.body).convertTo).toBe('pdf');
   });
 
   it('ошибка Carbone → 502 и запись со status=error', async () => {
@@ -271,8 +276,7 @@ describe('история', () => {
   it('файл отчёта удалён с диска → 410', async () => {
     const r = await render(userA, tplId, { params: { from: '2026-01-01' }, format: 'pdf' });
     const runId = r.json().runId;
-    const [run] = await t.deps.db.select().from(reportRuns).where(eq(reportRuns.id, runId));
-    await t.deps.storage.remove(run!.filePath!);
+    await t.deps.storage.remove(`reports/${runId}`);
     const file = await t.app.inject({
       method: 'GET',
       url: `/api/runs/${runId}/file`,

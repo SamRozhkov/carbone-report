@@ -183,14 +183,32 @@ export const reportRuns = pgTable('report_runs', {
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
   params: jsonb('params').$type<Record<string, ParamValue>>().notNull(),
-  outputFormat: text('output_format').$type<OutputFormat>().notNull(),
+  /** Формат старого запуска (snapshot = false); у новых — null, файлы в report_run_files. */
+  outputFormat: text('output_format').$type<OutputFormat>(),
   status: text('status').$type<'ok' | 'error'>().notNull(),
   error: text('error'),
+  /** Старый запуск — его единственный файл; запуск со снимком — копия шаблона `reports/<id>/template.<ext>`. */
   filePath: text('file_path'),
   fileDeleted: boolean('file_deleted').notNull().default(false),
+  /** Запуск со снимком (§24.2): данные и копия шаблона в `reports/<id>/`. */
+  snapshot: boolean('snapshot').notNull().default(false),
   durationMs: integer('duration_ms').notNull(),
   createdAt: createdAt(),
 });
+
+/** Собранные из снимка файлы запуска (§24.3). */
+export const reportRunFiles = pgTable(
+  'report_run_files',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => reportRuns.id, { onDelete: 'cascade' }),
+    format: text('format').$type<OutputFormat>().notNull(),
+    filePath: text('file_path').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.runId, t.format] })],
+);
 
 export type UserRow = typeof users.$inferSelect;
 export type DatasourceRow = typeof datasources.$inferSelect;
@@ -198,5 +216,6 @@ export type TemplateRow = typeof templates.$inferSelect;
 export type TemplateQueryRow = typeof templateQueries.$inferSelect;
 export type TemplateParamRow = typeof templateParams.$inferSelect;
 export type RunRow = typeof reportRuns.$inferSelect;
+export type RunFileRow = typeof reportRunFiles.$inferSelect;
 export type GroupRow = typeof groups.$inferSelect;
 export type CategoryRow = typeof categories.$inferSelect;

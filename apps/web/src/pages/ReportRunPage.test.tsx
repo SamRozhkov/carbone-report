@@ -47,10 +47,10 @@ describe('ReportRunPage', () => {
     expect(frame).toHaveAttribute('src', '/api/runs/r1/file?inline=1');
     expect(screen.getByRole('link', { name: 'Скачать' })).toHaveAttribute(
       'href',
-      '/api/runs/r1/file',
+      '/api/runs/r1/file?format=pdf',
     );
     const body = calls.find((c) => c.method === 'POST')?.body;
-    expect(body).toEqual({ params: { company: 'ООО Ромашка', limit: 5 }, format: 'pdf' });
+    expect(body).toEqual({ params: { company: 'ООО Ромашка', limit: 5 } });
   });
 
   it('формат DOCX → скачивание сразу, без предпросмотра', async () => {
@@ -64,7 +64,7 @@ describe('ReportRunPage', () => {
     await userEvent.type(await screen.findByRole('textbox', { name: 'Компания *' }), 'X');
     await userEvent.click(screen.getByRole('radio', { name: 'DOCX' }));
     await userEvent.click(screen.getByRole('button', { name: 'Сформировать' }));
-    await waitFor(() => expect(spy).toHaveBeenCalledWith('/api/runs/r2/file'));
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('/api/runs/r2/file?format=docx'));
     expect(screen.queryByTitle('Предпросмотр отчёта')).not.toBeInTheDocument();
   });
 
@@ -240,7 +240,6 @@ describe('ReportRunPage', () => {
     await waitFor(() =>
       expect(calls.find((c) => c.path === '/api/reports/t1/render')?.body).toEqual({
         params: { region: 7 },
-        format: 'pdf',
       }),
     );
   });

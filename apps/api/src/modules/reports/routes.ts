@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   IdParams,
+  type OutputFormat,
   type ParamsInput,
   type ParamValue,
   PreviewBody,
@@ -11,10 +12,10 @@ import {
   type RunDto,
   type RunsPage,
 } from '@carbone-reports/shared';
-import { and, count, desc, eq, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { App } from '../../app';
-import { reportRuns, users } from '../../db/schema';
+import { reportRunFiles, reportRuns, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { Deadline } from '../../lib/deadline';
 import { AppError, notFound } from '../../lib/errors';
@@ -23,8 +24,17 @@ import { assertTemplateAccess } from '../access/access';
 import { currentUser, type Guards } from '../auth/guards';
 import { previewQuery } from '../queries/executor';
 import { resolveParams } from '../queries/params';
-import { loadTemplateFull, type TemplateFull } from '../templates/service';
-import { assertFormat, collectReportData, renderReport } from './service';
+import { loadTemplateFull, templateFileRef, type TemplateFull } from '../templates/service';
+import { collectReportData, renderReport } from './service';
+import {
+  ensureRunFile,
+  renderFromSnapshot,
+  resolveRunFormat,
+  runFormats,
+  snapshotGone,
+  snapshotPaths,
+  writeSnapshot,
+} from './snapshot';
 
 const PREVIEW_ROWS = 50;
 
@@ -54,32 +64,46 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
       // До загрузки и до любой записи запуска: недоступный шаблон не оставляет следов в истории.
       await assertTemplateAccess(db, user, req.params.id);
       const full = await loadTemplateFull(db, req.params.id);
-      assertFormat(full, req.body.format);
       const runId = randomUUID();
       const started = Date.now();
+      const ext = full.row.fileExt;
+      const snap = snapshotPaths(runId, ext);
       const base = {
         id: runId,
         templateId: full.row.id,
         templateName: full.row.name,
         templateVersion: full.row.version,
         userId: user.id,
-        outputFormat: req.body.format,
       };
+      let snapshotStarted = false;
       try {
         const { data, params } = await collectReportData(deps, full, req.body.params, deadline);
-        const file = await renderReport(deps, full, data, req.body.format, deadline);
-        const filePath = `reports/${runId}.${req.body.format}`;
-        await storage.write(filePath, file);
-        try {
-          await db
-            .insert(reportRuns)
-            .values({ ...base, params, status: 'ok', filePath, durationMs: Date.now() - started });
-        } catch (insertErr) {
-          await storage.remove(filePath).catch(() => undefined);
-          throw insertErr;
-        }
+        // Снимок (§24.2): данные и копия файла шаблона; любой формат запуска собирается только из него.
+        snapshotStarted = true;
+        await writeSnapshot(deps, runId, ext, data, await templateFileRef(deps, full.row).read());
+        const pdf = await renderFromSnapshot(deps, runId, ext, full.row.version, 'pdf', deadline);
+        await storage.write(snap.out('pdf'), pdf);
+        await db.transaction(async (tx) => {
+          await tx.insert(reportRuns).values({
+            ...base,
+            params,
+            status: 'ok',
+            snapshot: true,
+            filePath: snap.template,
+            durationMs: Date.now() - started,
+          });
+          await tx
+            .insert(reportRunFiles)
+            .values({ runId, format: 'pdf', filePath: snap.out('pdf') });
+        });
         return reply.status(201).send({ runId });
       } catch (e) {
+        // Незавершённый снимок не нужен. Удаление не ждём: во время бэкапа удаления стоят в очереди.
+        if (snapshotStarted) {
+          void storage
+            .remove(snap.dir)
+            .catch((err) => req.log.warn({ err, runId }, 'снимок запуска не удалён'));
+        }
         // Ошибки ввода пользователя историю не засоряют.
         if (!(e instanceof AppError && e.code === 'VALIDATION')) {
           try {
@@ -125,6 +149,17 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         db.select({ n: count() }).from(reportRuns).where(cond),
       ]);
 
+      // Собранные форматы — только для запусков со снимком на этой странице.
+      const snapIds = rows.filter(({ run }) => run.snapshot).map(({ run }) => run.id);
+      const built = new Map<string, OutputFormat[]>();
+      if (snapIds.length > 0) {
+        const files = await db
+          .select({ runId: reportRunFiles.runId, format: reportRunFiles.format })
+          .from(reportRunFiles)
+          .where(inArray(reportRunFiles.runId, snapIds));
+        for (const f of files) built.set(f.runId, [...(built.get(f.runId) ?? []), f.format]);
+      }
+
       const items: RunDto[] = rows.map(({ run, login }) => ({
         id: run.id,
         templateId: run.templateId,
@@ -137,6 +172,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         status: run.status,
         error: run.error,
         fileAvailable: run.status === 'ok' && !!run.filePath && !run.fileDeleted,
+        ...runFormats(run, built.get(run.id) ?? []),
         durationMs: run.durationMs,
         createdAt: run.createdAt.toISOString(),
       }));
@@ -150,33 +186,43 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
       preHandler: guards.requireUser,
       schema: {
         params: IdParams,
-        querystring: z.object({ inline: z.enum(['0', '1']).optional() }),
+        querystring: z.object({
+          // Строка, а не enum: любой недоступный формат — одна ошибка «формат недоступен…» (§24.4).
+          format: z.string().max(16).optional(),
+          inline: z.enum(['0', '1']).optional(),
+        }),
       },
     },
     async (req, reply) => {
+      // Сборка из снимка — в общем сроке, отсчёт от начала запроса на скачивание (§24.2).
+      const deadline = new Deadline(deps.config.reportTimeoutMs);
       const me = currentUser(req);
       const [run] = await db.select().from(reportRuns).where(eq(reportRuns.id, req.params.id));
       // Чужой запуск для пользователя неотличим от несуществующего.
       if (!run || (me.role !== 'admin' && run.userId !== me.id)) throw notFound('запуск');
       if (run.status !== 'ok' || !run.filePath) throw notFound('файл');
-      if (run.fileDeleted) throw new AppError('GONE', 410, 'файл удалён по сроку хранения');
+      const format = resolveRunFormat(run, req.query.format);
       let content: Buffer;
-      try {
-        content = await storage.read(run.filePath);
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'ENOENT')
-          throw new AppError('GONE', 410, 'файл удалён по сроку хранения');
-        throw e;
+      if (run.snapshot) {
+        if (run.fileDeleted) throw snapshotGone();
+        // Ошибка сборки (в том числе CARBONE_COMMUNITY) уходит как есть; статус запуска не меняется.
+        content = await ensureRunFile(deps, run, format, deadline);
+      } else {
+        if (run.fileDeleted) throw new AppError('GONE', 410, 'файл удалён по сроку хранения');
+        try {
+          content = await storage.read(run.filePath);
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code === 'ENOENT')
+            throw new AppError('GONE', 410, 'файл удалён по сроку хранения');
+          throw e;
+        }
       }
       const date = run.createdAt.toISOString().slice(0, 10);
       return reply
-        .header('content-type', MIME[run.outputFormat])
+        .header('content-type', MIME[format])
         .header(
           'content-disposition',
-          contentDisposition(
-            `${run.templateName} ${date}.${run.outputFormat}`,
-            req.query.inline === '1',
-          ),
+          contentDisposition(`${run.templateName} ${date}.${format}`, req.query.inline === '1'),
         )
         .send(content);
     },
@@ -205,7 +251,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
       const full = await loadTemplateFull(db, req.params.id);
       const { data } = await collectReportData(deps, full, req.body.params, deadline);
       if (req.body.mode === 'data') return data;
-      const pdf = await renderReport(deps, full, data, 'pdf', deadline);
+      const pdf = await renderReport(deps, templateFileRef(deps, full.row), data, 'pdf', deadline);
       return reply
         .header('content-type', MIME.pdf)
         .header('content-disposition', contentDisposition(`${full.row.name}.pdf`, true))

@@ -1,6 +1,6 @@
 import { RUNS_PAGE_SIZE } from '@carbone-reports/shared';
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, inject, it, vi } from 'vitest';
 import { AppError } from '../src/lib/errors';
 import type { CarboneRenderer } from '../src/deps';
 import { CarboneClient } from '../src/modules/carbone/client';
@@ -20,6 +20,8 @@ let dsId: string;
 let tplId: string;
 let carboneFails = false;
 let carboneCommunity = false;
+/** Настоящий клиент Carbone для отдельного теста (читает файл шаблона из хранилища сам). */
+let liveCarbone: CarboneRenderer | null = null;
 
 const COMMUNITY_MESSAGE =
   'в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
@@ -46,6 +48,7 @@ const carbone: CarboneRenderer = {
   async render(tpl, data, opts) {
     if (carboneFails) throw new AppError('CARBONE_ERROR', 502, 'ошибка генерации: boom');
     if (carboneCommunity) return communityCarbone.render(tpl, data, opts);
+    if (liveCarbone) return liveCarbone.render(tpl, data, opts);
     return Buffer.from(
       JSON.stringify({
         version: tpl.version,
@@ -467,6 +470,39 @@ describe('инструменты админа', () => {
       });
     expect(r.statusCode).toBe(400);
     expect(r.json().error).toEqual({ code: 'CARBONE_COMMUNITY', message: COMMUNITY_MESSAGE });
+  });
+});
+
+describe('сбой хранилища при чтении шаблона', () => {
+  it('preview: не CARBONE_ERROR 502, а 500 INTERNAL с записью в журнал', async () => {
+    const fetchCalls: string[] = [];
+    liveCarbone = new CarboneClient({
+      baseUrl: 'http://carbone',
+      fetch: (async (input: RequestInfo | URL) => {
+        fetchCalls.push(String(input));
+        return Response.json({ success: true, data: { templateId: 'x' } });
+      }) as typeof fetch,
+    });
+    const cause = Object.assign(new Error('S3: socket hang up'), { name: 'TimeoutError' });
+    const read = vi.spyOn(t.deps.storage, 'read').mockRejectedValue(cause);
+    const logged = vi.spyOn(t.app.log, 'error');
+    try {
+      const r = await t.app.inject({
+        method: 'POST',
+        url: `/api/templates/${tplId}/preview`,
+        headers: { cookie: admin },
+        payload: { params: { from: '2026-01-01' }, mode: 'pdf' },
+      });
+      expect(r.statusCode).toBe(500);
+      expect(r.json().error).toEqual({ code: 'INTERNAL', message: 'внутренняя ошибка сервера' });
+      expect(read).toHaveBeenCalled();
+      expect(fetchCalls).toEqual([]);
+      expect(logged).toHaveBeenCalledWith(cause);
+    } finally {
+      liveCarbone = null;
+      read.mockRestore();
+      logged.mockRestore();
+    }
   });
 });
 

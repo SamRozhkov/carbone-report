@@ -8,7 +8,13 @@ import type pg from 'pg';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FUTURE_BACKUP } from './migrations';
 import type { Runner } from './run';
-import { createSteps, flushExcept, MAINTENANCE_KEY, type StepsDeps } from './steps';
+import {
+  createSteps,
+  flushExcept,
+  MAINTENANCE_KEY,
+  withStartupLock,
+  type StepsDeps,
+} from './steps';
 
 const KNOWN = 'a'.repeat(64);
 const NAME = '2026-10-08T03-00-00Z';
@@ -204,23 +210,91 @@ describe('preBackup, restoreStorage, restoreDb', () => {
 });
 
 describe('flushExcept', () => {
-  it('SCAN по страницам и UNLINK всего, кроме cr:maintenance', async () => {
-    const keys = new Set([MAINTENANCE_KEY, ...Array.from({ length: 1200 }, (_, i) => `cr:k${i}`)]);
-    // Снимок берётся один раз: курсор — позиция в нём, удаление ключей страницы не сдвигает.
+  /** Фейк SCAN с MATCH: шаблон вида «префикс*», как у Redis для cr:*. */
+  function fakeRedis(all: string[]) {
+    const keys = new Set(all);
     const snapshot = [...keys].sort();
-    const fake = {
-      async scan(cursor: string) {
+    const calls: string[][] = [];
+    return {
+      keys,
+      calls,
+      async scan(cursor: string, ...args: string[]) {
+        calls.push(args);
+        const match = args[args.indexOf('MATCH') + 1];
         const start = Number(cursor);
         const page = snapshot.slice(start, start + 500);
         const next = start + 500 >= snapshot.length ? '0' : String(start + 500);
-        return [next, page] as [string, string[]];
+        const prefix = match?.endsWith('*') ? match.slice(0, -1) : undefined;
+        return [next, prefix === undefined ? page : page.filter((k) => k.startsWith(prefix))] as [
+          string,
+          string[],
+        ];
       },
       async unlink(...victims: string[]) {
         for (const v of victims) keys.delete(v);
         return victims.length;
       },
     };
+  }
+
+  it('SCAN MATCH cr:* по страницам и UNLINK всего, кроме cr:maintenance', async () => {
+    const fake = fakeRedis([
+      MAINTENANCE_KEY,
+      ...Array.from({ length: 1200 }, (_, i) => `cr:k${i}`),
+    ]);
     expect(await flushExcept(fake as unknown as Redis, MAINTENANCE_KEY)).toBe(1200);
-    expect([...keys]).toEqual([MAINTENANCE_KEY]);
+    expect([...fake.keys]).toEqual([MAINTENANCE_KEY]);
+    expect(fake.calls.every((a) => a.join(' ') === 'MATCH cr:* COUNT 500')).toBe(true);
+  });
+
+  it('общий внешний Redis: чужие ключи не трогаются', async () => {
+    const fake = fakeRedis([MAINTENANCE_KEY, 'cr:rl:1', 'session:abc', 'other-app:cache', 'crx:1']);
+    expect(await flushExcept(fake as unknown as Redis, MAINTENANCE_KEY)).toBe(1);
+    expect([...fake.keys].sort()).toEqual(
+      ['crx:1', MAINTENANCE_KEY, 'other-app:cache', 'session:abc'].sort(),
+    );
+  });
+});
+
+describe('withStartupLock', () => {
+  function fakePool(failUnlock = false) {
+    const log: string[] = [];
+    const client = {
+      async query(sql: string, params?: unknown[]) {
+        log.push(`${sql.includes('unlock') ? 'unlock' : 'lock'}:${String(params?.[0])}`);
+        if (failUnlock && sql.includes('unlock')) throw new Error('обрыв');
+        return { rows: [] };
+      },
+      release(destroy?: boolean) {
+        log.push(`release:${String(destroy ?? false)}`);
+      },
+    };
+    return { log, pool: { connect: async () => client } as unknown as pg.Pool };
+  }
+
+  it('ключ 726100003 берётся и снимается на одном соединении вокруг fn', async () => {
+    const { log, pool } = fakePool();
+    const r = await withStartupLock(pool, async () => {
+      log.push('fn');
+      return 7;
+    });
+    expect(r).toBe(7);
+    expect(log).toEqual(['lock:726100003', 'fn', 'unlock:726100003', 'release:false']);
+  });
+
+  it('при ошибке fn блокировка снимается, ошибка пробрасывается', async () => {
+    const { log, pool } = fakePool();
+    await expect(
+      withStartupLock(pool, async () => {
+        throw new Error('сбой миграции');
+      }),
+    ).rejects.toThrow('сбой миграции');
+    expect(log).toEqual(['lock:726100003', 'unlock:726100003', 'release:false']);
+  });
+
+  it('не удалось снять — соединение уничтожается', async () => {
+    const { log, pool } = fakePool(true);
+    await withStartupLock(pool, async () => undefined);
+    expect(log.at(-1)).toBe('release:true');
   });
 });

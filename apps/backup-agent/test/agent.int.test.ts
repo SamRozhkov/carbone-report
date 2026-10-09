@@ -163,6 +163,24 @@ describe('агент бэкапа в образе', () => {
     expect(mode.output).toContain('rc=2');
   });
 
+  it('S3 без ключей: rclone берёт учётные данные из окружения (env_auth); один ключ — код 2', async () => {
+    const none = await agent.sh(
+      '. /backup/lib.sh && export S3_ACCESS_KEY_ID= S3_SECRET_ACCESS_KEY= && check_storage_backend && s3_env && echo "auth=$RCLONE_CONFIG_S3_ENV_AUTH key=[${RCLONE_CONFIG_S3_ACCESS_KEY_ID:-}]"',
+    );
+    expect(none.output).toContain('auth=true key=[]');
+    const keys = await agent.sh(
+      '. /backup/lib.sh && check_storage_backend && s3_env && echo "auth=$RCLONE_CONFIG_S3_ENV_AUTH"',
+    );
+    expect(keys.output).toContain('auth=false');
+    const one = await agent.sh(
+      '(. /backup/lib.sh && export S3_SECRET_ACCESS_KEY= && check_storage_backend); echo "rc=$?"',
+    );
+    expect(one.output).toContain(
+      'S3_ACCESS_KEY_ID и S3_SECRET_ACCESS_KEY задаются вместе (или ни один — учётные данные из окружения, IRSA)',
+    );
+    expect(one.output).toContain('rc=2');
+  });
+
   it('бэкап и список: succeeded, в списке ok с последней миграцией; каталог .partial — partial', async () => {
     const name = await backupNow(agent);
     await agent.sh('mkdir -p /backups/2026-01-01T00-00-00Z.partial');
@@ -239,6 +257,7 @@ describe('агент бэкапа в образе', () => {
       'printf v2 | rclone rcat "s3:$S3_BUCKET/templates/a.txt" && printf x | rclone rcat "s3:$S3_BUCKET/stray.txt"',
     );
     await redis.set('cr:carbone:tpl:x', '{}');
+    await redis.set('foreign:key', '1');
     const old = [1, 2, 3, 4].map((d) => `pre-restore-2020-01-0${d}T00-00-00Z`);
     await agent.sh(`mkdir -p ${old.map((n) => `/backups/${n}`).join(' ')}`);
     const api = new pg.Client({ connectionString: pgUrl(db), application_name: 'api' });
@@ -270,6 +289,9 @@ describe('агент бэкапа в образе', () => {
       (await rclone(agent, 'rclone lsf -R --files-only "s3:$S3_BUCKET"')).output,
     ).not.toContain('stray.txt');
     expect(await redis.exists('cr:carbone:tpl:x')).toBe(0);
+    // Redis может быть общим с другими сервисами (§27.5): чужой ключ переживает восстановление.
+    expect(await redis.exists('foreign:key')).toBe(1);
+    await redis.del('foreign:key');
     expect(await redis.exists('cr:maintenance')).toBe(0);
     await expect(api.query('select 1')).rejects.toThrow();
     await api.end().catch(() => {});

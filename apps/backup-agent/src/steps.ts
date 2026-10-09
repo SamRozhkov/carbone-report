@@ -39,17 +39,48 @@ export async function sha256File(path: string): Promise<string> {
   return h.digest('hex');
 }
 
-/** Удаляет все ключи Redis, кроме keep: SCAN по страницам и UNLINK (§26.2, фаза redis). */
+/** Ключи приложения в Redis: все начинаются с cr: (§27.5). */
+export const APP_KEYS = 'cr:*';
+
+/**
+ * Удаляет ключи приложения (cr:*), кроме keep: SCAN MATCH по страницам и UNLINK (§26.2, фаза redis).
+ * Внешний Redis может быть общим с другими сервисами (§27.5) — чужие ключи не трогаются.
+ */
 export async function flushExcept(redis: Redis, keep: string): Promise<number> {
   let cursor = '0';
   let removed = 0;
   do {
-    const [next, keys] = await redis.scan(cursor, 'COUNT', 500);
+    const [next, keys] = await redis.scan(cursor, 'MATCH', APP_KEYS, 'COUNT', 500);
     cursor = next;
     const victims = keys.filter((k) => k !== keep);
     if (victims.length > 0) removed += await redis.unlink(...victims);
   } while (cursor !== '0');
   return removed;
+}
+
+/** Ключ блокировки миграций при старте: то же значение, что STARTUP_LOCK_KEY в apps/api/src/lib/startup-lock.ts. */
+export const STARTUP_LOCK_KEY = 726100003;
+
+/**
+ * fn под сессионной advisory-блокировкой на отдельном соединении — той же, что API берёт на время
+ * миграций при старте: перезапускающийся под API не мигрирует одновременно с восстановлением.
+ * Если снять блокировку не удалось, соединение уничтожается — закрытие сессии снимает её блокировки.
+ */
+export async function withStartupLock<T>(pool: pg.Pool, fn: () => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  let destroy = false;
+  try {
+    await client.query('select pg_advisory_lock($1::bigint)', [STARTUP_LOCK_KEY]);
+    try {
+      return await fn();
+    } finally {
+      await client.query('select pg_advisory_unlock($1::bigint)', [STARTUP_LOCK_KEY]).catch(() => {
+        destroy = true;
+      });
+    }
+  } finally {
+    client.release(destroy);
+  }
 }
 
 const PRE_SQL =
@@ -142,7 +173,9 @@ export function createSteps(d: StepsDeps): Steps {
     },
 
     async migrate(out) {
-      await migrate(drizzle(d.pool), { migrationsFolder: cfg.migrationsDir });
+      await withStartupLock(d.pool, () =>
+        migrate(drizzle(d.pool), { migrationsFolder: cfg.migrationsDir }),
+      );
       out('миграции применены');
     },
 

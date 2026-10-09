@@ -10,7 +10,8 @@ check_backup_timeout() {
 }
 
 # check_storage_backend: STORAGE_BACKEND — local (по умолчанию, каталог /data) или s3 (бакет через
-# rclone). Для s3 нужны S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY и rclone в образе.
+# rclone). Для s3 нужны S3_BUCKET и rclone в образе; ключи S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY —
+# оба или ни одного (без них rclone берёт учётные данные из окружения: IRSA в k8s).
 # Иначе — сообщение и выход с кодом 2.
 check_storage_backend() {
   : "${STORAGE_BACKEND:=local}"
@@ -18,8 +19,9 @@ check_storage_backend() {
     local) ;;
     s3)
       [ -n "${S3_BUCKET:-}" ] || { echo "S3_BUCKET обязателен при STORAGE_BACKEND=s3" >&2; exit 2; }
-      [ -n "${S3_ACCESS_KEY_ID:-}" ] || { echo "S3_ACCESS_KEY_ID обязателен при STORAGE_BACKEND=s3" >&2; exit 2; }
-      [ -n "${S3_SECRET_ACCESS_KEY:-}" ] || { echo "S3_SECRET_ACCESS_KEY обязателен при STORAGE_BACKEND=s3" >&2; exit 2; }
+      case "${S3_ACCESS_KEY_ID:+1}${S3_SECRET_ACCESS_KEY:+1}" in
+        1) echo "S3_ACCESS_KEY_ID и S3_SECRET_ACCESS_KEY задаются вместе (или ни один — учётные данные из окружения, IRSA)" >&2; exit 2 ;;
+      esac
       command -v rclone >/dev/null || { echo "rclone не найден: образ backup собирается из docker/backup/Dockerfile" >&2; exit 2; } ;;
     *) echo "STORAGE_BACKEND: ожидается local или s3" >&2; exit 2 ;;
   esac
@@ -30,7 +32,7 @@ check_storage_backend() {
 # S3-совместимого хранилища — S3_RCLONE_PROVIDER, например Other), без него — AWS.
 # NO_CHECK_BUCKET: бакет создаёт API (S3_CREATE_BUCKET), rclone его не создаёт.
 # RCLONE_CONFIG="": конфигурация только в памяти — rclone не ищет файл и не пишет NOTICE
-# «Config file … not found».
+# «Config file … not found». Без ключей — env_auth (IRSA).
 s3_env() {
   RCLONE_CONFIG=
   RCLONE_CONFIG_S3_TYPE=s3
@@ -41,9 +43,16 @@ s3_env() {
     RCLONE_CONFIG_S3_PROVIDER=AWS
     RCLONE_CONFIG_S3_ENDPOINT=
   fi
-  RCLONE_CONFIG_S3_ENV_AUTH=false
-  RCLONE_CONFIG_S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID
-  RCLONE_CONFIG_S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
+  # Без ключей — учётные данные из окружения (переменные AWS_*, IRSA в k8s).
+  if [ -n "${S3_ACCESS_KEY_ID:-}" ]; then
+    RCLONE_CONFIG_S3_ENV_AUTH=false
+    RCLONE_CONFIG_S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID
+    RCLONE_CONFIG_S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
+  else
+    RCLONE_CONFIG_S3_ENV_AUTH=true
+    RCLONE_CONFIG_S3_ACCESS_KEY_ID=
+    RCLONE_CONFIG_S3_SECRET_ACCESS_KEY=
+  fi
   RCLONE_CONFIG_S3_REGION=${S3_REGION:-us-east-1}
   RCLONE_CONFIG_S3_FORCE_PATH_STYLE=${S3_FORCE_PATH_STYLE:-false}
   RCLONE_CONFIG_S3_NO_CHECK_BUCKET=true

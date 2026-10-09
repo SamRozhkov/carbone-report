@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { Redis } from 'ioredis';
 import pg from 'pg';
 import { BackupAgent } from './agent';
-import { loadAgentConfig, pgConnection, type AgentConfig } from './config';
+import { loadAgentConfig, pgConnection, type AgentConfig, type PgConnection } from './config';
 import { scheduleCron } from './cron';
 import { flockFile } from './lock';
 import { bundledMigrationHashes } from './migrations';
@@ -28,8 +28,10 @@ if (process.argv[2] === 'resolve-external') {
 }
 
 let cfg: AgentConfig;
+let pgConn: PgConnection;
 try {
   cfg = loadAgentConfig(process.env);
+  pgConn = pgConnection(process.env);
 } catch (e) {
   console.error((e as Error).message);
   process.exit(2);
@@ -49,7 +51,7 @@ redis.on('error', (e: Error) => {
   }
 });
 const pool = new pg.Pool({
-  ...pgConnection(process.env),
+  ...pgConn,
   max: 2,
   application_name: 'backup-agent',
 });

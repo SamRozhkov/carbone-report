@@ -41,6 +41,8 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
       target: prod
+    # При остановке API ждёт активные отчёты до RENDER_TIMEOUT_MS + 5 с (по умолчанию 125 с).
+    stop_grace_period: 130s
     environment:
       DATABASE_URL: postgres://app:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}@postgres:5432/app
       APP_SECRET: ${APP_SECRET:?задайте APP_SECRET в .env}

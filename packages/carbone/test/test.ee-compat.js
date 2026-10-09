@@ -414,8 +414,20 @@ describe('EE: метки в строке-разделителе [i+1] (2.0.1)', 
   it('метка [i] в строке [i+1] не начинает новый цикл', async function () {
     assert.strictEqual(await text('| {d.cars[i].brand} |\n| {d.cars[i+1].brand} {d.cars[i].qty} |', cars), '| Лада |\n| Тесла |');
   });
-  it('пара hideBegin/hideEnd с меткой в строке [i+1] отбрасывается целиком', async function () {
-    assert.strictEqual(await text('| {d.cars[i].brand} |\n| {d.cars[i+1].brand} {d.f:ifEQ(true):hideBegin} |\nX{d.f:hideEnd}', cars), '| Лада |\n| Тесла |\nX');
+  it('hideBegin в строке [i] и hideEnd того же элемента в строке [i+1] — пара отбрасывается', async function () {
+    const t = '| {d.cars[i].brand} | {d.cars[i].qty}{d.cars[i].ok:ifEQ(false):hideBegin} |\n| {d.cars[i+1].brand} | {d.cars[i].ok:hideEnd} |';
+    assert.strictEqual(await text(t, cars), '| Лада | 3 |\n| Тесла | 1 |');
+  });
+  it('как в базе: hideBegin в строке [i+1], hideEnd после таблицы', async function () {
+    assert.strictEqual(await text('| {d.cars[i].brand} |\n| {d.cars[i+1].brand} {d.f:ifEQ(true):hideBegin} |\nX{d.f:hideEnd}', cars), '| Лада |\n| Тесла |');
+  });
+  it('как в базе: блоки одного объекта до таблицы, в строке [i+1] и после', async function () {
+    const t = '{d.f:ifEQ(true):hideBegin}\n| {d.cars[i].brand} |\n| {d.cars[i+1].brand}{d.f:hideEnd}{d.f:ifEQ(true):hideBegin} |\n{d.f:hideEnd}Z';
+    assert.strictEqual(await text(t, cars), 'Z');
+  });
+  it('как в базе: «новый цикл» из строки [i+1] с метками вне неё — ошибка', async function () {
+    const t = '| {d.cars[i].brand} |\n| {d.cars[i+1].brand} {d.cars[i].qty} |\nafter {d.cars[i].brand} {d.t}';
+    assert.ok(/has no corresponding \[i\+1\]/.test(await error(t, cars)));
   });
   it('непарный hideBegin вне строки [i+1] — по-прежнему ошибка', async function () {
     assert.strictEqual(await error('| {d.cars[i].brand}{d.cars[i].ok:ifEQ(false):hideBegin} |\n| {d.cars[i+1].brand} |', cars), 'Missing at least one showEnd or hideEnd');

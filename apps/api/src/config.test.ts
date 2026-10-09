@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from './config';
+import { defaultRenderWorkerMemoryMb, loadConfig } from './config';
 
 const base = {
   DATABASE_URL: 'postgres://u:p@localhost/app',
@@ -241,6 +241,46 @@ describe('loadConfig', () => {
         'RENDER_WORKERS: целое от 1 до 16',
       );
     }
+  });
+
+  it('RENDER_WORKER_MEMORY_MB: явное значение, пустое — по умолчанию, целое 128–8192', () => {
+    const c = loadConfig({ ...base, RENDER_WORKER_MEMORY_MB: '512' }, () => 4 * 1024 ** 3);
+    expect(c.renderWorkerMemoryMb).toBe(512);
+    expect(c.renderWorkerMemorySource).toBe('env');
+    for (const v of ['127', '8193', '1.5', 'x']) {
+      expect(() => loadConfig({ ...base, RENDER_WORKER_MEMORY_MB: v })).toThrow(
+        'RENDER_WORKER_MEMORY_MB: целое от 128 до 8192',
+      );
+    }
+    const empty = loadConfig(
+      { ...base, RENDER_WORKER_MEMORY_MB: '', RENDER_WORKERS: '2' },
+      () => undefined,
+    );
+    expect(empty.renderWorkerMemoryMb).toBe(1024);
+    expect(empty.renderWorkerMemorySource).toBe('default');
+  });
+
+  it('RENDER_WORKER_MEMORY_MB не задан — из лимита памяти контейнера', () => {
+    const c = loadConfig({ ...base, RENDER_WORKERS: '4' }, () => 2 * 1024 ** 3);
+    expect(c.renderWorkerMemoryMb).toBe(412); // (2048 − 400) / 4
+    expect(c.renderWorkerMemorySource).toBe('container');
+  });
+});
+
+describe('defaultRenderWorkerMemoryMb', () => {
+  const mb = 1024 * 1024;
+  it('лимит неизвестен — 1024', () => {
+    expect(defaultRenderWorkerMemoryMb(undefined, 4)).toBe(1024);
+    expect(defaultRenderWorkerMemoryMb(0, 4)).toBe(1024);
+    expect(defaultRenderWorkerMemoryMb(Number.POSITIVE_INFINITY, 4)).toBe(1024);
+  });
+  it('(лимит − 400) / потоки, с округлением вниз', () => {
+    expect(defaultRenderWorkerMemoryMb(2048 * mb, 4)).toBe(412);
+    expect(defaultRenderWorkerMemoryMb(2048 * mb, 3)).toBe(549);
+  });
+  it('в пределах 256–2048', () => {
+    expect(defaultRenderWorkerMemoryMb(512 * mb, 4)).toBe(256);
+    expect(defaultRenderWorkerMemoryMb(16384 * mb, 1)).toBe(2048);
   });
 });
 

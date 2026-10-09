@@ -36,6 +36,16 @@ const Env = z
         .max(16, 'целое от 1 до 16')
         .optional(),
     ),
+    // Предел кучи (old space) одного потока рендера, МБ; пусто — по лимиту памяти контейнера.
+    RENDER_WORKER_MEMORY_MB: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.coerce
+        .number({ error: 'целое от 128 до 8192' })
+        .int('целое от 128 до 8192')
+        .min(128, 'целое от 128 до 8192')
+        .max(8192, 'целое от 128 до 8192')
+        .optional(),
+    ),
     ADMIN_LOGIN: z.string().optional(),
     ADMIN_PASSWORD: z
       .string()
@@ -186,6 +196,10 @@ export interface Config {
   apiSelfUrl: string;
   /** Число потоков рендера Carbone. */
   renderWorkers: number;
+  /** Предел кучи одного потока рендера, МБ (resourceLimits.maxOldGenerationSizeMb). */
+  renderWorkerMemoryMb: number;
+  /** Откуда взят предел: env — RENDER_WORKER_MEMORY_MB, container — из лимита памяти, default — 1024. */
+  renderWorkerMemorySource: 'env' | 'container' | 'default';
   redisUrl: string;
   adminLogin?: string;
   adminPassword?: string;
@@ -222,13 +236,40 @@ export interface LdapConfig {
   tlsRejectUnauthorized: boolean;
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv): Config {
+/** Запас памяти контейнера на основной поток API, МБ. */
+const API_RESERVE_MB = 400;
+
+/**
+ * Предел кучи потока рендера по умолчанию: (лимит контейнера − 400 МБ) / число потоков,
+ * в пределах 256–2048 МБ; лимит неизвестен — 1024 МБ.
+ */
+export function defaultRenderWorkerMemoryMb(limitBytes: number | undefined, workers: number) {
+  if (!limitBytes || !Number.isFinite(limitBytes) || limitBytes <= 0) return 1024;
+  const limitMb = limitBytes / (1024 * 1024);
+  const perWorker = Math.floor((limitMb - API_RESERVE_MB) / Math.max(1, workers));
+  return Math.min(2048, Math.max(256, perWorker));
+}
+
+/** Лимит памяти контейнера (cgroup), байт; undefined — не задан или не определяется. */
+export function containerMemoryLimit(): number | undefined {
+  const v = process.constrainedMemory?.();
+  // Без лимита Node возвращает 0 или огромное значение (cgroup v1) — больше памяти узла.
+  if (!v || !Number.isFinite(v) || v <= 0 || v >= os.totalmem()) return undefined;
+  return v;
+}
+
+export function loadConfig(
+  env: NodeJS.ProcessEnv,
+  memoryLimit: () => number | undefined = containerMemoryLimit,
+): Config {
   const r = Env.safeParse(env);
   if (!r.success) {
     const msg = r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
     throw new Error(`Неверная конфигурация: ${msg}`);
   }
   const e = r.data;
+  const renderWorkers = e.RENDER_WORKERS ?? Math.min(4, os.availableParallelism());
+  const limit = e.RENDER_WORKER_MEMORY_MB === undefined ? memoryLimit() : undefined;
   const enc = new TextEncoder();
   return {
     databaseUrl: withPassword(e.DATABASE_URL, e.DATABASE_PASSWORD),
@@ -238,7 +279,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     onlyofficeInternalUrl: e.ONLYOFFICE_INTERNAL_URL.replace(/\/$/, ''),
     apiInternalUrl: e.API_INTERNAL_URL.replace(/\/$/, ''),
     apiSelfUrl: e.API_SELF_URL.replace(/\/$/, ''),
-    renderWorkers: e.RENDER_WORKERS ?? Math.min(4, os.availableParallelism()),
+    renderWorkers,
+    renderWorkerMemoryMb:
+      e.RENDER_WORKER_MEMORY_MB ?? defaultRenderWorkerMemoryMb(limit, renderWorkers),
+    renderWorkerMemorySource:
+      e.RENDER_WORKER_MEMORY_MB !== undefined ? 'env' : limit ? 'container' : 'default',
     redisUrl: withPassword(e.REDIS_URL, e.REDIS_PASSWORD),
     adminLogin: e.ADMIN_LOGIN,
     adminPassword: e.ADMIN_PASSWORD,

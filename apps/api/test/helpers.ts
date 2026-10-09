@@ -52,6 +52,8 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     apiInternalUrl: 'http://api:3000',
     apiSelfUrl: 'http://api:3000',
     renderWorkers: 1,
+    renderWorkerMemoryMb: 1024,
+    renderWorkerMemorySource: 'default',
     redisUrl: inject('redisUrl'),
     storageDir,
     storageBackend: 'local',

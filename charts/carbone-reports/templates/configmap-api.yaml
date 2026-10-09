@@ -25,6 +25,9 @@ data:
   {{- if .Values.config.renderWorkers }}
   RENDER_WORKERS: {{ .Values.config.renderWorkers | toString | quote }}
   {{- end }}
+  {{- if .Values.config.renderWorkerMemoryMb }}
+  RENDER_WORKER_MEMORY_MB: {{ .Values.config.renderWorkerMemoryMb | toString | quote }}
+  {{- end }}
   LDAP_ENABLED: {{ .Values.config.ldap.enabled | toString | quote }}
   LDAP_URL: {{ .Values.config.ldap.url | quote }}
   LDAP_BIND_DN: {{ .Values.config.ldap.bindDn | quote }}

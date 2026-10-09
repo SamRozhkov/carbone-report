@@ -17,7 +17,10 @@ const tpl = (
 const opts = (convertTo: string, timeoutMs = 5000) =>
   ({ convertTo, lang: 'ru', timezone: 'Europe/Moscow', timeoutMs }) as never;
 
-function setup(run: (job: { template: Buffer }) => Promise<Buffer>) {
+function setup(
+  run: (job: { template: Buffer }) => Promise<Buffer>,
+  log?: { info(o: object, m: string): void },
+) {
   const handoff = createRenderHandoff(secret);
   const convert = vi.fn(async (r: { url: string }) => {
     const u = new URL(r.url);
@@ -30,6 +33,7 @@ function setup(run: (job: { template: Buffer }) => Promise<Buffer>) {
     handoff,
     convert,
     selfUrl: 'http://10.0.0.5:3000',
+    log,
   });
   return { renderer, convert, handoff };
 }
@@ -119,5 +123,23 @@ describe('createEmbeddedRenderer', () => {
       status: 400,
     });
     expect(run).not.toHaveBeenCalled();
+  });
+
+  it('ошибка шаблона пишется в журнал (info) с текстом Carbone, без данных', async () => {
+    const info = vi.fn();
+    const { renderer } = setup(
+      async () => {
+        throw new TemplateRenderError('Formatter "x" does not exist');
+      },
+      { info },
+    );
+    await expect(renderer.render(tpl(), { secret: 'данные' }, opts('docx'))).rejects.toMatchObject({
+      code: 'CARBONE_ERROR',
+    });
+    expect(info).toHaveBeenCalledOnce();
+    expect(info).toHaveBeenCalledWith(
+      { templateId: 't1', version: 1, carboneError: 'Formatter "x" does not exist' },
+      'ошибка шаблона Carbone',
+    );
   });
 });

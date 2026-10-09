@@ -140,4 +140,18 @@ describe('RenderPool', () => {
     await pool.run({ ...job('echo'), template }, soon(5000));
     expect(template.length).toBe(100 * 1024);
   });
+
+  it('поток, исчерпавший предел кучи, — RenderCrashError, следующий отчёт строится', async () => {
+    const crashes: unknown[] = [];
+    pool = new RenderPool({
+      size: 1,
+      workerUrl: new URL('./test-workers/oom-render.mjs', import.meta.url),
+      resourceLimits: { maxOldGenerationSizeMb: 32 },
+      onCrash: (e) => crashes.push(e),
+    });
+    await expect(pool.run(job('oom'), soon(15_000))).rejects.toThrow(RenderCrashError);
+    expect(crashes).toHaveLength(1);
+    expect(crashes[0]).toMatchObject({ code: 'ERR_WORKER_OUT_OF_MEMORY' });
+    expect((await pool.run(job('echo'), soon(5000))).toString()).toBe('tpl!');
+  }, 20_000);
 });

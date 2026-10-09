@@ -57,6 +57,11 @@ config:
   # Число воркеров сборки отчётов (1–16). Пусто — min(4, число ядер). В поде с лимитом CPU
   # число ядер узла завышено, поэтому разумно указать значение явно.
   renderWorkers: ""
+  # Предел кучи одного воркера рендера, МБ (128–8192): отчёт, превысивший его, завершается
+  # ошибкой, остальные строятся. Пусто — (limits.memory api − 400 МБ) / число воркеров,
+  # в пределах 256–2048 МБ; без лимита памяти — 1024. При значении вручную держите
+  # renderWorkers × renderWorkerMemoryMb + ~400 МБ в пределах api.resources.limits.memory.
+  renderWorkerMemoryMb: ""
   # Прокси перед API: Ingress и nginx образа web (1–5). Без Ingress (web через LoadBalancer/NodePort)
   # поставьте 1, иначе клиент подделает X-Forwarded-For и обойдёт лимит входа по IP.
   trustedProxyHops: 2
@@ -100,6 +105,7 @@ api:
   replicas: 2
   # Адрес пода API для Document Server (API_SELF_URL). Пусто — http://$(POD_IP):3000 (IPv4).
   # В кластере только с IPv6: http://[$(POD_IP)]:3000. $(POD_IP) подставляет Kubernetes.
+  # Внешний Document Server (onlyoffice.enabled: false) должен достигать IP подов API, не только Service.
   selfUrl: ''
   resources:
     requests: { cpu: 500m, memory: 512Mi }

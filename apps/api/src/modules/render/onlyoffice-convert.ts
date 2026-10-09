@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as sleep } from 'node:timers/promises';
 import type { OutputFormat, TemplateExt } from '@carbone-reports/shared';
 import { AppError } from '../../lib/errors';
 import { toInternalDownloadUrl } from '../onlyoffice/download-url';
@@ -28,10 +29,13 @@ export function createOnlyOfficeConverter(opts: {
   secret: Uint8Array;
   fetch?: typeof fetch;
   maxBytes?: number;
+  /** Пауза между опросами, пока Document Server отвечает endConvert: false, мс. */
+  pollMs?: number;
 }): Converter {
   const doFetch = opts.fetch ?? fetch;
   const base = opts.baseUrl.replace(/\/$/, '');
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
+  const pollMs = opts.pollMs ?? 1000;
 
   return async (req) => {
     const body = {
@@ -44,29 +48,52 @@ export function createOnlyOfficeConverter(opts: {
       url: req.url,
       region: 'ru-RU',
     };
-    let reply: { endConvert?: boolean; fileUrl?: string; error?: number };
-    try {
-      const res = await doFetch(`${base}/converter`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({ ...body, token: await signOnlyOffice(body, opts.secret) }),
-        redirect: 'error',
-        signal: req.signal,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json: unknown = await res.json();
-      if (typeof json !== 'object' || json === null) throw new Error('ответ не объект JSON');
-      reply = json as typeof reply;
-    } catch (e) {
-      if (req.signal.aborted) throw timeout();
-      throw unavailable(e);
+    // Повторный запрос с тем же ключом и телом продолжает ту же задачу конвертации.
+    const payload = JSON.stringify({ ...body, token: await signOnlyOffice(body, opts.secret) });
+    for (;;) {
+      const reply = await post(doFetch, `${base}/converter`, payload, req.signal);
+      if (typeof reply.error === 'number' && reply.error < 0) throw failed(reply.error);
+      if (reply.endConvert === true) {
+        if (!reply.fileUrl) throw failed(-1);
+        const internal = toInternalDownloadUrl(reply.fileUrl, base);
+        if (!internal) throw failed(-1);
+        return download(doFetch, internal, req.signal, maxBytes);
+      }
+      // endConvert: false без ошибки — Document Server ещё конвертирует (долгий документ).
+      if (reply.endConvert !== false) throw failed(-1);
+      try {
+        await sleep(pollMs, undefined, { signal: req.signal });
+      } catch {
+        throw timeout();
+      }
     }
-    if (typeof reply.error === 'number' && reply.error < 0) throw failed(reply.error);
-    if (reply.endConvert !== true || !reply.fileUrl) throw failed(-1);
-    const internal = toInternalDownloadUrl(reply.fileUrl, base);
-    if (!internal) throw failed(-1);
-    return download(doFetch, internal, req.signal, maxBytes);
   };
+}
+
+type Reply = { endConvert?: boolean; fileUrl?: string; error?: number; percent?: number };
+
+async function post(
+  doFetch: typeof fetch,
+  url: string,
+  payload: string,
+  signal: AbortSignal,
+): Promise<Reply> {
+  try {
+    const res = await doFetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: payload,
+      redirect: 'error',
+      signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json: unknown = await res.json();
+    if (typeof json !== 'object' || json === null) throw new Error('ответ не объект JSON');
+    return json as Reply;
+  } catch (e) {
+    if (signal.aborted) throw timeout();
+    throw unavailable(e);
+  }
 }
 
 async function download(

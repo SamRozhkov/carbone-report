@@ -102,6 +102,11 @@ tests:
     set: { config.renderWorkers: 2 }
     asserts:
       - equal: { path: data.RENDER_WORKERS, value: '2' }
+  - it: config.renderWorkerMemoryMb задан — RENDER_WORKER_MEMORY_MB в ConfigMap
+    template: configmap-api.yaml
+    set: { config.renderWorkerMemoryMb: 768 }
+    asserts:
+      - equal: { path: data.RENDER_WORKER_MEMORY_MB, value: '768' }
   - it: безопасность api — restricted
     template: api.yaml
     documentIndex: 0
@@ -143,6 +148,7 @@ tests:
       - equal: { path: data.REDIS_URL, value: 'rediss://redis.example.com:6380' }
       - notExists: { path: data.CARBONE_URL }
       - notExists: { path: data.RENDER_WORKERS }
+      - notExists: { path: data.RENDER_WORKER_MEMORY_MB }
       - equal: { path: data.ONLYOFFICE_INTERNAL_URL, value: 'http://cr-carbone-reports-onlyoffice' }
       - equal: { path: data.API_INTERNAL_URL, value: 'http://cr-carbone-reports-api:3000' }
       - equal: { path: data.BACKUP_AGENT_URL, value: 'http://cr-carbone-reports-backup-agent:8080' }

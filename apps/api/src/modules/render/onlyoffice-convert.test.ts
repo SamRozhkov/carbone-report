@@ -143,4 +143,39 @@ describe('createOnlyOfficeConverter', () => {
       status: 504,
     });
   });
+
+  it('endConvert: false — опрос с тем же ключом и телом, пока конвертация не закончится', async () => {
+    const replies = [
+      { endConvert: false, percent: 30 },
+      { endConvert: false, percent: 70 },
+      { endConvert: true, fileUrl: 'http://x/cache/files/a/output.pdf', percent: 100 },
+    ];
+    const { fn, calls } = fake(undefined);
+    const fnSeq = (async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith('/converter')) {
+        calls.push({ url: String(url), init });
+        return Response.json(replies.shift());
+      }
+      return fn(url, init);
+    }) as typeof fetch;
+    const out = await createOnlyOfficeConverter({
+      baseUrl: BASE,
+      secret,
+      fetch: fnSeq,
+      pollMs: 10,
+    })(req());
+    expect(out.toString()).toBe('%PDF-1.7 ok');
+    const posts = calls.filter((c) => c.url.endsWith('/converter'));
+    expect(posts).toHaveLength(3);
+    expect(new Set(posts.map((c) => String(c.init!.body))).size).toBe(1);
+  });
+
+  it('endConvert: false до истечения срока — TIMEOUT', async () => {
+    const { fn } = fake({ endConvert: false, percent: 10 });
+    await expect(
+      createOnlyOfficeConverter({ baseUrl: BASE, secret, fetch: fn, pollMs: 20 })(
+        req(AbortSignal.timeout(100)),
+      ),
+    ).rejects.toMatchObject({ code: 'TIMEOUT', status: 504 });
+  });
 });

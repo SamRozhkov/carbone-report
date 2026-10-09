@@ -17,6 +17,8 @@ export function createEmbeddedRenderer(opts: {
   handoff: RenderHandoff;
   convert: Converter;
   selfUrl: string;
+  /** Журнал ошибок шаблона (только текст Carbone, без данных отчёта). */
+  log?: { info(o: object, m: string): void };
 }): CarboneRenderer {
   const selfUrl = opts.selfUrl.replace(/\/$/, '');
   return {
@@ -39,6 +41,10 @@ export function createEmbeddedRenderer(opts: {
       } catch (e) {
         if (e instanceof RenderTimeoutError) throw timeout();
         if (e instanceof TemplateRenderError) {
+          opts.log?.info(
+            { templateId: tpl.id, version: tpl.version, carboneError: e.message },
+            'ошибка шаблона Carbone',
+          );
           const community = communityErrorMessage(e.message);
           if (community) throw new AppError('CARBONE_COMMUNITY', 400, community);
           throw new AppError('CARBONE_ERROR', 502, `ошибка генерации: ${e.message}`);

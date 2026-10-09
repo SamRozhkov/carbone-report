@@ -19,9 +19,6 @@
 {{- if and (not $v.s3.enabled) (not $v.externalS3.bucket) }}
 {{- fail "externalS3.bucket: задайте бакет внешнего S3 или s3.enabled=true" }}
 {{- end }}
-{{- if and (not $v.carbone.enabled) (not $v.carbone.url) }}
-{{- fail "carbone.url: задайте адрес внешнего Carbone или carbone.enabled=true" }}
-{{- end }}
 {{- if and (not $v.onlyoffice.enabled) (not $v.onlyoffice.internalUrl) }}
 {{- fail "onlyoffice.internalUrl: задайте адрес Document Server или onlyoffice.enabled=true" }}
 {{- end }}

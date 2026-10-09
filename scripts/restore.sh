@@ -66,7 +66,7 @@ refuse_if_manual_backup
 bk=$(docker compose ps -q --status running backup)
 
 echo "Будут ЗАМЕНЕНЫ база app и файлы хранилища ($target) данными из $(basename "$dir")."
-echo "Redis (кэш шаблонов Carbone и счётчики попыток входа) будет очищен."
+echo "Redis (счётчики попыток входа и флаг режима обслуживания) будет очищен."
 [ -z "$bk" ] || echo "Агент бэкапа (сервис backup) будет остановлен на время восстановления."
 echo "Незавершённое восстановление из админки (если есть) будет отмечено как выполненное этим скриптом."
 printf 'Введите restore для продолжения: '
@@ -78,9 +78,8 @@ read -r answer || answer=
 phase=none
 bk_stopped=
 redis_flushed=
-# Кэш Carbone в Redis (cr:carbone:tpl:<id> → {version, carboneId}) после замены базы устаревает:
-# номер версии шаблона из бэкапа может совпасть с закэшированным, и отчёт молча сформируется по
-# старому шаблону в Carbone. Всё в Redis одноразовое (кэш и счётчики), поэтому он очищается целиком.
+# Состояние в Redis (счётчики попыток входа, флаг режима обслуживания, кэши) после замены базы
+# устаревает. Всё в Redis одноразовое, поэтому он очищается целиком.
 redis_hint="docker compose exec -T redis redis-cli FLUSHALL (или docker compose restart redis)"
 on_exit() {
   [ "$1" -ne 0 ] || return 0
@@ -164,7 +163,7 @@ if docker compose up -d --wait redis && docker compose exec -T redis redis-cli F
   redis_flushed=1
   echo "Redis очищен."
 else
-  echo "ВНИМАНИЕ: не удалось очистить Redis — кэш шаблонов Carbone может быть устаревшим." >&2
+  echo "ВНИМАНИЕ: не удалось очистить Redis — счётчики входа и флаги в Redis могут быть устаревшими." >&2
   echo "Когда Redis заработает, выполните: $redis_hint" >&2
 fi
 docker compose up -d --wait api web

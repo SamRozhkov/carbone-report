@@ -50,7 +50,8 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?задайте ADMIN_PASSWORD в .env}
       ONLYOFFICE_INTERNAL_URL: http://onlyoffice
       API_INTERNAL_URL: http://api:3000
-      CARBONE_URL: http://carbone:4000
+      # Адрес API для Document Server: он забирает собранный отчёт по этому адресу.
+      API_SELF_URL: http://api:3000
       REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD в .env}@redis:6379
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
       # Агент бэкапа (сервис backup) — только во внутренней сети backup, псевдоним backup-agent:
@@ -94,8 +95,6 @@ services:
         condition: service_healthy
       s3:
         condition: service_healthy
-      carbone:
-        condition: service_started
     restart: unless-stopped
     logging: *logging
 
@@ -156,13 +155,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-    restart: unless-stopped
-    logging: *logging
-
-  carbone:
-    image: carbone/carbone-ee:full-5.15.3-fonts
-    volumes:
-      - carbone_templates:/app/template
     restart: unless-stopped
     logging: *logging
 
@@ -271,7 +263,6 @@ volumes:
   pgdata:
   demo_pgdata:
   s3_data:
-  carbone_templates:
   oo_data:
   oo_lib:
   oo_logs:

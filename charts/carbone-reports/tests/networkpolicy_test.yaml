@@ -14,7 +14,7 @@ tests:
       - hasDocuments: { count: 0 }
   - it: все компоненты, кроме web, закрыты; к агенту — только api
     asserts:
-      - hasDocuments: { count: 7 }
+      - hasDocuments: { count: 6 }
       - equal: { path: metadata.name, value: cr-carbone-reports-backup-agent }
         documentIndex: 0
       - equal:
@@ -38,11 +38,11 @@ tests:
       - equal: { path: 'spec.ingress[0].from[1].podSelector.matchLabels["app.kubernetes.io/component"]', value: onlyoffice }
       - equal: { path: 'spec.ingress[0].ports', value: [{ port: 3000, protocol: TCP }] }
   - it: к redis — api и агент
-    documentIndex: 5
+    documentIndex: 4
     asserts:
       - equal: { path: metadata.name, value: cr-carbone-reports-redis }
       - equal: { path: 'spec.ingress[0].from[1].podSelector.matchLabels["app.kubernetes.io/component"]', value: backup-agent }
   - it: выключенные компоненты — без политики
-    set: { carbone.enabled: false, carbone.url: 'http://c:4000', onlyoffice.enabled: false, onlyoffice.internalUrl: 'http://o' }
+    set: { onlyoffice.enabled: false, onlyoffice.internalUrl: 'http://o' }
     asserts:
       - hasDocuments: { count: 5 }

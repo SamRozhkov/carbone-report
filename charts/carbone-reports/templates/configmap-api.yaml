@@ -9,7 +9,6 @@ data:
   # Пароли — не здесь: DATABASE_PASSWORD и REDIS_PASSWORD из Secret API вставляет в URL сам.
   DATABASE_URL: {{ include "cr.databaseUrl" . | quote }}
   REDIS_URL: {{ include "cr.redisUrl" . | quote }}
-  CARBONE_URL: {{ include "cr.carboneUrl" . | quote }}
   ONLYOFFICE_INTERNAL_URL: {{ include "cr.onlyofficeUrl" . | quote }}
   # По этому адресу Document Server скачивает файлы и шлёт callback.
   API_INTERNAL_URL: {{ printf "http://%s:3000" (include "cr.component" (dict "root" . "name" "api")) | quote }}
@@ -23,6 +22,9 @@ data:
   RENDER_TIMEOUT_MS: {{ .Values.config.renderTimeoutMs | toString | quote }}
   REPORT_TIMEOUT_MS: {{ .Values.config.reportTimeoutMs | toString | quote }}
   REPORT_RETENTION_DAYS: {{ .Values.config.reportRetentionDays | toString | quote }}
+  {{- if .Values.config.renderWorkers }}
+  RENDER_WORKERS: {{ .Values.config.renderWorkers | toString | quote }}
+  {{- end }}
   LDAP_ENABLED: {{ .Values.config.ldap.enabled | toString | quote }}
   LDAP_URL: {{ .Values.config.ldap.url | quote }}
   LDAP_BIND_DN: {{ .Values.config.ldap.bindDn | quote }}

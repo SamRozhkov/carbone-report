@@ -24,10 +24,6 @@ tests:
     set: { externalS3.bucket: '' }
     asserts:
       - failedTemplate: { errorMessage: 'externalS3.bucket: задайте бакет внешнего S3 или s3.enabled=true' }
-  - it: выключен Carbone без адреса
-    set: { carbone.enabled: false }
-    asserts:
-      - failedTemplate: { errorMessage: 'carbone.url: задайте адрес внешнего Carbone или carbone.enabled=true' }
   - it: выключен OnlyOffice без адреса
     set: { onlyoffice.enabled: false }
     asserts:

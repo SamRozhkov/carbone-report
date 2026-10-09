@@ -1,9 +1,11 @@
 // Smoke установки чарта (CI, задание chart-kind; §27.9) через port-forward к web:
 //   BASE_URL=http://127.0.0.1:8080 ADMIN_LOGIN=… ADMIN_PASSWORD=… pnpm exec tsx scripts/k8s-smoke.ts
-// Проверяет: health и CSP через nginx, вход, бэкап из админки, восстановление с режимом обслуживания,
+// Проверяет: health и CSP через nginx, вход, отчёт в PDF и DOCX (через OnlyOffice), бэкап из админки, восстановление с режимом обслуживания,
 // данные из бэкапа после повторного входа. Первая ошибка останавливает проверку (код 1).
-// Пароль и cookie сессии в вывод не попадают.
+// Дополнительно: POSTGRES_PASSWORD — пароль встроенного Postgres (источник данных отчёта).
+// Пароли и cookie сессии в вывод не попадают.
 import { randomUUID } from 'node:crypto';
+import JSZip from 'jszip';
 
 const BASE = (process.env.BASE_URL ?? 'http://127.0.0.1:8080').replace(/\/$/, '');
 const need = (k: string) => {
@@ -45,6 +47,7 @@ async function call(
   path: string,
   body?: unknown,
   retry503 = true,
+  timeoutMs = TIMEOUT_MS,
 ): Promise<Response> {
   const until = Date.now() + 15_000;
   for (;;) {
@@ -56,7 +59,7 @@ async function call(
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
       redirect: 'manual',
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (r.status !== 503 || !retry503 || Date.now() > until) return r;
     await r.body?.cancel();
@@ -64,10 +67,22 @@ async function call(
   }
 }
 
+/** Код и сообщение ошибки API (тело ответа об ошибке не содержит секретов); иначе начало тела. */
+function apiError(text: string): string {
+  try {
+    const e = JSON.parse(text) as { code?: string; message?: string; error?: string };
+    const msg = [e.code, e.message ?? e.error].filter(Boolean).join(': ');
+    if (msg) return msg.slice(0, 500);
+  } catch {
+    // не JSON — ниже начало тела как есть
+  }
+  return text.slice(0, 300);
+}
+
 async function json<T>(res: Response, expected: number): Promise<T> {
   const text = await res.text();
   if (res.status !== expected)
-    throw new Error(`${res.url}: HTTP ${res.status}, ожидался ${expected}: ${text.slice(0, 300)}`);
+    throw new Error(`${res.url}: HTTP ${res.status}, ожидался ${expected}: ${apiError(text)}`);
   return JSON.parse(text) as T;
 }
 
@@ -137,6 +152,25 @@ async function waitMaintenanceCleared(timeoutMs: number): Promise<void> {
   }
 }
 
+/** Минимальный DOCX с тегом Carbone {d.company.name} (как docxWithTag() в scripts/smoke.ts). */
+async function docxWithTag(): Promise<Buffer> {
+  const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const zip = new JSZip();
+  zip.file(
+    '[Content_Types].xml',
+    `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+  );
+  zip.file(
+    '_rels/.rels',
+    `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+  );
+  zip.file(
+    'word/document.xml',
+    `${XML}<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Компания: {d.company.name}</w:t></w:r></w:p></w:body></w:document>`,
+  );
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
 const describe = (op: Operation) =>
   `${op.status} (фаза ${op.phase ?? '?'}${op.error ? `: ${op.error}` : ''})`;
 
@@ -170,6 +204,71 @@ await step('вход администратора, бэкапы включены
   );
   if (me.features?.backups !== true)
     throw new Error('features.backups не true: у api нет BACKUP_AGENT_URL');
+});
+
+await step('отчёт: PDF и DOCX через OnlyOffice', async () => {
+  const ds = await json<{ id: string }>(
+    await call('POST', '/api/datasources', {
+      name: `k8s-smoke ${suffix}`,
+      // Имя Service встроенного Postgres релиза cr (charts/carbone-reports, ci/kind-values.yaml).
+      host: 'cr-carbone-reports-postgresql',
+      port: 5432,
+      database: 'app',
+      username: 'app',
+      password: need('POSTGRES_PASSWORD'),
+      sslMode: 'disable',
+    }),
+    201,
+  );
+  const test = await json<{ ok: boolean; message?: string }>(
+    await call('POST', `/api/datasources/${ds.id}/test`),
+    200,
+  );
+  if (!test.ok) throw new Error(`проверка соединения источника данных: ${test.message ?? '?'}`);
+
+  const form = new FormData();
+  form.append('name', `k8s-smoke-шаблон-${suffix}`);
+  form.append('description', '');
+  form.append('datasourceId', ds.id);
+  form.append('file', new Blob([new Uint8Array(await docxWithTag())]), 'smoke.docx');
+  const up = await fetch(`${BASE}/api/templates/upload`, {
+    method: 'POST',
+    headers: { cookie },
+    body: form,
+    redirect: 'manual',
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  const tpl = await json<{ id: string }>(up, 201);
+  await json(
+    await call('PUT', `/api/templates/${tpl.id}/queries`, [
+      { key: 'company', mode: 'single', sql: "select 'ООО Ромашка' as name" },
+    ]),
+    200,
+  );
+
+  // Три запуска подряд: при двух репликах API запросы расходятся по обеим, и каждая реплика
+  // отдаёт Document Server файл отчёта по адресу собственного пода (API_SELF_URL).
+  // Первая конвертация PDF в только что поднятом OnlyOffice долгая — таймаут запроса 2 минуты.
+  let lastRunId = '';
+  for (let i = 1; i <= 3; i++) {
+    const { runId } = await json<{ runId: string }>(
+      await call('POST', `/api/reports/${tpl.id}/render`, { params: {} }, true, 120_000),
+      201,
+    );
+    lastRunId = runId;
+    const pdf = await call('GET', `/api/runs/${runId}/file?format=pdf`);
+    const bytes = Buffer.from(await pdf.arrayBuffer());
+    if (pdf.status !== 200)
+      throw new Error(`запуск ${i}: PDF, HTTP ${pdf.status}: ${apiError(bytes.toString('utf8'))}`);
+    if (bytes.subarray(0, 4).toString() !== '%PDF') throw new Error(`запуск ${i}: файл не PDF`);
+  }
+
+  const docx = await call('GET', `/api/runs/${lastRunId}/file?format=docx`);
+  const docxBytes = Buffer.from(await docx.arrayBuffer());
+  if (docx.status !== 200)
+    throw new Error(`DOCX, HTTP ${docx.status}: ${apiError(docxBytes.toString('utf8'))}`);
+  const xml = await (await JSZip.loadAsync(docxBytes)).file('word/document.xml')?.async('string');
+  if (!xml?.includes('ООО Ромашка')) throw new Error('в DOCX нет «ООО Ромашка»');
 });
 
 await step('бэкап из админки', async () => {

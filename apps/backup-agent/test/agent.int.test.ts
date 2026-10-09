@@ -256,7 +256,7 @@ describe('агент бэкапа в образе', () => {
       agent,
       'printf v2 | rclone rcat "s3:$S3_BUCKET/templates/a.txt" && printf x | rclone rcat "s3:$S3_BUCKET/stray.txt"',
     );
-    await redis.set('cr:carbone:tpl:x', '{}');
+    await redis.set('cr:test:x', '{}');
     await redis.set('foreign:key', '1');
     const old = [1, 2, 3, 4].map((d) => `pre-restore-2020-01-0${d}T00-00-00Z`);
     await agent.sh(`mkdir -p ${old.map((n) => `/backups/${n}`).join(' ')}`);
@@ -288,7 +288,7 @@ describe('агент бэкапа в образе', () => {
     expect(
       (await rclone(agent, 'rclone lsf -R --files-only "s3:$S3_BUCKET"')).output,
     ).not.toContain('stray.txt');
-    expect(await redis.exists('cr:carbone:tpl:x')).toBe(0);
+    expect(await redis.exists('cr:test:x')).toBe(0);
     // Redis может быть общим с другими сервисами (§27.5): чужой ключ переживает восстановление.
     expect(await redis.exists('foreign:key')).toBe(1);
     await redis.del('foreign:key');

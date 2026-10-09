@@ -1,6 +1,5 @@
-suite: Carbone и OnlyOffice
+suite: OnlyOffice
 templates:
-  - carbone.yaml
   - onlyoffice.yaml
   - secret.yaml
 values:
@@ -8,20 +7,6 @@ values:
 release:
   name: cr
 tests:
-  - it: Carbone — образ из values, :4000, кэш шаблонов в emptyDir
-    template: carbone.yaml
-    documentIndex: 0
-    asserts:
-      - equal: { path: 'spec.template.spec.containers[0].image', value: carbone/carbone-ee:full-5.15.3-fonts }
-      - equal: { path: 'spec.template.spec.containers[0].ports[0].containerPort', value: 4000 }
-      - contains:
-          path: spec.template.spec.volumes
-          content: { name: templates, emptyDir: {} }
-  - it: carbone.enabled=false — ничего не создаётся
-    template: carbone.yaml
-    set: { carbone.enabled: false, carbone.url: 'http://carbone.example:4000' }
-    asserts:
-      - hasDocuments: { count: 0 }
   - it: OnlyOffice — StatefulSet из одной реплики, JWT из Secret, один PVC для Data и lib
     template: onlyoffice.yaml
     documentIndex: 0

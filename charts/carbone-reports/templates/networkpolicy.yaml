@@ -2,14 +2,13 @@
 {{- /*
 Повторяет внутренние сети compose (§27.6): к компоненту — только перечисленные поды, на его порт.
 web не закрыт: к нему ходит Ingress-контроллер. Исходящий трафик не ограничивается (внешние
-Postgres, Redis, S3, LDAP). Порядок: backup-agent, api, onlyoffice, carbone, postgresql, redis, s3.
+Postgres, Redis, S3, LDAP). Порядок: backup-agent, api, onlyoffice, postgresql, redis, s3.
 */ -}}
 {{- $root := . }}
 {{- $rules := list
   (dict "to" "backup-agent" "from" (list "api") "port" 8080 "on" true)
   (dict "to" "api" "from" (list "web" "onlyoffice") "port" 3000 "on" true)
   (dict "to" "onlyoffice" "from" (list "web" "api") "port" 80 "on" .Values.onlyoffice.enabled)
-  (dict "to" "carbone" "from" (list "api") "port" 4000 "on" .Values.carbone.enabled)
   (dict "to" "postgresql" "from" (list "api" "backup-agent") "port" 5432 "on" .Values.postgresql.enabled)
   (dict "to" "redis" "from" (list "api" "backup-agent") "port" 6379 "on" .Values.redis.enabled)
   (dict "to" "s3" "from" (list "api" "backup-agent") "port" 8333 "on" .Values.s3.enabled)

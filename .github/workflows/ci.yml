@@ -75,7 +75,7 @@ jobs:
     name: Чарт в kind
     needs: [chart, integration]
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -121,7 +121,7 @@ jobs:
       - name: Установка чарта
         run: >-
           helm install cr charts/carbone-reports --namespace cr --create-namespace
-          -f charts/carbone-reports/ci/kind-values.yaml --wait --timeout 10m
+          -f charts/carbone-reports/ci/kind-values.yaml --wait --timeout 20m
       - name: Smoke
         # Явный bash — с pipefail: сбой kubectl в конвейере не даёт пустой файл и «нет изменений».
         shell: bash
@@ -129,6 +129,8 @@ jobs:
           BASE_URL: http://127.0.0.1:8080
           ADMIN_LOGIN: admin
           ADMIN_PASSWORD: admin-password
+          # postgresPassword из charts/carbone-reports/ci/kind-values.yaml (тестовый набор, не секрет).
+          POSTGRES_PASSWORD: 'p@ss/w:rd#%'
         run: |
           kubectl -n cr port-forward svc/cr-carbone-reports-web 8080:80 > /tmp/port-forward.log 2>&1 &
           # Перезапуски API при установке (пока встроенные Postgres и S3 не готовы) допустимы;
@@ -167,6 +169,9 @@ jobs:
             kubectl -n cr logs "$p" --all-containers --previous --tail=100 2>/dev/null || true
             echo "::endgroup::"
           done
+          echo "== логи OnlyOffice (Document Server)"
+          kubectl -n cr logs statefulset/cr-carbone-reports-onlyoffice --tail=300 || true
+          kubectl -n cr exec statefulset/cr-carbone-reports-onlyoffice -- sh -c 'tail -n 100 /var/log/onlyoffice/documentserver/converter/out.log /var/log/onlyoffice/documentserver/docservice/out.log' || true
           echo "== port-forward"
           cat /tmp/port-forward.log || true
           echo "== счётчики перезапусков API до/после smoke"

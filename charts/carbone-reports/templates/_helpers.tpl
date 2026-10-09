@@ -134,10 +134,6 @@ URL базы без пароля (пароль — DATABASE_PASSWORD, его в�
 {{- if .Values.redis.enabled }}{{ printf "redis://%s:6379" (include "cr.component" (dict "root" . "name" "redis")) }}{{ else }}{{ .Values.externalRedis.url }}{{ end }}
 {{- end }}
 
-{{- define "cr.carboneUrl" -}}
-{{- if .Values.carbone.enabled }}{{ printf "http://%s:4000" (include "cr.component" (dict "root" . "name" "carbone")) }}{{ else }}{{ .Values.carbone.url }}{{ end }}
-{{- end }}
-
 {{- define "cr.onlyofficeUrl" -}}
 {{- if .Values.onlyoffice.enabled }}{{ printf "http://%s" (include "cr.component" (dict "root" . "name" "onlyoffice")) }}{{ else }}{{ .Values.onlyoffice.internalUrl }}{{ end }}
 {{- end }}

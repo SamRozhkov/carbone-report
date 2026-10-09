@@ -54,6 +54,9 @@ config:
   renderTimeoutMs: 120000
   reportTimeoutMs: 120000
   reportRetentionDays: 30
+  # Число воркеров сборки отчётов (1–16). Пусто — min(4, число ядер). В поде с лимитом CPU
+  # число ядер узла завышено, поэтому разумно указать значение явно.
+  renderWorkers: ""
   # Прокси перед API: Ingress и nginx образа web (1–5). Без Ingress (web через LoadBalancer/NodePort)
   # поставьте 1, иначе клиент подделает X-Forwarded-For и обойдёт лимит входа по IP.
   trustedProxyHops: 2
@@ -96,21 +99,7 @@ web:
 api:
   replicas: 2
   resources:
-    requests: { cpu: 200m, memory: 256Mi }
-    limits: { memory: 1Gi }
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
-  podAnnotations: {}
-  extraEnv: []
-
-carbone:
-  enabled: true
-  image: carbone/carbone-ee:full-5.15.3-fonts
-  # При carbone.enabled=false — адрес внешнего Carbone, например http://carbone.example:4000.
-  url: ''
-  resources:
-    requests: { cpu: 250m, memory: 512Mi }
+    requests: { cpu: 500m, memory: 512Mi }
     limits: { memory: 2Gi }
   nodeSelector: {}
   tolerations: []

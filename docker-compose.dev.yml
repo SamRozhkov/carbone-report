@@ -20,6 +20,7 @@ services:
       - dev_node_modules:/repo/node_modules
       - dev_api_node_modules:/repo/apps/api/node_modules
       - dev_shared_node_modules:/repo/packages/shared/node_modules
+      - dev_carbone_node_modules:/repo/packages/carbone/node_modules
       - dev_pnpm_store:/pnpm/store
     healthcheck:
       start_period: 240s
@@ -33,4 +34,5 @@ volumes:
   dev_node_modules:
   dev_api_node_modules:
   dev_shared_node_modules:
+  dev_carbone_node_modules:
   dev_pnpm_store:

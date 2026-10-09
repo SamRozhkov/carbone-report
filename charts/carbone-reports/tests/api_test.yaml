@@ -66,6 +66,30 @@ tests:
           path: 'spec.template.spec.containers[0].env'
           content: { name: PGPASSWORD }
           any: true
+  - it: POD_IP из downward API, затем API_SELF_URL по адресу пода (порядок важен для $(POD_IP))
+    template: api.yaml
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: 'spec.template.spec.containers[0].env'
+          content: { name: POD_IP, valueFrom: { fieldRef: { fieldPath: status.podIP } } }
+      - contains:
+          path: 'spec.template.spec.containers[0].env'
+          content: { name: API_SELF_URL, value: 'http://$(POD_IP):3000' }
+      - equal: { path: 'spec.template.spec.containers[0].env[0].name', value: POD_IP }
+      - equal: { path: 'spec.template.spec.containers[0].env[1].name', value: API_SELF_URL }
+  - it: ресурсы api по умолчанию — сборка отчётов в самом API
+    template: api.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: 'spec.template.spec.containers[0].resources'
+          value: { requests: { cpu: 500m, memory: 512Mi }, limits: { memory: 2Gi } }
+  - it: config.renderWorkers задан — RENDER_WORKERS в ConfigMap
+    template: configmap-api.yaml
+    set: { config.renderWorkers: 2 }
+    asserts:
+      - equal: { path: data.RENDER_WORKERS, value: '2' }
   - it: безопасность api — restricted
     template: api.yaml
     documentIndex: 0
@@ -105,7 +129,8 @@ tests:
           path: data.DATABASE_URL
           value: postgres://app@pg.example.com:5432/app?sslmode=verify-full&uselibpqcompat=true&sslrootcert=/etc/carbone-reports/pg-ca/ca.crt
       - equal: { path: data.REDIS_URL, value: 'rediss://redis.example.com:6380' }
-      - equal: { path: data.CARBONE_URL, value: 'http://cr-carbone-reports-carbone:4000' }
+      - notExists: { path: data.CARBONE_URL }
+      - notExists: { path: data.RENDER_WORKERS }
       - equal: { path: data.ONLYOFFICE_INTERNAL_URL, value: 'http://cr-carbone-reports-onlyoffice' }
       - equal: { path: data.API_INTERNAL_URL, value: 'http://cr-carbone-reports-api:3000' }
       - equal: { path: data.BACKUP_AGENT_URL, value: 'http://cr-carbone-reports-backup-agent:8080' }

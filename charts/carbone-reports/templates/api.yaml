@@ -48,6 +48,15 @@ spec:
             - configMapRef:
                 name: {{ $name }}
           env:
+            # Адрес именно этого пода: Document Server забирает собранный отчёт у реплики, которая его собрала.
+            # $(POD_IP) раскрывается только из переменных, объявленных выше в этом же списке env.
+            # Ограничение: подстановка рассчитана на IPv4-адрес пода; для IPv6 нужны квадратные скобки.
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: API_SELF_URL
+              value: 'http://$(POD_IP):3000'
             {{- include "cr.secretEnv" (dict "root" . "env" "APP_SECRET" "key" "APP_SECRET") | nindent 12 }}
             {{- include "cr.secretEnv" (dict "root" . "env" "ENCRYPTION_KEY" "key" "ENCRYPTION_KEY") | nindent 12 }}
             {{- include "cr.secretEnv" (dict "root" . "env" "ONLYOFFICE_JWT_SECRET" "key" "ONLYOFFICE_JWT_SECRET") | nindent 12 }}

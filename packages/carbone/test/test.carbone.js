@@ -5,7 +5,6 @@ var fs = require('fs');
 var helper = require('../lib/helper');
 var params = require('../lib/params');
 var input = require('../lib/input');
-var converter = require('../lib/converter');
 var testPath = path.join(__dirname, 'test_file');
 var spawn = require('child_process').spawn;
 var execSync = require('child_process').execSync;
@@ -23,18 +22,6 @@ describe('Carbone', function () {
     });
     afterEach(function (done) {
       carbone.reset();
-      done();
-    });
-    it('should create automatically the template directory if it does not exists', function (done) {
-      helper.rmDirRecursive(_templatePath);
-      carbone.set({templatePath : _templatePath});
-      helper.assert(fs.existsSync(_templatePath), true);
-      done();
-    });
-    it('should create automatically the temp directory if it does not exists', function (done) {
-      helper.rmDirRecursive(_tempPath);
-      carbone.set({tempPath : _tempPath});
-      helper.assert(fs.existsSync(_tempPath), true);
       done();
     });
     it('should not overwrite lang object if provided', function (done) {
@@ -227,42 +214,6 @@ describe('Carbone', function () {
   });
 
 
-  describe('addTemplate', function () {
-    var _templatePath = path.join(__dirname,'template');
-    before(function () {
-      helper.rmDirRecursive(_templatePath);
-      fs.mkdirSync(_templatePath, '0755');
-      carbone.set({templatePath : _templatePath});
-    });
-    after(function () {
-      helper.rmDirRecursive(_templatePath);
-      carbone.reset();
-    });
-    it('should save the template in the folder "templatePath"', function (done) {
-      var _filePath = path.resolve('./test/datasets/test_word_render_2003_XML.xml');
-      var _fileContent = fs.readFileSync(_filePath, 'utf8');
-      var _fileId = '1.xml';
-      carbone.addTemplate(_fileId, _fileContent, function (err) {
-        helper.assert(err, null);
-        var _result = fs.readFileSync(path.join(_templatePath,_fileId), 'utf8');
-        helper.assert(_result, _fileContent);
-        done();
-      });
-    });
-    it('should overwrite existing template and should work if data is a buffer', function (done) {
-      var _fileId = '2.txt';
-      fs.writeFileSync(path.join(_templatePath, _fileId), 'bla');
-      var _filePath = path.resolve('./test/datasets/test_word_render_2003_XML.xml');
-      var _fileContent = fs.readFileSync(_filePath);
-      carbone.addTemplate(_fileId, _fileContent, function (err) {
-        helper.assert(err, null);
-        var _result = fs.readFileSync(path.join(_templatePath,_fileId));
-        helper.assert(_result, _fileContent);
-        done();
-      });
-    });
-  });
-
 
   describe('addFormatters', function () {
     it('should add a formatter to the list of custom formatters', function () {
@@ -293,44 +244,6 @@ describe('Carbone', function () {
 
 
 
-  describe('removeTemplate', function () {
-    var _templatePath = path.join(__dirname,'template');
-    before(function () {
-      helper.rmDirRecursive(_templatePath);
-      fs.mkdirSync(_templatePath, '0755');
-      carbone.set({templatePath : _templatePath});
-    });
-    after(function () {
-      helper.rmDirRecursive(_templatePath);
-      carbone.reset();
-    });
-    it('should remove the template from the Carbone datastore (templatePath)', function (done) {
-      var _fileId = '2.txt';
-      var _filePath = path.join(_templatePath, _fileId);
-      fs.writeFileSync(_filePath, 'bla');
-      carbone.removeTemplate(_fileId, function (err) {
-        helper.assert(err, null);
-        helper.assert(fs.existsSync(_filePath), false);
-        done();
-      });
-    });
-    it('should not crash if the template does not exist', function (done) {
-      var _fileId = '5.txt';
-      carbone.removeTemplate(_fileId, function (err) {
-        helper.assert(/unlink/.test(err+''), true);
-        done();
-      });
-    });
-  });
-
-
-  describe('listConversionFormats', function () {
-    it('should return the list of format for conversion', function (done) {
-      var _list = carbone.listConversionFormats('document');
-      helper.assert(_list[0].id, 'bib');
-      done();
-    });
-  });
 
   describe('renderXML with dash', function () {
     it('should render an XML string with dash in json keys', function (done) {
@@ -2681,35 +2594,15 @@ describe('Carbone', function () {
     after(function () {
       carbone.reset();
     });
-    it('should render a template and return a path instead of a buffer if renderPrefix is defined', function (done) {
-      var data = {
-        field1 : 'field_1',
-        field2 : 'field_2'
-      };
-      var opt = {
-        renderPrefix : 'prefix-'
-      };
-      carbone.render('test_word_render_A.docx', data, opt, function (err, resultFilePath, reportName, debugInfo) {
-        assert.equal(err, null);
-        var _filename = path.basename(resultFilePath);
-        assert.strictEqual(path.dirname(resultFilePath), params.renderPath);
-        assert.strictEqual(debugInfo, null);
-        assert.strictEqual(/prefix-[A-Za-z0-9-_]{22}cmVwb3J0\.docx/.test(reportName), true);
-        assert.strictEqual(/prefix-[A-Za-z0-9-_]{22}cmVwb3J0\.docx/.test(_filename), true);
-        fs.unlinkSync(resultFilePath);
-        done();
-      });
-    });
     it('should get debug info if isDebugActive = true', function (done) {
       var data = {
         field1 : 'field_1',
         field2 : 'field_2'
       };
       var opt = {
-        renderPrefix  : 'prefix-',
         isDebugActive : true
       };
-      carbone.render('test_word_render_A.docx', data, opt, function (err, resultFilePath, reportName, debugInfo) {
+      carbone.render('test_word_render_A.docx', data, opt, function (err, resultBuffer, reportName, debugInfo) {
         assert.equal(err, null);
         helper.assert(debugInfo, {
           markers : [
@@ -2719,75 +2612,20 @@ describe('Carbone', function () {
             '{c.author2}'
           ]
         });
-        fs.unlinkSync(resultFilePath);
         done();
       });
     });
-    it('should return a path instead of a buffer if renderPrefix is defined with reportName\
-      it should encode reportName to write POSIX compatible filename\
-      decodeRenderedFilename can be used to decode the filename', function (done) {
-      var data = {
-        field1 : 'field_1',
-        field2 : 'field_2'
-      };
-      var opt = {
-        renderPrefix : 'aa',
-        reportName   : '报道yéà?e|ah/../{d.field1}(")\''
-      };
-      carbone.render('test_word_render_A.docx', data, opt, function (err, resultFilePath, reportName) {
-        assert.equal(err, null);
-        var _filename = path.basename(resultFilePath);
-        assert.strictEqual(path.dirname(resultFilePath), params.renderPath);
-        assert.strictEqual(reportName, '报道yéà?e|ah/../field_1(")\'');
-        assert.strictEqual(/^[a-z0-9-_]+\.docx$/i.test(_filename), true);
-        var _onlyReportName = _filename.slice(2+22, -5);
-        assert.strictEqual(helper.decodeSafeFilename(_onlyReportName), '报道yéà?e|ah/../field_1(")\'');
-        helper.assert(carbone.decodeRenderedFilename(resultFilePath, 2), {
-          reportName : '报道yéà?e|ah/../field_1(")\'',
-          extension  : 'docx'
-        });
-        fs.unlinkSync(resultFilePath);
+    it('should return an error if convertTo differs from the template format (conversion is not supported)', function (done) {
+      carbone.render('test_word_render_A.docx', {}, { convertTo : 'pdf' }, function (err, result) {
+        assert.strictEqual(err, 'Conversion is not supported in this build. Use the same format as the template.');
+        assert.equal(result, null);
         done();
       });
     });
-    it('should accept only alphanumeric characters in renderPrefix', function (done) {
-      var data = {
-        field1 : 'field_1',
-        field2 : 'field_2'
-      };
-      var opt = {
-        renderPrefix : '报道yéà?e|ah/../{d.field1}(")'
-      };
-      carbone.render('test_word_render_A.docx', data, opt, function (err, resultFilePath) {
+    it('should accept convertTo equal to the template format', function (done) {
+      carbone.render('test_word_render_A.docx', {}, { convertTo : ' DOCX ' }, function (err, result) {
         assert.equal(err, null);
-        var _filename = path.basename(resultFilePath);
-        assert.strictEqual(path.dirname(resultFilePath), params.renderPath);
-        var _onlyReportName = _filename.slice(11+22, -5);
-        assert.strictEqual(helper.decodeSafeFilename(_onlyReportName), 'report');
-        assert.strictEqual(/yeahdfield1[A-Za-z0-9-_]{22}cmVwb3J0\.docx/.test(_filename), true);
-        fs.unlinkSync(resultFilePath);
-        done();
-      });
-    });
-    it('should render a template and return a path instead of a buffer (with conversion).\
-      it should trim and lower case convertTo extension', function (done) {
-      var data = {
-        field1 : 'field_1',
-        field2 : 'field_2'
-      };
-      var opt = {
-        renderPrefix : 'prefix',
-        reportName   : '{d.field1}test',
-        convertTo    : ' PDF  '
-      };
-      carbone.render('test_word_render_A.docx', data, opt, function (err, resultFilePath) {
-        assert.equal(err, null);
-        assert.strictEqual(path.dirname(resultFilePath), params.renderPath);
-        var _filename = path.basename(resultFilePath);
-        var _onlyReportName = _filename.slice(opt.renderPrefix.length + 22, -4);
-        assert.strictEqual(helper.decodeSafeFilename(_onlyReportName), 'field_1test');
-        assert.strictEqual(/prefix[A-Za-z0-9-_]{22}ZmllbGRfMXRlc3Q\.pdf/.test(_filename), true);
-        fs.unlinkSync(resultFilePath);
+        assert.strictEqual(Buffer.isBuffer(result), true);
         done();
       });
     });
@@ -2869,17 +2707,6 @@ describe('Carbone', function () {
         assert.equal(result.indexOf('field2'), -1);
         assert.notEqual(result.indexOf('field_1'), -1);
         assert.notEqual(result.indexOf('field_2'), -1);
-        done();
-      });
-    });
-    it('should return an error if hardRefresh is set to true on unknown files for LibreOffice', function (done) {
-      var data = {
-        field1 : 'field_1',
-        field2 : 'field_2'
-      };
-      carbone.render('test_word_render_2003_XML.xml', data, { hardRefresh : true }, function (err, result) {
-        helper.assert(err+'', 'Format "xml" can\'t be converted to "xml".');
-        assert.equal(result, null);
         done();
       });
     });
@@ -3120,391 +2947,9 @@ describe('Carbone', function () {
     it.skip('should re-generate r=1, c=A1 in Excel documents');
     it.skip('should not remove empty cells in XLSX files (needs pre-processing to add empty cells)');
 
-    it('should render a template (docx) and update the table of content by using libre office (hardRefresh set to true)', function (done) {
-      var options = {
-        convertTo   : 'docx',
-        hardRefresh : true
-      };
-      carbone.render('test_docx_refresh_table_of_content.docx', {}, options, function (err, result) {
-        assert.equal(err, null);
-        fs.mkdirSync(testPath, parseInt('0755',8));
-        var _document = path.join(testPath, 'file.docx');
-        var _unzipPath = path.join(testPath, 'unzip');
-        fs.writeFileSync(_document, result);
-        unzipSystem(_document, _unzipPath, function (err, files) {
-          var _xmlExpectedContent = files['word/document.xml'];
-          // Previous table of content
-          assert.equal(_xmlExpectedContent.indexOf('Main title'), -1);
-          assert.equal(_xmlExpectedContent.indexOf('subtitle1'), -1);
-          assert.equal(_xmlExpectedContent.indexOf('This is a text1'), -1);
-          // New table of content
-          assert.notEqual(_xmlExpectedContent.indexOf('subtitle2'), -1);
-          assert.notEqual(_xmlExpectedContent.indexOf('This is a text2'), -1);
-          done();
-        });
-      });
-    });
   });
 
 
-  describe('render and convert document', function () {
-    var _templatePath = path.join(__dirname, 'datasets');
-    var defaultOptions = {
-      pipeNamePrefix : '_carbone',
-      factories      : 1,
-      startFactory   : false,
-      attempts       : 2
-    };
-    afterEach(function (done) {
-      converter.exit(function () {
-        converter.init(defaultOptions, done);
-        carbone.reset();
-      });
-    });
-    beforeEach(function () {
-      carbone.set({templatePath : _templatePath});
-    });
-
-    it('should return error by converting a template ODS to BMP (non compatible files types)', (done) => {
-      var data = [{ id : 1, name : 'field_1' }, { id : 2, name : 'field_2' }];
-      var _options = {
-        convertTo : {
-          formatName : 'bmp'
-        }
-      };
-      carbone.render('test_spreadsheet.ods', data, _options, function (err, result) {
-        helper.assert(typeof err, 'string');
-        helper.assert(/can't be converted to "bmp"*/.test(err), true);
-        helper.assert(result, undefined);
-        done();
-      });
-    });
-
-    it('should accept txt files as template', (done) => {
-      var data = [{ id : 1, name : 'field_1' }, { id : 2, name : 'field_2' }];
-      carbone.render('template_txt.txt', data, function (err, result) {
-        helper.assert(err+'', 'null');
-        helper.assert(result, '1 field_1 2 field_2 ');
-        done();
-      });
-    });
-
-    it('should return error by converting a template ODS to text10 (non compatible files types)', (done) => {
-      var data = [{ id : 1, name : 'field_1' }, { id : 2, name : 'field_2' }];
-      var _options = {
-        convertTo : {
-          formatName : 'text10'
-        }
-      };
-      carbone.render('test_spreadsheet.ods', data, _options, function (err, result) {
-        helper.assert(typeof err, 'string');
-        helper.assert(/can't be converted to "text10"*/.test(err), true);
-        helper.assert(result, undefined);
-        done();
-      });
-    });
-
-    it('should return error by converting a template ODS to PGM (non compatible files types)', (done) => {
-      var data = [{ id : 1, name : 'field_1' }, { id : 2, name : 'field_2' }];
-      var _options = {
-        convertTo : {
-          formatName : 'pgm'
-        }
-      };
-      carbone.render('test_spreadsheet.ods', data, _options, function (err, result) {
-        helper.assert(typeof err, 'string');
-        helper.assert(/can't be converted to "pgm"*/.test(err), true);
-        helper.assert(result, undefined);
-        done();
-      });
-    });
-
-    it('should render a template (docx), generate to PDF and give output', function (done) {
-      var _pdfResultPath = path.resolve('./test/datasets/test_word_render_A.pdf');
-      var data = {
-        field1 : 'field_1',
-        field2 : 'field_2',
-      };
-      carbone.render('test_word_render_A.docx', data, {convertTo : 'pdf'}, function (err, result) {
-        assert.equal(err, null);
-        assert.equal(result.slice(0, 4).toString(), '%PDF');
-        fs.readFile(_pdfResultPath, function (err, expected) {
-          assert.equal(err+'', 'null');
-          assert.equal(result.slice(0, 4).toString(), '%PDF');
-          assert.equal(result.slice(8, 50).toString(), expected.slice(8, 50).toString());
-          done();
-        });
-      });
-    });
-    it('should render a template (docx), generate to PDF and give a path instead of a buffer if renderPrefix is defined', function (done) {
-      var _pdfExpectedPath = path.resolve('./test/datasets/test_word_render_A.pdf');
-      var data = {
-        field1 : 'field_1',
-        field2 : 'field_2',
-      };
-      carbone.render('test_word_render_A.docx', data, {convertTo : 'pdf', renderPrefix : ''}, function (err, resultPath) {
-        assert.equal(err, null);
-        assert.equal(resultPath.endsWith('.pdf'), true);
-        fs.readFile(_pdfExpectedPath, function (err, expected) {
-          fs.readFile(resultPath, function (err, result) {
-            assert.equal(err+'', 'null');
-            assert.equal(result.slice(0, 4).toString(), '%PDF');
-            assert.equal(result.slice(8, 50).toString(), expected.slice(8, 50).toString());
-            fs.unlinkSync(resultPath);
-            done();
-          });
-        });
-      });
-    });
-    it('should not crash if datas contain XML-incompatible control code', function (done) {
-      // eslint-disable-next-line no-unused-vars
-      var _pdfResultPath = path.resolve('./test/datasets/test_word_render_A.pdf');
-      var data = {
-        field1 : '\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u000b\u000c\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f',
-        field2 : 'field_2'
-      };
-      carbone.render(path.resolve('./test/datasets/test_word_render_A.docx'), data, {convertTo : 'pdf'}, function (err, result) {
-        assert.equal(err, null);
-        assert.equal(result.slice(0, 4).toString(), '%PDF');
-        done();
-      });
-    });
-    it('should render spreadsheet and convert it to a xls', function (done) {
-      var data = [{
-        id   : 1,
-        name : 'field_1'
-      },{
-        id   : 2,
-        name : 'field_2'
-      }];
-      carbone.render('test_spreadsheet.ods', data, {convertTo : 'xls'}, function (err) {
-        helper.assert(err, null);
-        // fs.writeFileSync('test.xls', result);
-        // TODO TODO TODO TODO TODO TODO TODO TODO : test the content of the xls
-        done();
-      });
-    });
-    it('should be fast to render and convert to pdf', function (done) {
-      converter.init({
-        pipeNamePrefix : '_carbone',
-        factories      : 3,
-        startFactory   : true,
-        attempts       : 2
-      }, function () {
-
-        var data = {
-          field1 : 'field_1',
-          field2 : 'field_2'
-        };
-        var _nbExecuted = 100;
-        var _results = [];
-        var _waitedResponse = _nbExecuted;
-        var _start = process.hrtime();
-        for (var i = 0; i < _nbExecuted; i++) {
-          carbone.render('test_word_render_A.docx', data, {convertTo : 'pdf'}, function (err, result) {
-            _waitedResponse--;
-            _results.push(result);
-            if (_waitedResponse === 0) {
-              theEnd();
-            }
-          });
-        }
-        function theEnd () {
-          var _diff = process.hrtime(_start);
-          var _elapsed = ((_diff[0] * 1e9 + _diff[1]) / 1e6) / _nbExecuted;
-          console.log('\n\n Conversion to PDF Time Elapsed : '+_elapsed + ' ms per pdf for '+_nbExecuted+' conversions (usally around 65ms) \n\n\n');
-          for (var i = 0; i < _results.length; i++) {
-            assert.equal(Buffer.isBuffer(_results[i]), true);
-            assert.equal(_results[i].slice(0, 4).toString(), '%PDF');
-          }
-          assert.equal((_elapsed < (200 * helper.CPU_PERFORMANCE_FACTOR)), true);
-          done();
-        }
-      });
-    });
-  });
-
-  describe('convert', function () {
-    var _templatePath = path.join(__dirname, 'datasets');
-    var defaultOptions = {
-      pipeNamePrefix : '_carbone',
-      factories      : 1,
-      startFactory   : false,
-      attempts       : 1
-    };
-    afterEach(function (done) {
-      converter.exit(function () {
-        converter.init(defaultOptions, done);
-        carbone.reset();
-      });
-    });
-    beforeEach(function () {
-      carbone.set({templatePath : _templatePath});
-    });
-    it('should convert a document', function (done) {
-      var _pdfResultPath = path.resolve('./test/datasets/test_word_render_A.pdf');
-      fs.readFile(path.join(_templatePath, 'test_word_render_A.docx'), function (err, buffer) {
-        helper.assert(err+'', 'null');
-        carbone.convert(buffer, {convertTo : 'pdf', extension : 'docx'}, function (err, result) {
-          assert.equal(err, null);
-          assert.equal(result.slice(0, 4).toString(), '%PDF');
-          fs.readFile(_pdfResultPath, function (err, expected) {
-            assert.equal(err+'', 'null');
-            assert.equal(result.slice(0, 4).toString(), '%PDF');
-            assert.equal(result.slice(8, 50).toString(), expected.slice(8, 50).toString());
-            done();
-          });
-        });
-      });
-    });
-    it('should return an error if the input extension is not passed', function (done) {
-      fs.readFile(path.join(_templatePath, 'test_word_render_A.docx'), function (err, buffer) {
-        helper.assert(err+'', 'null');
-        carbone.convert(buffer, {convertTo : 'pdf'}, function (err) {
-          assert.equal(err, 'options.extension must be set to detect input file type');
-          done();
-        });
-      });
-    });
-  });
-  describe('render and convert CSV with options', function () {
-    var _templatePath = path.join(__dirname, 'datasets');
-    var defaultOptions = {
-      pipeNamePrefix : '_carbone',
-      factories      : 1,
-      startFactory   : false,
-      attempts       : 2
-    };
-    afterEach(function (done) {
-      converter.exit(function () {
-        converter.init(defaultOptions, done);
-        carbone.reset();
-      });
-    });
-    beforeEach(function () {
-      carbone.set({templatePath : _templatePath});
-    });
-    it('should render spreadsheet with raw options (complete)', function (done) {
-      var data = [{ id : 1, name : 'field_1' },
-        { id : 2, name : 'field_2' }];
-      var _options = {
-        convertTo : null
-      };
-      carbone.render('test_spreadsheet.ods', data, _options, function (err) {
-        helper.assert(err, null);
-        done();
-      });
-    });
-    it('should not use the converter if the input file extension is the same as convertTo parameter', function (done) {
-      var data = [{ id : 1, name : 'field_1' },
-        { id : 2, name : 'field_2' }];
-      var _options = {
-        convertTo : 'ods'
-      };
-      var _start = process.hrtime();
-      carbone.render('test_spreadsheet.ods', data, _options, function (err) {
-        var _diff = process.hrtime(_start);
-        var _elapsed = ((_diff[0] * 1e9 + _diff[1]) / 1e6);
-        helper.assert(err, null);
-        helper.assert(_elapsed < 100, true);
-        done();
-      });
-    });
-    it('should return an error when the convertTo format is unknown', function (done) {
-      var _options = {
-        convertTo : 'ods_ede'
-      };
-      carbone.render('test_spreadsheet.ods', {}, _options, function (err) {
-        helper.assert(/can't be converted to "ods_ede"*/.test(err), true);
-        done();
-      });
-    });
-    it('should render spreadsheet with only a different fieldSeparator', function (done) {
-      var data = [{ id : 1, name : 'field_1' },
-        { id : 2, name : 'field_2' }];
-      var _options = {
-        convertTo : {
-          formatName    : 'csv',
-          formatOptions : {
-            fieldSeparator : '|'
-          },
-        }
-      };
-      carbone.render('test_spreadsheet.ods', data, _options, function (err, result) {
-        helper.assert(err, null);
-        var _expected = '||\n|1|field_1\n|2|field_2\n';
-        helper.assert(result.toString(), _expected);
-        done();
-      });
-    });
-    it('should not crash if formatName is passed without formatOptions', function (done) {
-      var data = [{ id : 1, name : 'field_1' },
-        { id : 2, name : 'field_2' }];
-      var _options = {
-        convertTo : {
-          formatName : 'csv'
-        }
-      };
-      carbone.render('test_spreadsheet.ods', data, _options, function (err, result) {
-        helper.assert(err, null);
-        var _expected = ',,\n,1,field_1\n,2,field_2\n';
-        helper.assert(result.toString(), _expected);
-        done();
-      });
-    });
-    it('should render spreadsheet with options (complete)', function (done) {
-      var data = [{ id : 1, name : 'field_1' },
-        { id : 2, name : 'field_2' }];
-      var _options = {
-        convertTo : {
-          formatName    : 'csv',
-          formatOptions : {
-            fieldSeparator : '+',
-            textDelimiter  : '"',
-            characterSet   : '0'
-          }
-        }
-      };
-      carbone.render('test_spreadsheet.ods', data, _options, function (err, result) {
-        helper.assert(err, null);
-        var _expected = '++\n+1+field_1\n+2+field_2\n';
-        helper.assert(result.toString(), _expected);
-        done();
-      });
-    });
-    it('should by default render with options 44,34,0 for csv', function (done) {
-      var data = [{ id : 1, name : 'field_1' },
-        { id : 2, name : 'référence' }];
-      var _options = {
-        convertTo : 'csv'
-      };
-      carbone.render('test_spreadsheet.ods', data, _options, function (err, result) {
-        helper.assert(err, null);
-        var _expected = ',,\n,1,field_1\n,2,référence\n';
-        helper.assert(result.toString(), _expected);
-        done();
-      });
-    });
-    it('should render spreadsheet with options (incomplete)', function (done) {
-      var data = [{ id : 1, name : 'field_1' },
-        { id : 2, name : 'field_2' }];
-      var _options = {
-        convertTo : {
-          formatName    : 'csv',
-          formatOptions : {
-            fieldSeparator : '*',
-            characterSet   : '9'
-          }
-        }
-      };
-      carbone.render('test_spreadsheet.ods', data, _options, function (err, result) {
-        helper.assert(err, null);
-        var _expected = '**\n*1*field_1\n*2*field_2\n';
-        helper.assert(result.toString(), _expected);
-        done();
-      });
-    });
-  });
 });
 
 

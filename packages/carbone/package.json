@@ -1,11 +1,23 @@
 {
-  "name": "carbone",
-  "description": "Fast, Simple and Powerful report generator. Injects JSON and produces PDF, DOCX, XLSX, ODT, PPTX, ODS, ...!",
-  "version": "3.8.2",
-  "bin": "bin/carbone",
-  "main": "./lib",
-  "author": "David Grelaud",
+  "name": "@carbone-reports/carbone",
+  "version": "3.8.2-cr.1",
+  "private": true,
+  "type": "commonjs",
+  "description": "Carbone Community 3.8.2, встроенная сборка carbone-reports (см. NOTICE.md)",
   "license": "SEE LICENSE IN LICENSE.md",
+  "main": "./lib/index.js",
+  "types": "./index.d.ts",
+  "files": [
+    "lib",
+    "formatters",
+    "index.d.ts",
+    "LICENSE.md",
+    "NOTICE.md"
+  ],
+  "scripts": {
+    "test": "mocha test --timeout 20000 --exit"
+  },
+  "author": "David Grelaud",
   "homepage": "https://carbone.io",
   "keywords": [
     "report",
@@ -17,23 +29,13 @@
     "ods",
     "json"
   ],
-  "scripts": {
-    "test": "./node_modules/.bin/mocha test --timeout 100000 --exit",
-    "lint": "eslint ./lib/**.js ./test/**.js ./formatters/**.js",
-    "lint:fix": "eslint ./lib/**.js ./test/**.js ./formatters/**.js --fix",
-    "postpublish": "PACKAGE_VERSION=$(cat package.json | grep \\\"version\\\" | head -1 | awk -F: '{ print $2 }' | sed 's/[\",]//g' | tr -d '[[:space:]]') && git tag $PACKAGE_VERSION && git push origin $PACKAGE_VERSION && git push github-origin $PACKAGE_VERSION"
-  },
   "dependencies": {
     "dayjs": "=1.11.20",
     "debug": "=4.4.3",
-    "which": "=6.0.1",
     "yauzl": "=2.10.0",
     "yazl": "=2.5.1"
   },
   "devDependencies": {
     "mocha": "=9.2.2"
-  },
-  "engines": {
-    "node": ">= 12.14.0"
   }
 }

@@ -1,34 +1,25 @@
-var fs = require('fs');
 var os = require('os');
-var path = require('path');
 var file = require('./file');
 var params = require('./params');
-var helper = require('./helper');
-var format = require('./format');
 var builder = require('./builder');
 var input = require('./input');
-var preprocessor = require('./preprocessor');
 var translator = require('./translator');
-var converter = require('./converter');
-var debug = require('debug')('carbone');
+var preprocessor = require('./preprocessor');
 var dayjs = require('dayjs');
 var locales = require('../formatters/_locale');
 
 var carbone = {
 
   /**
-   * This function is NOT asynchronous (It may create the template or temp directory synchronously)
+   * Глобальные параметры библиотеки (встроенная сборка: без LibreOffice, без временных каталогов).
    * @param {Object} options {
-   *                           tempPath     : system temp directory by default
-   *                           templatePath : it will create the directory if it does not exists
-   *                           renderPath   : where rendered files are temporary saved. It will create the directory if it does not exists
-   *                           lang         : set default lang of carbone, can be overwrite in carbone.render options.lang
-   *                           timezone     : set default timezone of carbone, can be overwrite in carbone.render options.timezone
-   *                           translations : overwrite carbone translations object
-   *                           currencySource : currency of data, it depends on the locale if empty
-   *                           currencyTarget : default target currency when the formatter convCurr is used without target
-   *                                            it depends on the locale if empty
-   *                           currencyRates  : rates, based on EUR { EUR : 1, USD : 1.14 }
+   *                           templatePath : каталог шаблонов для относительных путей в render
+   *                           lang         : язык по умолчанию, можно переопределить в options.lang
+   *                           timezone     : часовой пояс по умолчанию, можно переопределить в options.timezone
+   *                           translations : объект переводов
+   *                           currencySource : валюта данных, по умолчанию зависит от локали
+   *                           currencyTarget : валюта по умолчанию для convCurr
+   *                           currencyRates  : курсы относительно EUR { EUR : 1, USD : 1.14 }
    *                         }
    */
   set : function (options) {
@@ -40,25 +31,9 @@ var carbone = {
         throw Error('Undefined options :' + attr);
       }
     }
-    if (options.templatePath !== undefined) {
-      if (fs.existsSync(params.templatePath) === false) {
-        fs.mkdirSync(params.templatePath, '0755');
-      }
-      if (fs.existsSync(path.join(params.templatePath, 'lang')) === false) {
-        fs.mkdirSync(path.join(params.templatePath, 'lang'), '0755');
-      }
-      if (options.translations === undefined) {
-        translator.loadTranslations(params.templatePath);
-      }
-    }
-    if (options.tempPath !== undefined && fs.existsSync(params.tempPath) === false) {
-      fs.mkdirSync(params.tempPath, '0755');
-    }
-    if (fs.existsSync(params.renderPath) === false) {
-      fs.mkdirSync(params.renderPath, '0755');
-    }
-    if (options.factories !== undefined || options.startFactory !== undefined) {
-      converter.init();
+    // Переводы из каталога шаблонов (templatePath/lang/*.json), если они не переданы явно
+    if (options.templatePath !== undefined && options.translations === undefined) {
+      translator.loadTranslations(params.templatePath);
     }
     dayjs.tz.setDefault(params.timezone);
     dayjs.locale(params.lang.toLowerCase());
@@ -74,37 +49,13 @@ var carbone = {
 
     params.tempPath                = _tmpDir;
     params.templatePath            = process.cwd();
-    params.renderPath              = path.join(params.tempPath, 'carbone_render');
-    params.factories               = 1;
-    params.attempts                = 2;
-    params.startFactory            = false;
-    params.factoryMemoryFileSize   = 1;
-    params.factoryMemoryThreshold  = 50;
-    params.converterFactoryTimeout = 60000;
     params.uidPrefix               = 'c';
-    params.pipeNamePrefix          = '_carbone';
     params.lang                    = 'en';
     params.timezone                = 'Europe/Paris';
     params.translations            = {};
     params.currencySource          = '';
     params.currencyTarget          = '';
     params.currencyRates           = { EUR : 1, USD : 1.14 };
-  },
-
-  /**
-   * Add a template in Carbone datastore (template path)
-   * @param {String}            fileId   Unique file name. All templates will be saved in the same folder (templatePath). It will overwrite if the template already exists.
-   * @param {String|Buffer}     data     The content of the template
-   * @param {Function}          callback(err) called when done
-   */
-  addTemplate : function (fileId, data, callback) {
-    /* if(path.isAbsolute(fileId)===true){  //possible with Node v0.11
-      return callback('The file id should not be an absolute path: '+fileId);
-    }*/
-    var _fullPath = path.join(params.templatePath, fileId);
-    fs.writeFile(_fullPath, data, function (err) {
-      callback(err);
-    });
   },
 
   /**
@@ -115,36 +66,6 @@ var carbone = {
     for (var f in customFormatters) {
       input.formatters[f] = customFormatters[f];
     }
-  },
-
-  /**
-   * Remove a template from the Carbone datastore (template path)
-   * @param  {String}   fileId   Unique file name.
-   * @param  {Function} callback(err)
-   */
-  removeTemplate : function (fileId, callback) {
-    var _fullPath = path.join(params.templatePath, fileId);
-    fs.unlink(_fullPath, callback);
-  },
-
-
-  /**
-   * Return the list of possible conversion format
-   * @param  {String} documentType  Must be 'document', 'web', 'graphics', 'spreadsheet', 'presentation'
-   * @return {Array}                List of format
-   */
-  listConversionFormats : function (documentType) {
-    var _res = [];
-    if (format[documentType] === undefined) {
-      throw Error('Unknown document type');
-    }
-    var _doc = format[documentType];
-    for (var attr in _doc) {
-      var _format = _doc[attr];
-      _format.id = attr;
-      _res.push(_format);
-    }
-    return _res;
   },
 
   /**
@@ -170,7 +91,7 @@ var carbone = {
    * @param {Object|Array} data : Datas to be inserted in the template represented by the {d.****}
    * @param {Object}       optionsRaw [optional] : {
    *                          'complement'   : {}    data which is represented by the {c.****}
-   *                          'convertTo'    : 'pdf' || { 'formatName', 'formatOptions'} Convert the document in the format specified
+   *                          'convertTo'    : не поддерживается, допустим только формат шаблона (иначе ошибка)
    *                          'extension'    : 'odt' || undefined Specify the template extension
    *                          'variableStr'  : ''    pre-declared variables,
    *                          'lang'         : overwrite default lang. Ex. "fr"
@@ -184,7 +105,7 @@ var carbone = {
    *                          'renderPrefix' : If defined, it returns a path instead of a buffer, and it adds this prefix in the filename
    *                                           The filename will contains also the report name URL Encoded
    *                       }
-   * @param {Function}     callbackRaw(err, bufferOrPath, reportName) : Function called after generation with the result
+   * @param {Function}     callbackRaw(err, buffer, reportName) : Function called after generation with the result
    */
   render : function (templatePath, data, optionsRaw, callbackRaw) {
     input.parseOptions(optionsRaw, callbackRaw, function (options, callback) {
@@ -200,10 +121,13 @@ var carbone = {
         if (options.extension === null) {
           return callback('Unknown input file type. It should be a docx, xlsx, pptx, odt, ods, odp, xhtml, html or an xml file');
         }
-        // check and clean convertTo object, options.convertTo contains a clean version of optionsRaw.convertTo
-        var _error = input.parseConvertTo(options, optionsRaw.convertTo);
-        if (_error) {
-          return callback(_error);
+        // Конвертация форматов в этой сборке не поддерживается: допустим только формат шаблона
+        var _convertTo = optionsRaw.convertTo;
+        if (_convertTo && typeof _convertTo === 'object') {
+          _convertTo = _convertTo.formatName;
+        }
+        if (typeof _convertTo === 'string' && _convertTo.toLowerCase().trim() !== options.extension) {
+          return callback('Conversion is not supported in this build. Use the same format as the template.');
         }
         template.reportName = options.reportName;
         template.extension = options.extension;
@@ -221,12 +145,7 @@ var carbone = {
               if (err) {
                 return callback(err, null);
               }
-              convert (result, report.reportName, options, function (err, bufferOrFile) {
-                if (report.reportName === undefined && typeof bufferOrFile === 'string') {
-                  report.reportName = path.basename(bufferOrFile);
-                }
-                callback(err, bufferOrFile, report.reportName, (options.isDebugActive === true ? options.debugInfo : null) );
-              });
+              callback(null, result, report.reportName, (options.isDebugActive === true ? options.debugInfo : null) );
             });
           });
         });
@@ -235,77 +154,20 @@ var carbone = {
   },
 
   /**
-   * Decodes a rendered filename.
-   *
-   * When carbone.render is called with the options renderPrefix, the callback returns a path instead of a buffer
-   * The filename is built like this (3 distinct parts), with only alphanumeric characters to be able to write it on the disk safely
-   *
-   * <prefix><22-random-chars><encodedReportName.extension>
-   *
-   * This function decodes the part `<encodedReportName.extension>` `
-   *
-   * @param  {String}   pathOrFilename  The path or filename
-   * @param  {Integer}  prefixLength    The prefix length used in options.renderPrefix
-   * @return {Object}   {
-   *                      extension  : 'pdf',
-   *                      reportName : 'decoded filename'
-   *                    }
-   */
-  decodeRenderedFilename : function (pathOrFilename, prefixLength = 0) {
-    var _filename = path.basename(pathOrFilename);
-    var _extension = path.extname(_filename);
-    var _onlyReportName = _filename.slice(prefixLength + helper.RANDOM_STRING_LENGTH, -_extension.length);
-
-    return {
-      reportName : helper.decodeSafeFilename(_onlyReportName),
-      extension  : _extension.slice(1)
-    };
-  },
-
-  /**
-   * Return the file extension
-   * @param {String} filePath File path
-   * @param {Function} callback
+   * Определить расширение шаблона по пути
+   * @param {String} filePath Путь к файлу
+   * @param {Function} callback(err, extension)
    */
   getFileExtension : function (filePath, callback) {
     file.openTemplate(filePath, function (err, template) {
       if (err) {
         return callback(err);
       }
-
       var ext = file.detectType(template);
-
       if (ext === null) {
         return callback('Cannot detect file extension');
       }
-
       return callback(null, ext);
-    });
-  },
-
-  /**
-   * Convert a file format to another
-   *
-   * @param  {Buffer}   data      raw data returned by fs.readFile (no utf-8)
-   * @param  {Object}   options   Same as carbone.render
-   *                              {
-   *                                convertTo : pdf || {formatName, formatOptions}
-   *                                extension : 'csv'  // extension of input file returned by path.extname(filename).
-   *                                                   // It helps LibreOffice to understand the source format (mandatory for CSV files)
-   *                              }
-   * @param  {Function} callback  (err, result) result is a buffer (file converted)
-   */
-  convert : function (fileBuffer, optionsRaw, callbackRaw) {
-    input.parseOptions(optionsRaw, callbackRaw, function (options, callback) {
-      options.extension = optionsRaw.extension;
-      if (options.extension === null) {
-        return callback('Unknown input file type. options.extension should be equals to docx, xlsx, pptx, odt, ods, odp, xhtml, html or an xml');
-      }
-      var _error = input.parseConvertTo(options, optionsRaw.convertTo);
-      if (_error) {
-        return callback(_error);
-      }
-      convert (fileBuffer, undefined, options, callback);
     });
   },
 
@@ -356,100 +218,12 @@ function walkFiles (template, data, options, currentIndex, callback) {
 }
 
 
-/**
- * { function_description }
- *
- * @param {Buffer}    inputFileBuffer  The input file buffer
- * @param {String}    customReportName user-defined report name computed by Carbone
- * @param {Function}  options          options coming from input.parseOptions and input.parseConvertTo
- *                                     {
- *                                       convertTo : {
- *                                         extension  : 'pdf',
- *                                         format     : 'writer_pdf_Export' // coming from lib/format.js
- *                                         optionsStr : '44,34,76',         // only for CSV
- *                                         filters    : {                   // only for PDF, JPG, ...
- *                                           ReduceImageResolution : true
- *                                         }
- *                                       }
- *                                       extension    : 'odt' || Force input template extension
- *                                       hardRefresh  : (default: false) if true, LibreOffice is used to render and refresh the content of the report at the end of Carbone process
- *                                       renderPrefix : If defined, it add a prefix to the report name
- *                                     }
- * @param {Function}  callback(err, bufferOrPath) return a path if renderPrefix is defined, a buffer otherwise
- */
-function convert (inputFileBuffer, customReportName, options, callback) {
-  const _convertTo         = options.convertTo;
-  const _hasConversion     = options.extension !== _convertTo.extension || options.hardRefresh === true;
-  const _isReturningBuffer = options.renderPrefix === undefined || options.renderPrefix === null;
-
-  // If there is no conversion, and there is no renderPrefix, we return the buffer directly
-  if (_hasConversion === false && _isReturningBuffer === true) {
-    return callback(null, inputFileBuffer);
-  }
-
-  // generate a unique random & safe filename
-  const _renderPrefix     = (options.renderPrefix || '').replace(/[^0-9a-z-]/gi, '');
-  const _randomNamePart   = helper.getRandomString();
-  const _customReportName = customReportName !== undefined ? customReportName : 'report';
-  const _renderFilename   = _renderPrefix + _randomNamePart + helper.encodeSafeFilename(_customReportName) + '.' + _convertTo.extension;
-  const _renderFile       = path.join(params.renderPath, _renderFilename);
-
-  // no conversion, but return a path
-  if (_hasConversion === false) {
-    return fs.writeFile(_renderFile, inputFileBuffer, function (err) {
-      if (err) {
-        debug('Cannot write rendered file on disk' + err);
-        return callback('Cannot write rendered file on disk', null);
-      }
-      return callback(null, _renderFile);
-    });
-  }
-
-  // A conversion is necessary, generate a intermediate file for the converter
-  const _intermediateFilename = _renderPrefix + _randomNamePart + '_tmp.' + options.extension;
-  const _intermediateFile     = path.join(params.renderPath, _intermediateFilename);
-  fs.writeFile(_intermediateFile, inputFileBuffer, function (err) {
-    if (err) {
-      debug('Cannot write rendered file on disk' + err);
-      return callback('Cannot write rendered file on disk', null);
-    }
-    // call the converter and tell him to generate directly the wanted filename
-    converter.convertFile(_intermediateFile, _convertTo.format, _convertTo.optionsStr, _renderFile, function (errConvert, outputFile) {
-      fs.unlink(_intermediateFile, function (err) {
-        if (err) {
-          debug('Cannot remove intermediate file before conversion ' + err);
-        }
-      });
-      if (errConvert) {
-        return callback(errConvert, null);
-      }
-      if (_isReturningBuffer === false) {
-        return callback(null, outputFile);
-      }
-      fs.readFile(outputFile, function (err, outputBuffer) {
-        fs.unlink(outputFile, function (err) {
-          if (err) {
-            debug('Cannot remove rendered file ' + err);
-          }
-        });
-        if (err) {
-          debug('Cannot returned file buffer ' + err);
-          return callback('Cannot returned file buffer', null);
-        }
-        callback(null, outputBuffer);
-      });
-    });
-  });
-}
-
-
 // add default formatters
 carbone.addFormatters(require('../formatters/array.js'));
 carbone.addFormatters(require('../formatters/condition.js'));
 carbone.addFormatters(require('../formatters/date.js'));
 carbone.addFormatters(require('../formatters/number.js'));
 carbone.addFormatters(require('../formatters/string.js'));
-translator.loadTranslations(params.templatePath);
 
 // We must include all locales like this for PKG
 require('dayjs/locale/af.js');
@@ -611,9 +385,5 @@ dayjs.extend(require('dayjs/plugin/timezone'));
 
 dayjs.tz.setDefault('Europe/Paris');
 dayjs.locale('en');
-
-if (fs.existsSync(params.renderPath) === false) {
-  fs.mkdirSync(params.renderPath, '0755');
-}
 
 module.exports = carbone;

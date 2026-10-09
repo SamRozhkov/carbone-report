@@ -9,6 +9,8 @@ export default tseslint.config(
       '**/drizzle/**',
       'e2e/report/**',
       'e2e/test-results/**',
+      'docs/**',
+      'packages/carbone/**',
     ],
   },
   js.configs.recommended,

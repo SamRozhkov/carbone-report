@@ -226,6 +226,13 @@ var extracter = {
                 iterators : [],
                 xmlParts  : []
               };
+              // первая метка массива — для ошибки «нет [i+1]» как в Carbone EE; неперечисляемое поле,
+              // чтобы не менять форму дескриптора (его сравнивают тесты апстрима)
+              Object.defineProperty(_res[_uniqueMarkerName], 'firstMarker', {
+                value      : '{' + _marker.replace(/^_root\./, '') + '}',
+                enumerable : false,
+                writable   : true
+              });
             }
             if (_isIteratorUsedInCurrentArray === true && _res[_uniqueMarkerName].position.start === undefined) {
               _res[_uniqueMarkerName].position.start = _markerPos;
@@ -639,10 +646,26 @@ function findAndSetExactPositionOfArrays (xml, descriptor) {
   var _oddZones = [];
   for (var _objName in descriptor) {
     var _obj = descriptor[_objName];
+    // как в Carbone EE: цикл [i] без парной метки [i+1] — ошибка, а не тихий вывод первого элемента
+    // (эталон matrix/tests3/bad-loop-missing-i-1)
+    if (_obj.type === 'array' && _obj.iterators.length === 0 && _obj.firstMarker !== undefined) {
+      throw new Error('The marker ' + _obj.firstMarker + ' has no corresponding [i+1] for array "' + _obj.name + '". '
+        + 'Add at least one tag with ' + _obj.name + '[i+1] to describe where is the i+1-th item.');
+    }
     if (_obj.type === 'array' && _obj.iterators.length>0) {
       var _roughPosStart = descriptor[_objName].position.start;
       var _roughPosEnd = descriptor[_objName].position.end;
       var _subString = xml.slice(Math.trunc(_roughPosStart), Math.trunc(_roughPosEnd));
+      // как в Carbone EE: повтор внутри одного текстового узла («[{d.cars[i].brand}, {d.cars[i+1].brand}]») —
+      // между метками нет тегов, повторяется только текст (эталон matrix/s1/inline-loop-same-paragraph).
+      // findPivot здесь вернул бы конец строки, и повтор поднялся бы до корня документа.
+      if (_subString.indexOf('<') === -1) {
+        descriptor[_objName].position = {start : _roughPosStart, end : _roughPosEnd, endOdd : _roughPosEnd};
+        descriptor[_objName].xmlParts.push({obj : _objName, array : 'start', pos : _roughPosStart, posOrigin : _roughPosStart});
+        descriptor[_objName].xmlParts.push({obj : _objName, array : 'end'  , pos : _roughPosEnd  , posOrigin : _roughPosEnd });
+        _oddZones.push([_roughPosEnd, _roughPosEnd]);
+        continue;
+      }
       var _pivot = parser.findPivot(_subString);
       // TODO test if the _pivot is not null !!!!!!!!!!!!
       // absolute position of the pivot

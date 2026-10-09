@@ -10,7 +10,8 @@ var parser = {
    * @param {String}  oneMarker  One marker
    */
   isCarboneMarker : function (oneMarker) {
-    const _isCarboneMarkerRegexp = /^\{?\s*(?:[cdt]\s*[.[:(])|^\{?\s*[#$]|^\{?\s*bindColor/;
+    // «o.» — теги опций Carbone EE ({o.useHighPrecisionArithmetic=true})
+    const _isCarboneMarkerRegexp = /^\{?\s*(?:[cdt]\s*[.[:(])|^\{?\s*o\s*\.|^\{?\s*[#$]|^\{?\s*bindColor/;
     return _isCarboneMarkerRegexp.test(oneMarker);
   },
 
@@ -32,6 +33,7 @@ var parser = {
     var _nbMarkerPresenceChar = 0;
     var _markerPresenceChar = MARKER_PRESENCE_CHAR;
     var _cleanedXml = xml;
+    var _optionTags = {};
 
     // Capture { } markers again and extract them
     _cleanedXml = _cleanedXml.replace(/\{([^{]+?)\}/g, function (m, marker, offset) {
@@ -39,6 +41,13 @@ var parser = {
         return m;
       }
       var _cleanedMarker = that.removeWhitespace(that.cleanMarker(marker));
+      // как в Carbone EE: тег опции {o.name=value} ничего не печатает и задаёт опцию рендера
+      // (эталоны matrix/s2/usehighprecisionarithmetic-0-1-0-2, matrix/s5/o-prereleasefeaturein)
+      if (/^o\./.test(_cleanedMarker) === true) {
+        that.parseOptionTag(_cleanedMarker, _optionTags);
+        _previousMarkerLength += (marker.length + 2);
+        return '';
+      }
       _markerPresenceChar = '';
       if (condition._isConditionalBlockEndMarker(_cleanedMarker) === false && condition._isConditionalBlockBeginMarker(_cleanedMarker) === false) {
         // Replace the marker by a special character for all markers, except begin/end conditional blocks. This character is removed after.
@@ -64,8 +73,28 @@ var parser = {
       return _markerPresenceChar;
     });
     process.nextTick(function () {
-      callback(null, _cleanedXml, _allMarkers);
+      callback(null, _cleanedXml, _allMarkers, _optionTags);
     });
+  },
+
+  /**
+   * Тег опции Carbone EE «o.name=value» → поле опций рендера. Известны preReleaseFeatureIn (число)
+   * и useHighPrecisionArithmetic (булево); прочие имена молча пропускаются.
+   *
+   * @param {String} marker      маркер без скобок и пробелов, например «o.useHighPrecisionArithmetic=true»
+   * @param {Object} optionTags  сюда записывается опция
+   */
+  parseOptionTag : function (marker, optionTags) {
+    var _match = /^o\.([A-Za-z0-9_]+)=(.*)$/.exec(marker);
+    if (_match === null) {
+      return;
+    }
+    if (_match[1] === 'preReleaseFeatureIn') {
+      optionTags.preReleaseFeatureIn = Number(_match[2]);
+    }
+    else if (_match[1] === 'useHighPrecisionArithmetic') {
+      optionTags.useHighPrecisionArithmetic = (_match[2] === 'true');
+    }
   },
   /**
    * @description Remove XML tags inside markers

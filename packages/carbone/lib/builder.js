@@ -28,10 +28,16 @@ var builder = {
     // find declared variable {#myVar }
     parser.findVariables(xml, options.existingVariables, function (err, xmlWithoutVariable, variables) {
       // find markers { d. } or { c. }
-      parser.findMarkers(xmlWithoutVariable, function (err, xmlWithoutMarkers, markers) {
+      parser.findMarkers(xmlWithoutVariable, function (err, xmlWithoutMarkers, markers, optionTags) {
+        // теги {o.…} уже вырезаны из xml: их значения становятся опциями рендера (действуют до конца рендера)
+        var _hasOptionTags = false;
+        for (var _optionName in optionTags) {
+          options[_optionName] = optionTags[_optionName];
+          _hasOptionTags = true;
+        }
         // exit if there is no markers
         if (markers.length === 0) {
-          return callback(null, xmlWithoutVariable);
+          return callback(null, _hasOptionTags === true ? xmlWithoutMarkers : xmlWithoutVariable);
         }
         parser.preprocessMarkers(markers, variables, function (err, preprocessedMarkers) {
           var _xmlParts = [];
@@ -115,6 +121,11 @@ var builder = {
           // count number of point nothing
         }
         var _dynamicVariable = variable.slice(_nbPoint);
+        // как в Carbone EE: «.i» — индекс элемента в цикле своего уровня, «..i» — родительского
+        // (эталоны matrix/tests2/iterator-via-print-i, help/tables-numbering)
+        if (_dynamicVariable === 'i') {
+          return contextName+'.parentsIndex['+(_nbPoint-1)+']';
+        }
         _injectedArgument = 'helper.getValueOfPath( '+contextName+'.parentsData['+(_nbPoint-1)+'], '+getSafeValue(_dynamicVariable)+')';
       }
       return _injectedArgument;
@@ -521,6 +532,10 @@ var builder = {
     var _safeAccessor   = that.generateSafeJSValueAccessor(_dictionaryName);
     var _getSafeValue   = _safeAccessor.get;
     var _getXMLStrIndex = _safeAccessor.getIndex;
+    // переменная индекса цикла уровня (объявлена «for (var <имя>_i …)» ниже) или undefined, если уровень — не цикл
+    var _getLoopIndexVar = function (objName) {
+      return (_dynamicData[objName] !== undefined && _dynamicData[objName].type === 'array') ? _getSafeVar(objName)+'_i' : 'undefined';
+    };
     _code.add('prev', addIfNotExist.toString()+'\n'+removeFrom.toString()+'\n');
     _code.add('init', "var _strResult = '';\n");
     _code.add('init', 'var '+_getSafeVar('_root') + '= (data !== null)?data:{};\n');
@@ -756,17 +771,34 @@ var builder = {
           _code.add('main', '_strPart.rowEnd = true;\n');
         }
         // insert the data only if it not null
-        if (_dataAttr) {
+        // как в Carbone EE: метка прямо на элементе массива ({d.tags[i]}) печатает сам элемент, если он примитив
+        // (эталон matrix/s1/loop-over-string-array). Объект без форматтеров ({d.list[i]} как якорь цикла) остаётся
+        // невидимым, как в 3.8.2; объект с форматтерами проходит цепочку, а объект в результате печатается пустым.
+        // (служебные части начала/конца повтора — array: 'start'|'end' — данных не несут)
+        var _isItemPart = !_dataAttr && _xmlPart.array === undefined && _dynamicData[_dataObj] !== undefined && _dynamicData[_dataObj].type === 'array';
+        if (_isItemPart === true) {
+          var _itemG = _getSafeVar(_dataObj);
+          var _isPrimitiveG = "(typeof("+_itemG+") === 'string' || typeof("+_itemG+") === 'number' || typeof("+_itemG+") === 'boolean')";
+          _code.add('main', 'if (' + _isPrimitiveG + (_formatters.length > 0 ? ' || (' + _itemG + ' instanceof Object)' : '') + ') {\n');
+        }
+        if (_dataAttr || _isItemPart === true) {
           // handle conditions
           _code.add('main', '_strPart.rowShow = true;\n');
           _code.add('main', that.getFilterString(_getSafeVar, _getSafeValue, _conditions, '_strPart.rowShow = false', _getSafeVar(_objName), true));
-          _code.add('main', 'var _str = ' + _getSafeVar(_dataObj) + ' !== undefined &&  ' + _getSafeVar(_dataObj) + ' !== null ? ' + _getSafeVar(_dataObj) + '[' + _getSafeValue(_dataAttr) + ']' + ' : undefined ;\n');
+          if (_isItemPart === true) {
+            _code.add('main', 'var _str = ' + _getSafeVar(_dataObj) + ';\n');
+          }
+          else {
+            _code.add('main', 'var _str = ' + _getSafeVar(_dataObj) + ' !== undefined &&  ' + _getSafeVar(_dataObj) + ' !== null ? ' + _getSafeVar(_dataObj) + '[' + _getSafeValue(_dataAttr) + ']' + ' : undefined ;\n');
+          }
           // TODO optimize avoid using all this options for all formatters
           _code.add('main', 'context.stopPropagation = false;\n');
           _code.add('main', 'context.isConditionTrue = null;\n');
           _code.add('main', 'context.isAndOperator = null;\n');
           _code.add('main', 'context.isHidden = null;\n');
           _code.add('main', 'context.parentsData = ['+_getSafeVar(_dataObj)+', '+_objParentNames.map(_getSafeVar).join(',')+'];\n');
+          // индексы циклов параллельно parentsData (для «.i»): исходная позиция в массиве, фильтр её не сдвигает
+          _code.add('main', 'context.parentsIndex = ['+[_dataObj].concat(_objParentNames).map(_getLoopIndexVar).join(', ')+'];\n');
           _code.add('main', that.getFormatterString(_getSafeValue, '_str', 'context', _formatters, existingFormatters, false));
           // replace null or undefined value by an empty string
           _code.add('main', 'if(_str === null || _str === undefined) {\n');
@@ -782,7 +814,14 @@ var builder = {
           // insert formatters which can inject XML, so after .replace(/</g, '&lt;') ... etc
           _code.add('main', that.getFormatterString(_getSafeValue, '_str', 'context', _formatters, existingFormatters, true));
 
+          if (_isItemPart === true) {
+            // объект после цепочки форматтеров не печатаем («[object Object]»)
+            _code.add('main', "if (_str instanceof Object) { _str = ''; }\n");
+          }
           _code.add('main', "_strPart.str += (_strPart.rowShow !== false)?_str:''"+';\n');
+        }
+        if (_isItemPart === true) {
+          _code.add('main', '}\n');
         }
         if (_xmlPart.after) {
           _code.add('main', '_strPart.aft = ' + _getXMLStrIndex(_xmlPart.after) + ';\n');

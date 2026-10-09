@@ -188,6 +188,77 @@ function formatC (d, precisionOrFormat, targetCurrency) {
 }
 
 /**
+ * Как в Carbone EE: при {o.useHighPrecisionArithmetic=true} add/sub/mul/div считают в десятичной арифметике
+ * без ошибок двоичной плавающей точки (0.1 + 0.2 → 0.3); деление — до 20 знаков после запятой
+ * (документация carbone.io «Simple mathematics»). Нечисловые значения считаются как раньше (NaN и т. п.).
+ *
+ * @param  {String} op  '+', '-', '*', '/'
+ * @param  {Number} a
+ * @param  {Number} b
+ * @return {Number|null} null — точный расчёт невозможен, считать обычным способом
+ */
+function _preciseOp (op, a, b) {
+  var _a = _toDecimal(a);
+  var _b = _toDecimal(b);
+  if (_a === null || _b === null) {
+    return null;
+  }
+  var _int;
+  var _scale;
+  if (op === '+' || op === '-') {
+    _scale = Math.max(_a.scale, _b.scale);
+    var _ai = _a.int * (10n ** BigInt(_scale - _a.scale));
+    var _bi = _b.int * (10n ** BigInt(_scale - _b.scale));
+    _int = (op === '+') ? _ai + _bi : _ai - _bi;
+  }
+  else if (op === '*') {
+    _int = _a.int * _b.int;
+    _scale = _a.scale + _b.scale;
+  }
+  else {
+    if (_b.int === 0n) {
+      return null;
+    }
+    _scale = 20;
+    // a / b = a.int·10^b.scale / (b.int·10^a.scale); +1 знак для округления половины от нуля
+    var _num = _a.int * (10n ** BigInt(_b.scale + _scale + 1));
+    var _den = _b.int * (10n ** BigInt(_a.scale));
+    var _q = _num / _den;
+    _int = (_q + (_q < 0n ? -5n : 5n)) / 10n;
+  }
+  return Number(_fromDecimal(_int, _scale));
+}
+
+/** Число → { int: BigInt, scale } (значение = int / 10^scale) по кратчайшей десятичной записи числа */
+function _toDecimal (value) {
+  var _n = parseFloat(value);
+  if (Number.isFinite(_n) === false) {
+    return null;
+  }
+  var _m = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(String(_n));
+  if (_m === null) {
+    return null;
+  }
+  var _frac = _m[3] || '';
+  var _exp = parseInt(_m[4] || '0', 10);
+  var _int = BigInt(_m[1] + _m[2] + _frac);
+  var _scale = _frac.length - _exp;
+  if (_scale < 0) {
+    _int = _int * (10n ** BigInt(-_scale));
+    _scale = 0;
+  }
+  return { int : _int, scale : _scale };
+}
+
+/** { int, scale } → десятичная строка */
+function _fromDecimal (int, scale) {
+  var _neg = int < 0n;
+  var _digits = (_neg ? -int : int).toString().padStart(scale + 1, '0');
+  var _str = scale > 0 ? _digits.slice(0, _digits.length - scale) + '.' + _digits.slice(_digits.length - scale) : _digits;
+  return (_neg ? '-' : '') + _str;
+}
+
+/**
  * Add two numbers
  *
  * @version 1.2.0
@@ -200,6 +271,12 @@ function formatC (d, precisionOrFormat, targetCurrency) {
  */
 function add (d, value) {
   if (d !== null && typeof d !== 'undefined') {
+    if (this !== undefined && this !== null && this.useHighPrecisionArithmetic === true) {
+      var _precise = _preciseOp('+', d, value);
+      if (_precise !== null) {
+        return _precise;
+      }
+    }
     return parseFloat(d) + parseFloat(value);
   }
   return d;
@@ -219,6 +296,12 @@ add.isAcceptingMathExpression = true;
  */
 function sub (d, value) {
   if (d !== null && typeof d !== 'undefined') {
+    if (this !== undefined && this !== null && this.useHighPrecisionArithmetic === true) {
+      var _precise = _preciseOp('-', d, value);
+      if (_precise !== null) {
+        return _precise;
+      }
+    }
     return parseFloat(d) - parseFloat(value);
   }
   return d;
@@ -238,6 +321,12 @@ sub.isAcceptingMathExpression = true;
  */
 function mul (d, value) {
   if (d !== null && typeof d !== 'undefined') {
+    if (this !== undefined && this !== null && this.useHighPrecisionArithmetic === true) {
+      var _precise = _preciseOp('*', d, value);
+      if (_precise !== null) {
+        return _precise;
+      }
+    }
     return parseFloat(d) * parseFloat(value);
   }
   return d;
@@ -257,6 +346,12 @@ mul.isAcceptingMathExpression = true;
  */
 function div (d, value) {
   if (d !== null && typeof d !== 'undefined' && parseFloat(value) !== 0) {
+    if (this !== undefined && this !== null && this.useHighPrecisionArithmetic === true) {
+      var _precise = _preciseOp('/', d, value);
+      if (_precise !== null) {
+        return _precise;
+      }
+    }
     return parseFloat(d) / parseFloat(value);
   }
   return d;

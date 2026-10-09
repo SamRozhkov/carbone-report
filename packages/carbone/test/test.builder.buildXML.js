@@ -1305,19 +1305,21 @@ describe('builder.buildXML', function () {
     });
   });
   it('should not crash if the object parent of an array is null or undefined', function (done) {
-    var _xml = '<xml> <t_row> {d.test.subArray[i].id}  <b/> {d.test.subArray[i].id} </t_row></xml>';
+    // как в Carbone EE 5 (эталон matrix/tests3/bad-loop-missing-i-1): цикл без [i+1] — ошибка,
+    // поэтому шаблон дополнен строкой [i+1]; пустой массив убирает обе строки
+    var _xml = '<xml> <t_row> {d.test.subArray[i].id}  <b/> {d.test.subArray[i].id} </t_row><t_row> {d.test.subArray[i+1].id} </t_row></xml>';
     var _data = {
       test : null
     };
     builder.buildXML(_xml, _data, function (err, _xmlBuilt) {
       helper.assert(err+'', 'null');
-      helper.assert(_xmlBuilt, '<xml> <t_row>  </t_row></xml>');
+      helper.assert(_xmlBuilt, '<xml> </xml>');
       _data = {
         test : undefined
       };
       builder.buildXML(_xml, _data, function (err, _xmlBuilt) {
         helper.assert(err+'', 'null');
-        helper.assert(_xmlBuilt, '<xml> <t_row>  </t_row></xml>');
+        helper.assert(_xmlBuilt, '<xml> </xml>');
         done();
       });
     });

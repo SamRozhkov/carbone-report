@@ -174,3 +174,73 @@ describe('EE: форматтеры', function () {
     assert.ok((await rawError('{d.n:fooBar()}', { n: 1 })).endsWith(' Source: "{d.n:fooBar()}"'));
   });
 });
+
+describe('EE: циклы', function () {
+  const cars = {
+    cars: [
+      { brand: 'Лада', qty: 3, ok: true },
+      { brand: 'Тесла', qty: 2, ok: false },
+      { brand: 'Лада', qty: 5, ok: true },
+      { brand: 'БМВ', qty: 1, ok: true }
+    ]
+  };
+
+  it('print(.i) — индекс элемента (эталон matrix/tests2/iterator-via-print-i)', async function () {
+    assert.strictEqual(await text('| {d.cars[i].brand:print(.i)} |\n| {d.cars[i+1].brand} |', cars), '| 0 |\n| 1 |\n| 2 |\n| 3 |');
+  });
+  it('print(.i):add(1) — нумерация с единицы (эталон help/tables-numbering)', async function () {
+    assert.strictEqual(await text('| {d.cars[i].brand:print(.i):add(1)} |\n| {d.cars[i+1].brand} |', cars), '| 1 |\n| 2 |\n| 3 |\n| 4 |');
+  });
+  it('mul(0):add(.i):add(1) (эталон matrix/tests2/iterator-via-qty-mul-0-add-i-add-1)', async function () {
+    assert.strictEqual(await text('{d.cars[i].qty:mul(0):add(.i):add(1)}\n{d.cars[i+1].qty}', cars), '1\n2\n3\n4');
+  });
+  it('с фильтром .i — индекс в исходном массиве (эталон matrix/tests3/numbering-with-filter)', async function () {
+    assert.strictEqual(
+      await text('{d.cars[i, ok=true].brand:print(.i):add(1)}. {d.cars[i, ok=true].brand}\n{d.cars[i+1, ok=true].brand}', cars),
+      '1. Лада\n3. Лада\n4. БМВ'
+    );
+  });
+  it('.i во вложенном цикле — индекс своего уровня, ..i — родителя', async function () {
+    const data = { a: [{ b: [{ v: 'x' }, { v: 'y' }] }, { b: [{ v: 'z' }] }] };
+    assert.strictEqual(
+      await text('{d.a[i].b[i].v:print(.i)}-{d.a[i].b[i].v:print(..i)}\n{d.a[i].b[i+1].v}\n{d.a[i+1].b[0].v}', data),
+      '0-0\n1-0\n0-1'
+    );
+  });
+  it('{d.cars[i].i} и {d.cars[i]..i} печатают пустоту', async function () {
+    assert.strictEqual(await text('[{d.cars[i].i}]\n[{d.cars[i+1].i}]', cars), '[]\n[]\n[]\n[]');
+    assert.strictEqual(await text('[{d.cars[i]..i}]\n[{d.cars[i+1]..i}]', cars), '[]\n[]\n[]\n[]');
+  });
+  it('массив строк (эталон matrix/s1/loop-over-string-array)', async function () {
+    assert.strictEqual(await text('{d.tags[i]}\n{d.tags[i+1]}', { tags: ['a', 'b', 'c'] }), 'a\nb\nc');
+    assert.strictEqual(await text('{d.n[i]}\n{d.n[i+1]}', { n: [1, 0, true] }), '1\n0\ntrue');
+  });
+  it('{d.list[i]} над объектами остаётся невидимым якорем цикла', async function () {
+    assert.strictEqual(await text('{d.cars[i]}{d.cars[i].brand}\n{d.cars[i+1]}', cars), 'Лада\nТесла\nЛада\nБМВ');
+  });
+  it('повтор внутри одного абзаца (эталон matrix/s1/inline-loop-same-paragraph)', async function () {
+    assert.strictEqual(await text('[{d.cars[i].brand}, {d.cars[i+1].brand}]', cars), '[Лада, Тесла, Лада, БМВ, ]');
+  });
+  it('повтор в одном абзаце: массив строк и вложенный цикл', async function () {
+    assert.strictEqual(await text('[{d.t[i]}, {d.t[i+1]}]', { t: ['x', 'y'] }), '[x, y, ]');
+    const data = { a: [{ n: 'A', b: ['x', 'y'] }, { n: 'B', b: ['z'] }] };
+    assert.strictEqual(await text('{d.a[i].n}: [{d.a[i].b[i]}, {d.a[i].b[i+1]}]\n{d.a[i+1].n}', data), 'A: [x, y, ]\nB: [z, ]');
+  });
+  it('useHighPrecisionArithmetic: sub, mul, div', async function () {
+    const t = '{o.useHighPrecisionArithmetic=true}{d.x:mul(.y)} {d.x:sub(.y)} {d.one:div(.y)}';
+    assert.strictEqual(await text(t, { x: 1.1, y: 3, one: 1 }), '3.3 -1.9 0.3333333333333333');
+  });
+  it('{o.useHighPrecisionArithmetic=true} (эталон matrix/s2/usehighprecisionarithmetic-0-1-0-2)', async function () {
+    assert.strictEqual(await text('[{o.useHighPrecisionArithmetic=true}{d.a:add(.b)}]', { a: 0.1, b: 0.2 }), '[0.3]');
+    assert.strictEqual(await text('[{d.a:add(.b)}]', { a: 0.1, b: 0.2 }), '[0.30000000000000004]');
+  });
+  it('{o.preReleaseFeatureIn=…} ничего не печатает (эталон matrix/s5/o-prereleasefeaturein)', async function () {
+    assert.strictEqual(await text('[{o.preReleaseFeatureIn=5002000}{d.v}]', { v: 'ok' }), '[ok]');
+  });
+  it('цикл без [i+1] — ошибка EE (эталон matrix/tests3/bad-loop-missing-i-1)', async function () {
+    assert.strictEqual(
+      await error('{d.cars[i].brand}', cars),
+      'The marker {d.cars[i].brand} has no corresponding [i+1] for array "cars". Add at least one tag with cars[i+1] to describe where is the i+1-th item.'
+    );
+  });
+});

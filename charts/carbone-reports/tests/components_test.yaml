@@ -43,6 +43,7 @@ tests:
       - equal: { path: 'spec.volumeClaimTemplates[0].spec.resources.requests.storage', value: 10Gi }
       - equal: { path: 'spec.template.spec.containers[0].startupProbe.httpGet.path', value: /healthcheck }
       - equal: { path: 'spec.template.spec.containers[0].startupProbe.failureThreshold', value: 30 }
+      - equal: { path: 'spec.template.spec.containers[0].readinessProbe.timeoutSeconds', value: 5 }
   - it: Service onlyoffice :80
     template: onlyoffice.yaml
     documentIndex: 1

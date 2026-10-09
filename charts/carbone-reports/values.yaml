@@ -54,7 +54,8 @@ config:
   renderTimeoutMs: 120000
   reportTimeoutMs: 120000
   reportRetentionDays: 30
-  # Прокси перед API: Ingress и nginx образа web (1–5).
+  # Прокси перед API: Ingress и nginx образа web (1–5). Без Ingress (web через LoadBalancer/NodePort)
+  # поставьте 1, иначе клиент подделает X-Forwarded-For и обойдёт лимит входа по IP.
   trustedProxyHops: 2
   # Cookie сессии только по HTTPS. false — лишь для пробной установки без TLS.
   cookieSecure: true
@@ -120,7 +121,9 @@ carbone:
 onlyoffice:
   enabled: true
   image: onlyoffice/documentserver:9.4.0.1
-  # При onlyoffice.enabled=false — адрес Document Server изнутри кластера.
+  # При onlyoffice.enabled=false — адрес Document Server изнутри кластера. Нужно полное имя:
+  # http://<svc>.<ns>.svc.cluster.local или публичный FQDN. Короткое (http://docserver, http://svc.ns)
+  # не сработает: резолвер nginx игнорирует search-домены, и /onlyoffice/ ответит 502.
   internalUrl: ''
   persistence:
     size: 10Gi

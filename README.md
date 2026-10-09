@@ -315,7 +315,9 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-send-timeout: '300'
 ```
 
-`config.trustedProxyHops: 2` (по умолчанию в чарте) — это Ingress и nginx образа web. Если перед Ingress есть ещё балансировщик, добавляющий `X-Forwarded-For`, поставьте 3: иначе все клиенты разделят один лимит попыток входа.
+`config.trustedProxyHops: 2` (по умолчанию в чарте) — это Ingress и nginx образа web. Если перед Ingress есть ещё балансировщик, добавляющий `X-Forwarded-For`, поставьте 3: иначе все клиенты разделят один лимит попыток входа. Без Ingress (web через LoadBalancer/NodePort) поставьте `config.trustedProxyHops: 1`: иначе клиент подделает `X-Forwarded-For` и обойдёт лимит входа по IP.
+
+При `onlyoffice.enabled: false` укажите `onlyoffice.internalUrl` полным именем: `http://<svc>.<ns>.svc.cluster.local` или публичным FQDN. Короткое имя (`http://docserver`, `http://svc.ns`) даёт 502 на `/onlyoffice/`: резолвер nginx не использует search-домены, хотя API (Node) такое имя разрешает.
 
 ### Внешний Postgres с TLS
 

@@ -4,7 +4,7 @@ carbone-reports {{ .Chart.AppVersion }} (образы: {{ default .Chart.AppVers
 Адрес: {{ if .Values.ingress.tls.secretName }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}/
 {{- else }}
 
-Ingress выключен. Проверка: kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "cr.component" (dict "root" . "name" "web") }} 8080:80
+Ingress выключен: при публикации web через LoadBalancer/NodePort задайте config.trustedProxyHops=1, иначе клиенты смогут подделать X-Forwarded-For и обойти лимит входа по IP. Проверка: kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "cr.component" (dict "root" . "name" "web") }} 8080:80
 {{- end }}
 
 Вход: логин из ADMIN_LOGIN ({{ if .Values.existingSecret }}Secret {{ .Values.existingSecret }}{{ else }}secrets.adminLogin{{ end }}).

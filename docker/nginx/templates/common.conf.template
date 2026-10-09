@@ -36,6 +36,9 @@ location /onlyoffice/ {
     set $oo_upstream ${ONLYOFFICE_UPSTREAM};
     rewrite ^/onlyoffice/(.*)$ /$1 break;
     proxy_pass $oo_upstream;
+    # SNI для внешнего Document Server по https:// (без него хост за общим IP отдаст не тот сертификат);
+    # для http-апстрима compose безвреден.
+    proxy_ssl_server_name on;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;

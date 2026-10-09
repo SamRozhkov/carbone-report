@@ -35,6 +35,7 @@ tests:
           path: spec.template.spec.volumes
           content: { name: backups, persistentVolumeClaim: { claimName: cr-carbone-reports-backups } }
       - equal: { path: 'spec.template.spec.containers[0].readinessProbe.httpGet.path', value: /health }
+      - equal: { path: 'spec.template.spec.containers[0].readinessProbe.timeoutSeconds', value: 5 }
   - it: пароль базы — PGPASSWORD (у агента нет источников данных), токен и пароль Redis из Secret
     template: backup-agent.yaml
     documentIndex: 1

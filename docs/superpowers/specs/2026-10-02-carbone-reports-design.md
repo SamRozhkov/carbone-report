@@ -1160,10 +1160,10 @@ scripts/smoke.ts            сквозная проверка работающе
 Не входит в план:
 - платные функции EE: графики, изображения из данных, HTML, штрихкоды, цвета, агрегаторы, `drop/keep`, операции с PDF — следующие планы;
 - переключатель на старый рендер через Carbone EE;
-- OnlyOffice в kind-смоуке.
+- изменение порядка сборки отчёта: API по-прежнему сначала собирает PDF, поэтому без OnlyOffice отчёт не строится.
 
 ### 28.1 Пакет `packages/carbone`
-- Код форка `SamRozhkov/carbone` (Carbone Community 3.8.2, Carbone Community License) переносится в монорепо через `git subtree` вместе с историей. Лицензия пакета — CCL, файл `LICENSE` сохраняется; `NOTICE.md` описывает происхождение кода, отличия от апстрима и правило чистой реализации.
+- Код форка `SamRozhkov/carbone` (Carbone Community 3.8.2, Carbone Community License) переносится в монорепо через `git subtree` вместе с историей. Лицензия пакета — CCL, файл `LICENSE.md` сохраняется; `NOTICE.md` описывает происхождение кода, отличия от апстрима и правило чистой реализации.
 - Правило чистой реализации: новые возможности пишутся по открытой документации carbone.io и наблюдаемому поведению EE (эталоны 28.4). Код из образа `carbone-ee` не читается и не копируется — он закрытый и CCL не покрыт.
 - Изменённый пакет не публикуется отдельно (npm, отдельный образ): CCL разрешает распространять изменённый Carbone только в составе продукта (2.1(b), 2.1(d)). В `package.json` пакета — `"private": true`.
 - Публичная функция `renderBuffer(template: Buffer, ext, data, { lang, timezone }): Promise<Buffer>` — отчёт в формате шаблона, без временных файлов. Код конвертации LibreOffice (`converter.js`, `converter.py`, `soffice`) удаляется вместе с опцией `convertTo`.
@@ -1172,8 +1172,9 @@ scripts/smoke.ts            сквозная проверка работающе
   - `:set` с записью в `c.` и группировка `c.g[id=.key].rows[]`;
   - форматтеры, которых нет в 3.8.2 и которые в EE 5.15.3 без лицензии работают: `ellipsis, append, replace, mod, abs, ceil, floor, formatI, diffD, ifTE` и остальные из матрицы — полный список фиксирует план по эталонам.
 - Поведение бесплатного режима EE 5.15.3:
-  - `aggSum, aggAvg, aggMin, aggMax, aggCount, aggCountD, aggStr, aggStrD, cumSum, cumCount, cumCountD, count, drop, keep, html, color, barcode, chart, formatR, defaultURL, autoOrient` дают ошибку `Formatter "X" is disabled in the Community Edition`;
-  - дата без времени и «наивная» дата разбираются с учётом только `timezone` из опций, не часового пояса процесса.
+  - `aggSum, aggAvg, aggMin, aggMax, aggCount, aggCountD, aggStr, aggStrD, cumSum, cumCount, cumCountD, drop, keep, html, color, barcode, chart, formatR, defaultURL, autoOrient` дают ошибку `Formatter "X" is disabled in the Community Edition.` (с точкой), за ней ` Source: "<тег>"` — как в EE; `count()` даёт ту же ошибку с именем `cumCount`;
+  - даты не зависят от часового пояса процесса: дата без пояса разбирается как UTC и выводится в `timezone` из опций — как в EE (пример справки `fmt-date-naive`);
+  - прочие отличия 3.8.2 от EE, которые ловят пробы матрицы: повтор с `[i]` и `[i+1]` в одном абзаце (в 3.8.2 вставляет весь документ), `ifEmpty` не обрывает цепочку, литерал `'.'` в аргументах, `substr` по словам, сдвиг и количество в `arrayJoin`, целевая валюта `formatC`, теги `{o.…}`, ошибка цикла без `[i+1]`; `:set` с суммированием повторяет особенность EE (пример `totals-set-sum`).
 
 ### 28.2 Рендер в API (`apps/api/src/modules/render/`)
 Новая реализация интерфейса `CarboneRenderer.render(tpl, data, { convertTo, lang, timezone, timeoutMs })`; `reports/service.ts` не меняется.
@@ -1196,7 +1197,7 @@ scripts/smoke.ts            сквозная проверка работающе
 | OnlyOffice недоступен | 502 | `CONVERT_ERROR`, `сервис конвертации недоступен` |
 | OnlyOffice вернул `error: -N` | 502 | `CONVERT_ERROR`, `ошибка конвертации (код N)` |
 
-Отчёты в формате шаблона от OnlyOffice не зависят.
+Сборка отчёта в формате шаблона OnlyOffice не требует, но API строит отчёт сначала в PDF (и предпросмотр — PDF), поэтому на практике без OnlyOffice отчёты не строятся.
 
 Удаляются: `modules/carbone/client.ts`, `template-cache.ts` и их тесты, кэш идентификаторов шаблонов в Redis, `CARBONE_URL`. Остаётся `modules/carbone/community.ts`.
 
@@ -1207,9 +1208,9 @@ scripts/smoke.ts            сквозная проверка работающе
 - README, раздел «Обновление с 1.x»: старый контейнер и том Carbone больше не нужны (`docker compose up --remove-orphans`, том удаляется вручную); `CARBONE_URL` не читается; ключи `cr:carbone:*` в Redis не используются (команда удаления приводится); шаблоны в S3 не меняются; PDF собирает OnlyOffice — вёрстка ближе к редактору и может немного отличаться от отчётов 1.x.
 
 ### 28.4 Проверка
-- Эталоны: скрипт разработки `scripts/carbone-parity.ts` поднимает `carbone-ee:full-5.15.3-fonts`, прогоняет пробы матрицы Community и примеры справки, записывает результат (текст документа или текст ошибки) в `packages/carbone/test/golden/*.json`. Эталоны снимаются один раз и коммитятся; в CI образ EE не нужен.
+- Эталоны `packages/carbone/test/golden/*.json` строятся из уже записанных ответов `carbone-ee:full-5.15.3-fonts` без лицензии: 248 проб матрицы Community (`docs/superpowers/notes/2026-10-13-carbone-community-matrix.md`, набор проб переносится в репозиторий) и 44 примера справки с ожидаемым результатом из `content.ts`. Скрипт разработки `scripts/carbone-parity.ts` дописывает эталоны для новых проб, поднимая образ EE; в CI образ EE не нужен.
 - `packages/carbone`: тесты апстрима без тестов конвертации, тесты новых возможностей, сверка с эталонами — в задаче проверок CI.
 - API, модульные: пул (таймаут останавливает поток, упавший поток пересоздаётся, очередь соблюдает срок), handoff (токен, одноразовость, срок), клиент конвертации (тело, JWT, коды ошибок), рендерер (формат шаблона — без OnlyOffice).
 - API, интеграционный тест с настоящим Document Server: docx → pdf, xlsx → ods, odt → docx; результат — корректный файл с подставленным текстом. В CI всегда; локально — по флагу (образ 3,4 ГБ).
 - `pnpm help:check` рендерит через пакет напрямую, без поднятого стека.
-- Kind-смоук строит отчёт в формате шаблона (docx); конвертацию покрывает интеграционный тест.
+- Kind-смоук включает OnlyOffice (`onlyoffice.enabled=true`) и строит отчёт в PDF и docx: это проверка передачи файла Document Server по адресу пода (`API_SELF_URL`) в кластере.

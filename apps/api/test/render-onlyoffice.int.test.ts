@@ -98,6 +98,8 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
   let pool: RenderPool;
   let handoff: RenderHandoff;
   let puts: { id: string; token: string }[];
+  // Результаты handoff.take: строка — отказ ('forbidden'/'gone'), объект — файл выдан.
+  let takes: unknown[];
   let renderer: CarboneRenderer;
   let deadLink: CarboneRenderer;
   let convert: ReturnType<typeof createOnlyOfficeConverter>;
@@ -143,6 +145,13 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
       puts.push(r);
       return r;
     };
+    takes = [];
+    const take = handoff.take.bind(handoff);
+    handoff.take = async (...args) => {
+      const r = await take(...args);
+      takes.push(r);
+      return r;
+    };
     app = createFastify();
     registerErrorHandler(app);
     registerRenderRoutes(app, handoff);
@@ -184,7 +193,37 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
       convert,
       selfUrl: 'http://host.testcontainers.internal:1',
     });
-  }, 300_000);
+
+    // Прогрев: холодный конвертер первое время отвечает -1/-2 или не отвечает.
+    const warmDeadline = Date.now() + 60_000;
+    const warmTpl = await docxTemplate();
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const { id, token } = await handoff.put(warmTpl, 'docx', Date.now() + 30_000);
+        await convert({
+          filetype: 'docx',
+          outputtype: 'pdf',
+          title: 'warmup.docx',
+          url: `http://host.testcontainers.internal:${port}/internal/render-files/${id}?t=${encodeURIComponent(token)}`,
+          signal: AbortSignal.timeout(30_000),
+        });
+        break;
+      } catch (e) {
+        if (Date.now() > warmDeadline) {
+          throw new Error(
+            `прогрев конвертера не удался (попыток: ${attempt}): ${describeError(e)}`,
+            {
+              cause: e,
+            },
+          );
+        }
+        await new Promise((r) => setTimeout(r, 3_000));
+      }
+    }
+    // Прогрев не должен влиять на проверки выдачи ссылок.
+    puts.length = 0;
+    takes.length = 0;
+  }, 420_000);
 
   afterAll(async () => {
     await oo?.stop();
@@ -220,42 +259,42 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
     CONVERT_TIMEOUT,
   );
 
-  it(
-    'odt → docx (шаблон odt получен конвертацией docx в Document Server)',
-    async () => {
-      const odt = await diagnose('шаблон docx→odt', async () => {
-        const { id, token } = await handoff.put(
-          await docxTemplate(),
-          'docx',
-          Date.now() + CONVERT_TIMEOUT,
-        );
-        return convert({
-          filetype: 'docx',
-          outputtype: 'odt',
-          title: 'template.docx',
-          url: `http://host.testcontainers.internal:${port}/internal/render-files/${id}?t=${encodeURIComponent(token)}`,
-          signal: AbortSignal.timeout(CONVERT_TIMEOUT - 5_000),
-        });
-      });
-      const out = await diagnose('odt→docx', () =>
-        renderer.render(tpl('odt', odt), { name: NAME }, ro('docx')),
+  it('odt → docx (шаблон odt получен конвертацией docx в Document Server)', async () => {
+    const odt = await diagnose('шаблон docx→odt', async () => {
+      const { id, token } = await handoff.put(
+        await docxTemplate(),
+        'docx',
+        Date.now() + CONVERT_TIMEOUT,
       );
-      const zip = await JSZip.loadAsync(out);
-      expect(await zip.file('word/document.xml')!.async('string')).toContain(NAME);
-    },
-    CONVERT_TIMEOUT,
-  );
+      return convert({
+        filetype: 'docx',
+        outputtype: 'odt',
+        title: 'template.docx',
+        url: `http://host.testcontainers.internal:${port}/internal/render-files/${id}?t=${encodeURIComponent(token)}`,
+        signal: AbortSignal.timeout(CONVERT_TIMEOUT - 5_000),
+      });
+    });
+    const out = await diagnose('odt→docx', () =>
+      renderer.render(tpl('odt', odt), { name: NAME }, ro('docx')),
+    );
+    const zip = await JSZip.loadAsync(out);
+    expect(await zip.file('word/document.xml')!.async('string')).toContain(NAME);
+  }, 240_000);
 
   it(
-    'ссылка разовая: после рендера файла в handoff нет',
+    'ссылка разовая: Document Server забирает файл ровно один раз',
     async () => {
       const before = puts.length;
+      const takesBefore = takes.length;
       await diagnose('docx→pdf (разовая ссылка)', async () =>
         renderer.render(tpl('docx', await docxTemplate()), { name: NAME }, ro('pdf')),
       );
       const made = puts.slice(before);
       expect(made).toHaveLength(1);
-      // Верный токен, но файл уже выдан Document Server (и снят после рендера).
+      // Ровно одна успешная выдача (объект, не отказ) на рендер с конвертацией.
+      const ok = takes.slice(takesBefore).filter((r) => typeof r !== 'string');
+      expect(ok).toHaveLength(1);
+      // Повторно по верному токену файла уже нет.
       expect(await handoff.take(made[0]!.id, made[0]!.token)).toBe('gone');
     },
     CONVERT_TIMEOUT,

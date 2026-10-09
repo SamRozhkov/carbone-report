@@ -6,6 +6,7 @@ import type { AppDeps } from './deps';
 import { fetchFile } from './lib/fetch-file';
 import { createRedis } from './lib/redis';
 import { createStorage } from './lib/create-storage';
+import { withStartupLock } from './lib/startup-lock';
 import { createRunFileGate } from './lib/run-file-gate';
 import { createRemoveGate } from './lib/storage-gate';
 import { ensureAdmin } from './modules/auth/bootstrap';
@@ -33,7 +34,8 @@ const runFilePool = new pg.Pool({
   application_name: 'api',
 });
 runFilePool.on('error', (err) => console.error('run file pool', err));
-await migrateDb(db);
+// Несколько реплик (Helm): миграции схемы — одна реплика за раз, остальные ждут и видят, что всё применено.
+await withStartupLock(pool, () => migrateDb(db));
 // До buildApp и listen: с s3 нет бакета (и S3_CREATE_BUCKET=false) — API не запускается.
 // Fastify-логгера ещё нет; сообщение о созданном бакете — в консоль (как ensureAdmin).
 const storage = await createStorage(config, createRemoveGate(gatePool), console);
@@ -64,7 +66,9 @@ await ensureAdmin(deps, console);
 const app = await buildApp(deps);
 carbone.log = app.log;
 // До listen: к первому запросу все строки уже указывают на пути с версией.
-await migrateTemplateFiles({ db, storage: deps.storage, log: app.log });
+await withStartupLock(pool, () =>
+  migrateTemplateFiles({ db, storage: deps.storage, log: app.log }),
+);
 const stopCleanup = startCleanupTimer(deps, app.log);
 
 async function shutdown(signal: string) {

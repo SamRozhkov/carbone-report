@@ -174,7 +174,7 @@ export class RenderPool {
     );
   }
 
-  private finish(slot: Slot, m: Reply): void {
+  private finish(slot: Slot, m: Exclude<Reply, { ready: true }>): void {
     const task = slot.task;
     if (!task || task.id !== m.id) return;
     clearTimeout(task.timer);

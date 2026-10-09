@@ -1,0 +1,615 @@
+## 1 | {d.name}
+   exp: '[Иван]'
+   got: '[Иван]'
+## 1 | {d.client.address.city}
+   exp: '[Москва]'
+   got: '[Москва]'
+## 1 | {d.missing}
+   exp: '[]'
+   got: '[]'
+## 1 | {d.items[0].name} {d.items[1].name}
+   exp: '[a b]'
+   got: '[a b]'
+## 1 | array search [id=2]
+   exp: '[b]'
+   got: '[b]'
+## 1 | array search string
+   exp: '[b]'
+   got: '[b]'
+## 1 | parent ..
+   exp: '[Родитель]'
+   got: '[Родитель]'
+## 1 | literal xml chars
+   exp: '[<&> "кавычки"]'
+   got: '[<&> "кавычки"]'
+## 1 | data with xml chars
+   exp: '[<b>&"\']'
+   got: '[<b>&"\']'
+## 1 | complement c.
+   exp: '[X ООО Ромашка]'
+   got: '[X ООО Ромашка]'
+## 1 | c.now
+   exp: '[2026]'
+   got: '[2026]'
+## 1 | alias
+   exp: '[Пётр]'
+   got: '[Пётр]'
+## 1 | param alias
+   exp: '[b]'
+   got: '[b]'
+## 1 | table [i]/[i+1]
+   exp: '[Марка | Кол-во | ]... rows Лада/Тесла/Лада/БМВ'
+   got: '[№ | Марка | Кол-во]\n[Лада | 3 | ]\n[Тесла | 1 | ]\n[Лада | 2 | ]\n[БМВ | 5 | ]'
+## 1 | paragraph loop
+   exp: 'Лада\nТесла\nЛада\nБМВ'
+   got: 'Лада\nТесла\nЛада\nБМВ'
+## 1 | inline loop same paragraph
+   exp: '[Лада, Тесла, Лада, БМВ, ]'
+   got: '[Лада, Тесла, Лада, БМВ, ]'
+## 1 | nested loop paragraphs
+   exp: 'Г1: a b Г2: c Г3:'
+   got: 'Г1:\n- a\n- b\nГ2:\n- c\nГ3:'
+## 1 | nested loop table rows
+   exp: 'Г1/a/b/Г2/c/Г3'
+   got: '[Г1 | ]\n[ | a]\n[ | b]\n[Г2 | ]\n[ | c]\n[Г3 | ]'
+## 1 | nested: table inside paragraph loop
+   exp: 'one table per group'
+   got: '== Г1\n[a]\n[b]\n== Г2\n[c]\n== Г3'
+## 1 | numbering .i
+   exp: '0..3?'
+   got: '[ | Лада]\n[ | Тесла]\n[ | Лада]\n[ | БМВ]'
+## 1 | numbering .i:add(1)
+   exp: '1..4'
+   got: '[ | Лада]\n[ | Тесла]\n[ | Лада]\n[ | БМВ]'
+## 1 | numbering :count()
+   exp: '1..4'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"cumCount\\" is disabled in the Community Edition. Source: \\"{d.cars[i].brand:cumCount}\\"","code":"w101","data":{"renderId":""}}'
+## 1 | numbering :cumCount
+   exp: '1..4'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"cumCount\\" is disabled in the Community Edition. Source: \\"{d.cars[i].brand:cumCount}\\"","code":"w101","data":{"renderId":""}}'
+## 1 | empty array table
+   exp: 'до\n[H]\nпосле'
+   got: 'до\n[H]\nпосле'
+## 1 | missing array table
+   exp: 'до\n[H]\nпосле'
+   got: 'до\n[H]\nпосле'
+## 1 | loop over object .att/.val
+   exp: 'a=1\nb=2'
+   got: 'a=1\nb=2'
+## 1 | loop over string array
+   exp: 'x\ny'
+   got: 'x\ny'
+## 1 | horizontal loop (columns)
+   exp: '[A|B|C][1|2|3]'
+   got: '[A | B | C]\n[1 | 2 | 3]'
+## 1 | root array d[i]
+   exp: 'Лада Тесла Лада БМВ'
+   got: 'Лада\nТесла\nЛада\nБМВ'
+## 1 | lookup (prerelease 5.2)
+   exp: 'A2\nA1'
+   got: 'A2\nA1'
+## 1 | lookup in loop without prerelease
+   exp: 'A2\nA1'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Forbidden array access in \\"actors[id=.actorId].name\\". Only positive integers are allowed in [] Source: \\"{d.movies[i].actorId:print(..actors[id=.actorId].name)}\\"","code":"w101","data":{"renderId":""}}'
+## 1 | parent access in loop ..
+   exp: '1 T\n2 T'
+   got: '1 T\n2 T'
+## 1 | multiline :convCRLF
+   exp: '[строка1 / строка2 (line break)]'
+   got: '[строка1строка2]'
+## 1 | multiline without convCRLF
+   exp: '[?]'
+   got: '[строка1\nстрока2]'
+## 2 | formatD('DD MMMM YYYY') ← "2026-03-08"
+   exp: '[08 марта 2026]'
+   got: '[08 марта 2026]'
+## 2 | formatD('D MMMM YYYY г.') ← "2026-03-08"
+   exp: '[8 марта 2026 г.]'
+   got: '[8 марта 2026 г.]'
+## 2 | formatD('MMMM YYYY') ← "2026-03-08"
+   exp: '[март 2026]'
+   got: '[март 2026]'
+## 2 | formatD('DD.MM.YYYY') ← "2026-03-08"
+   exp: '[08.03.2026]'
+   got: '[08.03.2026]'
+## 2 | formatD('L') ← "2026-03-08"
+   exp: '[08.03.2026]'
+   got: '[08.03.2026]'
+## 2 | formatD('LL') ← "2026-03-08"
+   exp: '[8 марта 2026 г.]'
+   got: '[8 марта 2026 г.]'
+## 2 | formatD('LLLL') ← "2026-03-08T10:00:00Z"
+   exp: '[воскресенье, 8 марта 2026 г., 13:00]'
+   got: '[воскресенье, 8 марта 2026 г., 13:00]'
+## 2 | formatD('dddd, D MMM') ← "2026-03-08"
+   exp: '[воскресенье, 8 мар.]'
+   got: '[воскресенье, 8 мар.]'
+## 2 | formatD('DD.MM.YYYY HH:mm') ← "2026-03-08T22:30:00Z"
+   exp: '[09.03.2026 01:30]'
+   got: '[09.03.2026 01:30]'
+## 2 | formatD('DD.MM.YYYY HH:mm') ← "2026-03-08T22:30:00"
+   exp: '[08.03.2026 22:30?]'
+   got: '[09.03.2026 01:30]'
+## 2 | formatD('DD.MM.YYYY') ← "2026-03-08 00:00:00"
+   exp: '[08.03.2026]'
+   got: '[08.03.2026]'
+## 2 | formatD('DD.MM.YYYY', 'YYYYMMDD') ← "20260308"
+   exp: '[08.03.2026]'
+   got: '[08.03.2026]'
+## 2 | formatD('DD.MM.YYYY', 'X') ← 1772928000
+   exp: '[08.03.2026]'
+   got: '[08.03.2026]'
+## 2 | formatD('DD.MM.YYYY') ← null
+   exp: '[]'
+   got: '[]'
+## 2 | formatD('DD.MM.YYYY') ← "не дата"
+   exp: '[?]'
+   got: '[Invalid Date]'
+## 2 | addD(1, 'month'):formatD('DD.MM.YYYY') ← "2026-01-31"
+   exp: '[28.02.2026]'
+   got: '[28.02.2026]'
+## 2 | subD(7, 'day'):formatD('DD.MM.YYYY') ← "2026-03-08"
+   exp: '[01.03.2026]'
+   got: '[01.03.2026]'
+## 2 | startOfD('month'):formatD('DD.MM.YYYY') ← "2026-03-08"
+   exp: '[01.03.2026]'
+   got: '[01.03.2026]'
+## 2 | endOfD('month'):formatD('DD.MM.YYYY') ← "2026-03-08"
+   exp: '[31.03.2026]'
+   got: '[01.04.2026]'
+## 2 | diffD('2026-12-31', 'days') ← "2026-03-08"
+   exp: '[298]'
+   got: '[298]'
+## 2 | convDate('YYYY-MM-DD', 'DD.MM.YYYY') ← "2026-03-08"
+   exp: '[08.03.2026]'
+   got: '[08.03.2026]'
+## 2 | formatI('human') ← 7200000
+   exp: '[2 часа]'
+   got: '[2 часа]'
+## 2 | formatI('human+') ← 7200000
+   exp: '[через 2 часа]'
+   got: '[через 2 часа]'
+## 2 | formatI('days', 'hours') ← 48
+   exp: '[2]'
+   got: '[2]'
+## 2 | formatN() ← 1234567.891
+   exp: '[1 234 567,891]'
+   got: '[1,234,567.891]'
+## 2 | formatN(2) ← 1234567.891
+   exp: '[1 234 567,89]'
+   got: '[1,234,567.89]'
+## 2 | formatN(0) ← 1234567.5
+   exp: '[1 234 568]'
+   got: '[1,234,568]'
+## 2 | formatN(2) ← "1234.5"
+   exp: '[1 234,50 (string input)]'
+   got: '[1,234.50]'
+## 2 | formatN(2) ← null
+   exp: '[]'
+   got: '[]'
+## 2 | round(2) ← 10.055
+   exp: '[10.06]'
+   got: '[10.06]'
+## 2 | add(2) ← 1000.4
+   exp: '[1002.4]'
+   got: '[1002.4]'
+## 2 | sub(.b) ← 10
+   exp: '[7]'
+   got: '[7]'
+## 2 | mul(.b):formatN(2) ← 10
+   exp: '[30,00]'
+   got: '[30.00]'
+## 2 | div(3):round(2) ← 10
+   exp: '[3.33]'
+   got: '[3.33]'
+## 2 | div(0) ← 10
+   exp: '[?]'
+   got: '[10]'
+## 2 | mod(3) ← 10
+   exp: '[1]'
+   got: '[1]'
+## 2 | abs() ← -5.5
+   exp: '[5.5]'
+   got: '[5.5]'
+## 2 | ceil() ← 10.1
+   exp: '[11]'
+   got: '[11]'
+## 2 | floor() ← 10.9
+   exp: '[10]'
+   got: '[10]'
+## 2 | toFixed(2) ← 10.1
+   exp: '[10.10]'
+   got: '[10.10]'
+## 2 | add(.b * 2 - 1) ← 10
+   exp: '[15]'
+   got: '[15]'
+## 2 | formatC() ← 1234567.891
+   exp: '[1 234 567,89 ₽]'
+   got: '[1,234,567.89 €]'
+## 2 | formatC(0) ← 1234.5
+   exp: '[1 235 ₽]'
+   got: '[1,235 €]'
+## 2 | formatC('M') ← 5
+   exp: '[рублей]'
+   got: '[5.00 €]'
+## 2 | formatC('LL') ← 5
+   exp: '[5,00 рублей]'
+   got: '[5.00 €]'
+## 2 | formatC(2, 'USD') ← 1000
+   exp: '[?]'
+   got: '[1,140.30 $]'
+## 2 | formatC(2, 'EUR') ← 1000
+   exp: '[?]'
+   got: '[1,000.00 €]'
+## 2 | convCurr('USD') ← 1000
+   exp: '[1000 without rates]'
+   got: '[1140.3000000000002]'
+## 2 | lowerCase() ← "ПРИВЕТ Мир"
+   exp: '[привет мир]'
+   got: '[привет мир]'
+## 2 | upperCase() ← "привет ёж"
+   exp: '[ПРИВЕТ ЁЖ]'
+   got: '[ПРИВЕТ ЁЖ]'
+## 2 | ucFirst() ← "иванов иван"
+   exp: '[Иванов иван]'
+   got: '[Иванов иван]'
+## 2 | ucWords() ← "иванов иван"
+   exp: '[Иванов Иван]'
+   got: '[Иванов Иван]'
+## 2 | substr(0, 5) ← "Длинная строка"
+   exp: '[Длинн]'
+   got: '[Длинн]'
+## 2 | substr(0, 10, true) ← "Длинная строка текста"
+   exp: '[Длинная (word mode)]'
+   got: '[Длинная ]'
+## 2 | padl(6, '0') ← "42"
+   exp: '[000042]'
+   got: '[000042]'
+## 2 | padr(6, '.') ← "ab"
+   exp: '[ab....]'
+   got: '[ab....]'
+## 2 | ellipsis(7) ← "Длинная строка"
+   exp: '[Длинная...]'
+   got: '[Длинная...]'
+## 2 | prepend('№ ') ← "15"
+   exp: '[№ 15]'
+   got: '[№ 15]'
+## 2 | append(' руб.') ← "15"
+   exp: '[15 руб.]'
+   got: '[15 руб.]'
+## 2 | replace('-', '/') ← "2026-03-08"
+   exp: '[2026/03/08]'
+   got: '[2026/03/08]'
+## 2 | len() ← "Привет"
+   exp: '[6]'
+   got: '[6]'
+## 2 | print('X') ← "anything"
+   exp: '[X]'
+   got: '[X]'
+## 2 | unaccent() ← "café ёлка"
+   exp: '[cafe ёлка?]'
+   got: '[cafe елка]'
+## 2 | printJSON() ← {"a": 1}
+   exp: '[{"a":1}]'
+   got: '[{"a":1}]'
+## 2 | split(',') ← "a,b"
+   exp: '[?]'
+   got: '[a,b]'
+## 2 | formatR() ← "RU"
+   exp: '[Россия]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"formatR\\" is disabled in the Community Edition. Source: \\"{d.v:formatR()}\\"","code":"w101","data":{"renderId":""}}'
+## 2 | arrayJoin() ← ["a", "b", "c"]
+   exp: '[a, b, c]'
+   got: '[a, b, c]'
+## 2 | arrayJoin('; ', 1, 1) ← ["a", "b", "c"]
+   exp: '[b]'
+   got: '[b]'
+## 2 | arrayMap(', ', ':', 'name') ← [{"name": "a", "x": 1}, {"name": "b", "x": 2}]
+   exp: '[a, b]'
+   got: '[a, b]'
+## 2 | len() ← [1, 2, 3]
+   exp: '[3]'
+   got: '[3]'
+## 2 | defaultURL('https://example.com') ← "not a url"
+   exp: '[https://example.com]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"defaultURL\\" is disabled in the Community Edition. Source: \\"{d.v:defaultURL(\'https://example.com\')}\\"","code":"w101","data":{"renderId":""}}'
+## 2 | lowerCase:upperCase:prepend('<'):append('>') ← "Аб"
+   exp: '[<АБ> (chaining)]'
+   got: '[<АБ>]'
+## 2 | useHighPrecisionArithmetic 0.1+0.2
+   exp: '[0.3]'
+   got: '[0.3]'
+## 2 | plain float 0.1+0.2
+   exp: '[0.30000000000000004]'
+   got: '[0.30000000000000004]'
+## 2 | formatN with lang en-us
+   exp: '[1,234.50]'
+   got: '[1,234.50]'
+## 2 | formatD with lang en-us
+   exp: '[08 March 2026]'
+   got: '[08 March 2026]'
+## 2 | formatN with lang ru (not ru-ru)
+   exp: '[?]'
+   got: '[1 234,50]'
+## 2 | formatC currency opts target USD + rates
+   exp: '[? USD]'
+   got: '[1,000.00 €]'
+## 2 | convCurr with rates
+   exp: '[11]'
+   got: '[14.679643146796433]'
+## 2 | formatC with currency source only
+   exp: '[?]'
+   got: '[1,000.00 €]'
+## 2 | timezone UTC option
+   exp: '[08.03.2026 22:30]'
+   got: '[08.03.2026 22:30]'
+## 3 | ifEQ('paid'):show('Оплачен'):elseShow('Не оплачен') ← "paid"
+   exp: '[Оплачен]'
+   got: '[Оплачен]'
+## 3 | ifEQ('paid'):show('Оплачен'):elseShow('Не оплачен') ← "new"
+   exp: '[Не оплачен]'
+   got: '[Не оплачен]'
+## 3 | ifEQ(1):show('один') ← 2
+   exp: '[2 (value passes through when no elseShow)]'
+   got: '[2]'
+## 3 | ifNE(0):show('ненулевой') ← 5
+   exp: '[ненулевой]'
+   got: '[ненулевой]'
+## 3 | ifGT(100):show('>100'):elseShow('<=100') ← 150
+   exp: '[>100]'
+   got: '[>100]'
+## 3 | ifGTE(100):show('ok') ← 100
+   exp: '[ok]'
+   got: '[ok]'
+## 3 | ifLT(0):show('минус'):elseShow('плюс') ← -1
+   exp: '[минус]'
+   got: '[минус]'
+## 3 | ifLTE(0):show('<=0') ← 0
+   exp: '[<=0]'
+   got: '[<=0]'
+## 3 | ifIN('Лада'):show('есть') ← "Лада, БМВ"
+   exp: '[? (ifIN tests if value contains arg)]'
+   got: '[есть]'
+## 3 | ifIN('Лада'):show('есть'):elseShow('нет') ← ["Лада", "БМВ"]
+   exp: '[есть]'
+   got: '[есть]'
+## 3 | ifNIN('X'):show('нет X') ← ["Лада"]
+   exp: '[нет X]'
+   got: '[нет X]'
+## 3 | ifEM():show('пусто'):elseShow('не пусто') ← ""
+   exp: '[пусто]'
+   got: '[пусто]'
+## 3 | ifEM():show('пусто'):elseShow('не пусто') ← null
+   exp: '[пусто]'
+   got: '[пусто]'
+## 3 | ifEM():show('пусто'):elseShow('не пусто') ← []
+   exp: '[пусто]'
+   got: '[пусто]'
+## 3 | ifNEM():show('есть') ← "x"
+   exp: '[есть]'
+   got: '[есть]'
+## 3 | ifTE('number'):show('число'):elseShow('не число') ← 5
+   exp: '[число]'
+   got: '[число]'
+## 3 | ifTE('string'):show('строка') ← "x"
+   exp: '[строка]'
+   got: '[строка]'
+## 3 | ifGT(0):and(.b):ifEQ(3):show('оба'):elseShow('нет') ← 1
+   exp: '[оба]'
+   got: '[оба]'
+## 3 | ifEQ(0):or(.b):ifEQ(3):show('хотя бы одно'):elseShow('нет') ← 1
+   exp: '[хотя бы одно]'
+   got: '[хотя бы одно]'
+## 3 | ifEQ(true):show('да'):elseShow('нет') ← true
+   exp: '[да]'
+   got: '[да]'
+## 3 | ifEQ('true'):show('да'):elseShow('нет') ← true
+   exp: '[?]'
+   got: '[да]'
+## 3 | ifEmpty('—') ← null
+   exp: '[—]'
+   got: '[—]'
+## 3 | ifEmpty('—') ← ""
+   exp: '[—]'
+   got: '[—]'
+## 3 | ifEmpty('—') ← 0
+   exp: '[0?]'
+   got: '[0]'
+## 3 | ifEmpty('—') ← []
+   exp: '[—]'
+   got: '[—]'
+## 3 | ifEmpty('—') ← "текст"
+   exp: '[текст]'
+   got: '[текст]'
+## 3 | ifEM():show('—'):elseShow(.v) ← "x"
+   exp: '[x? (dynamic elseShow)]'
+   got: '[x]'
+## 3 | ifEQ(.b):show('равно') ← 3
+   exp: '[равно (dynamic param)]'
+   got: '[равно]'
+## 3 | ifEQ(1):show({t(hello)}) ← 1
+   exp: '[Здравствуйте]'
+   got: '[Здравствуйте]'
+## 3 | ifEmpty on missing field
+   exp: '[—]'
+   got: '[—]'
+## 3 | showBegin/showEnd true
+   exp: 'ABC'
+   got: 'ABC'
+## 3 | showBegin/showEnd false
+   exp: 'AC'
+   got: 'AC'
+## 3 | hideBegin/hideEnd paragraphs
+   exp: 'до\nпосле (maybe empty paras)'
+   got: 'до\nпосле'
+## 3 | drop(p)
+   exp: 'до\nпосле'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"drop\\" is disabled in the Community Edition. Source: \\"{d.f:ifEQ(true):drop(p)}\\"","code":"w101","data":{"renderId":""}}'
+## 3 | drop(p) false
+   exp: 'до\nостаётся\nпосле'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"drop\\" is disabled in the Community Edition. Source: \\"{d.f:ifEQ(true):drop(p)}\\"","code":"w101","data":{"renderId":""}}'
+## 3 | keep(p)
+   exp: 'до\nпосле'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"keep\\" is disabled in the Community Edition. Source: \\"{d.f:ifEQ(true):keep(p)}\\"","code":"w101","data":{"renderId":""}}'
+## 3 | drop(row) in loop
+   exp: 'H Лада Лада БМВ'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"drop\\" is disabled in the Community Edition. Source: \\"{d.cars[i].ok:ifEQ(false):drop(row)}\\"","code":"w101","data":{"renderId":""}}'
+## 3 | drop(table)
+   exp: 'до\nпосле'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"drop\\" is disabled in the Community Edition. Source: \\"{d.f:ifEQ(true):drop(table)}\\"","code":"w101","data":{"renderId":""}}'
+## 3 | hide row via hideBegin/hideEnd in row
+   exp: 'row Тесла hidden?'
+   got: '[H | ]\n[Лада | 3]\n[]\n[Лада | 2]\n[БМВ | 5]'
+## 3 | hide static row via showBegin across rows
+   exp: '?'
+   got: '[A]\n[]\n[B]'
+## 3 | filter number [i, qty > 1]
+   exp: 'Лада БМВ Лада? order Лада Лада БМВ'
+   got: 'Лада\nЛада\nБМВ'
+## 3 | filter v5 single [i+1] filter
+   exp: 'Лада Лада БМВ'
+   got: 'Лада\nЛада\nБМВ'
+## 3 | filter string [i, brand=Лада]
+   exp: '3 2'
+   got: '3\n2'
+## 3 | filter string unquoted
+   exp: '3 2'
+   got: '3\n2'
+## 3 | filter bool [i, ok=true]
+   exp: 'Лада Лада БМВ'
+   got: 'Лада\nЛада\nБМВ'
+## 3 | filter multi AND
+   exp: 'Лада Лада'
+   got: 'Лада\nЛада'
+## 3 | filter index [i, i < 2]
+   exp: 'Лада Тесла'
+   got: 'Лада\nТесла'
+## 3 | filter exclude last [i, i!=-1]
+   exp: 'Лада Тесла Лада'
+   got: 'Лада\nТесла\nЛада'
+## 3 | filter in table row
+   exp: 'Тесла row hidden'
+   got: '[Лада]\n[Лада]\n[БМВ]'
+## 3 | sort [qty, i]
+   exp: 'Тесла Лада Лада БМВ'
+   got: 'Тесла\nЛада\nЛада\nБМВ'
+## 3 | sort multi [brand, qty, i]
+   exp: 'БМВ5 Лада2 Лада3 Тесла1'
+   got: 'БМВ5\nЛада2\nЛада3\nТесла1'
+## 3 | sort desc [-qty, i]?
+   exp: '? (docs: not available)'
+   got: 'Лада\nТесла\nЛада\nБМВ'
+## 3 | distinct [brand]
+   exp: 'БМВ Лада Тесла (sorted?)'
+   got: 'БМВ\nЛада\nТесла'
+## 3 | translations {t()}
+   exp: 'Total: яблоко'
+   got: 'Total: яблоко'
+## 3 | translations missing key
+   exp: 'Итого'
+   got: 'Итого'
+## 4 | aggSum
+   exp: '[11]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggSum\\" is disabled in the Community Edition. Source: \\"{d.cars[].qty:aggSum}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggSum:formatN
+   exp: '[11,00]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggSum\\" is disabled in the Community Edition. Source: \\"{d.cars[].qty:aggSum:formatN(2)}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggSum:formatC
+   exp: '[3 720,50 ₽]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggSum\\" is disabled in the Community Edition. Source: \\"{d.cars[].price:aggSum:formatC()}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggSum of qty*price
+   exp: '[10 041,50]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggSum\\" is disabled in the Community Edition. Source: \\"{d.cars[].qty:mul(.price):aggSum:formatN(2)}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggAvg
+   exp: '[2.75]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggAvg\\" is disabled in the Community Edition. Source: \\"{d.cars[].qty:aggAvg}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggMin/aggMax
+   exp: '[1 5]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggMin\\" is disabled in the Community Edition. Source: \\"{d.cars[].qty:aggMin}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggCount
+   exp: '[4]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggCount\\" is disabled in the Community Edition. Source: \\"{d.cars[].qty:aggCount}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggCountD
+   exp: '[3]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggCountD\\" is disabled in the Community Edition. Source: \\"{d.cars[].brand:aggCountD}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggStr
+   exp: '[Лада, Тесла, Лада, БМВ]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggStr\\" is disabled in the Community Edition. Source: \\"{d.cars[].brand:aggStr(\', \')}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggStrD
+   exp: '[Лада | Тесла | БМВ]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggStrD\\" is disabled in the Community Edition. Source: \\"{d.cars[].brand:aggStrD(\' | \')}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggSum with filter
+   exp: '[10]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggSum\\" is disabled in the Community Edition. Source: \\"{d.cars[ok=true].qty:aggSum}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggSum empty array
+   exp: '[0?]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggSum\\" is disabled in the Community Edition. Source: \\"{d.cars[].qty:aggSum}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggSum nested arrays
+   exp: '[13]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggSum\\" is disabled in the Community Edition. Source: \\"{d.groups[].items[].q:aggSum}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | .length property
+   exp: '[4?]'
+   got: '[4]'
+## 4 | array:len()
+   exp: '[4]'
+   got: '[4]'
+## 4 | cumSum in loop
+   exp: '3 4 6 11'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"cumSum\\" is disabled in the Community Edition. Source: \\"{d.cars[i].qty:cumSum}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | cumCountD
+   exp: '1 2 2 3'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"cumCountD\\" is disabled in the Community Edition. Source: \\"{d.cars[i].brand:cumCountD}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | total row after table
+   exp: 'rows + Итого 11'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggSum\\" is disabled in the Community Edition. Source: \\"{d.cars[].qty:aggSum}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | aggSum inside loop (per-group subtotal)
+   exp: 'A 3 / B 10'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggSum\\" is disabled in the Community Edition. Source: \\"{d.groups[i].items[].q:aggSum}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | group-by [brand] + aggSum(.brand)
+   exp: 'БМВ 5 / Лада 5 / Тесла 1'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggSum\\" is disabled in the Community Edition. Source: \\"{d.cars[brand].qty:aggSum(.brand)}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | group-by + aggCount(.brand)
+   exp: 'БМВ 1 / Лада 2 / Тесла 1'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggCount\\" is disabled in the Community Edition. Source: \\"{d.cars[brand].qty:aggCount(.brand)}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | partition aggSum(.brand) in plain loop
+   exp: 'Лада 5, Тесла 1, Лада 5, БМВ 5'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggSum\\" is disabled in the Community Edition. Source: \\"{d.cars[i].qty:aggSum(.brand)}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | cumCount(.brand) partition
+   exp: '1 1 2 1'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"cumCount\\" is disabled in the Community Edition. Source: \\"{d.cars[i].qty:cumCount(.brand)}\\"","code":"w101","data":{"renderId":""}}'
+## 4 | group header + detail rows (nested filter by parent)
+   exp: '? (no native)'
+   got: '[БМВ | ]\n[ | ..]\n[Лада | ]\n[ | ..]\n[Тесла | ]\n[ | ..]'
+## 4 | grouping via :set (v5 enterprise)
+   exp: 'Лада: 3 2 ...'
+   got: 'Лада\n- \n- \n- 3\n- 2\nТесла\n- \n- 1\nБМВ\n- \n- 5'
+## 4 | grouping with pre-grouped JSON
+   exp: 'A 3 / a1 1 / a2 2 / B 10 / b1 10'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"aggSum\\" is disabled in the Community Edition. Source: \\"{d.groups[i].items[].q:aggSum}\\"","code":"w101","data":{"renderId":""}}'
+## 5 | :html
+   exp: '[жирный текст (bold)]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"html\\" is disabled in the Community Edition. Source: \\"{d.h:html}\\"","code":"w101","data":{"renderId":""}}'
+## 5 | :color(p)
+   exp: '[цветной (red)]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"color\\" is disabled in the Community Edition. Source: \\"{d.c:color(p)}\\"","code":"w101","data":{"renderId":""}}'
+## 5 | bindColor legacy
+   exp: '[?]'
+   got: '[текст ff0000]'
+## 5 | :barcode in text
+   exp: '[?]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"barcode\\" is disabled in the Community Edition. Source: \\"{d.v:barcode(qrcode)}\\"","code":"w101","data":{"renderId":""}}'
+## 5 | :barcode ean13 text (font mode)
+   exp: '[?]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"barcode\\" is disabled in the Community Edition. Source: \\"{d.v:barcode(ean13)}\\"","code":"w101","data":{"renderId":""}}'
+## 5 | defaultURL text
+   exp: '[https://carbone.io]'
+   got: 'HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \\"defaultURL\\" is disabled in the Community Edition. Source: \\"{d.u:defaultURL(\'https://carbone.io\')}\\"","code":"w101","data":{"renderId":""}}'
+## 5 | o.preReleaseFeatureIn
+   exp: '[ok]'
+   got: '[ok]'
+## 5 | :set store value
+   exp: '[stored]'
+   got: '[stored]'
+## 5 | :t formatter
+   exp: '[яблоко]'
+   got: '[яблоко]'

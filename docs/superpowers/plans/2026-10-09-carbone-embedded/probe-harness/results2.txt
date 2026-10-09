@@ -1,0 +1,95 @@
+## locale lang=ru-ru
+   1,234,567.891 | 1,234,567.89 | 1,234,567.89 € | 1,234,568 € | 5.00 € | 5.00 € | 08 марта 2026, воскресенье | 8 марта 2026 г.
+## locale lang=ru-RU
+   1,234,567.891 | 1,234,567.89 | 1,234,567.89 € | 1,234,568 € | 5.00 € | 5.00 € | 08 марта 2026, воскресенье | 8 марта 2026 г.
+## locale lang=ru
+   1 234 567,891 | 1 234 567,89 | 1 234 567,89 ₽ | 1 234 568 ₽ | roubles | 5,00 roubles | 08 марта 2026, воскресенье | 8 марта 2026 г.
+## locale lang=ru_RU
+   1,234,567.891 | 1,234,567.89 | 1,234,567.89 € | 1,234,568 € | 5.00 € | 5.00 € | 08 марта 2026, воскресенье | 8 марта 2026 г.
+## locale lang=None
+   1,234,567.891 | 1,234,567.89 | 1,234,567.89 € | 1,234,568 € | 5.00 € | 5.00 € | 08 March 2026, Sunday | March 8, 2026
+## formatC ru + currencyTarget RUB
+   1 000,00 ₽ | 1 000,00 ₽ | 14,68 $ | 14.679643146796433
+## ru-ru + currencySource/Target RUB
+   1,000.00 ₽ | 14.68 $ | 14.679643146796433 | 1,000.00
+## ru + currencyRates
+   11,00 $ | 11
+## ru no currency opts
+   14,68 $ | 14.679643146796433 | 1 000,00 ₽
+## count() alone
+   HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \"cumCount\" is disabled in the Community Edition. Source: \"{d.cars[i].brand:cumCount}\"","code":"w101","data":{"renderId":""}}
+## iterator via print(.i)
+   0 Лада
+1 Тесла
+2 Лада
+3 БМВ
+## iterator via qty:mul(0):add(.i):add(1)
+   1. Лада
+2. Тесла
+3. Лада
+4. БМВ
+## iterator {d.cars[i].brand:add(.i)}
+   ||Лада
+||Тесла
+||Лада
+||БМВ
+## sum via :set accumulator
+   Итого: 14
+## sum via :set accumulator no init
+   Итого: NaN
+## sum via :set accumulator mul
+   Итого: 10,343.00
+## group via :set whole object
+   Лада
+- Лада 3
+- Лада 2
+Тесла
+- Тесла 1
+БМВ
+- БМВ 5
+## group via :set table
+   [Лада | ]
+[ | 3]
+[ | 2]
+[Тесла | ]
+[ | 1]
+[БМВ | ]
+[ | 5]
+## group via :set + subtotal :set
+   HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Forbidden array access in \"c.g[id=.brand].sum\". Only positive integers are allowed in [] Source: \"{d.cars[i].qty:add(c.g[id=.brand].sum):_setInit(c.g):_setObj(c):_setArr(g):_setObjInArr(id,.brand):_setVal(sum)}\"","code":"w101","data":{"renderId":""}}
+## hide row: hideBegin at end of prev row, hideEnd at end of row
+   [H | ]
+[Лада | 3]
+[Тесла | 1]
+[Лада | 2]
+[БМВ | 5]
+   XML: <w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t xml:space="preserve">H</w:t></w:r></w:p></w:tc><w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t xml:space="preserve"></w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t xml:space="preserve">Лада</w:t></w:r></w:p></w:tc><w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t xml:space="preserve">3</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t xml:space="preserve">Тесла</w:t></w:r></w:p></w:tc><w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t xml:space="preserve">1</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t xml:space="preserve">Лада</w:t></w:r></w:p></w:tc><w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t xml:space="preserve">2</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t x
+   RELS: <?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships> ['[Content_Types].xml', '_rels/.rels', 'word/_rels/document.xml.rels', 'word/document.xml']
+## empty array paragraphs + ifEM message
+   Нет данных
+## pdf output
+   <16622 bytes, starts b'%PDF-1.7'>
+## txt output
+   <10 bytes, starts b'?????? 1'>
+## pdf formatOptions
+   <16219 bytes, starts b'%PDF-1.7'>
+## naive datetime tz
+   09.03.2026 02:30 | 08.03.2026 23:30 | 09.03.2026 02:30
+## endOfD tz
+   31.03.2026 23:59 | 31.03.2026 23:59
+## ifEmpty chain with formatD
+   Invalid Date | —
+## ifEmpty on formatted number
+   —
+## bindColor with colored run
+   цвет
+   XML: <w:p><w:r><w:t></w:t></w:r><w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t>цвет</w:t></w:r></w:p><w:p/><w:sectPr/>
+   RELS: <?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships> ['[Content_Types].xml', '_rels/.rels', 'word/_rels/document.xml.rels', 'word/document.xml']
+## dynamic image (alt text)
+   
+   XML: <w:p><w:r><w:drawing><wp:inline><wp:extent cx="914400" cy="914400"/><wp:docPr id="1000" name="Picture 1" descr="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="p.png" descr="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p><w:p/><w:sectPr/>
+   RELS: <?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/p.png"/></Relationships> ['[Content_Types].xml', '_rels/.rels', 'word/_rels/document.xml.rels', 'word/media/p.png', 'word/document.xml']
+## dynamic hyperlink
+   ссылка
+   XML: <w:p><w:hyperlink r:id="rIdL"><w:r><w:t>ссылка</w:t></w:r></w:hyperlink></w:p><w:p/><w:sectPr/>
+   RELS: <?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdL" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.org/x" TargetMode="External"/></Relationships> ['[Content_Types].xml', '_rels/.rels', 'word/_rels/document.xml.rels', 'word/document.xml']

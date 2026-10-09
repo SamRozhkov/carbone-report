@@ -1,0 +1,45 @@
+## numbering print(.i):add(1)
+   1. Лада
+2. Тесла
+3. Лада
+4. БМВ
+## numbering in table print(.i):add(1)
+   [№ | Марка]
+[1 | Лада]
+[2 | Тесла]
+[3 | Лада]
+[4 | БМВ]
+## numbering with filter
+   1. Лада
+3. Лада
+4. БМВ
+## set accumulator separate paragraph
+   Итого: 14
+## set accumulator 1 item
+   Итого: 14
+## set accumulator init via set
+   Итого: 14
+## nbsp check
+   1 234 567,50
+## translations with lang ru
+   Всего
+## translations ru-ru key with lang ru
+   Итого
+## unknown formatter
+   HTTP 500 {"success":false,"error":"Unable to generate the document. Error: Formatter \"fooBar\" does not exist. Do you mean \"mod\"? Source: \"{d.n:fooBar()}\"","code":"w101","data":{"renderId":""}}
+## unclosed tag
+   {d.n
+## bad loop (missing i+1)
+   HTTP 500 {"success":false,"error":"Unable to generate the document. Error: The marker {d.cars[i].brand} has no corresponding [i+1] for array \"cars\". Add at least one tag with cars[i+1] to describe where is the i+1-th item.","code":"w101","data":{"renderId":""}}
+## ifEmpty missing nested
+   —
+## pdf encrypt check
+   <16218 bytes, starts b'%PDF-1.7'>
+## pdf plain
+   <15981 bytes, starts b'%PDF-1.7'>
+## txt
+   <10 bytes, starts b'?????? 1'>
+## formatC M/LL lang ru
+   rouble | roubles | 2,00 roubles
+## formatD ru dates lang ru
+   08 марта 2026 | 8 марта 2026 г., 13:00

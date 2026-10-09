@@ -1,0 +1,365 @@
+[
+ {
+  "section": "basics",
+  "id": "basics-field",
+  "title": "Значение поля",
+  "template": "Покупатель: {d.name}",
+  "data": "{\n  \"name\": \"Иван\"\n}",
+  "result": "Покупатель: Иван"
+ },
+ {
+  "section": "basics",
+  "id": "basics-nested",
+  "title": "Вложенный объект",
+  "template": "{d.client.address.city}",
+  "data": "{\n  \"client\": {\n    \"address\": {\n      \"city\": \"Москва\"\n    }\n  }\n}",
+  "result": "Москва"
+ },
+ {
+  "section": "basics",
+  "id": "basics-search",
+  "title": "Элемент массива по условию",
+  "template": "{d.items[id=2].name}",
+  "data": "{\n  \"items\": [\n    {\n      \"id\": 1,\n      \"name\": \"a\"\n    },\n    {\n      \"id\": 2,\n      \"name\": \"b\"\n    }\n  ]\n}",
+  "result": "b"
+ },
+ {
+  "section": "basics",
+  "id": "basics-params",
+  "title": "Параметр отчёта",
+  "template": "Период с {d.params.from:formatD('DD.MM.YYYY')}",
+  "data": "{\n  \"params\": {\n    \"from\": \"2026-03-01\"\n  }\n}",
+  "result": "Период с 01.03.2026"
+ },
+ {
+  "section": "basics",
+  "id": "basics-ifempty",
+  "title": "Значение по умолчанию",
+  "template": "Оплачен: {d.paid_on:formatD('DD.MM.YYYY'):ifEmpty('—')}",
+  "data": "{\n  \"paid_on\": null\n}",
+  "result": "Оплачен: —"
+ },
+ {
+  "section": "basics",
+  "id": "basics-alias",
+  "title": "Алиас",
+  "template": "{#cl = d.client}{$cl.name}",
+  "data": "{\n  \"client\": {\n    \"name\": \"Пётр\"\n  }\n}",
+  "result": "Пётр"
+ },
+ {
+  "section": "tables",
+  "id": "tables-rows",
+  "title": "Строки таблицы из массива",
+  "template": "| Марка | Кол-во |\n| {d.cars[i].brand} | {d.cars[i].qty} |\n| {d.cars[i+1].brand} | |",
+  "data": "{\n  \"cars\": [\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 3,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"Тесла\",\n      \"qty\": 1,\n      \"ok\": false\n    },\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 2,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"БМВ\",\n      \"qty\": 5,\n      \"ok\": true\n    }\n  ]\n}",
+  "result": "| Марка | Кол-во |\n| Лада | 3 |\n| Тесла | 1 |\n| Лада | 2 |\n| БМВ | 5 |"
+ },
+ {
+  "section": "tables",
+  "id": "tables-nested",
+  "title": "Вложенный цикл",
+  "template": "{d.groups[i].name}:\n- {d.groups[i].items[i].x}\n- {d.groups[i].items[i+1].x}\n{d.groups[i+1].name}",
+  "data": "{\n  \"groups\": [\n    {\n      \"name\": \"Г1\",\n      \"items\": [\n        {\n          \"x\": \"a\"\n        },\n        {\n          \"x\": \"b\"\n        }\n      ]\n    },\n    {\n      \"name\": \"Г2\",\n      \"items\": [\n        {\n          \"x\": \"c\"\n        }\n      ]\n    },\n    {\n      \"name\": \"Г3\",\n      \"items\": []\n    }\n  ]\n}",
+  "result": "Г1:\n- a\n- b\nГ2:\n- c\nГ3:"
+ },
+ {
+  "section": "tables",
+  "id": "tables-nested-rows",
+  "title": "Вложенный цикл в строках таблицы",
+  "template": "| {d.groups[i].name} | |\n| | {d.groups[i].items[i].x} |\n| | {d.groups[i].items[i+1].x} |\n| {d.groups[i+1].name} | |",
+  "data": "{\n  \"groups\": [\n    {\n      \"name\": \"Г1\",\n      \"items\": [\n        {\n          \"x\": \"a\"\n        },\n        {\n          \"x\": \"b\"\n        }\n      ]\n    },\n    {\n      \"name\": \"Г2\",\n      \"items\": [\n        {\n          \"x\": \"c\"\n        }\n      ]\n    },\n    {\n      \"name\": \"Г3\",\n      \"items\": []\n    }\n  ]\n}",
+  "result": "| Г1 | |\n| | a |\n| | b |\n| Г2 | |\n| | c |\n| Г3 | |"
+ },
+ {
+  "section": "tables",
+  "id": "tables-empty",
+  "title": "Пустой массив",
+  "template": "до\n| Марка |\n| {d.cars[i].brand} |\n| {d.cars[i+1].brand} |\nпосле\n{d.cars:ifEM():show('Нет данных'):elseShow('')}",
+  "data": "{\n  \"cars\": []\n}",
+  "result": "до\n| Марка |\nпосле\nНет данных"
+ },
+ {
+  "section": "tables",
+  "id": "tables-numbering",
+  "title": "Номер строки",
+  "template": "| № | Марка |\n| {d.cars[i].brand:print(.i):add(1)} | {d.cars[i].brand} |\n| {d.cars[i+1].brand} | |",
+  "data": "{\n  \"cars\": [\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 3,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"Тесла\",\n      \"qty\": 1,\n      \"ok\": false\n    },\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 2,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"БМВ\",\n      \"qty\": 5,\n      \"ok\": true\n    }\n  ]\n}",
+  "result": "| № | Марка |\n| 1 | Лада |\n| 2 | Тесла |\n| 3 | Лада |\n| 4 | БМВ |"
+ },
+ {
+  "section": "tables",
+  "id": "tables-filter",
+  "title": "Отбор строк",
+  "template": "| {d.cars[i, ok=true].brand} |\n| {d.cars[i+1, ok=true].brand} |",
+  "data": "{\n  \"cars\": [\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 3,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"Тесла\",\n      \"qty\": 1,\n      \"ok\": false\n    },\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 2,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"БМВ\",\n      \"qty\": 5,\n      \"ok\": true\n    }\n  ]\n}",
+  "result": "| Лада |\n| Лада |\n| БМВ |"
+ },
+ {
+  "section": "tables",
+  "id": "tables-sort",
+  "title": "Сортировка",
+  "template": "{d.cars[qty, i].brand}\n{d.cars[qty+1, i+1].brand}",
+  "data": "{\n  \"cars\": [\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 3,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"Тесла\",\n      \"qty\": 1,\n      \"ok\": false\n    },\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 2,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"БМВ\",\n      \"qty\": 5,\n      \"ok\": true\n    }\n  ]\n}",
+  "result": "Тесла\nЛада\nЛада\nБМВ"
+ },
+ {
+  "section": "formatting",
+  "id": "fmt-date-long",
+  "title": "Дата прописью",
+  "template": "{d.date:formatD('DD MMMM YYYY')}",
+  "data": "{\n  \"date\": \"2026-03-08\"\n}",
+  "result": "08 марта 2026"
+ },
+ {
+  "section": "formatting",
+  "id": "fmt-date-short",
+  "title": "Дата цифрами",
+  "template": "{d.date:formatD('DD.MM.YYYY')}",
+  "data": "{\n  \"date\": \"2026-03-08\"\n}",
+  "result": "08.03.2026"
+ },
+ {
+  "section": "formatting",
+  "id": "fmt-date-time",
+  "title": "Дата и время",
+  "template": "{d.at:formatD('DD.MM.YYYY HH:mm')}",
+  "data": "{\n  \"at\": \"2026-03-08T23:30:00+03:00\"\n}",
+  "result": "08.03.2026 23:30"
+ },
+ {
+  "section": "formatting",
+  "id": "fmt-date-naive",
+  "title": "Время без смещения",
+  "template": "{d.at:formatD('DD.MM.YYYY HH:mm')}",
+  "data": "{\n  \"at\": \"2026-03-08 23:30:00\"\n}",
+  "result": "09.03.2026 02:30"
+ },
+ {
+  "section": "formatting",
+  "id": "fmt-number",
+  "title": "Число",
+  "template": "{d.n:formatN(2)}",
+  "data": "{\n  \"n\": 1234567.891\n}",
+  "result": "1 234 567,89"
+ },
+ {
+  "section": "formatting",
+  "id": "fmt-money",
+  "title": "Сумма в рублях",
+  "template": "{d.sum:formatC()}",
+  "data": "{\n  \"sum\": 1234567.891\n}",
+  "result": "1 234 567,89 ₽"
+ },
+ {
+  "section": "formatting",
+  "id": "fmt-convcurr",
+  "title": "Пересчёт в другую валюту",
+  "template": "{d.sum:convCurr('USD')}",
+  "data": "{\n  \"sum\": 1000\n}",
+  "result": "14.679643146796433"
+ },
+ {
+  "section": "formatting",
+  "id": "fmt-case",
+  "title": "Регистр букв",
+  "template": "{d.name:ucWords()}",
+  "data": "{\n  \"name\": \"иванов иван\"\n}",
+  "result": "Иванов Иван"
+ },
+ {
+  "section": "formatting",
+  "id": "fmt-ellipsis",
+  "title": "Обрезка строки",
+  "template": "{d.title:ellipsis(7)}",
+  "data": "{\n  \"title\": \"Длинная строка\"\n}",
+  "result": "Длинная..."
+ },
+ {
+  "section": "formatting",
+  "id": "fmt-math",
+  "title": "Арифметика",
+  "template": "{d.v:add(.b * 2 - 1)}",
+  "data": "{\n  \"v\": 10,\n  \"b\": 3\n}",
+  "result": "15"
+ },
+ {
+  "section": "formatting",
+  "id": "fmt-array-join",
+  "title": "Список через запятую",
+  "template": "{d.tags:arrayJoin()}",
+  "data": "{\n  \"tags\": [\n    \"a\",\n    \"b\",\n    \"c\"\n  ]\n}",
+  "result": "a, b, c"
+ },
+ {
+  "section": "formatting",
+  "id": "fmt-multiline",
+  "title": "Многострочный текст",
+  "template": "{d.text:convCRLF}",
+  "data": "{\n  \"text\": \"строка1\\nстрока2\"\n}",
+  "result": "строка1\nстрока2"
+ },
+ {
+  "section": "conditions",
+  "id": "cond-if",
+  "title": "Текст по условию",
+  "template": "{d.status:ifEQ('paid'):show('Оплачен'):elseShow('Не оплачен')}",
+  "data": "{\n  \"status\": \"new\"\n}",
+  "result": "Не оплачен"
+ },
+ {
+  "section": "conditions",
+  "id": "cond-and",
+  "title": "Два условия",
+  "template": "{d.qty:ifGT(0):and(.paid):ifEQ(true):show('к отгрузке'):elseShow('ждём')}",
+  "data": "{\n  \"qty\": 2,\n  \"paid\": true\n}",
+  "result": "к отгрузке"
+ },
+ {
+  "section": "conditions",
+  "id": "cond-inline",
+  "title": "Часть текста по условию",
+  "template": "Итого{d.vat:ifEQ(true):showBegin}, включая НДС{d.vat:showEnd}.",
+  "data": "{\n  \"vat\": false\n}",
+  "result": "Итого."
+ },
+ {
+  "section": "conditions",
+  "id": "cond-paragraphs",
+  "title": "Скрыть абзацы",
+  "template": "Счёт\n{d.paid:ifEQ(true):hideBegin}\nПросим оплатить в течение 5 дней.\n{d.paid:hideEnd}\nСпасибо!",
+  "data": "{\n  \"paid\": true\n}",
+  "result": "Счёт\nСпасибо!"
+ },
+ {
+  "section": "conditions",
+  "id": "cond-table-row",
+  "antiPattern": true,
+  "title": "hideBegin в строке таблицы (так нельзя)",
+  "template": "| Марка | Кол-во |\n| {d.cars[i].ok:ifEQ(false):hideBegin}{d.cars[i].brand} | {d.cars[i].qty}{d.cars[i].ok:hideEnd} |\n| {d.cars[i+1].brand} | |",
+  "data": "{\n  \"cars\": [\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 3,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"Тесла\",\n      \"qty\": 1,\n      \"ok\": false\n    },\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 2,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"БМВ\",\n      \"qty\": 5,\n      \"ok\": true\n    }\n  ]\n}",
+  "result": "| Марка | Кол-во |\n| Лада | 3 |\n| |\n| Лада | 2 |\n| БМВ | 5 |"
+ },
+ {
+  "section": "totals",
+  "id": "totals-sum",
+  "title": "Итог отдельным запросом",
+  "template": "Позиций: {d.totals.positions}, на сумму {d.totals.amount:formatC()}",
+  "data": "{\n  \"totals\": {\n    \"positions\": 3,\n    \"amount\": 13775\n  }\n}",
+  "result": "Позиций: 3, на сумму 13 775,00 ₽"
+ },
+ {
+  "section": "totals",
+  "id": "totals-rownum",
+  "title": "Номер строки из SQL",
+  "template": "| № | Наименование | Кол-во |\n| {d.items[i].n} | {d.items[i].name} | {d.items[i].qty} |\n| {d.items[i+1].n} | | |",
+  "data": "{\n  \"items\": [\n    {\n      \"n\": 1,\n      \"name\": \"Бумага А4\",\n      \"qty\": 10\n    },\n    {\n      \"n\": 2,\n      \"name\": \"Картридж\",\n      \"qty\": 2\n    },\n    {\n      \"n\": 3,\n      \"name\": \"Ручки шариковые\",\n      \"qty\": 50\n    }\n  ]\n}",
+  "result": "| № | Наименование | Кол-во |\n| 1 | Бумага А4 | 10 |\n| 2 | Картридж | 2 |\n| 3 | Ручки шариковые | 50 |"
+ },
+ {
+  "section": "totals",
+  "id": "totals-groups",
+  "title": "Группы с подытогами (json_agg)",
+  "template": "{d.groups[i].company} — {d.groups[i].subtotal:formatC()}\n- {d.groups[i].items[i].name}: {d.groups[i].items[i].qty}\n- {d.groups[i].items[i+1].name}\n{d.groups[i+1].company}",
+  "data": "{\n  \"groups\": [\n    {\n      \"company\": \"ООО «Ромашка»\",\n      \"subtotal\": 13775,\n      \"items\": [\n        {\n          \"name\": \"Бумага А4\",\n          \"qty\": 10\n        },\n        {\n          \"name\": \"Картридж\",\n          \"qty\": 2\n        },\n        {\n          \"name\": \"Ручки шариковые\",\n          \"qty\": 50\n        }\n      ]\n    },\n    {\n      \"company\": \"АО «Лютик»\",\n      \"subtotal\": 34300,\n      \"items\": [\n        {\n          \"name\": \"Стол офисный\",\n          \"qty\": 1\n        },\n        {\n          \"name\": \"Кресло\",\n          \"qty\": 2\n        },\n        {\n          \"name\": \"Лампа настольная\",\n          \"qty\": 3\n        }\n      ]\n    }\n  ]\n}",
+  "result": "ООО «Ромашка» — 13 775,00 ₽\n- Бумага А4: 10\n- Картридж: 2\n- Ручки шариковые: 50\nАО «Лютик» — 34 300,00 ₽\n- Стол офисный: 1\n- Кресло: 2\n- Лампа настольная: 3"
+ },
+ {
+  "section": "totals",
+  "id": "totals-set-group",
+  "title": "Группировка в шаблоне (:set)",
+  "template": "{d.cars[]:set(c.g[id=.brand].rows[])}\n{c.g[i].id}\n- {c.g[i].rows[i].brand} {c.g[i].rows[i].qty}\n- {c.g[i].rows[i+1].qty}\n{c.g[i+1].id}",
+  "data": "{\n  \"cars\": [\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 3,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"Тесла\",\n      \"qty\": 1,\n      \"ok\": false\n    },\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 2,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"БМВ\",\n      \"qty\": 5,\n      \"ok\": true\n    }\n  ]\n}",
+  "result": "Лада\n- Лада 3\n- Лада 2\nТесла\n- Тесла 1\nБМВ\n- БМВ 5"
+ },
+ {
+  "section": "totals",
+  "id": "totals-set-sum",
+  "antiPattern": true,
+  "title": "Сумма через :set (неверно)",
+  "template": "{d.zero:set(c.total)}{d.cars[].qty:add(c.total):set(c.total)}Итого: {c.total}",
+  "data": "{\n  \"zero\": 0,\n  \"cars\": [\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 3,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"Тесла\",\n      \"qty\": 1,\n      \"ok\": false\n    },\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 2,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"БМВ\",\n      \"qty\": 5,\n      \"ok\": true\n    }\n  ]\n}",
+  "result": "Итого: 14"
+ },
+ {
+  "section": "unavailable",
+  "id": "na-aggregators",
+  "title": "Агрегаторы",
+  "template": "Итого: {d.cars[].qty:aggSum}",
+  "data": "{\n  \"cars\": [\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 3,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"Тесла\",\n      \"qty\": 1,\n      \"ok\": false\n    },\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 2,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"БМВ\",\n      \"qty\": 5,\n      \"ok\": true\n    }\n  ]\n}",
+  "result": "в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+  "unavailable": true
+ },
+ {
+  "section": "unavailable",
+  "id": "na-count",
+  "title": "count()",
+  "template": "{d.cars[i].brand:count()} {d.cars[i].brand}\n{d.cars[i+1].brand}",
+  "data": "{\n  \"cars\": [\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 3,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"Тесла\",\n      \"qty\": 1,\n      \"ok\": false\n    },\n    {\n      \"brand\": \"Лада\",\n      \"qty\": 2,\n      \"ok\": true\n    },\n    {\n      \"brand\": \"БМВ\",\n      \"qty\": 5,\n      \"ok\": true\n    }\n  ]\n}",
+  "result": "в шаблоне используется cumCount — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+  "unavailable": true
+ },
+ {
+  "section": "unavailable",
+  "id": "na-drop",
+  "title": "drop() и keep()",
+  "template": "до\n{d.f:ifEQ(true):drop(p)}удалить абзац\nпосле",
+  "data": "{\n  \"f\": true\n}",
+  "result": "в шаблоне используется drop — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+  "unavailable": true
+ },
+ {
+  "section": "unavailable",
+  "id": "na-html",
+  "title": "HTML",
+  "template": "{d.h:html}",
+  "data": "{\n  \"h\": \"<b>жирный</b> текст\"\n}",
+  "result": "в шаблоне используется html — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+  "unavailable": true
+ },
+ {
+  "section": "unavailable",
+  "id": "na-color",
+  "title": "Цвет из данных",
+  "template": "{d.c:color(p)}цветной",
+  "data": "{\n  \"c\": \"#FF0000\"\n}",
+  "result": "в шаблоне используется color — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+  "unavailable": true
+ },
+ {
+  "section": "unavailable",
+  "id": "na-barcode",
+  "title": "Штрихкоды и QR-коды",
+  "template": "{d.v:barcode(qrcode)}",
+  "data": "{\n  \"v\": \"123\"\n}",
+  "result": "в шаблоне используется barcode — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+  "unavailable": true
+ },
+ {
+  "section": "unavailable",
+  "id": "na-chart",
+  "title": "Диаграммы",
+  "template": "{d.v:chart}",
+  "data": "{\n  \"v\": 1\n}",
+  "result": "в шаблоне используется chart — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+  "unavailable": true
+ },
+ {
+  "section": "unavailable",
+  "id": "na-format-region",
+  "title": "Названия регионов (formatR)",
+  "template": "{d.v:formatR()}",
+  "data": "{\n  \"v\": \"RU\"\n}",
+  "result": "в шаблоне используется formatR — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+  "unavailable": true
+ },
+ {
+  "section": "unavailable",
+  "id": "na-default-url",
+  "title": "Ссылка по умолчанию (defaultURL)",
+  "template": "{d.u:defaultURL('https://example.com')}",
+  "data": "{\n  \"u\": \"not a url\"\n}",
+  "result": "в шаблоне используется defaultURL — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+  "unavailable": true
+ }
+]

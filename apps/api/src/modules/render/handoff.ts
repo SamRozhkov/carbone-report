@@ -42,7 +42,8 @@ export function createRenderHandoff(secret: Uint8Array): RenderHandoff {
         .setProtectedHeader({ alg: 'HS256' })
         .setSubject(id)
         .setAudience(AUDIENCE)
-        .setExpirationTime(Math.ceil(deadlineAt / 1000))
+        // Вниз: токен не переживает срок рендера.
+        .setExpirationTime(Math.floor(deadlineAt / 1000))
         .sign(secret);
       return { id, token };
     },

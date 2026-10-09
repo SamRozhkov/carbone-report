@@ -19,7 +19,7 @@ export class Deadline {
     return Math.max(0, this.end - this.now());
   }
 
-  /** Таймаут шага, ограниченный остатком срока; не меньше 1 (0 у pg и Carbone значит «без ограничения»). */
+  /** Таймаут шага, ограниченный остатком срока; не меньше 1 (0 у pg значит «без ограничения»). */
   cap(ms: number): number {
     return Math.max(1, Math.min(ms, this.remaining()));
   }

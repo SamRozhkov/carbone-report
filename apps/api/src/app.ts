@@ -17,6 +17,7 @@ import { registerDatasourceRoutes } from './modules/datasources/routes';
 import { registerBackupRoutes } from './modules/backups/routes';
 import { registerMaintenance } from './modules/maintenance/routes';
 import { registerOnlyOfficeRoutes } from './modules/onlyoffice/routes';
+import { registerRenderRoutes } from './modules/render/routes';
 import { registerReportRoutes } from './modules/reports/routes';
 import { registerTemplateRoutes } from './modules/templates/routes';
 import { registerUserRoutes } from './modules/users/routes';
@@ -95,6 +96,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   registerTemplateRoutes(app, deps, guards);
   registerReportRoutes(app, deps, guards);
   registerOnlyOfficeRoutes(app, deps, guards);
+  registerRenderRoutes(app, deps.renderFiles);
   registerBackupRoutes(app, deps, guards);
 
   await app.ready();

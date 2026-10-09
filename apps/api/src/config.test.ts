@@ -17,7 +17,9 @@ describe('loadConfig', () => {
     expect(c.reportTimeoutMs).toBe(120000);
     expect(c.reportRetentionDays).toBe(30);
     expect(c.tz).toBe('Europe/Moscow');
-    expect(c.carboneUrl).toBe('http://carbone:4000');
+    expect(c.apiSelfUrl).toBe('http://api:3000');
+    expect(c.renderWorkers).toBeGreaterThanOrEqual(1);
+    expect(c.renderWorkers).toBeLessThanOrEqual(4);
     expect(c.encryptionKey.length).toBe(32);
     expect(c.cookieSecure).toBe(false);
     expect(c.redisUrl).toBe('redis://redis:6379');
@@ -222,6 +224,23 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...base, TRUSTED_PROXY_HOPS: '0' })).toThrow('TRUSTED_PROXY_HOPS');
     expect(() => loadConfig({ ...base, TRUSTED_PROXY_HOPS: '6' })).toThrow('TRUSTED_PROXY_HOPS');
     expect(() => loadConfig({ ...base, TRUSTED_PROXY_HOPS: '1.5' })).toThrow('TRUSTED_PROXY_HOPS');
+  });
+  it('API_SELF_URL: явное значение без завершающего слэша', () => {
+    expect(loadConfig({ ...base, API_SELF_URL: 'http://10.0.0.5:3000/' }).apiSelfUrl).toBe(
+      'http://10.0.0.5:3000',
+    );
+    expect(() => loadConfig({ ...base, API_SELF_URL: 'api' })).toThrow('API_SELF_URL');
+  });
+  it('RENDER_WORKERS: явное значение, пустое — по умолчанию, целое 1–16', () => {
+    expect(loadConfig({ ...base, RENDER_WORKERS: '8' }).renderWorkers).toBe(8);
+    expect(loadConfig({ ...base, RENDER_WORKERS: '' }).renderWorkers).toBe(
+      loadConfig(base).renderWorkers,
+    );
+    for (const v of ['0', '17', '1.5', 'x']) {
+      expect(() => loadConfig({ ...base, RENDER_WORKERS: v })).toThrow(
+        'RENDER_WORKERS: целое от 1 до 16',
+      );
+    }
   });
 });
 

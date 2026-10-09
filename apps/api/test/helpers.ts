@@ -25,6 +25,7 @@ import { createS3Client } from '../src/lib/s3-storage';
 import { createRunFileGate } from '../src/lib/run-file-gate';
 import { createRemoveGate } from '../src/lib/storage-gate';
 import { createSourcePools } from '../src/modules/datasources/pools';
+import { createRenderHandoff } from '../src/modules/render/handoff';
 import { hashPassword } from '../src/modules/auth/password';
 
 const enc = new TextEncoder();
@@ -49,7 +50,8 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     onlyofficeJwtSecret: enc.encode('test-onlyoffice-secret-'.repeat(2)),
     onlyofficeInternalUrl: 'http://onlyoffice',
     apiInternalUrl: 'http://api:3000',
-    carboneUrl: 'http://carbone:4000',
+    apiSelfUrl: 'http://api:3000',
+    renderWorkers: 1,
     redisUrl: inject('redisUrl'),
     storageDir,
     storageBackend: 'local',
@@ -245,6 +247,7 @@ export async function createTestApp(
     redis: ownRedis,
     ldap: null,
     backupAgent: null,
+    renderFiles: createRenderHandoff(cfg.appSecret),
     ...overrides,
   };
   const app = await buildApp(deps);
@@ -253,6 +256,7 @@ export async function createTestApp(
     deps,
     async close() {
       await app.close();
+      deps.renderFiles.close();
       await deps.sources.closeAll();
       await gatePool.end();
       await runFilePool.end();

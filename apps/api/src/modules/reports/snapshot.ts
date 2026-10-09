@@ -78,8 +78,8 @@ export function runStoragePath(run: Pick<RunRow, 'id' | 'snapshot' | 'filePath'>
 }
 
 /**
- * Копия шаблона для Carbone. id `run:<runId>` — ключ кэша id шаблона Carbone (§24.2): копия загружается
- * как обычный шаблон, а замена живого шаблона не влияет на запуск.
+ * Копия шаблона из снимка запуска (id `run:<runId>`): рендер берёт файл из снимка, поэтому
+ * замена живого шаблона не влияет на запуск.
  */
 export function snapshotTemplateRef(
   runId: string,
@@ -114,7 +114,7 @@ export async function writeSnapshot(
 }
 
 /**
- * Рендер формата только из снимка: данные и шаблон читаются из каталога запуска до вызова Carbone
+ * Рендер формата только из снимка: данные и шаблон читаются из каталога запуска до рендера
  * (нет файла — 410, а не «сервис генерации недоступен»).
  */
 export async function renderFromSnapshot(

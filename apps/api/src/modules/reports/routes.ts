@@ -205,7 +205,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
       let content: Buffer;
       if (run.snapshot) {
         if (run.fileDeleted) throw snapshotGone();
-        // Ошибка сборки (в том числе CARBONE_COMMUNITY) уходит как есть; статус запуска не меняется.
+        // Ошибка сборки (в том числе CARBONE_COMMUNITY и CONVERT_ERROR) уходит как есть; статус запуска не меняется.
         content = await ensureRunFile(deps, run, format, deadline);
       } else {
         if (run.fileDeleted) throw new AppError('GONE', 410, 'файл удалён по сроку хранения');

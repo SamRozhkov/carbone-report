@@ -3,7 +3,9 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from 'vitest';
 import { AppError } from '../src/lib/errors';
 import type { CarboneRenderer } from '../src/deps';
-import { CarboneClient } from '../src/modules/carbone/client';
+import { MIME } from '../src/lib/http';
+import { createEmbeddedRenderer } from '../src/modules/render/renderer';
+import { TemplateRenderError } from '../src/modules/render/pool';
 import {
   createSourceDatabase,
   createTemplate,
@@ -20,34 +22,36 @@ let dsId: string;
 let tplId: string;
 let carboneFails = false;
 let carboneCommunity = false;
-/** Настоящий клиент Carbone для отдельного теста (читает файл шаблона из хранилища сам). */
+/** Встроенный рендерер с поддельным пулом для отдельного теста (читает файл шаблона из хранилища сам). */
 let liveCarbone: CarboneRenderer | null = null;
 
 const COMMUNITY_MESSAGE =
   'в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
 
-/** Настоящий клиент против поддельного Carbone, который отвечает ошибкой Community (как в матрице). */
-const communityCarbone = new CarboneClient({
-  baseUrl: 'http://carbone',
-  fetch: (async (input: RequestInfo | URL) =>
-    String(input).endsWith('/template')
-      ? Response.json({ success: true, data: { templateId: 'community' } })
-      : Response.json(
-          {
-            success: false,
-            error:
-              'Unable to generate the document. Error: Formatter "aggSum" is disabled in the Community Edition. Source: "{d.orders[].total:aggSum}"',
-            code: 'w101',
-          },
-          { status: 500 },
-        )) as typeof fetch,
-});
+const noConvert = async (): Promise<Buffer> => {
+  throw new Error('конвертация не ожидается');
+};
+
+/** Встроенный рендерер, поток которого отвечает ошибкой Community (как в матрице). */
+const communityCarbone = () =>
+  createEmbeddedRenderer({
+    pool: {
+      run: async () => {
+        throw new TemplateRenderError(
+          'Formatter "aggSum" is disabled in the Community Edition. Source: "{d.orders[].total:aggSum}"',
+        );
+      },
+    },
+    handoff: t.deps.renderFiles,
+    convert: noConvert,
+    selfUrl: 'http://api:3000',
+  });
 
 // Поддельный Carbone возвращает JSON того, что ему передали.
 const carbone: CarboneRenderer = {
   async render(tpl, data, opts) {
     if (carboneFails) throw new AppError('CARBONE_ERROR', 502, 'ошибка генерации: boom');
-    if (carboneCommunity) return communityCarbone.render(tpl, data, opts);
+    if (carboneCommunity) return communityCarbone().render(tpl, data, opts);
     if (liveCarbone) return liveCarbone.render(tpl, data, opts);
     return Buffer.from(
       JSON.stringify({
@@ -475,13 +479,12 @@ describe('инструменты админа', () => {
 
 describe('сбой хранилища при чтении шаблона', () => {
   it('preview: не CARBONE_ERROR 502, а 500 INTERNAL с записью в журнал', async () => {
-    const fetchCalls: string[] = [];
-    liveCarbone = new CarboneClient({
-      baseUrl: 'http://carbone',
-      fetch: (async (input: RequestInfo | URL) => {
-        fetchCalls.push(String(input));
-        return Response.json({ success: true, data: { templateId: 'x' } });
-      }) as typeof fetch,
+    const run = vi.fn(async () => Buffer.from('OUT'));
+    liveCarbone = createEmbeddedRenderer({
+      pool: { run },
+      handoff: t.deps.renderFiles,
+      convert: noConvert,
+      selfUrl: 'http://api:3000',
     });
     const cause = Object.assign(new Error('S3: socket hang up'), { name: 'TimeoutError' });
     const read = vi.spyOn(t.deps.storage, 'read').mockRejectedValue(cause);
@@ -496,13 +499,43 @@ describe('сбой хранилища при чтении шаблона', () =>
       expect(r.statusCode).toBe(500);
       expect(r.json().error).toEqual({ code: 'INTERNAL', message: 'внутренняя ошибка сервера' });
       expect(read).toHaveBeenCalled();
-      expect(fetchCalls).toEqual([]);
+      expect(run).not.toHaveBeenCalled();
       expect(logged).toHaveBeenCalledWith(cause);
     } finally {
       liveCarbone = null;
       read.mockRestore();
       logged.mockRestore();
     }
+  });
+});
+
+describe('разовая выдача файла рендера Document Server', () => {
+  const get = (url: string) => t.app.inject({ method: 'GET', url });
+  const put = () => t.deps.renderFiles.put(Buffer.from('PK-report'), 'docx', Date.now() + 60_000);
+
+  it('отдаёт файл один раз с типом шаблона, повторно — 404', async () => {
+    const { id, token } = await put();
+    const r = await get(`/internal/render-files/${id}?t=${encodeURIComponent(token)}`);
+    expect(r.statusCode).toBe(200);
+    expect(r.headers['content-type']).toBe(MIME.docx);
+    expect(r.rawPayload.toString()).toBe('PK-report');
+    const again = await get(`/internal/render-files/${id}?t=${encodeURIComponent(token)}`);
+    expect(again.statusCode).toBe(404);
+    expect(again.json().error.code).toBe('NOT_FOUND');
+  });
+
+  it('чужой токен и запрос без токена — 403, файл остаётся', async () => {
+    const { id, token } = await put();
+    const other = await put();
+    const foreign = await get(`/internal/render-files/${id}?t=${encodeURIComponent(other.token)}`);
+    expect(foreign.statusCode).toBe(403);
+    expect(foreign.json().error.code).toBe('FORBIDDEN');
+    const none = await get(`/internal/render-files/${id}`);
+    expect(none.statusCode).toBe(403);
+    expect(none.json().error.code).toBe('FORBIDDEN');
+    const ok = await get(`/internal/render-files/${id}?t=${encodeURIComponent(token)}`);
+    expect(ok.statusCode).toBe(200);
+    t.deps.renderFiles.remove(other.id);
   });
 });
 

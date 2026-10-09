@@ -7,6 +7,7 @@ import type { RunFileGate } from './lib/run-file-gate';
 import type { Storage } from './lib/storage';
 import type { LdapAuthenticator } from './modules/auth/ldap';
 import type { AgentClient } from './modules/backups/agent-client';
+import type { RenderHandoff } from './modules/render/handoff';
 
 export interface TemplateFileRef {
   id: string;
@@ -48,10 +49,12 @@ export interface AppDeps {
   carbone: CarboneRenderer;
   onlyoffice: OnlyOfficeCommands;
   fetchFile: FileFetcher;
-  /** Общий Redis (кэш Carbone, лимит входа); null — кэш промахивается, лимиты считаются в памяти экземпляра. */
+  /** Общий Redis (лимит входа, режим обслуживания); null — лимиты считаются в памяти экземпляра. */
   redis: Redis | null;
   /** null, если LDAP не настроен (LDAP_ENABLED=false) — вход только по локальному паролю. */
   ldap: LdapAuthenticator | null;
   /** Агент бэкапа (§26.3); null — управление бэкапами в админке выключено. */
   backupAgent: AgentClient | null;
+  /** Разовые файлы рендера для Document Server в памяти этой реплики. */
+  renderFiles: RenderHandoff;
 }

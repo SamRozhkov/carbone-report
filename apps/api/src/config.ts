@@ -1,4 +1,5 @@
 import type { Role } from '@carbone-reports/shared';
+import os from 'node:os';
 import { z } from 'zod';
 import { hasHost, withPassword } from './lib/url-password';
 
@@ -12,7 +13,8 @@ const Env = z
     ONLYOFFICE_JWT_SECRET: z.string().min(32, 'ONLYOFFICE_JWT_SECRET: минимум 32 символа'),
     ONLYOFFICE_INTERNAL_URL: z.url().default('http://onlyoffice'),
     API_INTERNAL_URL: z.url().default('http://api:3000'),
-    CARBONE_URL: z.url().default('http://carbone:4000'),
+    // Адрес этой реплики API для Document Server (разовые ссылки на собранный отчёт); в k8s — IP пода.
+    API_SELF_URL: z.url().default('http://api:3000'),
     REDIS_URL: z.string().default('redis://redis:6379'),
     // Пароли отдельно от URL (чарт Helm): вставляются с кодированием, допустимы любые символы.
     DATABASE_PASSWORD: z.string().optional(),
@@ -24,6 +26,16 @@ const Env = z
       .min(1, 'целое от 1 до 5')
       .max(5, 'целое от 1 до 5')
       .default(1),
+    // Потоки рендера Carbone; пустая строка из .env — «не задано» (min(4, число ядер)).
+    RENDER_WORKERS: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.coerce
+        .number({ error: 'целое от 1 до 16' })
+        .int('целое от 1 до 16')
+        .min(1, 'целое от 1 до 16')
+        .max(16, 'целое от 1 до 16')
+        .optional(),
+    ),
     ADMIN_LOGIN: z.string().optional(),
     ADMIN_PASSWORD: z
       .string()
@@ -170,7 +182,10 @@ export interface Config {
   onlyofficeJwtSecret: Uint8Array;
   onlyofficeInternalUrl: string;
   apiInternalUrl: string;
-  carboneUrl: string;
+  /** Адрес этой реплики для Document Server, без завершающего слэша. */
+  apiSelfUrl: string;
+  /** Число потоков рендера Carbone. */
+  renderWorkers: number;
   redisUrl: string;
   adminLogin?: string;
   adminPassword?: string;
@@ -222,7 +237,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     onlyofficeJwtSecret: enc.encode(e.ONLYOFFICE_JWT_SECRET),
     onlyofficeInternalUrl: e.ONLYOFFICE_INTERNAL_URL.replace(/\/$/, ''),
     apiInternalUrl: e.API_INTERNAL_URL.replace(/\/$/, ''),
-    carboneUrl: e.CARBONE_URL.replace(/\/$/, ''),
+    apiSelfUrl: e.API_SELF_URL.replace(/\/$/, ''),
+    renderWorkers: e.RENDER_WORKERS ?? Math.min(4, os.availableParallelism()),
     redisUrl: withPassword(e.REDIS_URL, e.REDIS_PASSWORD),
     adminLogin: e.ADMIN_LOGIN,
     adminPassword: e.ADMIN_PASSWORD,

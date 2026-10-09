@@ -96,7 +96,7 @@ describe('runFormats', () => {
 });
 
 describe('snapshotTemplateRef', () => {
-  it('кэш Carbone ключуется по запуску; содержимое — копия из снимка', async () => {
+  it('id — по запуску; содержимое — копия из снимка', async () => {
     const file = Buffer.from('копия');
     const ref = snapshotTemplateRef('r1', 'docx', 3, file);
     expect(ref).toMatchObject({ id: 'run:r1', version: 3, ext: 'docx' });

@@ -33,11 +33,20 @@ describe('RenderHandoff', () => {
   });
 
   it('по сроку файл удаляется сам', async () => {
-    vi.useFakeTimers();
+    // Часы настоящие: токен (срок ≤ срока рендера) ещё действителен, а таймер удаления уже сработал.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     h = createRenderHandoff(secret);
     const { id, token } = await h.put(Buffer.from('a'), 'docx', Date.now() + 1_000);
     vi.advanceTimersByTime(1_001);
     expect(await h.take(id, token)).toBe('gone');
+  });
+
+  it('срок токена не позже срока рендера (секунды вниз)', async () => {
+    h = createRenderHandoff(secret);
+    const deadlineAt = Math.floor(Date.now() / 1000) * 1000 + 10_500;
+    const { token } = await h.put(Buffer.from('a'), 'docx', deadlineAt);
+    const payload = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString());
+    expect(payload.exp).toBe(Math.floor(deadlineAt / 1000));
   });
 
   it('remove удаляет файл до выдачи', async () => {

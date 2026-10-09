@@ -93,6 +93,21 @@ describe('createOnlyOfficeConverter', () => {
     });
   });
 
+  it('ответ JSON, но не объект (null, число) — «сервис конвертации недоступен»', async () => {
+    for (const body of ['null', '42']) {
+      const { fn } = fake(new Response(body, { headers: { 'content-type': 'application/json' } }));
+      await expect(
+        createOnlyOfficeConverter({ baseUrl: BASE, secret, fetch: fn })(req()),
+      ).rejects.toMatchObject({ code: 'CONVERT_ERROR', message: 'сервис конвертации недоступен' });
+    }
+  });
+
+  it('запрос к /converter и скачивание — без перехода по редиректам', async () => {
+    const { fn, calls } = fake({ endConvert: true, fileUrl: 'http://x/cache/files/a/output.pdf' });
+    await createOnlyOfficeConverter({ baseUrl: BASE, secret, fetch: fn })(req());
+    expect(calls.map((c) => c.init?.redirect)).toEqual(['error', 'error']);
+  });
+
   it('адрес результата не из /cache/files/ — ошибка, файл не скачивается', async () => {
     const { fn, calls } = fake({ endConvert: true, fileUrl: 'http://evil/other' });
     await expect(

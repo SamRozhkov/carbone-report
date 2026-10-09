@@ -12,10 +12,13 @@ import { createRemoveGate } from './lib/storage-gate';
 import { ensureAdmin } from './modules/auth/bootstrap';
 import { createLdapAuthenticator } from './modules/auth/ldap';
 import { createAgentClient } from './modules/backups/agent-client';
-import { CarboneClient } from './modules/carbone/client';
-import { redisTemplateCache } from './modules/carbone/template-cache';
 import { createSourcePools } from './modules/datasources/pools';
 import { createOnlyOfficeCommands } from './modules/onlyoffice/commands';
+import { createRenderHandoff } from './modules/render/handoff';
+import { createOnlyOfficeConverter } from './modules/render/onlyoffice-convert';
+import { RenderPool } from './modules/render/pool';
+import { createEmbeddedRenderer } from './modules/render/renderer';
+import { renderWorkerUrl } from './modules/render/worker-url';
 import { startCleanupTimer } from './modules/reports/cleanup';
 import { migrateTemplateFiles } from './modules/templates/file-migration';
 
@@ -44,7 +47,31 @@ const storage = await createStorage(config, createRemoveGate(gatePool), console)
 const redis = createRedis(config.redisUrl, {
   warn: (o, m) => console.warn(m, o),
 });
-const carbone = new CarboneClient({ baseUrl: config.carboneUrl, cache: redisTemplateCache(redis) });
+// Встроенный Carbone в worker_threads. Логгер Fastify появится после buildApp:
+// аварии потоков до этого пишем в консоль, потом — в журнал приложения (carbone.log).
+const consoleLog = { error: (o: object, m: string) => console.error(m, o) };
+const worker = renderWorkerUrl();
+const renderPool = new RenderPool({
+  size: config.renderWorkers,
+  workerUrl: worker.url,
+  execArgv: worker.execArgv,
+  onCrash: (err, ctx) =>
+    (carbone.log ?? consoleLog).error(
+      { err, hadTask: ctx?.hadTask, beforeReady: ctx?.beforeReady },
+      'поток рендера завершился аварийно',
+    ),
+});
+const renderFiles = createRenderHandoff(config.appSecret);
+const carbone = createEmbeddedRenderer({
+  pool: renderPool,
+  handoff: renderFiles,
+  convert: createOnlyOfficeConverter({
+    baseUrl: config.onlyofficeInternalUrl,
+    secret: config.onlyofficeJwtSecret,
+  }),
+  selfUrl: config.apiSelfUrl,
+  log: consoleLog,
+});
 const deps: AppDeps = {
   config,
   db,
@@ -60,6 +87,7 @@ const deps: AppDeps = {
   redis,
   ldap: config.ldap ? createLdapAuthenticator(config.ldap, console) : null,
   backupAgent: config.backupAgent ? createAgentClient(config.backupAgent) : null,
+  renderFiles,
 };
 
 await ensureAdmin(deps, console);
@@ -81,6 +109,8 @@ async function shutdown(signal: string) {
   await pool.end();
   await deps.storage.close?.();
   await redis.quit().catch(() => redis.disconnect());
+  await renderPool.destroy();
+  renderFiles.close();
   process.exit(0);
 }
 process.on('SIGTERM', () => void shutdown('SIGTERM'));

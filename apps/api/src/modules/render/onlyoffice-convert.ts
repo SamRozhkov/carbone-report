@@ -50,10 +50,13 @@ export function createOnlyOfficeConverter(opts: {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
         body: JSON.stringify({ ...body, token: await signOnlyOffice(body, opts.secret) }),
+        redirect: 'error',
         signal: req.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      reply = (await res.json()) as typeof reply;
+      const json: unknown = await res.json();
+      if (typeof json !== 'object' || json === null) throw new Error('ответ не объект JSON');
+      reply = json as typeof reply;
     } catch (e) {
       if (req.signal.aborted) throw timeout();
       throw unavailable(e);

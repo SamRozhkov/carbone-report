@@ -1,41 +1,7 @@
-import { randomUUID } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { afterAll, describe, expect, inject, it } from 'vitest';
 import { createRedis } from '../src/lib/redis';
-import { CarboneClient } from '../src/modules/carbone/client';
-import { redisTemplateCache } from '../src/modules/carbone/template-cache';
-import { createTestApp, createTestRedis } from './helpers';
-
-function fakeCarbone() {
-  const counter = { uploads: 0 };
-  const fn = (async (input: RequestInfo | URL) => {
-    if (String(input).endsWith('/template')) {
-      counter.uploads++;
-      return new Response(
-        JSON.stringify({ success: true, data: { templateId: `cid${counter.uploads}` } }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      );
-    }
-    return new Response(Buffer.from('%PDF-1.7 test'), {
-      status: 200,
-      headers: { 'content-type': 'application/pdf' },
-    });
-  }) as typeof fetch;
-  return { fn, counter };
-}
-
-const tpl = () => ({
-  id: randomUUID(),
-  version: 1,
-  ext: 'docx' as const,
-  read: async () => Buffer.from('PK\x03\x04docx'),
-});
-const opts = {
-  convertTo: 'pdf' as const,
-  lang: 'ru',
-  timezone: 'Europe/Moscow',
-  timeoutMs: 5000,
-};
+import { createTestApp } from './helpers';
 
 /** Адрес тестового Redis с другим паролем (`null` — без пароля). */
 function redisUrlWithPassword(password: string | null): string {
@@ -64,49 +30,14 @@ describe('Redis', () => {
     await Promise.all(clients.map((c) => c.quit().catch(() => c.disconnect())));
   });
 
-  it('кэш Carbone общий: два клиента на одном Redis загружают шаблон один раз', async () => {
-    const prefix = `t_${randomUUID()}:`;
-    const a = await createTestRedis(prefix);
-    const b = await createTestRedis(prefix);
-    clients.push(a, b);
-    const { fn, counter } = fakeCarbone();
-    const t = tpl();
-    const c1 = new CarboneClient({ baseUrl: 'http://c', fetch: fn, cache: redisTemplateCache(a) });
-    const c2 = new CarboneClient({ baseUrl: 'http://c', fetch: fn, cache: redisTemplateCache(b) });
-    expect((await c1.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
-    // Запись в кэш идёт в фоне (без await) — ждём появления ключа, но не дольше 2 с.
-    const key = `cr:carbone:tpl:${t.id}`;
-    for (let i = 0; i < 40 && !(await b.exists(key)); i++) {
-      await new Promise((r) => setTimeout(r, 50));
-    }
-    expect((await c2.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
-    expect(counter.uploads).toBe(1);
-    // Ключ лежит по ожидаемому имени со сроком жизни 7 дней.
-    expect(JSON.parse((await a.get(key))!)).toEqual({
-      version: 1,
-      carboneId: 'cid1',
-    });
-    const ttl = await a.ttl(key);
-    expect(ttl).toBeGreaterThan(604800 - 60);
-    expect(ttl).toBeLessThanOrEqual(604800);
-  });
-
-  it('Redis недоступен: рендер проходит быстро, шаблон загружается', async () => {
+  it('Redis недоступен: команды отклоняются быстро, лог не засоряется', async () => {
     const warns: string[] = [];
     const down = createRedis('redis://127.0.0.1:1', { warn: (_o, m) => warns.push(m) });
     clients.push(down);
-    const { fn, counter } = fakeCarbone();
-    const client = new CarboneClient({
-      baseUrl: 'http://c',
-      fetch: fn,
-      cache: redisTemplateCache(down),
-    });
-    const t = tpl();
     const started = Date.now();
-    expect((await client.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
-    expect((await client.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
+    await expect(down.get('k')).rejects.toThrow();
+    await expect(down.get('k')).rejects.toThrow();
     expect(Date.now() - started).toBeLessThan(1500);
-    expect(counter.uploads).toBe(2);
     // Повторные ошибки соединения не засоряют лог.
     await new Promise((r) => setTimeout(r, 300));
     expect(warns.length).toBeLessThanOrEqual(1);
@@ -116,7 +47,7 @@ describe('Redis', () => {
     expect(new URL(inject('redisUrl')).password).toMatch(/^[0-9a-f]{32,}$/);
   });
 
-  it('клиент без пароля: Redis отвечает NOAUTH, кэш считается промахом, рендер проходит', async () => {
+  it('клиент без пароля: Redis отвечает NOAUTH, команды отклоняются', async () => {
     const { redis, firstWarn } = loggedRedis(redisUrlWithPassword(null));
     clients.push(redis);
     // ioredis сообщает об отказе аутентификации событием `error` (проверка готовности
@@ -125,33 +56,15 @@ describe('Redis', () => {
     expect(warn).toBeDefined();
     expect(JSON.stringify(warn!.o)).toContain('NOAUTH');
     await expect(redis.get('k')).rejects.toThrow();
-    const { fn, counter } = fakeCarbone();
-    const client = new CarboneClient({
-      baseUrl: 'http://c',
-      fetch: fn,
-      cache: redisTemplateCache(redis),
-    });
-    const t = tpl();
-    expect((await client.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
-    expect((await client.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
-    expect(counter.uploads).toBe(2);
   });
 
-  it('клиент с неверным паролем: WRONGPASS в журнале, рендер проходит быстро', async () => {
+  it('клиент с неверным паролем: WRONGPASS в журнале, команды отклоняются быстро', async () => {
     const { redis, warns, firstWarn } = loggedRedis(redisUrlWithPassword('0'.repeat(64)));
     clients.push(redis);
-    const { fn, counter } = fakeCarbone();
-    const client = new CarboneClient({
-      baseUrl: 'http://c',
-      fetch: fn,
-      cache: redisTemplateCache(redis),
-    });
-    const t = tpl();
     const started = Date.now();
-    expect((await client.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
-    expect((await client.render(t, {}, opts)).toString()).toBe('%PDF-1.7 test');
+    await expect(redis.get('k')).rejects.toThrow();
+    await expect(redis.get('k')).rejects.toThrow();
     expect(Date.now() - started).toBeLessThan(1500);
-    expect(counter.uploads).toBe(2);
     const warn = await firstWarn();
     expect(warn).toBeDefined();
     expect(warn!.m).toContain('Redis недоступен');

@@ -26,7 +26,8 @@ async function run (c) {
 
 // сравниваем только text / error / errorSource: прочие поля expect (например, textFrom) — метаданные происхождения эталона
 function expected (c) {
-  if (c.deviation) return { text: c.deviation.ours };
+  // deviation.ours — текст сборки или { error } (ошибка вместо текста EE)
+  if (c.deviation) return typeof c.deviation.ours === 'string' ? { text: c.deviation.ours } : { error: c.deviation.ours.error };
   const want = {};
   for (const k of ['text', 'error', 'errorSource']) {
     if (c.expect[k] !== undefined) want[k] = c.expect[k];

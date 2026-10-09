@@ -1,21 +1,4 @@
 {
  "comment": "Случаи, где сборка пока расходится с EE. Каждая задача переноса синтаксиса убирает свои id; к концу плана список пуст.",
- "ids": [
-  "help/totals-set-group",
-  "help/totals-set-sum",
-  "matrix/s1/lookup-in-loop-without-prerelease",
-  "matrix/s1/lookup-prerelease-5-2",
-  "matrix/s4/grouping-via-set-v5-enterprise",
-  "matrix/s5/set-store-value",
-  "matrix/tests2/group-via-set-subtotal-set",
-  "matrix/tests2/group-via-set-table",
-  "matrix/tests2/group-via-set-whole-object",
-  "matrix/tests2/hide-row-hidebegin-at-end-of-prev-row-hideend-at-end-of-row",
-  "matrix/tests2/sum-via-set-accumulator",
-  "matrix/tests2/sum-via-set-accumulator-mul",
-  "matrix/tests2/sum-via-set-accumulator-no-init",
-  "matrix/tests3/set-accumulator-1-item",
-  "matrix/tests3/set-accumulator-init-via-set",
-  "matrix/tests3/set-accumulator-separate-paragraph"
- ]
+ "ids": []
 }

@@ -245,6 +245,11 @@ var extracter = {
           }
           // If it was the second part of the array ("i+1")
           else {
+            // метка [i+1] без парной [i] того же массива (или раньше неё) — ошибка шаблона, а не TypeError
+            if (_res[_uniqueMarkerName] === undefined) {
+              throw new Error('The marker {' + _marker.replace(/^_root\./, '') + '} has no corresponding [i] before it. '
+                + 'Add a tag with [i] on the same array to describe the repeated item.');
+            }
             if (_res[_uniqueMarkerName].position.end === undefined) {
               _res[_uniqueMarkerName].position.end = _markerPos;
               if (_repeater) {
@@ -659,7 +664,9 @@ function findAndSetExactPositionOfArrays (xml, descriptor) {
       // как в Carbone EE: повтор внутри одного текстового узла («[{d.cars[i].brand}, {d.cars[i+1].brand}]») —
       // между метками нет тегов, повторяется только текст (эталон matrix/s1/inline-loop-same-paragraph).
       // findPivot здесь вернул бы конец строки, и повтор поднялся бы до корня документа.
-      if (_subString.indexOf('<') === -1) {
+      // То же, когда метки в одном абзаце, но в разных run (шаблоны OnlyOffice/Word режут текст на run):
+      // повторяется xml между метками целиком — он закрывает и снова открывает те же run (isInlineSlice).
+      if (_subString.indexOf('<') === -1 || isInlineSlice(_subString) === true) {
         descriptor[_objName].position = {start : _roughPosStart, end : _roughPosEnd, endOdd : _roughPosEnd};
         descriptor[_objName].xmlParts.push({obj : _objName, array : 'start', pos : _roughPosStart, posOrigin : _roughPosStart});
         descriptor[_objName].xmlParts.push({obj : _objName, array : 'end'  , pos : _roughPosEnd  , posOrigin : _roughPosEnd });
@@ -680,6 +687,39 @@ function findAndSetExactPositionOfArrays (xml, descriptor) {
     }
   }
   return _oddZones;
+}
+
+/**
+ * Можно ли повторять xml между метками [i] и [i+1] как есть: отрезок внутри одного абзаца, то есть состоит
+ * только из тегов уровня run (DOCX w:r/w:t/w:rPr, ODT text:span, PPTX a:r/a:t/a:rPr; одиночные теги вида
+ * <w:b/> — любые), и каждый тег, закрытый в отрезке, в нём же открыт снова (баланс по имени — ноль).
+ * Пример: «</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">, ».
+ * Прочий xml (абзацы, ячейки, строки, теги тестов апстрима) повторяется как в 3.8.2 — через findPivot.
+ * @param  {String}  xml  отрезок между метками
+ * @return {Boolean}
+ */
+function isInlineSlice (xml) {
+  var _runLevel = { 'w:r' : true, 'w:t' : true, 'w:rPr' : true, 'w:rFonts' : true, 'w:lang' : true, 'text:span' : true, 'a:r' : true, 'a:t' : true, 'a:rPr' : true };
+  var _balance = {};
+  var _regex = /<(\/?)([^\s/>!?]+)[^>]*?(\/?)>/g;
+  var _match;
+  var _hasTag = false;
+  while ((_match = _regex.exec(xml)) !== null) {
+    if (_match[3] === '/') {
+      continue;
+    }
+    if (_runLevel[_match[2]] !== true) {
+      return false;
+    }
+    _hasTag = true;
+    _balance[_match[2]] = (_balance[_match[2]] || 0) + (_match[1] === '/' ? -1 : 1);
+  }
+  for (var _tag in _balance) {
+    if (_balance[_tag] !== 0) {
+      return false;
+    }
+  }
+  return _hasTag;
 }
 
 /**

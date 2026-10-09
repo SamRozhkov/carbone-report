@@ -826,7 +826,8 @@ var parser = {
         throw Error ('Bad Mathematical Expression in "'+mathExpr+'"');
       }
       // accept variable with dashes for example
-      if (/^[0-9\.]/.test(_trimVariable) === false) {
+      // как в Carbone EE: «c.путь» — тоже переменная (add(c.total), эталон help/totals-set-sum)
+      if (/^([0-9\.]|c\.)/.test(_trimVariable) === false) {
         _prevVariable = _operator + _trimVariable + _prevVariable;
         continue;
       }

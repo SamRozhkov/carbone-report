@@ -2,6 +2,7 @@ var extracter = require('./extracter');
 var parser = require('./parser');
 var helper = require('./helper');
 var community = require('./community');
+var set = require('./set');
 
 var builder = {
 
@@ -39,43 +40,71 @@ var builder = {
         if (markers.length === 0) {
           return callback(null, _hasOptionTags === true ? xmlWithoutMarkers : xmlWithoutVariable);
         }
-        parser.preprocessMarkers(markers, variables, function (err, preprocessedMarkers) {
-          var _xmlParts = [];
-          var _xmlResult = '';
-          var _builder;
-          if (options.isDebugActive === true) {
-            options.debugInfo.markers = [...options.debugInfo.markers, ...preprocessedMarkers.map((marker) => '{'+marker.name.replace(/^_root\./, '')+'}' )];
-          }
-          try {
-            var _dynamicDescriptor = extracter.splitMarkers(preprocessedMarkers);
-            var _descriptor = extracter.splitXml(xmlWithoutMarkers, _dynamicDescriptor);
-            _descriptor = extracter.buildSortedHierarchy(_descriptor);
-            _descriptor = extracter.deleteAndMoveNestedParts(_descriptor);
-            var _builder = builder.getBuilderFunction(_descriptor, options.formatters);
-            var _obj = {
-              d : data,
-              c : options.complement
-            };
-            options.stopPropagation = false;
-            _xmlParts = _builder(_obj, options, helper, _builder.builderDictionary);
-            _xmlResult = builder.assembleXmlParts(_xmlParts, 20, _builder.builderDictionary); // TODO -> adapt the depth of the sort according to the maximum depth in _xmlParts
-          }
-          catch (e) {
-            // как в Carbone EE: ошибка отключённой функции заканчивается меткой, где она встретилась
-            // то же для неизвестного форматтера (sourceFormatter)
-            if (e && (e.disabledFormatter || e.sourceFormatter)) {
-              var _source = builder.findDisabledSource(preprocessedMarkers, e.disabledFormatter || e.sourceFormatter);
-              if (_source !== null) {
-                e.message += ' Source: "' + _source + '"';
-              }
+        parser.preprocessMarkers(markers, variables, function (err, allMarkers) {
+          // метки :set выполняются предварительным проходом и ничего не печатают (lib/set.js)
+          var _split = set.extract(allMarkers);
+          var preprocessedMarkers = _split.markers;
+          set.run(_split.setMarkers, data, options, builder.buildXML, function (setErr) {
+            if (setErr) {
+              return callback(setErr, null);
             }
-            return callback(e, null);
-          }
-          return callback(null, _xmlResult);
+            if (preprocessedMarkers.length === 0) {
+              // остались только метки :set — убираем их плейсхолдеры
+              return callback(null, xmlWithoutMarkers.replace(/\uFFFF/g, ''));
+            }
+            builder.buildMarkers(xmlWithoutMarkers, preprocessedMarkers, data, options, callback);
+          });
         });
       });
     });
 
+  },
+
+  /**
+   * Собрать xml по меткам (тело buildXML после разбора меток)
+   */
+  buildMarkers : function (xmlWithoutMarkers, preprocessedMarkers, data, options, callback) {
+    var _xmlParts = [];
+    var _xmlResult = '';
+    var _builder;
+    if (options.isDebugActive === true) {
+      options.debugInfo.markers = [...options.debugInfo.markers, ...preprocessedMarkers.map((marker) => '{'+marker.name.replace(/^_root\./, '')+'}' )];
+    }
+    try {
+      var _dynamicDescriptor = extracter.splitMarkers(preprocessedMarkers);
+      var _descriptor = extracter.splitXml(xmlWithoutMarkers, _dynamicDescriptor);
+      _descriptor = extracter.buildSortedHierarchy(_descriptor);
+      _descriptor = extracter.deleteAndMoveNestedParts(_descriptor);
+      var _builder = builder.getBuilderFunction(_descriptor, options.formatters, options);
+      var _obj = {
+        d : data,
+        c : options.complement
+      };
+      options.stopPropagation = false;
+      _xmlParts = _builder(_obj, options, helper, _builder.builderDictionary);
+      _xmlResult = builder.assembleXmlParts(_xmlParts, 20, _builder.builderDictionary); // TODO -> adapt the depth of the sort according to the maximum depth in _xmlParts
+    }
+    catch (e) {
+      // как в Carbone EE: ошибка отключённой функции заканчивается меткой, где она встретилась
+      // то же для неизвестного форматтера (sourceFormatter)
+      if (e && (e.disabledFormatter || e.sourceFormatter)) {
+        var _source = builder.findDisabledSource(preprocessedMarkers, e.disabledFormatter || e.sourceFormatter);
+        if (_source !== null) {
+          e.message += ' Source: "' + _source + '"';
+        }
+      }
+      // запрещённый путь аргумента (эталон matrix/s1/lookup-in-loop-without-prerelease) — метка, где он встретился
+      else if (e && e.forbiddenPath !== undefined && e.sourceArgument !== undefined) {
+        for (var m = 0; m < preprocessedMarkers.length; m++) {
+          if (preprocessedMarkers[m].name.indexOf(e.sourceArgument) !== -1) {
+            e.message += ' Source: "{' + preprocessedMarkers[m].name.replace(/^_root\./, '') + '}"';
+            break;
+          }
+        }
+      }
+      return callback(e, null);
+    }
+    return callback(null, _xmlResult);
   },
 
   /**
@@ -108,11 +137,19 @@ var builder = {
    *                                                  the property canInjectXML = true
    * @return {String}. Example 'toFixed(int(d.number), 2)'
    */
-  getFormatterString : function (getSafeValue, varName, contextName, formatters, existingFormatters, onlyFormatterWhichInjectXML) {
+  getFormatterString : function (getSafeValue, varName, contextName, formatters, existingFormatters, onlyFormatterWhichInjectXML, options) {
     var _lineOfCodes = [];
 
     function getInjectedVariable (variable) {
       var _injectedArgument = getSafeValue(variable);
+      // как в Carbone EE: «c.путь» без кавычек — значение из complement в момент выполнения (эталон help/totals-set-sum);
+      // data — первый параметр функции сборки, объект { d, c }
+      if (/^c\.[^.]/.test(variable) === true) {
+        if (variable.indexOf('[') !== -1) {
+          return builder.getArgumentPathCode(variable, 'data', variable, contextName, options);
+        }
+        return 'helper.getValueOfPath(data, '+getSafeValue(variable)+')';
+      }
       // как в Carbone EE: путь — только «.x» / «..x»; одиночные точки без имени («.», «..») печатаются как есть
       // (эталон matrix/s4/group-header-detail-rows-nested-filter-by-parent: print(..) → «..»)
       if (/^\.+[^.]/.test(variable) === true) {
@@ -125,6 +162,10 @@ var builder = {
         // (эталоны matrix/tests2/iterator-via-print-i, help/tables-numbering)
         if (_dynamicVariable === 'i') {
           return contextName+'.parentsIndex['+(_nbPoint-1)+']';
+        }
+        // путь с «[…]»: индекс или поиск по ключу (helper.getValueOfArgumentPath)
+        if (_dynamicVariable.indexOf('[') !== -1) {
+          return builder.getArgumentPathCode(_dynamicVariable, contextName+'.parentsData['+(_nbPoint-1)+']', variable, contextName, options);
         }
         _injectedArgument = 'helper.getValueOfPath( '+contextName+'.parentsData['+(_nbPoint-1)+'], '+getSafeValue(_dynamicVariable)+')';
       }
@@ -190,6 +231,32 @@ var builder = {
       _str += '}';
     }
     return _str;
+  },
+
+  /**
+   * Код чтения пути аргумента форматтера с «[…]» («a[1].b», «actors[id=.actorId].name»)
+   * Как в Carbone EE: в «[]» допустимо только неотрицательное целое; поиск по ключу [ключ=.поле] — только с
+   * {o.preReleaseFeatureIn=5002000} и новее (эталоны matrix/s1/lookup-*), иначе ошибка с текстом EE.
+   * @param  {String} path         путь без ведущих точек
+   * @param  {String} baseCode     код объекта, от которого читается путь
+   * @param  {String} argument     аргумент как в метке (для подписи Source)
+   * @param  {String} contextName
+   * @param  {Object} options      опции рендера (preReleaseFeatureIn)
+   * @return {String}
+   */
+  getArgumentPathCode : function (path, baseCode, argument, contextName, options) {
+    var _steps = helper.parseArgumentPath(path);
+    var _lookupAllowed = options !== undefined && options !== null && Number(options.preReleaseFeatureIn) >= 5002000;
+    for (var i = 0; i < _steps.length; i++) {
+      if (_steps[i].index === undefined && _steps[i].attr === undefined && (_steps[i].key === undefined || _lookupAllowed === false)) {
+        var _err = new Error('Forbidden array access in "'+path+'". Only positive integers are allowed in []');
+        _err.forbiddenPath = path;
+        _err.sourceArgument = argument;
+        throw _err;
+      }
+    }
+    // шаги — литерал JSON (только строки и числа из шаблона)
+    return 'helper.getValueOfArgumentPath('+baseCode+', '+JSON.stringify(_steps)+', '+contextName+'.parentsData)';
   },
 
   /**
@@ -512,7 +579,7 @@ var builder = {
    * @param {object} descriptor : data descriptor computed by the analyzer
    * @return {function} f
    */
-  getBuilderFunction : function (descriptor, existingFormatters) {
+  getBuilderFunction : function (descriptor, existingFormatters, options) {
     var that = this;
     // declare an object which will contain all the code (by section) of the generated function
     var _code = {
@@ -798,8 +865,10 @@ var builder = {
           _code.add('main', 'context.isHidden = null;\n');
           _code.add('main', 'context.parentsData = ['+_getSafeVar(_dataObj)+', '+_objParentNames.map(_getSafeVar).join(',')+'];\n');
           // индексы циклов параллельно parentsData (для «.i»): исходная позиция в массиве, фильтр её не сдвигает
+          // строка отброшена фильтром цикла — внутренний __set (lib/set.js) её не записывает
+          _code.add('main', 'context.isRowFiltered = (_strPart.rowShow === false);\n');
           _code.add('main', 'context.parentsIndex = ['+[_dataObj].concat(_objParentNames).map(_getLoopIndexVar).join(', ')+'];\n');
-          _code.add('main', that.getFormatterString(_getSafeValue, '_str', 'context', _formatters, existingFormatters, false));
+          _code.add('main', that.getFormatterString(_getSafeValue, '_str', 'context', _formatters, existingFormatters, false, options));
           // replace null or undefined value by an empty string
           _code.add('main', 'if(_str === null || _str === undefined) {\n');
           _code.add('main', "  _str = '';\n");
@@ -812,7 +881,7 @@ var builder = {
           _code.add('main', "  _str = _str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/[\\u0000-\\u0008]|[\\u000B-\\u000C]|[\\u000E-\\u001F]/g, '');\n");
           _code.add('main', '};\n');
           // insert formatters which can inject XML, so after .replace(/</g, '&lt;') ... etc
-          _code.add('main', that.getFormatterString(_getSafeValue, '_str', 'context', _formatters, existingFormatters, true));
+          _code.add('main', that.getFormatterString(_getSafeValue, '_str', 'context', _formatters, existingFormatters, true, options));
 
           if (_isItemPart === true) {
             // объект после цепочки форматтеров не печатаем («[object Object]»)

@@ -1065,7 +1065,9 @@ describe('Carbone', function () {
         };
         carbone.renderXML('<xml>{d.subObject.id:ifEqual(2, ..otherObj[0].textToPrint)}</xml>', data, function (err, result) {
           helper.assert(err+'', 'null');
-          helper.assert(result, '<xml></xml>');
+          // как в Carbone EE 5 (эталон matrix/s1/lookup-in-loop-without-prerelease: «Only positive integers are allowed in []»):
+          // целый индекс в пути аргумента читается
+          helper.assert(result, '<xml>ddfdf</xml>');
           done();
         });
       });

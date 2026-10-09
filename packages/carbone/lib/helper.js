@@ -202,6 +202,88 @@ var helper = {
   },
 
   /**
+   * Разобрать путь аргумента форматтера с «[…]»: «a[1].b», «actors[id=.actorId].name»
+   * @param  {String} path
+   * @return {Array}  шаги: {attr} | {index} | {key, dots, field} | {key, value} | {} (недопустимое содержимое [])
+   */
+  parseArgumentPath : function (path) {
+    var _steps = [];
+    var _regex = /([^.[\]]+)|\[([^\]]*)\]|(\.)/g;
+    var _match;
+    while ((_match = _regex.exec(path)) !== null) {
+      if (_match[1] !== undefined) {
+        _steps.push({ attr : _match[1] });
+      }
+      else if (_match[2] !== undefined) {
+        var _inside = _match[2].trim();
+        var _key = /^([^=\s]+)\s*=\s*([\s\S]+)$/.exec(_inside);
+        if (/^\d+$/.test(_inside) === true) {
+          _steps.push({ index : parseInt(_inside, 10) });
+        }
+        else if (_key !== null) {
+          var _dots = /^(\.+)([^.][\s\S]*)$/.exec(_key[2].trim());
+          if (_dots !== null) {
+            _steps.push({ key : _key[1], dots : _dots[1].length, field : _dots[2] });
+          }
+          else {
+            _steps.push({ key : _key[1], value : _key[2].trim().replace(/^'([\s\S]*)'$/, '$1') });
+          }
+        }
+        else {
+          _steps.push({});
+        }
+      }
+    }
+    return _steps;
+  },
+
+  /**
+   * Прочитать путь аргумента по шагам parseArgumentPath
+   * @param  {Object} rootObj
+   * @param  {Array}  steps
+   * @param  {Array}  parentsData  context.parentsData (значения ключей «.поле»)
+   * @return {Mixed}  значение или '' (как getValueOfPath для отсутствующего пути)
+   */
+  getValueOfArgumentPath : function (rootObj, steps, parentsData) {
+    var _current = rootObj;
+    for (var i = 0; i < steps.length; i++) {
+      var _step = steps[i];
+      if (!(_current instanceof Object)) {
+        return '';
+      }
+      if (_step.attr !== undefined) {
+        _current = _current[_step.attr];
+      }
+      else if (_step.index !== undefined) {
+        _current = _current[_step.index];
+      }
+      else if (_step.key !== undefined && _current instanceof Array) {
+        var _wanted = _step.value;
+        if (_step.field !== undefined) {
+          var _source = parentsData instanceof Array ? parentsData[_step.dots - 1] : undefined;
+          _wanted = helper.getValueOfPath(_source, _step.field);
+        }
+        var _found;
+        for (var j = 0; j < _current.length; j++) {
+          var _item = _current[j];
+          if (_item instanceof Object && _item[_step.key] !== undefined && String(_item[_step.key]) === String(_wanted)) {
+            _found = _item;
+            break;
+          }
+        }
+        _current = _found;
+      }
+      else {
+        return '';
+      }
+      if (_current === undefined) {
+        return '';
+      }
+    }
+    return _current;
+  },
+
+  /**
    * Scan a directory and all sub-directory
    * It does not return files and directories which start by a point. Example: .trash, .cache, .svn, ...
    * This function is synchrone

@@ -244,3 +244,111 @@ describe('EE: циклы', function () {
     );
   });
 });
+
+describe('EE: set и c.', function () {
+  const cars = {
+    cars: [
+      { brand: 'Лада', qty: 3, ok: true },
+      { brand: 'Тесла', qty: 2, ok: false },
+      { brand: 'Лада', qty: 5, ok: true },
+      { brand: 'БМВ', qty: 1, ok: true }
+    ]
+  };
+  const RURU = { lang: 'ru-ru', timezone: 'Europe/Moscow' };
+  const GROUP = '{d.cars[]:set(c.g[id=.brand].rows[])}\n{c.g[i].id}\n- {c.g[i].rows[i].brand} {c.g[i].rows[i].qty}\n- {c.g[i].rows[i+1].qty}\n{c.g[i+1].id}';
+
+  it(':set сохраняет значение, сам тег ничего не печатает (эталон matrix/s5/set-store-value)', async function () {
+    assert.strictEqual(await text('[{d.v:set(c.x)}{c.x}]', { v: 'stored' }), '[stored]');
+  });
+  it('группировка целых элементов в порядке первого появления (эталоны help/totals-set-group, matrix/tests2/group-via-set-whole-object)', async function () {
+    assert.strictEqual(await text(GROUP, cars), 'Лада\n- Лада 3\n- Лада 5\nТесла\n- Тесла 2\nБМВ\n- БМВ 1');
+  });
+  it('группировка в таблице (эталон matrix/tests2/group-via-set-table)', async function () {
+    const t = '{d.cars[]:set(c.g[id=.brand].rows[])}\n| {c.g[i].id} | |\n| | {c.g[i].rows[i].qty} |\n| | {c.g[i].rows[i+1].qty} |\n| {c.g[i+1].id} | |';
+    assert.strictEqual(await text(t, cars), '| Лада | |\n| | 3 |\n| | 5 |\n| Тесла | |\n| | 2 |\n| БМВ | |\n| | 1 |');
+  });
+  it('rows[].поле — каждый :set добавляет новый элемент (эталон matrix/s4/grouping-via-set-v5-enterprise)', async function () {
+    const t = '{d.cars[].brand:set(c.g[id=.brand].rows[].brand)}{d.cars[].qty:set(c.g[id=.brand].rows[].qty)}\n{c.g[i].id}\n- {c.g[i].rows[i].qty}\n- {c.g[i].rows[i+1].qty}\n{c.g[i+1].id}';
+    assert.strictEqual(await text(t, cars), 'Лада\n- \n- \n- 3\n- 5\nТесла\n- \n- 2\nБМВ\n- \n- 1');
+  });
+  it('накопитель: особенность EE — первый элемент учитывается дважды (эталон help/totals-set-sum)', async function () {
+    const data = Object.assign({ zero: 0 }, cars);
+    assert.strictEqual(await text('{d.zero:set(c.total)}{d.cars[].qty:add(c.total):set(c.total)}Итого: {c.total}', data), 'Итого: 14');
+  });
+  it('накопитель с начальным значением в complement, в отдельном абзаце, из одного элемента', async function () {
+    const opts = Object.assign({ complement: { total: 0 } }, RURU);
+    assert.strictEqual(await text('{d.cars[].qty:add(c.total):set(c.total)}Итого: {c.total}', cars, opts), 'Итого: 14');
+    assert.strictEqual(await text('{d.cars[].qty:add(c.total):set(c.total)}\nИтого: {c.total}', cars, opts), 'Итого: 14');
+    assert.strictEqual(await text('{d.cars[].qty:add(c.total):set(c.total)}Итого: {c.total}', { cars: [{ qty: 7 }] }, opts), 'Итого: 14');
+  });
+  it('накопитель без инициализации — NaN (эталон matrix/tests2/sum-via-set-accumulator-no-init)', async function () {
+    assert.strictEqual(await text('{d.cars[].qty:add(c.total):set(c.total)}Итого: {c.total}', cars), 'Итого: NaN');
+  });
+  it('накопитель с mul(.price) (эталон matrix/tests2/sum-via-set-accumulator-mul)', async function () {
+    const data = { cars: [{ qty: 3, price: 100.5 }, { qty: 1, price: 2000 }, { qty: 2, price: 120 }, { qty: 5, price: 1500 }] };
+    const opts = Object.assign({ complement: { total: 0 } }, RURU);
+    assert.strictEqual(await text('{d.cars[].qty:mul(.price):add(c.total):set(c.total)}Итого: {c.total:formatN(2)}', data, opts), 'Итого: 10,343.00');
+  });
+  it('путь c. с [ключ=.поле] в аргументе — ошибка EE (эталон matrix/tests2/group-via-set-subtotal-set)', async function () {
+    const t = '{d.cars[]:set(c.g[id=.brand].rows[])}{d.cars[].qty:add(c.g[id=.brand].sum):set(c.g[id=.brand].sum)}\n{c.g[i].id}: {c.g[i].sum}\n{c.g[i+1].id}';
+    const msg = await rawError(t, cars);
+    assert.strictEqual(normalizeError(msg), 'Forbidden array access in "c.g[id=.brand].sum". Only positive integers are allowed in []');
+    assert.ok(msg.endsWith(' Source: "{d.cars[i].qty:add(c.g[id=.brand].sum):_setInit(c.g):_setObj(c):_setArr(g):_setObjInArr(id,.brand):_setVal(sum)}"'), msg);
+  });
+  it('вложенный источник d.a[].b[] и источник с [i, фильтр] перебираются', async function () {
+    const data = { a: [{ b: [{ v: 1 }, { v: 2 }] }, { b: [{ v: 4 }] }] };
+    assert.strictEqual(await text('{d.a[].b[].v:set(c.all[])}{c.all[i]}\n{c.all[i+1]}', data), '1\n2\n4');
+    assert.strictEqual(await text('{d.cars[i, ok=true].brand:set(c.ok[])}{c.ok[i]}\n{c.ok[i+1]}', cars), 'Лада\nЛада\nБМВ');
+  });
+  it('пустой массив: накопитель не меняется', async function () {
+    assert.strictEqual(await text('{d.cars[].qty:add(c.total):set(c.total)}[{c.total}]', { cars: [] }, Object.assign({ complement: { total: 0 } }, RU)), '[0]');
+  });
+  it('аргумент c.путь читается из complement', async function () {
+    assert.strictEqual(await text('{d.v:add(c.k)} {d.v:add(c.o.k)}', { v: 1 }, Object.assign({ complement: { k: 2, o: { k: 5 } } }, RU)), '3 6');
+  });
+  it(':set не меняет complement вызывающего', async function () {
+    const complement = { total: 0, o: { a: 1 } };
+    await text('{d.cars[].qty:add(c.total):set(c.total)}{d.v:set(c.o.a)}{c.total}', Object.assign({ v: 9 }, cars), Object.assign({ complement }, RU));
+    assert.deepStrictEqual(complement, { total: 0, o: { a: 1 } });
+  });
+  const movies = { movies: [{ actorId: 2 }, { actorId: 1 }], actors: [{ id: 1, name: 'A1' }, { id: 2, name: 'A2' }] };
+  it('поиск по ключу в аргументе без preReleaseFeatureIn — ошибка (эталон matrix/s1/lookup-in-loop-without-prerelease)', async function () {
+    const msg = await rawError('{d.movies[i].actorId:print(..actors[id=.actorId].name)}\n{d.movies[i+1].actorId}', movies, RURU);
+    assert.strictEqual(normalizeError(msg), 'Forbidden array access in "actors[id=.actorId].name". Only positive integers are allowed in []');
+    assert.ok(msg.endsWith(' Source: "{d.movies[i].actorId:print(..actors[id=.actorId].name)}"'), msg);
+  });
+  it('поиск по ключу с {o.preReleaseFeatureIn=5002000} (эталон matrix/s1/lookup-prerelease-5-2)', async function () {
+    assert.strictEqual(
+      await text('{o.preReleaseFeatureIn=5002000}\n{d.movies[i].actorId:print(..actors[id=.actorId].name)}\n{d.movies[i+1].actorId}', movies, RURU),
+      'A2\nA1'
+    );
+  });
+  it('целочисленный индекс в пути аргумента разрешён', async function () {
+    assert.strictEqual(await text('{d.v:print(.a[1].n)}', { v: 1, a: [{ n: 'x' }, { n: 'y' }] }), 'y');
+  });
+});
+
+describe('EE: решения контроллера по Task 7', function () {
+  const cars = { cars: [{ brand: 'Лада' }, { brand: 'Тесла' }, { brand: 'Лада' }, { brand: 'БМВ' }] };
+  it('повтор внутри одного абзаца, разбитого на несколько run (шаблоны OnlyOffice)', async function () {
+    const raw = '<w:p><w:r><w:t xml:space="preserve">[{d.cars[i].brand}</w:t></w:r><w:r><w:t xml:space="preserve">, {d.cars[i+1].brand}]</w:t></w:r></w:p>';
+    const out = await docxText(await renderBuffer(await buildDocx('<<RAW>>', [raw]), 'docx', cars, RU));
+    assert.strictEqual(out, '[Лада, Тесла, Лада, БМВ, ]');
+  });
+  it('повтор абзацами с несколькими run по-прежнему повторяет абзацы', async function () {
+    const raw = '<w:p><w:r><w:t xml:space="preserve">{d.cars[i].brand}</w:t></w:r><w:r><w:t xml:space="preserve">!</w:t></w:r></w:p>'
+      + '<w:p><w:r><w:t xml:space="preserve">{d.cars[i+1].brand}</w:t></w:r></w:p>';
+    const out = await docxText(await renderBuffer(await buildDocx('<<RAW>>', [raw]), 'docx', cars, RU));
+    assert.strictEqual(out, 'Лада!\nТесла!\nЛада!\nБМВ!');
+  });
+  it('[i+1] без [i] — понятная ошибка шаблона, а не TypeError', async function () {
+    const msg = await error('{d.cars[i+1].brand}', cars);
+    assert.ok(/d\.cars\[i\+1\]\.brand/.test(msg) && !/reading/.test(msg), msg);
+    const msg2 = await error('{d.cars[i].brand}{d.other[i+1].brand}', Object.assign({ other: [] }, cars));
+    assert.ok(!/reading/.test(msg2), msg2);
+  });
+  it('форматтер на элементе-объекте: строка печатается, объект — пусто (поведение EE не проверено)', async function () {
+    assert.strictEqual(await text('{d.cars[i]:print(\'Z\')}\n{d.cars[i+1]}', cars), 'Z\nZ\nZ\nZ');
+    assert.strictEqual(await text('[{d.cars[i]:ifEmpty(\'E\')}]\n{d.cars[i+1]}', cars), '[]\n[]\n[]\n[]');
+  });
+});

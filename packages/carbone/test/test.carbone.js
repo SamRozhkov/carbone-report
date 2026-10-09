@@ -47,7 +47,7 @@ describe('Carbone', function () {
       carbone.reset();
       done();
     });
-    it('should return friday for 20140131 even if no timezone is set', function (done) {
+    it('should parse a naive date as UTC (friday for 20140131) if no timezone is set', function (done) {
       carbone.set({lang : 'fr'});
       carbone.renderXML('<xml> {d.date:formatD(dddd)} </xml>', { date : '20140131 23:45:00'},  function (err, result) {
         helper.assert(err+'', 'null');

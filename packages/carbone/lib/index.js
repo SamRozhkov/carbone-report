@@ -217,6 +217,8 @@ function walkFiles (template, data, options, currentIndex, callback) {
 }
 
 
+var ZIP_EXTENSIONS = ['docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp'];
+
 /**
  * Собирает отчёт из шаблона в памяти. Формат результата совпадает с форматом шаблона;
  * перевод в другой формат в этой сборке не поддерживается (его делает OnlyOffice в API).
@@ -232,34 +234,51 @@ function renderBuffer (template, extension, data, options) {
     var _fail = function (err) {
       reject(err instanceof Error ? err : new Error(String(err)));
     };
+    // Синхронное исключение внутри колбэка цепочки не должно стать uncaught exception — превращаем в отказ промиса
+    var _guard = function (fn) {
+      return function () {
+        try {
+          return fn.apply(null, arguments);
+        }
+        catch (e) {
+          return _fail(e);
+        }
+      };
+    };
     if (!Buffer.isBuffer(template)) {
       return _fail(new Error('renderBuffer: template must be a Buffer'));
     }
-    input.parseOptions(Object.assign({}, options), _fail, function (_options) {
+    if (typeof extension !== 'string' || extension === '') {
+      return _fail(new Error('renderBuffer: extension is required'));
+    }
+    if (ZIP_EXTENSIONS.indexOf(extension) !== -1 && !(template.length >= 2 && template[0] === 0x50 && template[1] === 0x4B)) {
+      return _fail(new Error('renderBuffer: template is not a zip archive (PK signature expected) for extension "' + extension + '"'));
+    }
+    input.parseOptions(Object.assign({}, options), _fail, _guard(function (_options) {
       _options.extension = extension;
-      file.openTemplateBuffer(template, extension, function (err, _template) {
+      file.openTemplateBuffer(template, extension, _guard(function (err, _template) {
         if (err) {
           return _fail(err);
         }
         _template.extension = extension;
-        preprocessor.execute(_template, _options, function (err, _template) {
+        preprocessor.execute(_template, _options, _guard(function (err, _template) {
           if (err) {
             return _fail(err);
           }
-          walkFiles(_template, data, _options, 0, function (err, _report) {
+          walkFiles(_template, data, _options, 0, _guard(function (err, _report) {
             if (err) {
               return _fail(err);
             }
-            file.buildFile(_report, function (err, _result) {
+            file.buildFile(_report, _guard(function (err, _result) {
               if (err) {
                 return _fail(err);
               }
               resolve(Buffer.isBuffer(_result) ? _result : Buffer.from(_result, 'utf8'));
-            });
-          });
-        });
-      });
-    });
+            }));
+          }));
+        }));
+      }));
+    }));
   });
 }
 

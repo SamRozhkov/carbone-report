@@ -62,4 +62,24 @@ describe('renderBuffer', function () {
     const out = await carbone.renderBuffer(tpl, 'docx', { d: '2026-03-08 23:30:00' }, { lang: 'ru', timezone: 'Europe/Moscow' });
     assert.ok((await documentXml(out)).includes('09.03.2026 02:30'));
   });
+
+  it('без extension — отклонённый Promise', async function () {
+    await assert.rejects(carbone.renderBuffer(await docx(p('x')), undefined, {}, {}), /extension is required/);
+  });
+
+  it('zip-расширение без PK-сигнатуры — отклонённый Promise', async function () {
+    await assert.rejects(carbone.renderBuffer(Buffer.from('<xml/>'), 'docx', {}, {}), /not a zip archive/);
+  });
+
+  it('синхронное исключение внутри цепочки — отклонённый Promise, не uncaught exception', async function () {
+    const preprocessor = require('../lib/preprocessor');
+    const original = preprocessor.execute;
+    preprocessor.execute = function () { throw new Error('boom'); };
+    try {
+      await assert.rejects(carbone.renderBuffer(await docx(p('x')), 'docx', {}, {}), /boom/);
+    }
+    finally {
+      preprocessor.execute = original;
+    }
+  });
 });

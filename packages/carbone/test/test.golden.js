@@ -24,8 +24,14 @@ async function run (c) {
   }
 }
 
+// сравниваем только text / error / errorSource: прочие поля expect (например, textFrom) — метаданные происхождения эталона
 function expected (c) {
-  return c.deviation ? { text: c.deviation.ours } : c.expect;
+  if (c.deviation) return { text: c.deviation.ours };
+  const want = {};
+  for (const k of ['text', 'error', 'errorSource']) {
+    if (c.expect[k] !== undefined) want[k] = c.expect[k];
+  }
+  return want;
 }
 
 describe('эталоны EE: харнесс', function () {

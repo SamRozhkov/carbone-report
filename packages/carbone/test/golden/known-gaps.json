@@ -22,18 +22,11 @@
   "matrix/tests2/sum-via-set-accumulator-mul",
   "matrix/tests2/sum-via-set-accumulator-no-init",
   "matrix/tests3/bad-loop-missing-i-1",
-  "matrix/tests3/formatc-m-ll-lang-ru",
-  "matrix/tests3/formatd-ru-dates-lang-ru",
-  "matrix/tests3/ifempty-missing-nested",
-  "matrix/tests3/nbsp-check",
   "matrix/tests3/numbering-in-table-print-i-add-1",
   "matrix/tests3/numbering-print-i-add-1",
   "matrix/tests3/numbering-with-filter",
   "matrix/tests3/set-accumulator-1-item",
   "matrix/tests3/set-accumulator-init-via-set",
-  "matrix/tests3/set-accumulator-separate-paragraph",
-  "matrix/tests3/translations-ru-ru-key-with-lang-ru",
-  "matrix/tests3/translations-with-lang-ru",
-  "matrix/tests3/unclosed-tag"
+  "matrix/tests3/set-accumulator-separate-paragraph"
  ]
 }

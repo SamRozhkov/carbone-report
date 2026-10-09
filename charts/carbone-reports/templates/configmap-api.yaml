@@ -1,0 +1,32 @@
+{{- include "cr.validate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cr.component" (dict "root" . "name" "api") }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+data:
+  # Пароли — не здесь: DATABASE_PASSWORD и REDIS_PASSWORD из Secret API вставляет в URL сам.
+  DATABASE_URL: {{ include "cr.databaseUrl" . | quote }}
+  REDIS_URL: {{ include "cr.redisUrl" . | quote }}
+  CARBONE_URL: {{ include "cr.carboneUrl" . | quote }}
+  ONLYOFFICE_INTERNAL_URL: {{ include "cr.onlyofficeUrl" . | quote }}
+  # По этому адресу Document Server скачивает файлы и шлёт callback.
+  API_INTERNAL_URL: {{ printf "http://%s:3000" (include "cr.component" (dict "root" . "name" "api")) | quote }}
+  BACKUP_AGENT_URL: {{ printf "http://%s:8080" (include "cr.component" (dict "root" . "name" "backup-agent")) | quote }}
+  {{- include "cr.s3Config" . | nindent 2 }}
+  COOKIE_SECURE: {{ .Values.config.cookieSecure | toString | quote }}
+  TRUSTED_PROXY_HOPS: {{ .Values.config.trustedProxyHops | toString | quote }}
+  TZ: {{ .Values.config.tz | quote }}
+  QUERY_TIMEOUT_MS: {{ .Values.config.queryTimeoutMs | toString | quote }}
+  QUERY_MAX_ROWS: {{ .Values.config.queryMaxRows | toString | quote }}
+  RENDER_TIMEOUT_MS: {{ .Values.config.renderTimeoutMs | toString | quote }}
+  REPORT_TIMEOUT_MS: {{ .Values.config.reportTimeoutMs | toString | quote }}
+  REPORT_RETENTION_DAYS: {{ .Values.config.reportRetentionDays | toString | quote }}
+  LDAP_ENABLED: {{ .Values.config.ldap.enabled | toString | quote }}
+  LDAP_URL: {{ .Values.config.ldap.url | quote }}
+  LDAP_BIND_DN: {{ .Values.config.ldap.bindDn | quote }}
+  LDAP_BASE_DN: {{ .Values.config.ldap.baseDn | quote }}
+  LDAP_USER_FILTER: {{ .Values.config.ldap.userFilter | quote }}
+  LDAP_DEFAULT_ROLE: {{ .Values.config.ldap.defaultRole | quote }}
+  LDAP_TLS_REJECT_UNAUTHORIZED: {{ .Values.config.ldap.tlsRejectUnauthorized | toString | quote }}

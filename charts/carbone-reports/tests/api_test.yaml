@@ -1,0 +1,142 @@
+suite: api
+templates:
+  - api.yaml
+  - configmap-api.yaml
+  - secret.yaml
+values:
+  - ../ci/external-values.yaml
+release:
+  name: cr
+  namespace: reports
+tests:
+  - it: Deployment, Service и PDB с именами <fullname>-api
+    template: api.yaml
+    asserts:
+      - hasDocuments: { count: 3 }
+      - equal: { path: metadata.name, value: cr-carbone-reports-api }
+        documentIndex: 0
+      - equal: { path: spec.replicas, value: 2 }
+        documentIndex: 0
+      - equal: { path: spec.strategy.rollingUpdate, value: { maxUnavailable: 0, maxSurge: 1 } }
+        documentIndex: 0
+      - isKind: { of: Service }
+        documentIndex: 1
+      - equal: { path: 'spec.ports[0].port', value: 3000 }
+        documentIndex: 1
+      - isKind: { of: PodDisruptionBudget }
+        documentIndex: 2
+      - equal: { path: spec.minAvailable, value: 1 }
+        documentIndex: 2
+  - it: одна реплика — без PDB (иначе он блокирует drain узла)
+    template: api.yaml
+    set: { api.replicas: 1 }
+    asserts:
+      - hasDocuments: { count: 2 }
+  - it: образ ghcr с тегом appVersion по умолчанию и с image.tag
+    template: api.yaml
+    documentIndex: 0
+    asserts:
+      - equal: { path: 'spec.template.spec.containers[0].image', value: ghcr.io/samrozhkov/carbone-report-api:0.1.0 }
+  - it: image.tag задаёт общий тег
+    template: api.yaml
+    documentIndex: 0
+    set: { image.tag: sha-abc1234 }
+    asserts:
+      - equal: { path: 'spec.template.spec.containers[0].image', value: ghcr.io/samrozhkov/carbone-report-api:sha-abc1234 }
+  - it: пароли — отдельными переменными из Secret; PGPASSWORD в API нет
+    template: api.yaml
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: 'spec.template.spec.containers[0].env'
+          content:
+            name: DATABASE_PASSWORD
+            valueFrom: { secretKeyRef: { name: cr-carbone-reports, key: POSTGRES_PASSWORD } }
+      - contains:
+          path: 'spec.template.spec.containers[0].env'
+          content:
+            name: REDIS_PASSWORD
+            valueFrom: { secretKeyRef: { name: cr-carbone-reports, key: REDIS_PASSWORD } }
+      - contains:
+          path: 'spec.template.spec.containers[0].env'
+          content:
+            name: S3_ACCESS_KEY_ID
+            valueFrom: { secretKeyRef: { name: cr-carbone-reports, key: S3_ACCESS_KEY_ID, optional: true } }
+      - notContains:
+          path: 'spec.template.spec.containers[0].env'
+          content: { name: PGPASSWORD }
+          any: true
+  - it: безопасность api — restricted
+    template: api.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
+      - equal:
+          path: 'spec.template.spec.containers[0].securityContext'
+          value: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+      - contains:
+          path: 'spec.template.spec.containers[0].volumeMounts'
+          content: { name: tmp, mountPath: /tmp }
+      - equal: { path: spec.template.spec.automountServiceAccountToken, value: false }
+  - it: пробы /api/health, startupProbe с запасом на миграции
+    template: api.yaml
+    documentIndex: 0
+    asserts:
+      - equal: { path: 'spec.template.spec.containers[0].startupProbe.httpGet.path', value: /api/health }
+      - equal: { path: 'spec.template.spec.containers[0].startupProbe.failureThreshold', value: 60 }
+      - equal: { path: 'spec.template.spec.containers[0].readinessProbe.httpGet.path', value: /api/health }
+      - equal: { path: 'spec.template.spec.containers[0].livenessProbe.httpGet.path', value: /api/health }
+  - it: CA внешнего Postgres монтируется и указан в DATABASE_URL
+    template: api.yaml
+    documentIndex: 0
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: pg-ca, secret: { secretName: pg-ca, items: [{ key: ca.crt, path: ca.crt }] } }
+      - contains:
+          path: 'spec.template.spec.containers[0].volumeMounts'
+          content: { name: pg-ca, mountPath: /etc/carbone-reports/pg-ca, readOnly: true }
+  - it: ConfigMap api — адреса, URL без пароля, S3, доверенные прокси
+    template: configmap-api.yaml
+    asserts:
+      - equal:
+          path: data.DATABASE_URL
+          value: postgres://app@pg.example.com:5432/app?sslmode=verify-full&uselibpqcompat=true&sslrootcert=/etc/carbone-reports/pg-ca/ca.crt
+      - equal: { path: data.REDIS_URL, value: 'rediss://redis.example.com:6380' }
+      - equal: { path: data.CARBONE_URL, value: 'http://cr-carbone-reports-carbone:4000' }
+      - equal: { path: data.ONLYOFFICE_INTERNAL_URL, value: 'http://cr-carbone-reports-onlyoffice' }
+      - equal: { path: data.API_INTERNAL_URL, value: 'http://cr-carbone-reports-api:3000' }
+      - equal: { path: data.BACKUP_AGENT_URL, value: 'http://cr-carbone-reports-backup-agent:8080' }
+      - equal: { path: data.STORAGE_BACKEND, value: s3 }
+      - equal: { path: data.S3_ENDPOINT, value: 'https://storage.example.com' }
+      - equal: { path: data.S3_BUCKET, value: reports }
+      - equal: { path: data.S3_FORCE_PATH_STYLE, value: 'true' }
+      - equal: { path: data.S3_CREATE_BUCKET, value: 'false' }
+      - equal: { path: data.TRUSTED_PROXY_HOPS, value: '2' }
+      - equal: { path: data.COOKIE_SECURE, value: 'true' }
+      - notExists: { path: data.PGHOST }
+      - notExists: { path: data.PGSSLMODE }
+  - it: sslMode disable — без uselibpqcompat и sslrootcert
+    template: configmap-api.yaml
+    set: { externalDatabase.sslMode: disable, externalDatabase.caSecret.name: '' }
+    asserts:
+      - equal: { path: data.DATABASE_URL, value: 'postgres://app@pg.example.com:5432/app?sslmode=disable' }
+  - it: аннотации checksum/config и checksum/secret — sha256 (изменение настроек перезапускает поды)
+    template: api.yaml
+    documentIndex: 0
+    asserts:
+      - matchRegex: { path: 'spec.template.metadata.annotations["checksum/config"]', pattern: '^[a-f0-9]{64}$' }
+      - matchRegex: { path: 'spec.template.metadata.annotations["checksum/secret"]', pattern: '^[a-f0-9]{64}$' }
+  - it: existingSecret — без checksum/secret, ссылки на чужой Secret
+    template: api.yaml
+    documentIndex: 0
+    set: { existingSecret: my-secret }
+    asserts:
+      - notExists: { path: 'spec.template.metadata.annotations["checksum/secret"]' }
+      - contains:
+          path: 'spec.template.spec.containers[0].env'
+          content:
+            name: APP_SECRET
+            valueFrom: { secretKeyRef: { name: my-secret, key: APP_SECRET } }

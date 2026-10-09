@@ -1,0 +1,26 @@
+ingress:
+  host: reports.example.com
+  className: nginx
+  tls:
+    secretName: reports-tls
+secrets:
+  appSecret: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  encryptionKey: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+  onlyofficeJwtSecret: oooooooooooooooooooooooooooooooooooooooo
+  adminLogin: admin
+  adminPassword: admin-password
+  postgresPassword: 'p@ss/w:rd#%'
+  redisPassword: redis-password
+  backupAgentToken: tttttttttttttttttttttttttttttttttttttttt
+externalDatabase:
+  host: pg.example.com
+  sslMode: verify-full
+  caSecret:
+    name: pg-ca
+externalRedis:
+  url: rediss://redis.example.com:6380
+externalS3:
+  endpoint: https://storage.example.com
+  bucket: reports
+  forcePathStyle: true
+  rcloneProvider: Other

@@ -1,0 +1,46 @@
+suite: проверки значений
+templates:
+  - configmap-api.yaml
+values:
+  - ../ci/external-values.yaml
+tests:
+  - it: Ingress без хоста
+    set: { ingress.host: '' }
+    asserts:
+      - failedTemplate: { errorMessage: 'ingress.host: задайте хост (например reports.example.com) или ingress.enabled=false' }
+  - it: нет ни встроенного, ни внешнего Postgres
+    set: { externalDatabase.host: '' }
+    asserts:
+      - failedTemplate: { errorMessage: 'externalDatabase.host: задайте внешний Postgres или postgresql.enabled=true' }
+  - it: неверный sslMode
+    set: { externalDatabase.sslMode: prefer }
+    asserts:
+      - failedTemplate: { errorMessage: 'externalDatabase.sslMode: disable, require, verify-ca или verify-full' }
+  - it: нет Redis
+    set: { externalRedis.url: '' }
+    asserts:
+      - failedTemplate: { errorMessage: 'externalRedis.url: задайте внешний Redis (redis://host:6379, без пароля) или redis.enabled=true' }
+  - it: нет S3
+    set: { externalS3.bucket: '' }
+    asserts:
+      - failedTemplate: { errorMessage: 'externalS3.bucket: задайте бакет внешнего S3 или s3.enabled=true' }
+  - it: выключен Carbone без адреса
+    set: { carbone.enabled: false }
+    asserts:
+      - failedTemplate: { errorMessage: 'carbone.url: задайте адрес внешнего Carbone или carbone.enabled=true' }
+  - it: выключен OnlyOffice без адреса
+    set: { onlyoffice.enabled: false }
+    asserts:
+      - failedTemplate: { errorMessage: 'onlyoffice.internalUrl: задайте адрес Document Server или onlyoffice.enabled=true' }
+  - it: trustedProxyHops вне 1–5
+    set: { config.trustedProxyHops: 0 }
+    asserts:
+      - failedTemplate: { errorMessage: 'config.trustedProxyHops: целое от 1 до 5' }
+  - it: встроенный Postgres не поддерживает verify-ca и verify-full без CA
+    set:
+      postgresql.enabled: true
+      externalDatabase.host: ''
+      externalDatabase.sslMode: verify-full
+      externalDatabase.caSecret.name: ''
+    asserts:
+      - failedTemplate: { errorMessage: 'externalDatabase.caSecret.name: для sslMode verify-ca и verify-full задайте Secret с CA (скрипты бэкапа проверяют сертификат)' }

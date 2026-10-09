@@ -1,0 +1,64 @@
+suite: web и Ingress
+templates:
+  - web.yaml
+  - ingress.yaml
+values:
+  - ../ci/external-values.yaml
+release:
+  name: cr
+  namespace: reports
+tests:
+  - it: web — режим http, полные имена api и onlyoffice
+    template: web.yaml
+    documentIndex: 0
+    asserts:
+      - equal: { path: spec.replicas, value: 2 }
+      - equal: { path: 'spec.template.spec.containers[0].image', value: ghcr.io/samrozhkov/carbone-report-web:0.1.0 }
+      - contains: { path: 'spec.template.spec.containers[0].env', content: { name: NGINX_MODE, value: http } }
+      - contains:
+          path: 'spec.template.spec.containers[0].env'
+          content: { name: API_UPSTREAM, value: 'http://cr-carbone-reports-api.reports.svc.cluster.local:3000' }
+      - contains:
+          path: 'spec.template.spec.containers[0].env'
+          content: { name: ONLYOFFICE_UPSTREAM, value: 'http://cr-carbone-reports-onlyoffice.reports.svc.cluster.local' }
+  - it: clusterDomain меняет полные имена
+    template: web.yaml
+    documentIndex: 0
+    set: { clusterDomain: corp.local }
+    asserts:
+      - contains:
+          path: 'spec.template.spec.containers[0].env'
+          content: { name: API_UPSTREAM, value: 'http://cr-carbone-reports-api.reports.svc.corp.local:3000' }
+  - it: внешний OnlyOffice — web проксирует на onlyoffice.internalUrl
+    template: web.yaml
+    documentIndex: 0
+    set: { onlyoffice.enabled: false, onlyoffice.internalUrl: 'http://docs.example.com' }
+    asserts:
+      - contains:
+          path: 'spec.template.spec.containers[0].env'
+          content: { name: ONLYOFFICE_UPSTREAM, value: 'http://docs.example.com' }
+  - it: Service web :80
+    template: web.yaml
+    documentIndex: 1
+    asserts:
+      - isKind: { of: Service }
+      - equal: { path: 'spec.ports[0].port', value: 80 }
+  - it: Ingress — хост, класс, TLS, всё на web:80
+    template: ingress.yaml
+    asserts:
+      - equal: { path: spec.ingressClassName, value: nginx }
+      - equal: { path: 'spec.rules[0].host', value: reports.example.com }
+      - equal:
+          path: 'spec.rules[0].http.paths[0]'
+          value: { path: /, pathType: Prefix, backend: { service: { name: cr-carbone-reports-web, port: { number: 80 } } } }
+      - equal: { path: spec.tls, value: [{ hosts: [reports.example.com], secretName: reports-tls }] }
+  - it: без tls.secretName — Ingress без TLS
+    template: ingress.yaml
+    set: { ingress.tls.secretName: '' }
+    asserts:
+      - notExists: { path: spec.tls }
+  - it: ingress.enabled=false — Ingress нет
+    template: ingress.yaml
+    set: { ingress.enabled: false }
+    asserts:
+      - hasDocuments: { count: 0 }

@@ -1,0 +1,11 @@
+carbone-reports {{ .Chart.AppVersion }} (образы: {{ default .Chart.AppVersion .Values.image.tag }}) установлен в {{ .Release.Namespace }}.
+{{- if .Values.ingress.enabled }}
+
+Адрес: {{ if .Values.ingress.tls.secretName }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}/
+{{- else }}
+
+Ingress выключен. Проверка: kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "cr.component" (dict "root" . "name" "web") }} 8080:80
+{{- end }}
+
+Вход: логин из ADMIN_LOGIN ({{ if .Values.existingSecret }}Secret {{ .Values.existingSecret }}{{ else }}secrets.adminLogin{{ end }}).
+Бэкапы — на томе {{ include "cr.component" (dict "root" . "name" "backups") }} в этом же кластере: копии вне кластера — средствами кластера (снапшоты тома, Velero).

@@ -1,0 +1,68 @@
+{{- $name := include "cr.component" (dict "root" . "name" "web") }}
+{{- $oo := ternary (printf "http://%s" (include "cr.fqdn" (dict "root" . "name" "onlyoffice"))) .Values.onlyoffice.internalUrl .Values.onlyoffice.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels:
+      {{- include "cr.selectorLabels" (dict "root" . "component" "web") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cr.selectorLabels" (dict "root" . "component" "web") | nindent 8 }}
+      {{- with .Values.web.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "cr.podDefaults" . | nindent 6 }}
+      containers:
+        - name: web
+          image: {{ include "cr.image" (dict "root" . "name" "web") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            # TLS завершает Ingress: nginx слушает только 80 (§27.2).
+            - name: NGINX_MODE
+              value: http
+            - name: API_UPSTREAM
+              value: {{ printf "http://%s:3000" (include "cr.fqdn" (dict "root" . "name" "api")) | quote }}
+            - name: ONLYOFFICE_UPSTREAM
+              value: {{ $oo | quote }}
+            {{- with .Values.web.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 20
+          {{- with .Values.web.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- include "cr.scheduling" .Values.web | nindent 6 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  selector:
+    {{- include "cr.selectorLabels" (dict "root" . "component" "web") | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

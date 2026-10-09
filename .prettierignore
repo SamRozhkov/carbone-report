@@ -4,3 +4,4 @@ apps/api/drizzle/
 dist/
 node_modules/
 docs/
+charts/

@@ -1,0 +1,11 @@
+apiVersion: v2
+name: carbone-reports
+description: Отчёты Carbone с веб-интерфейсом и редактором шаблонов OnlyOffice
+type: application
+# На тег vX.Y.Z CI публикует чарт с version и appVersion X.Y.Z (§27.8).
+version: 0.1.0
+appVersion: '0.1.0'
+kubeVersion: '>=1.27.0-0'
+home: https://github.com/SamRozhkov/carbone-report
+sources:
+  - https://github.com/SamRozhkov/carbone-report

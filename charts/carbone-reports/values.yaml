@@ -1,0 +1,215 @@
+# Значения чарта carbone-reports (спецификация §27). «Обязательно» — без значения helm install
+# остановится с ошибкой, называющей это значение.
+
+nameOverride: ''
+fullnameOverride: ''
+# Домен кластера: web обращается к api и onlyoffice по полным именам сервисов
+# (резолвер nginx не применяет домены поиска).
+clusterDomain: cluster.local
+
+image:
+  registry: ghcr.io/samrozhkov
+  # Общий тег образов api, web и backup; пусто — appVersion чарта. Отдельного тега у агента нет:
+  # он накатывает миграции из своего образа, версии api и агента должны совпадать.
+  tag: ''
+  pullPolicy: IfNotPresent
+# Пакеты GHCR приватные, пока их не сделали публичными: [{ name: ghcr-pull }].
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ''
+  # IRSA (S3 без ключей): eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role>
+  annotations: {}
+
+# Готовый Secret с ключами из таблицы README («Kubernetes (Helm)»). Задан — secrets.* не используются.
+existingSecret: ''
+secrets:
+  # Обязательно, не короче 32 символов.
+  appSecret: ''
+  # Обязательно: 32 байта в base64 (openssl rand -base64 32).
+  encryptionKey: ''
+  # Обязательно, не короче 32 символов.
+  onlyofficeJwtSecret: ''
+  # Обязательно: первый администратор (создаётся, пока в базе нет пользователей).
+  adminLogin: ''
+  # Обязательно, не короче 8 символов.
+  adminPassword: ''
+  # Обязательно: пароль пользователя Postgres (встроенного или внешнего); любые символы.
+  postgresPassword: ''
+  # Обязательно: пароль Redis. Для встроенного Redis — только шестнадцатеричные символы (openssl rand -hex 32).
+  redisPassword: ''
+  # Обязательно, не короче 32 символов: токен агента бэкапа.
+  backupAgentToken: ''
+  # Встроенный s3 — обязательно оба (A-Z, a-z, 0-9 и . _ ~ + / = -). Внешний — оба или ни одного (IRSA).
+  s3AccessKeyId: ''
+  s3SecretAccessKey: ''
+  # Пароль привязки LDAP (config.ldap.bindDn).
+  ldapBindPassword: ''
+
+config:
+  tz: Europe/Moscow
+  queryTimeoutMs: 30000
+  queryMaxRows: 100000
+  renderTimeoutMs: 120000
+  reportTimeoutMs: 120000
+  reportRetentionDays: 30
+  # Прокси перед API: Ingress и nginx образа web (1–5).
+  trustedProxyHops: 2
+  # Cookie сессии только по HTTPS. false — лишь для пробной установки без TLS.
+  cookieSecure: true
+  ldap:
+    enabled: false
+    url: ''
+    bindDn: ''
+    baseDn: ''
+    userFilter: '(uid=%s)'
+    defaultRole: user
+    tlsRejectUnauthorized: true
+
+ingress:
+  enabled: true
+  className: ''
+  # Обязательно при ingress.enabled: например reports.example.com.
+  host: ''
+  # ingress-nginx — без этих аннотаций не работает загрузка в OnlyOffice:
+  #   nginx.ingress.kubernetes.io/proxy-body-size: 100m
+  #   nginx.ingress.kubernetes.io/proxy-read-timeout: '300'
+  #   nginx.ingress.kubernetes.io/proxy-send-timeout: '300'
+  annotations: {}
+  tls:
+    # Secret с сертификатом (cert-manager или свой). Пусто — Ingress без TLS.
+    secretName: ''
+
+web:
+  replicas: 2
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 256Mi }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
+
+api:
+  replicas: 2
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { memory: 1Gi }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
+
+carbone:
+  enabled: true
+  image: carbone/carbone-ee:full-5.15.3-fonts
+  # При carbone.enabled=false — адрес внешнего Carbone, например http://carbone.example:4000.
+  url: ''
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 2Gi }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
+
+onlyoffice:
+  enabled: true
+  image: onlyoffice/documentserver:9.4.0.1
+  # При onlyoffice.enabled=false — адрес Document Server изнутри кластера.
+  internalUrl: ''
+  persistence:
+    size: 10Gi
+    storageClass: ''
+  resources:
+    requests: { cpu: 500m, memory: 2Gi }
+    limits: { memory: 4Gi }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
+
+backup:
+  cron: '0 3 * * *'
+  keep: 14
+  # Срок каждого шага бэкапа, секунды.
+  timeout: 3600
+  persistence:
+    # Том с бэкапами не удаляется при helm uninstall (helm.sh/resource-policy: keep).
+    size: 20Gi
+    storageClass: ''
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 1Gi }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
+
+# Встроенный Postgres — для пробной установки; для прода — externalDatabase.
+postgresql:
+  enabled: false
+  image: postgres:17-alpine
+  database: app
+  user: app
+  persistence:
+    size: 10Gi
+    storageClass: ''
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 1Gi }
+externalDatabase:
+  # Обязательно при postgresql.enabled=false.
+  host: ''
+  port: 5432
+  database: app
+  user: app
+  # disable | require | verify-ca | verify-full — как в libpq.
+  sslMode: disable
+  # Secret с сертификатом CA для verify-ca/verify-full (частный CA).
+  caSecret:
+    name: ''
+    key: ca.crt
+
+# Встроенный Redis (без персистентности, как в compose).
+redis:
+  enabled: false
+  image: redis:7-alpine
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 256Mi }
+externalRedis:
+  # Обязательно при redis.enabled=false: URL без пароля (пароль — secrets.redisPassword), rediss:// — TLS.
+  url: ''
+
+# Встроенный S3 (SeaweedFS).
+s3:
+  enabled: false
+  image: chrislusf/seaweedfs:4.48
+  bucket: carbone-reports
+  persistence:
+    size: 20Gi
+    storageClass: ''
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 1Gi }
+externalS3:
+  # Пусто — AWS S3 по региону.
+  endpoint: ''
+  region: us-east-1
+  # Обязательно при s3.enabled=false.
+  bucket: ''
+  forcePathStyle: false
+  createBucket: false
+  # Провайдер rclone для S3-совместимого хранилища (Other, Minio, Ceph…). Пусто: с endpoint — SeaweedFS, без — AWS.
+  rcloneProvider: ''
+
+networkPolicy:
+  # Повторяет внутренние сети compose (§27.6).
+  enabled: false

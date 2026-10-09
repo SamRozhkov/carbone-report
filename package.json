@@ -12,6 +12,7 @@
     "typecheck": "pnpm -r typecheck && pnpm typecheck:scripts",
     "typecheck:scripts": "tsc -p scripts/tsconfig.json",
     "lint": "eslint .",
+    "chart:check": "sh scripts/chart.sh all",
     "format": "prettier --write .",
     "stack:prod": "docker compose up -d --build",
     "stack:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",

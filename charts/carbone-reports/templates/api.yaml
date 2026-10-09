@@ -1,0 +1,137 @@
+{{- $name := include "cr.component" (dict "root" . "name" "api") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  # Новая реплика готова раньше, чем уходит старая; миграции — под блокировкой при старте (§27.4).
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "cr.selectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cr.selectorLabels" (dict "root" . "component" "api") | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap-api.yaml") . | sha256sum }}
+        {{- if not .Values.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.api.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "cr.podDefaults" . | nindent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: {{ include "cr.image" (dict "root" . "name" "api") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: {{ $name }}
+          env:
+            {{- include "cr.secretEnv" (dict "root" . "env" "APP_SECRET" "key" "APP_SECRET") | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "ENCRYPTION_KEY" "key" "ENCRYPTION_KEY") | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "ONLYOFFICE_JWT_SECRET" "key" "ONLYOFFICE_JWT_SECRET") | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "ADMIN_LOGIN" "key" "ADMIN_LOGIN") | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "ADMIN_PASSWORD" "key" "ADMIN_PASSWORD") | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "DATABASE_PASSWORD" "key" "POSTGRES_PASSWORD") | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "REDIS_PASSWORD" "key" "REDIS_PASSWORD") | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "BACKUP_AGENT_TOKEN" "key" "BACKUP_AGENT_TOKEN") | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "S3_ACCESS_KEY_ID" "key" "S3_ACCESS_KEY_ID" "optional" true) | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "S3_SECRET_ACCESS_KEY" "key" "S3_SECRET_ACCESS_KEY" "optional" true) | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "LDAP_BIND_PASSWORD" "key" "LDAP_BIND_PASSWORD" "optional" true) | nindent 12 }}
+            {{- with .Values.api.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          # /api/health не трогает базу и доступен в режиме обслуживания: восстановление не делает поды NotReady.
+          startupProbe:
+            httpGet: { path: /api/health, port: http }
+            # До 5 минут: миграции и ожидание блокировки старта, пока мигрирует другая реплика.
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if include "cr.db.caPath" . }}
+            - name: pg-ca
+              mountPath: /etc/carbone-reports/pg-ca
+              readOnly: true
+            {{- end }}
+          {{- with .Values.api.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if include "cr.db.caPath" . }}
+        - name: pg-ca
+          secret:
+            secretName: {{ .Values.externalDatabase.caSecret.name }}
+            items:
+              - key: {{ .Values.externalDatabase.caSecret.key }}
+                path: {{ .Values.externalDatabase.caSecret.key }}
+        {{- end }}
+      {{- include "cr.scheduling" .Values.api | nindent 6 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  selector:
+    {{- include "cr.selectorLabels" (dict "root" . "component" "api") | nindent 4 }}
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+{{- if gt (int .Values.api.replicas) 1 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "cr.selectorLabels" (dict "root" . "component" "api") | nindent 6 }}
+{{- end }}

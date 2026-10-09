@@ -31,8 +31,8 @@ spec:
         {{- end }}
     spec:
       {{- include "cr.podDefaults" . | nindent 6 }}
-      # При остановке API ждёт активные отчёты до renderTimeoutMs + 5 с (округлено вверх до секунд), плюс запас 30 с на закрытие.
-      terminationGracePeriodSeconds: {{ add (div (add .Values.config.renderTimeoutMs 999) 1000) 30 }}
+      # При остановке API ждёт незавершённые запросы до max(renderTimeoutMs, reportTimeoutMs) + 5 с; здесь — тот же срок в секундах (вверх) плюс 30 с на закрытие.
+      terminationGracePeriodSeconds: {{ add (div (add (max .Values.config.renderTimeoutMs .Values.config.reportTimeoutMs) 999) 1000) 30 }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

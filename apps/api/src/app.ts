@@ -70,6 +70,20 @@ export function createFastify(hops: number = TRUSTED_PROXY_HOPS) {
 export type App = ReturnType<typeof createFastify>;
 
 /** health — startup/liveness; ready — readiness: при остановке пода отвечает 503, чтобы балансировщик снял реплику. */
+/** Не ждём при остановке: пробы и разовые ссылки, по которым Document Server забирает файл ждущего отчёта. */
+const UNTRACKED = /^\/(api\/health|api\/ready|internal\/render-files\/)/;
+
+/** Считает незавершённые запросы для дренажа: отчёт на этапе SQL тоже должен успеть до закрытия. */
+export function registerInflight(app: App, deps: Pick<AppDeps, 'drain'>): void {
+  const requests = deps.drain?.requests;
+  if (!requests) return;
+  app.addHook('onRequest', async (req, reply) => {
+    if (UNTRACKED.test(req.url)) return;
+    requests.enter();
+    reply.raw.once('close', () => requests.leave());
+  });
+}
+
 export function registerHealthRoutes(app: App, deps: Pick<AppDeps, 'drain'>): void {
   app.get('/api/health', async () => ({ status: 'ok' }));
   app.get('/api/ready', async (_req, reply) =>
@@ -82,6 +96,7 @@ export function registerHealthRoutes(app: App, deps: Pick<AppDeps, 'drain'>): vo
 export async function buildApp(deps: AppDeps): Promise<App> {
   const app = createFastify(deps.config.trustedProxyHops);
   registerErrorHandler(app);
+  registerInflight(app, deps);
   // До всех маршрутов: во время восстановления из бэкапа API отвечает 503 (§26.3).
   registerMaintenance(app, deps);
   await app.register(cookie);

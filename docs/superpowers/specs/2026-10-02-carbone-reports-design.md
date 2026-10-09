@@ -1221,8 +1221,8 @@ scripts/smoke.ts            сквозная проверка работающе
 
 ### 29.1 Дренаж при остановке
 - Рендерер считает активные отчёты (сборка и конвертация) и даёт `idle(): Promise<void>` — выполняется, когда активных нет.
-- По SIGTERM/SIGINT API: (1) ставит флаг остановки — `GET /api/ready` отвечает 503 `{ status: 'draining' }`, `GET /api/health` по-прежнему 200; (2) продолжает обслуживать запросы, в том числе `/internal/render-files` для Document Server; (3) ждёт `idle()` не дольше `RENDER_TIMEOUT_MS + 5 с`; (4) затем закрывает Fastify, пулы и потоки, как сейчас. Новые отчёты во время дренажа принимаются (балансировщик снимает под по readiness; принятый отчёт укладывается в тот же срок).
-- `GET /api/ready` — 200 `{ status: 'ok' }`, доступен в режиме обслуживания. Чарт: `readinessProbe` → `/api/ready`; `startupProbe` и `livenessProbe` остаются на `/api/health`. `terminationGracePeriodSeconds` у api = `ceil(renderTimeoutMs / 1000) + 30`.
+- По SIGTERM/SIGINT API: (1) ставит флаг остановки — `GET /api/ready` отвечает 503 `{ status: 'draining' }`, `GET /api/health` по-прежнему 200; (2) продолжает обслуживать запросы, в том числе `/internal/render-files` для Document Server; (3) ждёт `idle()` рендерера и завершения всех HTTP-запросов, кроме проб и `/internal/render-files` (отчёт на этапе SQL рендер ещё не начал), не дольше `max(RENDER_TIMEOUT_MS, REPORT_TIMEOUT_MS) + 5 с`; (4) затем закрывает Fastify, пулы и потоки, как сейчас. Новые отчёты во время дренажа принимаются (балансировщик снимает под по readiness; принятый отчёт укладывается в тот же срок).
+- `GET /api/ready` — 200 `{ status: 'ok' }`, доступен в режиме обслуживания. Чарт: `readinessProbe` → `/api/ready`; `startupProbe` и `livenessProbe` остаются на `/api/health`. `terminationGracePeriodSeconds` у api = `ceil(max(renderTimeoutMs, reportTimeoutMs) / 1000) + 30`; в compose у api `stop_grace_period: 130s` и `depends_on: onlyoffice` (Document Server останавливается после api).
 - Журнал: начало дренажа (число активных отчётов) и итог (дождались / истёк срок).
 
 ### 29.2 Режим обслуживания

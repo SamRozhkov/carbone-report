@@ -6,6 +6,7 @@ import type { AppDeps } from './deps';
 import { fetchFile } from './lib/fetch-file';
 import { createRedis } from './lib/redis';
 import { drainAndClose } from './lib/drain';
+import { createInflight } from './lib/inflight';
 import { createStorage } from './lib/create-storage';
 import { withStartupLock } from './lib/startup-lock';
 import { createRunFileGate } from './lib/run-file-gate';
@@ -79,8 +80,9 @@ const carbone = createEmbeddedRenderer({
   selfUrl: config.apiSelfUrl,
   log: { info: (o, m) => appLog.info(o, m) },
 });
-// Остановка: /api/ready отвечает 503, пока доделываются активные отчёты.
+// Остановка: /api/ready отвечает 503, пока доделываются незавершённые запросы и отчёты.
 let draining = false;
+const requests = createInflight();
 const deps: AppDeps = {
   config,
   db,
@@ -97,7 +99,7 @@ const deps: AppDeps = {
   ldap: config.ldap ? createLdapAuthenticator(config.ldap, console) : null,
   backupAgent: config.backupAgent ? createAgentClient(config.backupAgent) : null,
   renderFiles,
-  drain: { isDraining: () => draining },
+  drain: { isDraining: () => draining, requests },
 };
 
 await ensureAdmin(deps, console);
@@ -125,9 +127,10 @@ async function shutdown(signal: string) {
   draining = true;
   stopCleanup();
   await drainAndClose({
-    idle: carbone.idle,
-    active: carbone.active,
-    timeoutMs: config.renderTimeoutMs + 5000,
+    // Запрос отчёта на этапе SQL рендер ещё не начал: ждём и запросы, и рендеры.
+    idle: () => Promise.all([requests.idle(), carbone.idle()]).then(() => undefined),
+    active: () => requests.active() + carbone.active(),
+    timeoutMs: Math.max(config.renderTimeoutMs, config.reportTimeoutMs) + 5000,
     close: () => app.close(),
     log: app.log,
   });

@@ -41,7 +41,7 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
       target: prod
-    # При остановке API ждёт активные отчёты до RENDER_TIMEOUT_MS + 5 с (по умолчанию 125 с).
+    # При остановке API ждёт незавершённые запросы до max(RENDER_TIMEOUT_MS, REPORT_TIMEOUT_MS) + 5 с (по умолчанию 125 с).
     stop_grace_period: 130s
     environment:
       DATABASE_URL: postgres://app:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}@postgres:5432/app
@@ -97,6 +97,9 @@ services:
         condition: service_healthy
       s3:
         condition: service_healthy
+      # Останавливается после api: отчёты, которые api доделывает при остановке, ещё конвертируются.
+      onlyoffice:
+        condition: service_started
     restart: unless-stopped
     logging: *logging
 

@@ -1,3 +1,4 @@
+import type { Inflight } from './lib/inflight';
 import type { OutputFormat, TemplateExt } from '@carbone-reports/shared';
 import type { Redis } from 'ioredis';
 import type pg from 'pg';
@@ -58,5 +59,6 @@ export interface AppDeps {
   /** Разовые файлы рендера для Document Server в памяти этой реплики. */
   renderFiles: RenderHandoff;
   /** Состояние остановки процесса; нет — считается «не останавливаемся». */
-  drain?: { isDraining(): boolean };
+  /** requests — незавершённые HTTP-запросы (кроме проб и разовых ссылок рендера): их ждёт остановка. */
+  drain?: { isDraining(): boolean; requests?: Inflight };
 }

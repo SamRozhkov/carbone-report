@@ -129,9 +129,15 @@ tests:
   - it: terminationGracePeriodSeconds округляет срок вверх
     template: api.yaml
     documentIndex: 0
-    set: { config.renderTimeoutMs: 30500 }
+    set: { config.renderTimeoutMs: 30500, config.reportTimeoutMs: 30500 }
     asserts:
       - equal: { path: spec.template.spec.terminationGracePeriodSeconds, value: 61 }
+  - it: terminationGracePeriodSeconds берёт больший из сроков рендера и отчёта
+    template: api.yaml
+    documentIndex: 0
+    set: { config.reportTimeoutMs: 200000 }
+    asserts:
+      - equal: { path: spec.template.spec.terminationGracePeriodSeconds, value: 230 }
   - it: startup/liveness — /api/health, readiness — /api/ready, startupProbe с запасом на миграции
     template: api.yaml
     documentIndex: 0

@@ -251,6 +251,10 @@ function assign (state, segments, value, parents) {
     if (_isLast === true) {
       if (_index === -1) {
         _array.push(value);
+        // ключ добавленного элемента — в индекс, чтобы повторный ключ нашёл и заменил его, а не добавил дубль
+        if (value instanceof Object && value[_seg.key] !== undefined) {
+          registerKey(state, _array, _seg.key, value[_seg.key], _array.length - 1);
+        }
       }
       else {
         _array[_index] = value;

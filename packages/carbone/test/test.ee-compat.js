@@ -393,6 +393,11 @@ describe('EE: Task 7, доработка 1 (граничные случаи)', f
     const t = '{d.items[]:set(c.g[id=.k].rows[])}{c.g[i].id}\n{c.g[i+1].id}\n{c.g[0].rows[1].v}';
     assert.strictEqual(await text(t, data), '1\n2\nb');
   });
+  it('ключ в последнем сегменте c.g[id=.id]: повторный ключ заменяет элемент, 1 и \'1\' — один элемент', async function () {
+    const t = '{d.items[]:set(c.g[id=.id])}{c.g[i].id}-{c.g[i].v}\n{c.g[i+1].id}';
+    assert.strictEqual(await text(t, { items: [{ id: 1, v: 'a' }, { id: 1, v: 'b' }] }), '1-b');
+    assert.strictEqual(await text(t, { items: [{ id: 1, v: 'a' }, { id: '1', v: 'b' }, { id: 2, v: 'c' }] }), '1-b\n2-c');
+  });
   it('группировка 10 000 разных ключей — быстро (индекс ключей, а не линейный поиск)', async function () {
     this.timeout(20000);
     const items = [];

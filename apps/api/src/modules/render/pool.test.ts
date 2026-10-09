@@ -154,4 +154,29 @@ describe('RenderPool', () => {
     expect(crashes[0]).toMatchObject({ code: 'ERR_WORKER_OUT_OF_MEMORY' });
     expect((await pool.run(job('echo'), soon(5000))).toString()).toBe('tpl!');
   }, 20_000);
+
+  it('поток не прислал ready за readyTimeoutMs — onCrash(beforeReady) и пересоздание', async () => {
+    const crashes: { err: unknown; ctx?: { hadTask: boolean; beforeReady: boolean } }[] = [];
+    pool = new RenderPool({
+      size: 1,
+      workerUrl: new URL('./test-workers/never-ready.mjs', import.meta.url),
+      readyTimeoutMs: 100,
+      onCrash: (err, ctx) => crashes.push({ err, ctx }),
+    });
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(crashes.length).toBeGreaterThanOrEqual(1);
+    expect(crashes[0]!.ctx).toEqual({ hadTask: false, beforeReady: true });
+    expect(String((crashes[0]!.err as Error).message)).toContain('не готов');
+  });
+
+  it('задача в пуле из never-ready отклоняется по своему сроку', async () => {
+    pool = new RenderPool({
+      size: 1,
+      workerUrl: new URL('./test-workers/never-ready.mjs', import.meta.url),
+      readyTimeoutMs: 100,
+    });
+    const t0 = Date.now();
+    await expect(pool.run(job('echo'), soon(300))).rejects.toThrow(RenderTimeoutError);
+    expect(Date.now() - t0).toBeLessThan(1000);
+  });
 });

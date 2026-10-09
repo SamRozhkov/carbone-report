@@ -12,6 +12,8 @@ export interface RenderPoolOptions {
   workerUrl: URL;
   execArgv?: string[];
   resourceLimits?: ResourceLimits;
+  /** Срок до сигнала ready от потока, мс (по умолчанию 30 000); иначе поток пересоздаётся. */
+  readyTimeoutMs?: number;
   /** Аварийное завершение потока (в том числе без задачи) — для журнала. */
   onCrash?(err: unknown, ctx?: { hadTask: boolean; beforeReady: boolean }): void;
 }
@@ -54,10 +56,13 @@ interface Slot {
   /** Текущая задержка пересоздания, мс (0 — без задержки). */
   backoff: number;
   respawnTimer?: NodeJS.Timeout;
+  /** Срок готовности потока: снимается по ready, retire и destroy. */
+  readyTimer?: NodeJS.Timeout;
 }
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30_000;
+const READY_TIMEOUT_MS = 30_000;
 
 /**
  * Пул worker_threads для Carbone: сборка отчёта не блокирует основной поток API.
@@ -115,6 +120,7 @@ export class RenderPool {
     this.slots = [];
     for (const s of slots) {
       clearTimeout(s.respawnTimer);
+      clearTimeout(s.readyTimer);
       if (s.task) {
         clearTimeout(s.task.timer);
         s.task.reject(stopped);
@@ -131,8 +137,17 @@ export class RenderPool {
     });
     slot.worker = worker;
     slot.ready = false;
+    const readyMs = this.opts.readyTimeoutMs ?? READY_TIMEOUT_MS;
+    clearTimeout(slot.readyTimer);
+    slot.readyTimer = setTimeout(() => {
+      // Только если слот всё ещё держит тот же поток, не приславший ready.
+      if (slot.worker === worker && !slot.ready) {
+        this.crash(slot, new Error(`поток рендера не готов за ${readyMs} мс`));
+      }
+    }, readyMs);
     worker.on('message', (m: Reply) => {
       if ('ready' in m) {
+        clearTimeout(slot.readyTimer);
         slot.ready = true;
         slot.backoff = 0;
         this.dispatch();
@@ -220,6 +235,7 @@ export class RenderPool {
     const worker = slot.worker;
     slot.worker = null;
     slot.ready = false;
+    clearTimeout(slot.readyTimer);
     if (!worker) return;
     worker.removeAllListeners();
     worker.on('error', () => {});

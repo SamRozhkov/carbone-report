@@ -1,0 +1,117 @@
+{{- $name := include "cr.component" (dict "root" . "name" "backup-agent") }}
+{{- $pvc := include "cr.component" (dict "root" . "name" "backups") }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $pvc }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup-agent
+  annotations:
+    # Бэкапы переживают helm uninstall: том удаляется только вручную.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.backup.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.backup.persistence.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup-agent
+spec:
+  # Один агент и том RWO: Recreate не даёт двум агентам держать /backups одновременно (§27.5).
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "cr.selectorLabels" (dict "root" . "component" "backup-agent") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cr.selectorLabels" (dict "root" . "component" "backup-agent") | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap-backup-agent.yaml") . | sha256sum }}
+        {{- if not .Values.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.backup.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "cr.podDefaults" . | nindent 6 }}
+      containers:
+        - name: backup-agent
+          image: {{ include "cr.image" (dict "root" . "name" "backup") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [agent]
+          envFrom:
+            - configMapRef:
+                name: {{ $name }}
+          env:
+            {{- include "cr.secretEnv" (dict "root" . "env" "PGPASSWORD" "key" "POSTGRES_PASSWORD") | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "REDIS_PASSWORD" "key" "REDIS_PASSWORD") | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "BACKUP_AGENT_TOKEN" "key" "BACKUP_AGENT_TOKEN") | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "S3_ACCESS_KEY_ID" "key" "S3_ACCESS_KEY_ID" "optional" true) | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "S3_SECRET_ACCESS_KEY" "key" "S3_SECRET_ACCESS_KEY" "optional" true) | nindent 12 }}
+            {{- with .Values.backup.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: backups
+              mountPath: /backups
+            {{- if include "cr.db.caPath" . }}
+            - name: pg-ca
+              mountPath: /etc/carbone-reports/pg-ca
+              readOnly: true
+            {{- end }}
+          {{- with .Values.backup.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: backups
+          persistentVolumeClaim:
+            claimName: {{ $pvc }}
+        {{- if include "cr.db.caPath" . }}
+        - name: pg-ca
+          secret:
+            secretName: {{ .Values.externalDatabase.caSecret.name }}
+            items:
+              - key: {{ .Values.externalDatabase.caSecret.key }}
+                path: {{ .Values.externalDatabase.caSecret.key }}
+        {{- end }}
+      {{- include "cr.scheduling" .Values.backup | nindent 6 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup-agent
+spec:
+  selector:
+    {{- include "cr.selectorLabels" (dict "root" . "component" "backup-agent") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

@@ -1,0 +1,56 @@
+suite: Carbone и OnlyOffice
+templates:
+  - carbone.yaml
+  - onlyoffice.yaml
+  - secret.yaml
+values:
+  - ../ci/external-values.yaml
+release:
+  name: cr
+tests:
+  - it: Carbone — образ из values, :4000, кэш шаблонов в emptyDir
+    template: carbone.yaml
+    documentIndex: 0
+    asserts:
+      - equal: { path: 'spec.template.spec.containers[0].image', value: carbone/carbone-ee:full-5.15.3-fonts }
+      - equal: { path: 'spec.template.spec.containers[0].ports[0].containerPort', value: 4000 }
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: templates, emptyDir: {} }
+  - it: carbone.enabled=false — ничего не создаётся
+    template: carbone.yaml
+    set: { carbone.enabled: false, carbone.url: 'http://carbone.example:4000' }
+    asserts:
+      - hasDocuments: { count: 0 }
+  - it: OnlyOffice — StatefulSet из одной реплики, JWT из Secret, один PVC для Data и lib
+    template: onlyoffice.yaml
+    documentIndex: 0
+    asserts:
+      - isKind: { of: StatefulSet }
+      - equal: { path: spec.replicas, value: 1 }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: JWT_SECRET
+            valueFrom: { secretKeyRef: { name: cr-carbone-reports, key: ONLYOFFICE_JWT_SECRET } }
+      - contains: { path: 'spec.template.spec.containers[0].env', content: { name: JWT_ENABLED, value: 'true' } }
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: { name: data, mountPath: /var/www/onlyoffice/Data, subPath: Data }
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: { name: data, mountPath: /var/lib/onlyoffice, subPath: lib }
+      - equal: { path: 'spec.volumeClaimTemplates[0].spec.resources.requests.storage', value: 10Gi }
+      - equal: { path: 'spec.template.spec.containers[0].startupProbe.httpGet.path', value: /healthcheck }
+      - equal: { path: 'spec.template.spec.containers[0].startupProbe.failureThreshold', value: 30 }
+  - it: Service onlyoffice :80
+    template: onlyoffice.yaml
+    documentIndex: 1
+    asserts:
+      - equal: { path: metadata.name, value: cr-carbone-reports-onlyoffice }
+      - equal: { path: 'spec.ports[0].port', value: 80 }
+  - it: onlyoffice.enabled=false — ничего не создаётся
+    template: onlyoffice.yaml
+    set: { onlyoffice.enabled: false, onlyoffice.internalUrl: 'http://docs.example.com' }
+    asserts:
+      - hasDocuments: { count: 0 }

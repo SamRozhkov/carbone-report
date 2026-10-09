@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cr.component" (dict "root" . "name" "backup-agent") }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+data:
+  {{- include "cr.s3Config" . | nindent 2 }}
+  {{- if and (not .Values.s3.enabled) .Values.externalS3.rcloneProvider }}
+  S3_RCLONE_PROVIDER: {{ .Values.externalS3.rcloneProvider | quote }}
+  {{- end }}
+  REDIS_URL: {{ include "cr.redisUrl" . | quote }}
+  # libpq (pg_dump, psql) и пул агента читают одни и те же PG* (§27.5); пароль — PGPASSWORD из Secret.
+  PGHOST: {{ include "cr.db.host" . | quote }}
+  PGPORT: {{ include "cr.db.port" . | quote }}
+  PGUSER: {{ include "cr.db.user" . | quote }}
+  PGDATABASE: {{ include "cr.db.name" . | quote }}
+  PGSSLMODE: {{ include "cr.db.sslMode" . | quote }}
+  {{- with include "cr.db.caPath" . }}
+  PGSSLROOTCERT: {{ . | quote }}
+  {{- end }}
+  BACKUP_CRON: {{ .Values.backup.cron | quote }}
+  BACKUP_KEEP: {{ .Values.backup.keep | toString | quote }}
+  BACKUP_TIMEOUT: {{ .Values.backup.timeout | toString | quote }}
+  TZ: {{ .Values.config.tz | quote }}

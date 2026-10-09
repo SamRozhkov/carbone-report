@@ -1,0 +1,80 @@
+suite: агент бэкапа
+templates:
+  - backup-agent.yaml
+  - configmap-backup-agent.yaml
+  - secret.yaml
+values:
+  - ../ci/external-values.yaml
+release:
+  name: cr
+tests:
+  - it: PVC бэкапов переживает helm uninstall; размер и класс из values
+    template: backup-agent.yaml
+    documentIndex: 0
+    set: { backup.persistence.storageClass: fast, backup.persistence.size: 50Gi }
+    asserts:
+      - isKind: { of: PersistentVolumeClaim }
+      - equal: { path: metadata.name, value: cr-carbone-reports-backups }
+      - equal: { path: 'metadata.annotations["helm.sh/resource-policy"]', value: keep }
+      - equal: { path: spec.accessModes, value: [ReadWriteOnce] }
+      - equal: { path: spec.storageClassName, value: fast }
+      - equal: { path: spec.resources.requests.storage, value: 50Gi }
+  - it: Deployment — одна реплика, Recreate, режим agent, том /backups
+    template: backup-agent.yaml
+    documentIndex: 1
+    asserts:
+      - isKind: { of: Deployment }
+      - equal: { path: spec.replicas, value: 1 }
+      - equal: { path: spec.strategy, value: { type: Recreate } }
+      - equal: { path: 'spec.template.spec.containers[0].image', value: ghcr.io/samrozhkov/carbone-report-backup:0.1.0 }
+      - equal: { path: 'spec.template.spec.containers[0].args', value: [agent] }
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: { name: backups, mountPath: /backups }
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: backups, persistentVolumeClaim: { claimName: cr-carbone-reports-backups } }
+      - equal: { path: 'spec.template.spec.containers[0].readinessProbe.httpGet.path', value: /health }
+  - it: пароль базы — PGPASSWORD (у агента нет источников данных), токен и пароль Redis из Secret
+    template: backup-agent.yaml
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGPASSWORD
+            valueFrom: { secretKeyRef: { name: cr-carbone-reports, key: POSTGRES_PASSWORD } }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: BACKUP_AGENT_TOKEN
+            valueFrom: { secretKeyRef: { name: cr-carbone-reports, key: BACKUP_AGENT_TOKEN } }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDIS_PASSWORD
+            valueFrom: { secretKeyRef: { name: cr-carbone-reports, key: REDIS_PASSWORD } }
+  - it: Service агента :8080
+    template: backup-agent.yaml
+    documentIndex: 2
+    asserts:
+      - isKind: { of: Service }
+      - equal: { path: metadata.name, value: cr-carbone-reports-backup-agent }
+      - equal: { path: 'spec.ports[0].port', value: 8080 }
+  - it: ConfigMap агента — PG*, SSL, S3 c провайдером rclone, расписание; слушает 0.0.0.0
+    template: configmap-backup-agent.yaml
+    asserts:
+      - equal: { path: data.PGHOST, value: pg.example.com }
+      - equal: { path: data.PGPORT, value: '5432' }
+      - equal: { path: data.PGUSER, value: app }
+      - equal: { path: data.PGDATABASE, value: app }
+      - equal: { path: data.PGSSLMODE, value: verify-full }
+      - equal: { path: data.PGSSLROOTCERT, value: /etc/carbone-reports/pg-ca/ca.crt }
+      - equal: { path: data.REDIS_URL, value: 'rediss://redis.example.com:6380' }
+      - equal: { path: data.S3_RCLONE_PROVIDER, value: Other }
+      - equal: { path: data.S3_BUCKET, value: reports }
+      - equal: { path: data.BACKUP_CRON, value: '0 3 * * *' }
+      - equal: { path: data.BACKUP_KEEP, value: '14' }
+      - equal: { path: data.BACKUP_TIMEOUT, value: '3600' }
+      - notExists: { path: data.BACKUP_AGENT_HOST }
+      - notExists: { path: data.DATABASE_URL }

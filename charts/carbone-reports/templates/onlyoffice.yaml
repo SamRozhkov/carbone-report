@@ -1,0 +1,104 @@
+{{- if .Values.onlyoffice.enabled }}
+{{- $name := include "cr.component" (dict "root" . "name" "onlyoffice") }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice
+spec:
+  # Document Server хранит состояние редактирования локально и не масштабируется.
+  replicas: 1
+  serviceName: {{ $name }}
+  selector:
+    matchLabels:
+      {{- include "cr.selectorLabels" (dict "root" . "component" "onlyoffice") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cr.selectorLabels" (dict "root" . "component" "onlyoffice") | nindent 8 }}
+      annotations:
+        {{- if not .Values.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.onlyoffice.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "cr.podDefaults" . | nindent 6 }}
+      containers:
+        - name: onlyoffice
+          image: {{ .Values.onlyoffice.image }}
+          env:
+            - name: JWT_ENABLED
+              value: 'true'
+            {{- include "cr.secretEnv" (dict "root" . "env" "JWT_SECRET" "key" "ONLYOFFICE_JWT_SECRET") | nindent 12 }}
+            - name: JWT_HEADER
+              value: Authorization
+            # API в той же частной сети кластера.
+            - name: ALLOW_PRIVATE_IP_ADDRESS
+              value: 'true'
+            {{- with .Values.onlyoffice.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 80
+          # Первый старт — около двух минут.
+          startupProbe:
+            httpGet: { path: /healthcheck, port: http }
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: { path: /healthcheck, port: http }
+            periodSeconds: 15
+          livenessProbe:
+            httpGet: { path: /healthcheck, port: http }
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/www/onlyoffice/Data
+              subPath: Data
+            - name: data
+              mountPath: /var/lib/onlyoffice
+              subPath: lib
+            - name: logs
+              mountPath: /var/log/onlyoffice
+          {{- with .Values.onlyoffice.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: logs
+          emptyDir: {}
+      {{- include "cr.scheduling" .Values.onlyoffice | nindent 6 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.onlyoffice.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.onlyoffice.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: onlyoffice
+spec:
+  selector:
+    {{- include "cr.selectorLabels" (dict "root" . "component" "onlyoffice") | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+{{- end }}

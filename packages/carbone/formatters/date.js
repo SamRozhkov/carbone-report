@@ -1,5 +1,13 @@
 var dayjs = require('dayjs');
 
+// Плагины dayjs нужны и при отдельной загрузке этого модуля (extend идемпотентен)
+dayjs.extend(require('dayjs/plugin/advancedFormat'));
+dayjs.extend(require('dayjs/plugin/localizedFormat'));
+dayjs.extend(require('dayjs/plugin/customParseFormat'));
+dayjs.extend(require('dayjs/plugin/utc'));
+dayjs.extend(require('dayjs/plugin/isoWeek'));
+dayjs.extend(require('dayjs/plugin/timezone'));
+
 
 /**
  * Format dates. It takes an output date pattern as an argument. Date patterns are available on [this section](#date-formats).
@@ -173,7 +181,8 @@ function convDate (d, patternIn, patternOut) {
 
 
 /**
- * Convert old MomentJS format to DayJS format
+ * Строка без смещения разбирается как UTC (как в Carbone EE): результат не зависит от часового пояса процесса.
+ * Смещение или Z в строке, метки X/x остаются абсолютными. Вывод — в this.timezone (formatD).
  *
  * @private
  * @param      {string}  d          not undefined/null date
@@ -182,13 +191,10 @@ function convDate (d, patternIn, patternOut) {
  */
 function parse (d, patternIn) {
   // if the date is already parsed
-  if (typeof(d) === 'object' && d.isValid) {
+  if (typeof(d) === 'object' && d !== null && d.isValid) {
     return d;
   }
-  if (!patternIn) {
-    return dayjs(d + '');
-  }
-  return dayjs(d, patternIn);
+  return patternIn ? dayjs.utc(d, patternIn) : dayjs.utc(d + '');
 }
 
 

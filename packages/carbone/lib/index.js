@@ -101,9 +101,6 @@ var carbone = {
    *                          'currencySource'   : currency of data, 'EUR'
    *                          'currencyTarget' : default target currency when the formatter convCurr is used without target
    *                          'currencyRates'  : rates, based on EUR { EUR : 1, USD : 1.14 }
-   *                          'hardRefresh'  : (default: false) if true, LibreOffice is used to render and refresh the content of the report at the end of Carbone process
-   *                          'renderPrefix' : If defined, it returns a path instead of a buffer, and it adds this prefix in the filename
-   *                                           The filename will contains also the report name URL Encoded
    *                       }
    * @param {Function}     callbackRaw(err, buffer, reportName) : Function called after generation with the result
    */
@@ -152,6 +149,8 @@ var carbone = {
       });
     });
   },
+
+  renderBuffer : renderBuffer,
 
   /**
    * Определить расширение шаблона по пути
@@ -217,6 +216,52 @@ function walkFiles (template, data, options, currentIndex, callback) {
   }
 }
 
+
+/**
+ * Собирает отчёт из шаблона в памяти. Формат результата совпадает с форматом шаблона;
+ * перевод в другой формат в этой сборке не поддерживается (его делает OnlyOffice в API).
+ * @param {Buffer} template содержимое файла шаблона
+ * @param {String} extension расширение шаблона: docx, xlsx, odt, ods, pptx, xml, html…
+ * @param {*} data данные отчёта (d.)
+ * @param {Object} [options] lang, timezone, complement, translations, currencySource, currencyTarget, currencyRates
+ * @returns {Promise<Buffer>}
+ */
+function renderBuffer (template, extension, data, options) {
+  return new Promise(function (resolve, reject) {
+    // Ошибки Carbone бывают строками — приводим к Error с тем же текстом
+    var _fail = function (err) {
+      reject(err instanceof Error ? err : new Error(String(err)));
+    };
+    if (!Buffer.isBuffer(template)) {
+      return _fail(new Error('renderBuffer: template must be a Buffer'));
+    }
+    input.parseOptions(Object.assign({}, options), _fail, function (_options) {
+      _options.extension = extension;
+      file.openTemplateBuffer(template, extension, function (err, _template) {
+        if (err) {
+          return _fail(err);
+        }
+        _template.extension = extension;
+        preprocessor.execute(_template, _options, function (err, _template) {
+          if (err) {
+            return _fail(err);
+          }
+          walkFiles(_template, data, _options, 0, function (err, _report) {
+            if (err) {
+              return _fail(err);
+            }
+            file.buildFile(_report, function (err, _result) {
+              if (err) {
+                return _fail(err);
+              }
+              resolve(Buffer.isBuffer(_result) ? _result : Buffer.from(_result, 'utf8'));
+            });
+          });
+        });
+      });
+    });
+  });
+}
 
 // add default formatters
 carbone.addFormatters(require('../formatters/array.js'));

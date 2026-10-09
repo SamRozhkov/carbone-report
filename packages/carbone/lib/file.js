@@ -51,6 +51,15 @@ var file = {
    * @param  {Function} callback(err, files)  files is an array of files ['name':'filename', 'buffer':Buffer]
    */
   unzip : function (filePath, callback) {
+    // Защита от двойного вызова callback (zip-бомба, ошибка yauzl после end и т.п.)
+    var _done = false;
+    function finish (err, result) {
+      if (_done) {
+        return;
+      }
+      _done = true;
+      callback(err, result);
+    }
     var _unzippedFiles = [];
     var totalUncompressed = 0;
     var _unzipFn = yauzl.open;
@@ -59,13 +68,13 @@ var file = {
     }
     _unzipFn(filePath, {lazyEntries : true, decodeStrings : true, validateEntrySizes: true}, function (err, zipfile) {
       if (err) {
-        return callback(err);
+        return finish(err);
       }
       zipfile.on('end', function () {
         zipfile.close();
-        return callback(null, _unzippedFiles);
+        return finish(null, _unzippedFiles);
       });
-      zipfile.on('error', callback);
+      zipfile.on('error', finish);
       zipfile.readEntry();
       zipfile.on('entry', function (entry) {
         var _unzippedFile = {
@@ -75,7 +84,7 @@ var file = {
         _unzippedFiles.push(_unzippedFile);
         totalUncompressed +=  entry.uncompressedSize || 0;;
         if (totalUncompressed > params.maxTemplateUncompressedSize) {
-          return callback(new Error('ZIP rejected: total expanded size too large'));
+          return finish(new Error('ZIP rejected: total expanded size too large'));
         }
         if (/\/$/.test(entry.fileName)) {
           // directory file names end with '/'
@@ -85,7 +94,7 @@ var file = {
           zipfile.openReadStream(entry, function (err, readStream) {
             if (err) {
               zipfile.close();
-              return callback(err);
+              return finish(err);
             }
             var buffers = [];
             readStream.on('data', function (data) {
@@ -97,7 +106,7 @@ var file = {
             });
             readStream.on('error', function (err) {
               zipfile.close();
-              return callback(err);
+              return finish(err);
             });
           });
         }
@@ -133,6 +142,27 @@ var file = {
       }
     }
     _zip.end();
+  },
+
+  /**
+   * Шаблон из буфера (без файловой системы): zip — через unzipFiles, иначе один текстовый файл.
+   * @param  {Buffer}   buffer     содержимое шаблона
+   * @param  {String}   extension  расширение шаблона
+   * @param  {Function} callback(err, template)
+   */
+  openTemplateBuffer : function (buffer, extension, callback) {
+    var _template = {
+      isZipped   : false,
+      filename   : 'template.' + extension,
+      embeddings : [],
+      files      : []
+    };
+    if (buffer.length >= 2 && buffer[0] === 0x50 && buffer[1] === 0x4B) {
+      _template.isZipped = true;
+      return unzipFiles(_template, [{ name : '', data : buffer }], callback);
+    }
+    _template.files.push({ name : _template.filename, data : buffer.toString('utf8'), isMarked : true, parent : '' });
+    return callback(null, _template);
   },
 
   /**

@@ -65,9 +65,9 @@ describe('formatter', function () {
       helper.assert(dateFormatter.formatD.call(
         { lang : 'en', timezone : 'America/New_York' }, '1997-12-17 07:37:16-08:00', 'LLLL'), 'Wednesday, December 17, 1997 10:37 AM'
       );
-      // Europe/Paris UTC +01:00 / UTC DST +02:00 converted into America/New_York UTC -05:00 UTS DST -04:00
+      // Дата без смещения — UTC (18:32Z), переводится в America/New_York UTC -05:00: 13:32 // UTC-разбор, как в Carbone EE
       helper.assert(dateFormatter.formatD.call(
-        { lang : 'en', timezone : 'America/New_York' }, '1997-12-17 18:32:16', 'LLLL'), 'Wednesday, December 17, 1997 12:32 PM'
+        { lang : 'en', timezone : 'America/New_York' }, '1997-12-17 18:32:16', 'LLLL'), 'Wednesday, December 17, 1997 1:32 PM'
       );
       // Europe/London is UTC+0000, it means the date should not change when it convert into Europe/London
       helper.assert(dateFormatter.formatD.call(

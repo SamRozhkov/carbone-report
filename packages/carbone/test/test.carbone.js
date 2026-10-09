@@ -51,7 +51,7 @@ describe('Carbone', function () {
       carbone.set({lang : 'fr'});
       carbone.renderXML('<xml> {d.date:formatD(dddd)} </xml>', { date : '20140131 23:45:00'},  function (err, result) {
         helper.assert(err+'', 'null');
-        helper.assert(result, '<xml> vendredi </xml>');
+        helper.assert(result, '<xml> samedi </xml>'); // UTC-разбор, как в Carbone EE
         carbone.renderXML('<xml> {d.date:formatD(dddd)} </xml>', { date : '20140131'}, function (err, result) {
           helper.assert(err+'', 'null');
           helper.assert(result, '<xml> vendredi </xml>');
@@ -67,7 +67,7 @@ describe('Carbone', function () {
       carbone.set({lang : 'fr'});
       carbone.renderXML('<xml> {d.date:formatD(dddd)} </xml>', { date : '20140131 23:45:00'},  function (err, result) {
         helper.assert(err+'', 'null');
-        helper.assert(result, '<xml> vendredi </xml>');
+        helper.assert(result, '<xml> samedi </xml>'); // UTC-разбор, как в Carbone EE
         carbone.set({lang : 'en'});
         carbone.renderXML('<xml> {d.date:formatD(dddd)} </xml>', { date : '20140131'}, function (err, result) {
           helper.assert(err+'', 'null');
@@ -94,16 +94,16 @@ describe('Carbone', function () {
       let _xml = '<xml> {d.date:formatD(dddd)} {d.price:formatN()} </xml>';
       carbone.renderXML(_xml, _data , {lang : 'fr-FR'},  function (err, result) {
         helper.assert(err+'', 'null');
-        helper.assert(result, '<xml> vendredi 1 000,123 </xml>');
+        helper.assert(result, '<xml> samedi 1 000,123 </xml>'); // UTC-разбор, как в Carbone EE
         carbone.renderXML(_xml, _data, {lang : 'de-DE'},  function (err, result) {
           helper.assert(err+'', 'null');
-          helper.assert(result, '<xml> Freitag 1.000,123 </xml>');
+          helper.assert(result, '<xml> Samstag 1.000,123 </xml>'); // UTC-разбор, как в Carbone EE
           carbone.renderXML(_xml, _data, {lang : 'fr-fr'},  function (err, result) {
             helper.assert(err+'', 'null');
-            helper.assert(result, '<xml> vendredi 1 000,123 </xml>');
+            helper.assert(result, '<xml> samedi 1 000,123 </xml>'); // UTC-разбор, как в Carbone EE
             carbone.renderXML(_xml, _data, {lang : 'de'},  function (err, result) {
               helper.assert(err+'', 'null');
-              helper.assert(result, '<xml> Freitag 1.000,123 </xml>');
+              helper.assert(result, '<xml> Samstag 1.000,123 </xml>'); // UTC-разбор, как в Carbone EE
               done();
             });
           });
@@ -114,12 +114,12 @@ describe('Carbone', function () {
       carbone.set({timezone : 'Europe/Paris'});
       carbone.renderXML('<xml> {d.date:formatD(LTS)} </xml>', { date : '2014-06-01 14:00:00'}, function (err, result) {
         helper.assert(err+'', 'null');
-        // By defaut, Carbone consider the input timezone is Europe/Paris if not specified
-        helper.assert(result, '<xml> 2:00:00 PM </xml>');
+        // Дата без смещения — это UTC, вывод в Europe/Paris (UTC+2 летом)
+        helper.assert(result, '<xml> 4:00:00 PM </xml>'); // UTC-разбор, как в Carbone EE
         carbone.set({timezone : 'America/New_York'});
         carbone.renderXML('<xml> {d.date:formatD(LTS)} </xml>', { date : '2014-06-01 14:00:00'}, function (err, result) {
           helper.assert(err+'', 'null');
-          helper.assert(result, '<xml> 8:00:00 AM </xml>');
+          helper.assert(result, '<xml> 10:00:00 AM </xml>'); // UTC-разбор, как в Carbone EE
           // If the input timezone is defined with UTC-X, it takes this into account
           carbone.renderXML('<xml> {d.date:formatD(LTS)} </xml>', { date : '2014-06-01 14:00:00-04:00'}, function (err, result) {
             helper.assert(err+'', 'null');
@@ -181,10 +181,11 @@ describe('Carbone', function () {
     it('should accept combination of operations `endOfD` on dates + format', function (done) {
       carbone.renderXML('{d.date:endOfD(month):formatD(YYYY-MM-DD)}', { date : '2014-06-11 14:00:00'}, function (err, result) {
         helper.assert(err+'', 'null');
-        helper.assert(result, '2014-06-30');
+        // конец июня по UTC (23:59) в Europe/Paris уже 1 июля
+        helper.assert(result, '2014-07-01'); // UTC-разбор, как в Carbone EE
         carbone.renderXML('{d.date:endOfD(month, MM-DD-YYYY):formatD(YYYY-MM-DD)}', { date : '06-11-2014'}, function (err, result) {
           helper.assert(err+'', 'null');
-          helper.assert(result, '2014-06-30');
+          helper.assert(result, '2014-07-01'); // UTC-разбор, как в Carbone EE
           done();
         });
       });
@@ -192,7 +193,8 @@ describe('Carbone', function () {
     it('should add 2 days and format it with timezone', function (done) {
       carbone.renderXML('{d.date:addD(2, day):formatD(LLLL)}', { date : '2020-10-23T22:00:00Z'}, {timezone : 'Europe/London'}, function (err, result) {
         helper.assert(err+'', 'null');
-        helper.assert(result, 'Sunday, October 25, 2020 11:00 PM');
+        // addD считает в UTC: 22:00Z + 2 дня = 25 октября 22:00Z, это 22:00 GMT (после перехода на зимнее время)
+        helper.assert(result, 'Sunday, October 25, 2020 10:00 PM'); // UTC-разбор, как в Carbone EE
         carbone.renderXML('{d.date:formatD(LLLL)}', { date : '2020-10-25T23:00:00Z'}, { timezone : 'Europe/London'}, function (err, result) {
           helper.assert(err+'', 'null');
           helper.assert(result, 'Sunday, October 25, 2020 11:00 PM');
@@ -203,7 +205,8 @@ describe('Carbone', function () {
     it('should add 2 days and format it with timezone', function (done) {
       carbone.renderXML('{d.date:addD(2, day):formatD(LLL)}', { date : '2020-10-23T23:00:00+01:00'}, {timezone : 'Europe/London'}, function (err, result) {
         helper.assert(err+'', 'null');
-        helper.assert(result, 'October 25, 2020 11:00 PM');
+        // addD считает в UTC (см. выше)
+        helper.assert(result, 'October 25, 2020 10:00 PM'); // UTC-разбор, как в Carbone EE
         carbone.renderXML('{d.date:formatD(LLL)}', { date : '2020-10-25T23:00:00+00:00'}, { timezone : 'Europe/London'}, function (err, result) {
           helper.assert(err+'', 'null');
           helper.assert(result, 'October 25, 2020 11:00 PM');
@@ -2593,6 +2596,26 @@ describe('Carbone', function () {
     });
     after(function () {
       carbone.reset();
+    });
+    it('should accept txt files as template', (done) => {
+      var data = [{ id : 1, name : 'field_1' }, { id : 2, name : 'field_2' }];
+      carbone.render('template_txt.txt', data, function (err, result) {
+        helper.assert(err+'', 'null');
+        helper.assert(result, '1 field_1 2 field_2 ');
+        done();
+      });
+    });
+    it('should not crash if datas contain XML-incompatible control code', function (done) {
+      // Без конвертации в PDF: проверяем, что рендер docx не падает и возвращает zip
+      var data = {
+        field1 : '\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u000b\u000c\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f',
+        field2 : 'field_2'
+      };
+      carbone.render(path.resolve('./test/datasets/test_word_render_A.docx'), data, function (err, result) {
+        assert.equal(err, null);
+        assert.equal(result.slice(0, 2).toString(), 'PK');
+        done();
+      });
     });
     it('should get debug info if isDebugActive = true', function (done) {
       var data = {

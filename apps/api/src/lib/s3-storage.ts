@@ -34,12 +34,16 @@ export interface S3Timeouts {
   requestTimeoutMs: number;
 }
 
-export const S3_TIMEOUTS: S3Timeouts = { connectionTimeoutMs: 5_000, requestTimeoutMs: 60_000 };
+export const S3_TIMEOUTS: S3Timeouts = { connectionTimeoutMs: 5_000, requestTimeoutMs: 30_000 };
+
+/** Попыток на вызов: с таймаутом 30 с общий срок — до минуты (по умолчанию у SDK 3 попытки). */
+export const S3_MAX_ATTEMPTS = 2;
 
 /**
  * Клиент S3 с таймаутами: по умолчанию у SDK их нет, и зависший S3 держал бы шлюз удаления,
  * блокировки в БД и старт API. Без throwOnRequestTimeout requestTimeout лишь пишет предупреждение.
- * Таймаут — повторяемая ошибка: SDK делает до 3 попыток, общий срок — до 3 × requestTimeout.
+ * Таймаут — повторяемая ошибка: S3_MAX_ATTEMPTS попыток, общий срок — до 2 × requestTimeout.
+ * Без ключей — цепочка учётных данных SDK по умолчанию (IRSA в k8s, переменные AWS_*).
  */
 export function createS3Client(s: S3Settings, t: S3Timeouts = S3_TIMEOUTS): S3Client {
   return new S3Client({
@@ -48,10 +52,13 @@ export function createS3Client(s: S3Settings, t: S3Timeouts = S3_TIMEOUTS): S3Cl
       requestTimeout: t.requestTimeoutMs,
       throwOnRequestTimeout: true,
     }),
+    maxAttempts: S3_MAX_ATTEMPTS,
     region: s.region,
     endpoint: s.endpoint,
     forcePathStyle: s.forcePathStyle,
-    credentials: { accessKeyId: s.accessKeyId, secretAccessKey: s.secretAccessKey },
+    ...(s.accessKeyId && s.secretAccessKey
+      ? { credentials: { accessKeyId: s.accessKeyId, secretAccessKey: s.secretAccessKey } }
+      : {}),
     // S3-совместимые хранилища (SeaweedFS и др.): контрольные суммы — только там, где их требует API.
     requestChecksumCalculation: 'WHEN_REQUIRED',
     responseChecksumValidation: 'WHEN_REQUIRED',

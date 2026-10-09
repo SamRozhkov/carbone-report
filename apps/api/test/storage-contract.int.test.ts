@@ -344,7 +344,7 @@ describe('S3Storage: таймауты клиента', () => {
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     const { port } = server.address() as { port: number };
     const settings = testS3Settings('hung', { endpoint: `http://127.0.0.1:${port}` });
-    // Повторы SDK (3 попытки) остаются: общий срок — несколько requestTimeout, а не бесконечность.
+    // Повторы SDK (2 попытки) остаются: общий срок — несколько requestTimeout, а не бесконечность.
     const client = createS3Client(settings, {
       connectionTimeoutMs: 200,
       requestTimeoutMs: 300,

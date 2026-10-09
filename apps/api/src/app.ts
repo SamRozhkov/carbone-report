@@ -33,6 +33,7 @@ export const redactToken = (url?: string) => url?.replace(/([?&])t=[^&]*/g, '$1t
  * Менять нужно именно эту константу, а не `trustProxy`: число в `trustProxy` Fastify 5
  * не доверяет ни одному хопу, и все клиенты получат адрес nginx. Заголовок
  * X-Forwarded-Host при доверии тоже учитывается, его задаёт nginx (docker/nginx/common.conf).
+ * Значение по умолчанию; в работе — `config.trustedProxyHops` (TRUSTED_PROXY_HOPS, чарт Helm ставит 2: Ingress и nginx).
  */
 export const TRUSTED_PROXY_HOPS = 1;
 
@@ -43,7 +44,7 @@ export const TRUSTED_PROXY_HOPS = 1;
  */
 export const trustProxyHops = (hops: number) => (_addr: string, hop: number) => hop < hops;
 
-export function createFastify() {
+export function createFastify(hops: number = TRUSTED_PROXY_HOPS) {
   const app = Fastify({
     logger:
       process.env.NODE_ENV === 'test' || process.env.VITEST
@@ -58,7 +59,7 @@ export function createFastify() {
             },
           },
     bodyLimit: 1024 * 1024,
-    trustProxy: trustProxyHops(TRUSTED_PROXY_HOPS),
+    trustProxy: trustProxyHops(hops),
   }).withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -68,7 +69,7 @@ export function createFastify() {
 export type App = ReturnType<typeof createFastify>;
 
 export async function buildApp(deps: AppDeps): Promise<App> {
-  const app = createFastify();
+  const app = createFastify(deps.config.trustedProxyHops);
   registerErrorHandler(app);
   // До всех маршрутов: во время восстановления из бэкапа API отвечает 503 (§26.3).
   registerMaintenance(app, deps);

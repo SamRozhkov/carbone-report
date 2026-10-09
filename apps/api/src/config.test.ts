@@ -49,10 +49,32 @@ describe('loadConfig', () => {
     expect(c.storageDir).toBe('/data');
     expect(c.s3).toBeNull();
   });
-  it('s3 без обязательных значений — понятная ошибка', () => {
+  it('s3 без бакета — понятная ошибка; ключи не обязательны', () => {
     expect(() => loadConfig({ ...base, STORAGE_BACKEND: 's3' })).toThrow(
-      'Неверная конфигурация: S3_BUCKET: обязателен при STORAGE_BACKEND=s3; S3_ACCESS_KEY_ID: обязателен при STORAGE_BACKEND=s3; S3_SECRET_ACCESS_KEY: обязателен при STORAGE_BACKEND=s3',
+      'Неверная конфигурация: S3_BUCKET: обязателен при STORAGE_BACKEND=s3',
     );
+    // Без ключей — учётные данные из окружения пода (IRSA, переменные AWS_*).
+    expect(loadConfig({ ...base, STORAGE_BACKEND: 's3', S3_BUCKET: 'b' }).s3).toMatchObject({
+      bucket: 'b',
+      accessKeyId: undefined,
+      secretAccessKey: undefined,
+    });
+  });
+  it('s3: задан только один ключ — ошибка с именем второго, значения не попадают в текст', () => {
+    const one = () =>
+      loadConfig({
+        ...base,
+        STORAGE_BACKEND: 's3',
+        S3_BUCKET: 'b',
+        S3_ACCESS_KEY_ID: 'key-id-123',
+      });
+    expect(one).toThrow(
+      'S3_SECRET_ACCESS_KEY: задайте вместе с S3_ACCESS_KEY_ID или не задавайте ни один',
+    );
+    expect(one).not.toThrow(/key-id-123/);
+    expect(() =>
+      loadConfig({ ...base, STORAGE_BACKEND: 's3', S3_BUCKET: 'b', S3_SECRET_ACCESS_KEY: 'sss' }),
+    ).toThrow('S3_ACCESS_KEY_ID: задайте вместе с S3_SECRET_ACCESS_KEY или не задавайте ни один');
   });
   it('пустые строки из .env — не заданы; секрет не попадает в ошибку', () => {
     let message = '';
@@ -175,6 +197,31 @@ describe('loadConfig', () => {
         LDAP_BASE_DN: 'dc=example,dc=local',
       }),
     ).toThrow('LDAP_URL: нужен URL вида ldap://host:389 или ldaps://host:636');
+  });
+  it('DATABASE_PASSWORD и REDIS_PASSWORD вставляются в URL; без них URL как есть', () => {
+    const c = loadConfig({
+      ...base,
+      DATABASE_URL: 'postgres://app@db:5432/app?sslmode=disable',
+      DATABASE_PASSWORD: 'p@ss/w:rd#%',
+      REDIS_URL: 'redis://redis:6379',
+      REDIS_PASSWORD: 'r@d/s#',
+    });
+    expect(c.databaseUrl).toBe('postgres://app:p%40ss%2Fw%3Ard%23%25@db:5432/app?sslmode=disable');
+    expect(c.redisUrl).toBe('redis://:r%40d%2Fs%23@redis:6379');
+    expect(loadConfig(base).databaseUrl).toBe(base.DATABASE_URL);
+  });
+  it('DATABASE_URL не URL при DATABASE_PASSWORD — ошибка с именем переменной, без пароля', () => {
+    const bad = () =>
+      loadConfig({ ...base, DATABASE_URL: 'db:5432', DATABASE_PASSWORD: 'secret-value' });
+    expect(bad).toThrow('DATABASE_URL: нужен URL');
+    expect(bad).not.toThrow(/secret-value/);
+  });
+  it('TRUSTED_PROXY_HOPS: по умолчанию 1, целое 1–5', () => {
+    expect(loadConfig(base).trustedProxyHops).toBe(1);
+    expect(loadConfig({ ...base, TRUSTED_PROXY_HOPS: '2' }).trustedProxyHops).toBe(2);
+    expect(() => loadConfig({ ...base, TRUSTED_PROXY_HOPS: '0' })).toThrow('TRUSTED_PROXY_HOPS');
+    expect(() => loadConfig({ ...base, TRUSTED_PROXY_HOPS: '6' })).toThrow('TRUSTED_PROXY_HOPS');
+    expect(() => loadConfig({ ...base, TRUSTED_PROXY_HOPS: '1.5' })).toThrow('TRUSTED_PROXY_HOPS');
   });
 });
 

@@ -62,6 +62,7 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     tz: 'Europe/Moscow',
     port: 0,
     cookieSecure: false,
+    trustedProxyHops: 1,
     ldap: null,
     backupAgent: null,
   };

@@ -1,7 +1,6 @@
 import type { Role } from '@carbone-reports/shared';
 import { z } from 'zod';
-
-const S3_REQUIRED = ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const;
+import { hasHost, withPassword } from './lib/url-password';
 
 const Env = z
   .object({
@@ -15,6 +14,16 @@ const Env = z
     API_INTERNAL_URL: z.url().default('http://api:3000'),
     CARBONE_URL: z.url().default('http://carbone:4000'),
     REDIS_URL: z.string().default('redis://redis:6379'),
+    // Пароли отдельно от URL (чарт Helm): вставляются с кодированием, допустимы любые символы.
+    DATABASE_PASSWORD: z.string().optional(),
+    REDIS_PASSWORD: z.string().optional(),
+    // Сколько прокси перед API: compose — nginx (1), k8s — Ingress и nginx (2).
+    TRUSTED_PROXY_HOPS: z.coerce
+      .number({ error: 'целое от 1 до 5' })
+      .int('целое от 1 до 5')
+      .min(1, 'целое от 1 до 5')
+      .max(5, 'целое от 1 до 5')
+      .default(1),
     ADMIN_LOGIN: z.string().optional(),
     ADMIN_PASSWORD: z
       .string()
@@ -92,9 +101,39 @@ const Env = z
   .superRefine((e, ctx) => {
     if (e.STORAGE_BACKEND !== 's3') return;
     // Значения не попадают в сообщение — только имена переменных.
-    for (const k of S3_REQUIRED)
-      if (!e[k])
-        ctx.addIssue({ code: 'custom', path: [k], message: 'обязателен при STORAGE_BACKEND=s3' });
+    if (!e.S3_BUCKET)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['S3_BUCKET'],
+        message: 'обязателен при STORAGE_BACKEND=s3',
+      });
+    // Ключи — оба или ни одного: без них SDK берёт учётные данные из окружения (IRSA).
+    if (e.S3_ACCESS_KEY_ID && !e.S3_SECRET_ACCESS_KEY)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['S3_SECRET_ACCESS_KEY'],
+        message: 'задайте вместе с S3_ACCESS_KEY_ID или не задавайте ни один',
+      });
+    if (!e.S3_ACCESS_KEY_ID && e.S3_SECRET_ACCESS_KEY)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['S3_ACCESS_KEY_ID'],
+        message: 'задайте вместе с S3_SECRET_ACCESS_KEY или не задавайте ни один',
+      });
+  })
+  .superRefine((e, ctx) => {
+    if (e.DATABASE_PASSWORD && !hasHost(e.DATABASE_URL))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DATABASE_URL'],
+        message: 'нужен URL вида postgres://user@host:5432/db',
+      });
+    if (e.REDIS_PASSWORD && !hasHost(e.REDIS_URL))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['REDIS_URL'],
+        message: 'нужен URL вида redis://host:6379',
+      });
   })
   .superRefine((e, ctx) => {
     if (!e.BACKUP_AGENT_URL) return;
@@ -115,8 +154,9 @@ export interface S3Settings {
   endpoint?: string;
   region: string;
   bucket: string;
-  accessKeyId: string;
-  secretAccessKey: string;
+  /** Без ключей — учётные данные из окружения (IRSA, AWS_*). */
+  accessKeyId?: string;
+  secretAccessKey?: string;
   /** SeaweedFS, MinIO — true (адрес вида http://host/bucket/key). */
   forcePathStyle: boolean;
   /** Создать бакет при старте, если его нет. */
@@ -148,6 +188,8 @@ export interface Config {
   tz: string;
   port: number;
   cookieSecure: boolean;
+  /** Сколько прокси перед API (X-Forwarded-For): compose — 1, k8s — 2. */
+  trustedProxyHops: number;
   ldap: LdapConfig | null;
   /** Агент бэкапа; null — управление бэкапами выключено. Токен не логируется. */
   backupAgent: { url: string; token: string } | null;
@@ -174,14 +216,14 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   const e = r.data;
   const enc = new TextEncoder();
   return {
-    databaseUrl: e.DATABASE_URL,
+    databaseUrl: withPassword(e.DATABASE_URL, e.DATABASE_PASSWORD),
     appSecret: enc.encode(e.APP_SECRET),
     encryptionKey: Buffer.from(e.ENCRYPTION_KEY, 'base64'),
     onlyofficeJwtSecret: enc.encode(e.ONLYOFFICE_JWT_SECRET),
     onlyofficeInternalUrl: e.ONLYOFFICE_INTERNAL_URL.replace(/\/$/, ''),
     apiInternalUrl: e.API_INTERNAL_URL.replace(/\/$/, ''),
     carboneUrl: e.CARBONE_URL.replace(/\/$/, ''),
-    redisUrl: e.REDIS_URL,
+    redisUrl: withPassword(e.REDIS_URL, e.REDIS_PASSWORD),
     adminLogin: e.ADMIN_LOGIN,
     adminPassword: e.ADMIN_PASSWORD,
     storageBackend: e.STORAGE_BACKEND,
@@ -192,8 +234,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
             endpoint: e.S3_ENDPOINT || undefined,
             region: e.S3_REGION || 'us-east-1',
             bucket: e.S3_BUCKET!,
-            accessKeyId: e.S3_ACCESS_KEY_ID!,
-            secretAccessKey: e.S3_SECRET_ACCESS_KEY!,
+            accessKeyId: e.S3_ACCESS_KEY_ID || undefined,
+            secretAccessKey: e.S3_SECRET_ACCESS_KEY || undefined,
             forcePathStyle: e.S3_FORCE_PATH_STYLE === 'true',
             createBucket: e.S3_CREATE_BUCKET === 'true',
           }
@@ -206,6 +248,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     tz: e.TZ,
     port: e.PORT,
     cookieSecure: e.COOKIE_SECURE === 'true',
+    trustedProxyHops: e.TRUSTED_PROXY_HOPS,
     ldap:
       e.LDAP_ENABLED === 'true'
         ? {

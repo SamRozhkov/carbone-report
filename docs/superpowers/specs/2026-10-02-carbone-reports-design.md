@@ -1041,7 +1041,7 @@ scripts/smoke.ts            сквозная проверка работающе
 - копии бэкапов вне кластера: снапшоты тома и Velero — средства кластера, чарт за них не отвечает;
 - автоматическое масштабирование (HPA), Gateway API, OpenShift Routes;
 - E2E Playwright в кластере в CI;
-- скрипт аварийного восстановления для k8s — вместо него инструкция в README (27.5).
+- скрипт аварийного восстановления для k8s — вместо него инструкция в README: восстановление через HTTP агента (27.5).
 
 ### 27.1 Состав чарта (`charts/carbone-reports`)
 - Один чарт с обычными шаблонами, без подчартов. Имена ресурсов — `<fullname>-<компонент>`, где `fullname` — стандартный `<release>-carbone-reports` с усечением до 63 символов.
@@ -1078,7 +1078,7 @@ scripts/smoke.ts            сквозная проверка работающе
 
 ### 27.3 Секреты и настройки
 - Секреты: `existingSecret` (имя готового Secret с ключами по таблице в README) или значения в `secrets.*` — тогда чарт создаёт Secret сам. Случайные значения чарт не генерирует (`lookup` ломается в Argo CD и `helm template`).
-- Ключи: `APP_SECRET`, `ENCRYPTION_KEY`, `ONLYOFFICE_JWT_SECRET`, `ADMIN_LOGIN`, `ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `BACKUP_AGENT_TOKEN`, необязательные `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `LDAP_BIND_PASSWORD`. `DATABASE_URL` и `REDIS_URL` собираются в контейнере из частей (`$(VAR)` в env), пароль в values-шаблоне не появляется.
+- Ключи: `APP_SECRET`, `ENCRYPTION_KEY`, `ONLYOFFICE_JWT_SECRET`, `ADMIN_LOGIN`, `ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `BACKUP_AGENT_TOKEN`, необязательные `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `LDAP_BIND_PASSWORD`. Пароли в URL не подставляются: API и агент принимают `DATABASE_PASSWORD` и `REDIS_PASSWORD` отдельно и сами вставляют их в `DATABASE_URL`/`REDIS_URL` с кодированием (`new URL()`), поэтому пароль внешней базы может содержать любые символы. `PGPASSWORD` в окружение API не попадает: `pg` подставил бы его в подключения к источникам данных без пароля. Агенту пароль базы передаётся как `PGPASSWORD` (источников данных у него нет).
 - Настройки приложения из compose (`TZ`, `QUERY_TIMEOUT_MS`, `QUERY_MAX_ROWS`, `RENDER_TIMEOUT_MS`, `REPORT_TIMEOUT_MS`, `REPORT_RETENTION_DAYS`, `LDAP_*` кроме пароля, `BACKUP_CRON`, `BACKUP_KEEP`, `BACKUP_TIMEOUT`) — в values, в ConfigMap. Для каждого компонента: `resources`, `nodeSelector`, `tolerations`, `affinity`, `podAnnotations`, `extraEnv`.
 - Изменение ConfigMap или Secret перезапускает поды: аннотация `checksum/config` и `checksum/secret` (для `existingSecret` — нет, это забота владельца секрета).
 - Пробы:
@@ -1105,10 +1105,11 @@ scripts/smoke.ts            сквозная проверка работающе
   - фаза `redis` удаляет только ключи `cr:*`, кроме `cr:maintenance` (`SCAN MATCH cr:*`): общий внешний Redis не теряет чужие ключи. Все ключи приложения уже начинаются с `cr:`;
   - агент и скрипты принимают `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE`, `PGSSLMODE`, `PGSSLROOTCERT`; пул агента передаёт SSL-параметры в `pg`. API — через `DATABASE_URL` с `sslmode` и `sslrootcert`;
   - без ключей S3 rclone работает с `env_auth=true` (IRSA).
-- Аварийный путь — раздел README «Восстановление в Kubernetes вручную»:
-  1. `kubectl scale deploy/<fullname>-api --replicas=0`;
-  2. `kubectl exec` в под агента: восстановление базы и файлов из выбранного каталога теми же шагами, что `restore.sh`;
-  3. вернуть число реплик.
+- Аварийный путь — раздел README «Восстановление в Kubernetes без админки»: если API не поднимается, восстановление запускается прямо у агента тем же путём, что из админки (бэкап перед восстановлением, режим обслуживания, коды повтора):
+  1. `kubectl port-forward svc/<fullname>-backup-agent 18080:8080`;
+  2. токен — `BACKUP_AGENT_TOKEN` из Secret релиза;
+  3. `curl` с `Authorization: Bearer`: `GET /backups`, `POST /backups/<имя>/restore`, ход — `GET /operation`, повтор по коду — `POST /recovery` (код — в `kubectl logs deploy/<fullname>-backup-agent`).
+  Отдельного скрипта для k8s нет: `scripts/restore.sh` остаётся аварийным путём compose.
 - README прямо говорит, что бэкапы лежат на томе в том же кластере, и советует снапшоты тома или Velero.
 
 ### 27.6 Безопасность и сеть

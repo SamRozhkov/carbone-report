@@ -12,6 +12,9 @@ const need = (k: string) => {
   return v;
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Любой запрос не дольше 15 с: зависший port-forward не должен съедать таймаут задания. */
+const TIMEOUT_MS = 15_000;
+const get = (path: string) => fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
 
 interface Operation {
   id: string;
@@ -32,16 +35,33 @@ interface Maintenance {
 
 let cookie = '';
 
-async function call(method: string, path: string, body?: unknown): Promise<Response> {
-  const headers = new Headers();
-  if (cookie) headers.set('cookie', cookie);
-  if (body !== undefined) headers.set('content-type', 'application/json');
-  return fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    redirect: 'manual',
-  });
+/**
+ * Запрос к API с cookie сессии. 503 повторяется до 15 с: реплика API держит флаг обслуживания
+ * в кэше до секунды после снятия, и запрос через Service может попасть на неё (retry503 = false —
+ * вернуть 503 сразу, для опроса операции во время восстановления).
+ */
+async function call(
+  method: string,
+  path: string,
+  body?: unknown,
+  retry503 = true,
+): Promise<Response> {
+  const until = Date.now() + 15_000;
+  for (;;) {
+    const headers = new Headers();
+    if (cookie) headers.set('cookie', cookie);
+    if (body !== undefined) headers.set('content-type', 'application/json');
+    const r = await fetch(`${BASE}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      redirect: 'manual',
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (r.status !== 503 || !retry503 || Date.now() > until) return r;
+    await r.body?.cancel();
+    await sleep(500);
+  }
 }
 
 async function json<T>(res: Response, expected: number): Promise<T> {
@@ -75,7 +95,7 @@ async function login(): Promise<void> {
 
 /** Текущая операция агента, если это операция id и она завершена; иначе null. 401 — повторный вход. */
 async function finishedOperation(id: string): Promise<Operation | null> {
-  const r = await call('GET', '/api/admin/backups/operation').catch(() => null);
+  const r = await call('GET', '/api/admin/backups/operation', undefined, false).catch(() => null);
   if (r?.status === 401) await login().catch(() => {});
   else if (r?.status === 200) {
     const op = (await r.json()) as Operation;
@@ -96,6 +116,27 @@ async function waitOperation(id: string, timeoutMs: number): Promise<Operation> 
   }
 }
 
+/**
+ * Флаг снят на всех репликах: не меньше 3 ответов active:false подряд на протяжении не меньше 2 с
+ * (кэш флага в реплике — до 1 с, запросы через Service расходятся по репликам).
+ */
+async function waitMaintenanceCleared(timeoutMs: number): Promise<void> {
+  const until = Date.now() + timeoutMs;
+  let streak = 0;
+  let since = 0;
+  for (;;) {
+    const r = await get('/api/maintenance').catch(() => null);
+    const m = r?.status === 200 ? ((await r.json()) as Maintenance) : null;
+    if (m && !m.active) {
+      if (streak++ === 0) since = Date.now();
+      if (streak >= 3 && Date.now() - since >= 2000) return;
+    } else streak = 0;
+    if (Date.now() > until)
+      throw new Error(`режим обслуживания не снят устойчиво за ${timeoutMs / 1000} с`);
+    await sleep(700);
+  }
+}
+
 const describe = (op: Operation) =>
   `${op.status} (фаза ${op.phase ?? '?'}${op.error ? `: ${op.error}` : ''})`;
 
@@ -107,7 +148,7 @@ let backupName = '';
 await step('API отвечает через web', async () => {
   const until = Date.now() + 60_000;
   for (;;) {
-    const r = await fetch(`${BASE}/api/health`).catch(() => null);
+    const r = await get('/api/health').catch(() => null);
     if (r?.status === 200) return;
     if (Date.now() > until) throw new Error(`/api/health: ${r?.status ?? 'нет соединения'}`);
     await sleep(2000);
@@ -115,7 +156,7 @@ await step('API отвечает через web', async () => {
 });
 
 await step('SPA отдаётся с CSP', async () => {
-  const r = await fetch(`${BASE}/`);
+  const r = await get('/');
   if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
   const csp = r.headers.get('content-security-policy') ?? '';
   if (!csp.includes("default-src 'self'")) throw new Error(`нет CSP: «${csp}»`);
@@ -151,6 +192,9 @@ await step('бэкап из админки', async () => {
 
 await step('восстановление: режим обслуживания, затем данные из бэкапа', async () => {
   await json(await call('POST', '/api/categories', { name: later }), 201);
+  const beforeRestore = new Set(
+    (await json<Backup[]>(await call('GET', '/api/admin/backups'), 200)).map((b) => b.name),
+  );
   const { operationId } = await json<{ operationId: string }>(
     await call('POST', `/api/admin/backups/${encodeURIComponent(backupName)}/restore`, {}),
     202,
@@ -161,7 +205,7 @@ await step('восстановление: режим обслуживания, �
   let sawMaintenance = false;
   const until = Date.now() + 600_000;
   for (;;) {
-    const r = await fetch(`${BASE}/api/maintenance`).catch(() => null);
+    const r = await get('/api/maintenance').catch(() => null);
     if (r?.status === 200) {
       const m = (await r.json()) as Maintenance;
       if (m.active) {
@@ -177,9 +221,16 @@ await step('восстановление: режим обслуживания, �
   }
   if (!sawMaintenance)
     console.warn('⚠ режим обслуживания не замечен опросом: восстановление прошло между опросами');
+  await waitMaintenanceCleared(30_000);
   await login();
   const op = await waitOperation(operationId, 60_000);
   if (op.status !== 'succeeded') throw new Error(`восстановление: ${describe(op)}`);
+  // Путь восстановления пройден целиком (и без замеченного флага): агент сделал бэкап pre-restore-*.
+  const preRestore = (await json<Backup[]>(await call('GET', '/api/admin/backups'), 200)).find(
+    (b) =>
+      !beforeRestore.has(b.name) && b.kind === 'pre-restore' && b.name.startsWith('pre-restore-'),
+  );
+  if (!preRestore) throw new Error('после восстановления нет нового бэкапа pre-restore-*');
   const names = (await json<{ name: string }[]>(await call('GET', '/api/categories'), 200)).map(
     (c) => c.name,
   );
@@ -188,7 +239,7 @@ await step('восстановление: режим обслуживания, �
 });
 
 await step('режим обслуживания снят', async () => {
-  const m = await json<Maintenance>(await fetch(`${BASE}/api/maintenance`), 200);
+  const m = await json<Maintenance>(await get('/api/maintenance'), 200);
   if (m.active) throw new Error('cr:maintenance всё ещё установлен');
 });
 

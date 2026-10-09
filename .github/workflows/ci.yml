@@ -120,6 +120,8 @@ jobs:
           helm install cr charts/carbone-reports --namespace cr --create-namespace
           -f charts/carbone-reports/ci/kind-values.yaml --wait --timeout 10m
       - name: Smoke
+        # Явный bash — с pipefail: сбой kubectl в конвейере не даёт пустой файл и «нет изменений».
+        shell: bash
         env:
           BASE_URL: http://127.0.0.1:8080
           ADMIN_LOGIN: admin
@@ -134,11 +136,13 @@ jobs:
           }
           restarts > /tmp/api-restarts-before.txt
           cat /tmp/api-restarts-before.txt
+          test "$(wc -l < /tmp/api-restarts-before.txt)" -eq 2 || { echo "не получены счётчики перезапусков API" >&2; exit 1; }
           pnpm exec tsx scripts/k8s-smoke.ts
           # Обе реплики API пережили восстановление: /api/health доступен в режиме обслуживания.
           test "$(kubectl -n cr get deploy cr-carbone-reports-api -o jsonpath='{.status.readyReplicas}')" = 2
           test "$(kubectl -n cr get deploy cr-carbone-reports-api -o jsonpath='{.status.updatedReplicas}')" = 2
           restarts > /tmp/api-restarts-after.txt
+          test "$(wc -l < /tmp/api-restarts-after.txt)" -eq 2 || { echo "не получены счётчики перезапусков API" >&2; exit 1; }
           if ! diff -u /tmp/api-restarts-before.txt /tmp/api-restarts-after.txt; then
             echo "реплики API перезапускались или сменились во время smoke" >&2
             exit 1
@@ -146,6 +150,7 @@ jobs:
       # Без секретов: describe показывает только ссылки на Secret, значения не выводятся.
       - name: Диагностика
         if: failure()
+        shell: bash
         run: |
           kubectl get nodes -o wide || true
           helm -n cr status cr || true

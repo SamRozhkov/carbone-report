@@ -24,10 +24,12 @@ let certs: string;
 
 /** Заглушка API и OnlyOffice: nginx отвечает своим именем на любой путь. */
 const STUB_CONF = `server {
-  listen 3000; location / { return 200 "api-stub $request_uri"; }
+  listen 3000; location ~ /proto$ { return 200 "$http_x_forwarded_proto"; }
+  location / { return 200 "api-stub $request_uri"; }
 }
 server {
-  listen 80; location / { return 200 "oo-stub $request_uri"; }
+  listen 80; location ~ /proto$ { return 200 "$http_x_forwarded_proto"; }
+  location / { return 200 "oo-stub $request_uri"; }
 }`;
 
 beforeAll(async () => {
@@ -112,6 +114,14 @@ describe('образ web: nginx', () => {
     expect(page.headers.get('content-security-policy')).toContain("default-src 'self'");
     expect(page.headers.get('strict-transport-security')).toBe('max-age=31536000');
     expect((await fetch(url(c, 80, '/internal/x'))).status).toBe(404);
+    // За Ingress схему клиента отдаёт X-Forwarded-Proto; без заголовка — $scheme.
+    for (const path of ['/api/proto', '/onlyoffice/proto']) {
+      const withHeader = await fetch(url(c, 80, path), {
+        headers: { 'X-Forwarded-Proto': 'https' },
+      });
+      expect(await withHeader.text()).toBe('https');
+      expect(await (await fetch(url(c, 80, path))).text()).toBe('http');
+    }
     const conf = await c.exec(['cat', '/etc/nginx/snippets/common.conf']);
     const ns = (
       await c.exec(['awk', '$1 == "nameserver" { print $2; exit }', '/etc/resolv.conf'])
@@ -143,6 +153,24 @@ describe('образ web: nginx', () => {
         .on('error', reject);
     });
     expect(body).toBe('api-stub /api/me');
+    const proto = await new Promise<string>((resolve, reject) => {
+      https
+        .get(
+          {
+            host: c.getHost(),
+            port: c.getMappedPort(443),
+            path: '/api/proto',
+            rejectUnauthorized: false,
+          },
+          (res) => {
+            let s = '';
+            res.on('data', (d) => (s += d));
+            res.on('end', () => resolve(s));
+          },
+        )
+        .on('error', reject);
+    });
+    expect(proto).toBe('https');
   });
 
   it('dev: только HTTP, без HSTS', async () => {
@@ -152,15 +180,30 @@ describe('образ web: nginx', () => {
     expect(page.headers.get('strict-transport-security')).toBeNull();
   });
 
-  it('неверный NGINX_MODE — понятная ошибка и ненулевой код', async () => {
-    const c = await web({ NGINX_MODE: 'http' });
-    const r = await c.exec([
-      'sh',
-      '-c',
-      'NGINX_MODE=bogus; . /docker-entrypoint.d/15-carbone-reports.envsh; echo "rc=$?"',
-    ]);
-    expect(r.output).toContain('NGINX_MODE: ожидается tls, http или dev');
-    expect(r.output).not.toContain('rc=0');
+  it('неверный NGINX_MODE — контейнер не стартует, в логе понятная ошибка', async () => {
+    const c = new GenericContainer(IMAGE)
+      .withEnvironment({ NGINX_MODE: 'bogus' })
+      .withNetwork(network);
+    // Контейнер завершается сразу: ждём его остановки, а не открытых портов.
+    const s = await c
+      .withWaitStrategy(Wait.forLogMessage('NGINX_MODE: ожидается tls, http или dev'))
+      .start();
+    started.push(s);
+    const inspect = () =>
+      execFileSync(
+        'docker',
+        ['inspect', '-f', '{{.State.Status}} {{.State.ExitCode}}', s.getId()],
+        {
+          encoding: 'utf8',
+        },
+      ).trim();
+    for (let i = 0; i < 50 && !inspect().startsWith('exited'); i++)
+      await new Promise((r) => setTimeout(r, 200));
+    expect(inspect()).toBe('exited 1');
+    const logs = await s.logs();
+    let out = '';
+    for await (const l of logs) out += String(l);
+    expect(out).toContain('NGINX_MODE: ожидается tls, http или dev');
   });
 
   it('шаблон и режимы в репозитории — те же файлы, что копирует Dockerfile', () => {

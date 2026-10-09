@@ -18,7 +18,7 @@ location /api/ {
     proxy_http_version 1.1;
     proxy_set_header Host $http_host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Proto $fwd_proto;
     # Fastify доверяет X-Forwarded-Host (req.hostname): значение клиента подменяем своим.
     proxy_set_header X-Forwarded-Host $host;
     client_max_body_size 25m;
@@ -40,7 +40,7 @@ location /onlyoffice/ {
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
     proxy_set_header X-Forwarded-Host $http_host/onlyoffice;
-    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Proto $fwd_proto;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     # Сессия админа не должна уходить в Document Server.
     proxy_set_header Cookie "";

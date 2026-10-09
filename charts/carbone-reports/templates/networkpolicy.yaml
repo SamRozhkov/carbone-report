@@ -1,0 +1,43 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- /*
+Повторяет внутренние сети compose (§27.6): к компоненту — только перечисленные поды, на его порт.
+web не закрыт: к нему ходит Ingress-контроллер. Исходящий трафик не ограничивается (внешние
+Postgres, Redis, S3, LDAP). Порядок: backup-agent, api, onlyoffice, carbone, postgresql, redis, s3.
+*/ -}}
+{{- $root := . }}
+{{- $rules := list
+  (dict "to" "backup-agent" "from" (list "api") "port" 8080 "on" true)
+  (dict "to" "api" "from" (list "web" "onlyoffice") "port" 3000 "on" true)
+  (dict "to" "onlyoffice" "from" (list "web" "api") "port" 80 "on" .Values.onlyoffice.enabled)
+  (dict "to" "carbone" "from" (list "api") "port" 4000 "on" .Values.carbone.enabled)
+  (dict "to" "postgresql" "from" (list "api" "backup-agent") "port" 5432 "on" .Values.postgresql.enabled)
+  (dict "to" "redis" "from" (list "api" "backup-agent") "port" 6379 "on" .Values.redis.enabled)
+  (dict "to" "s3" "from" (list "api" "backup-agent") "port" 8333 "on" .Values.s3.enabled)
+}}
+{{- range $rules }}
+{{- if .on }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cr.component" (dict "root" $root "name" .to) }}
+  labels:
+    {{- include "cr.labels" $root | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "cr.selectorLabels" (dict "root" $root "component" .to) | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- range .from }}
+        - podSelector:
+            matchLabels:
+              {{- include "cr.selectorLabels" (dict "root" $root "component" .) | nindent 14 }}
+        {{- end }}
+      ports:
+        - port: {{ .port }}
+          protocol: TCP
+{{- end }}
+{{- end }}
+{{- end }}

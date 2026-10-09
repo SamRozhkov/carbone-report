@@ -1,0 +1,18 @@
+# NetworkPolicy, встроенные зависимости, внешние Carbone и OnlyOffice, готовый Secret.
+ingress:
+  host: reports.example.com
+existingSecret: carbone-reports
+networkPolicy:
+  enabled: true
+postgresql:
+  enabled: true
+redis:
+  enabled: true
+s3:
+  enabled: true
+carbone:
+  enabled: false
+  url: http://carbone.example:4000
+onlyoffice:
+  enabled: false
+  internalUrl: http://docs.example.com

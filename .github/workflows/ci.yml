@@ -56,6 +56,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:int
 
+  chart:
+    name: Чарт Helm
+    needs: [checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # helm lint, helm-unittest (плагин закреплённой версии) и kubeconform — в Docker, как локально.
+      - run: sh scripts/chart.sh all
+
   images:
     name: Образы ${{ matrix.name }}
     needs: [checks, integration]

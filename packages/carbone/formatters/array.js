@@ -16,9 +16,11 @@
  *
  * @param  {Array}  d           array passed by carbone
  * @param  {String} separator   [optional] item separator (`,` by default)
+ * @param  {Integer} index      [optional] Carbone 5: с какого элемента начинать
+ * @param  {Integer} count      [optional] Carbone 5: сколько элементов взять (отрицательное — до стольких-то с конца)
  * @return {String}             computed result, or `d` if `d` is not an array
  */
-function arrayJoin (d, separator) {
+function arrayJoin (d, separator, index, count) {
   if (separator === undefined) {
     separator = ', ';
   }
@@ -30,7 +32,22 @@ function arrayJoin (d, separator) {
   }
 
   if (d instanceof Array) {
-    return d.join(separator);
+    // Carbone 5: срез массива по index/count, как arrayJoin('', 1, 1) → второй элемент
+    var _index = parseInt(index, 10);
+    var _count = parseInt(count, 10);
+    var _items = d;
+    if (isNaN(_index) === false || isNaN(_count) === false) {
+      var _start = isNaN(_index) === true ? 0 : _index;
+      var _end;
+      if (isNaN(_count) === false) {
+        _end = _count < 0 ? _count : _start + _count;
+        if (_start < 0 && _end >= 0) {
+          _end = d.length + _start + _count;
+        }
+      }
+      _items = d.slice(_start, _end);
+    }
+    return _items.join(separator);
   }
   return d;
 }

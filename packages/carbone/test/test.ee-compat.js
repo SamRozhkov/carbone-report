@@ -80,3 +80,97 @@ describe('EE: отключённые функции', function () {
     });
   });
 });
+
+describe('EE: форматтеры', function () {
+  // эталоны снимались с настройками по умолчанию: другие тесты могли поменять глобальные params
+  beforeEach(function () { require('../lib/index').reset(); });
+  after(function () { require('../lib/index').reset(); });
+  const RURU = { lang: 'ru-ru', timezone: 'Europe/Moscow' };
+
+  it('ellipsis', async function () {
+    assert.strictEqual(await text('{d.s:ellipsis(7)}', { s: 'Длинная строка' }), 'Длинная...');
+    assert.strictEqual(await text('{d.s:ellipsis(6)}', { s: 'abcdef' }), 'abcdef');
+  });
+  it('append', async function () {
+    assert.strictEqual(await text("{d.s:append('!')}", { s: 'a' }), 'a!');
+  });
+  it('replace', async function () {
+    assert.strictEqual(await text("{d.s:replace('-','/')}", { s: '2026-03-08' }), '2026/03/08');
+    assert.strictEqual(await text("{d.s:replace('cd')}", { s: 'abcdef abcde' }), 'abef abe');
+  });
+  it('split', async function () {
+    assert.strictEqual(await text("{d.s:split(',')}", { s: 'a,b' }), 'a,b');
+    assert.strictEqual(await text("{d.s:split('/'):arrayJoin('', 1, 1)}", { s: 'ab/cd/ef' }), 'cd');
+  });
+  it('mod', async function () {
+    assert.strictEqual(await text('{d.n:mod(3)}', { n: 10 }), '1');
+  });
+  it('abs', async function () {
+    assert.strictEqual(await text('{d.n:abs()}', { n: -5 }), '5');
+  });
+  it('ceil / floor', async function () {
+    assert.strictEqual(await text('{d.n:ceil()} / {d.n:floor()}', { n: 1.5 }), '2 / 1');
+  });
+  it("formatI('human') и 'human+'", async function () {
+    assert.strictEqual(await text("{d.n:formatI('human')}", { n: 7200000 }), '2 часа');
+    assert.strictEqual(await text("{d.n:formatI('human+')}", { n: 7200000 }), 'через 2 часа');
+    assert.strictEqual(await text("{d.n:formatI('human+')}", { n: -7200000 }), '2 часа назад');
+  });
+  it('formatI: единицы', async function () {
+    assert.strictEqual(await text("{d.n:formatI('days','hours')}", { n: 48 }), '2');
+    assert.strictEqual(await text("{d.n:formatI('ms','weeks')}", { n: 4 }), '2419200000');
+    assert.strictEqual(await text("{d.n:formatI('minute')}", { n: 3600000 }), '60');
+  });
+  it('diffD', async function () {
+    assert.strictEqual(await text("{d.d:diffD('2026-12-31','days')}", { d: '2026-03-08' }), '298');
+    assert.strictEqual(await text("{d.d:diffD('20101201')}", { d: '20101001' }), '5270400000');
+    assert.strictEqual(await text("{d.d:diffD('20101201', 'weeks')}", { d: '20101001' }), '8');
+    assert.strictEqual(await text("{d.d:diffD('2010=12=01', 'ms', 'YYYY+MM+DD', 'YYYY=MM=DD')}", { d: '2010+10+01' }), '5270400000');
+  });
+  it('ifTE', async function () {
+    const t = "{d.v:ifTE('number'):show('number'):elseShow('string')}";
+    assert.strictEqual(await text(t, { v: 1 }), 'number');
+    assert.strictEqual(await text(t, { v: 'x' }), 'string');
+    assert.strictEqual(await text("{d.v:ifTE('binary'):show('да'):elseShow('нет')}", { v: '0' }), 'да');
+    assert.strictEqual(await text("{d.v:ifTE('integer'):show('да'):elseShow('нет')}", { v: 1.5 }), 'нет');
+  });
+  it('printJSON', async function () {
+    assert.strictEqual(await text('{d.o:printJSON()}', { o: { a: 1 } }), '{"a":1}');
+  });
+  it('t', async function () {
+    const opts = Object.assign({}, RU, { translations: { ru: { Hello: 'Привет' } } });
+    assert.strictEqual(await text('{d.v:t}', { v: 'Hello' }, opts), 'Привет');
+    assert.strictEqual(await text('{d.v:t}', { v: 'Bye' }, opts), 'Bye');
+  });
+  it('substr в режиме слов не режет слово', async function () {
+    assert.strictEqual(await text('{d.s:substr(0,10,true)}', { s: 'Длинная строка' }), 'Длинная ');
+    assert.strictEqual(await text('{d.s:substr(1,11,true)}', { s: 'abcd efg hijklm' }), 'abcd efg ');
+    assert.strictEqual(await text("{d.s:substr(11,22,'last')}", { s: 'abcd efg hijklm' }), 'hijklm');
+  });
+  it('arrayJoin со срезом', async function () {
+    assert.strictEqual(await text("{d.a:arrayJoin('; ',1,1)}", { a: ['a', 'b', 'c'] }), 'b');
+    assert.strictEqual(await text("{d.a:arrayJoin('', 0, -1)}", { a: ['a', 'b', 'c'] }), 'ab');
+    assert.strictEqual(await text("{d.a:arrayJoin('', 1)}", { a: ['a', 'b', 'c'] }), 'bc');
+  });
+  it('formatC: второй аргумент — целевая валюта (эталон matrix/s2/formatc-2-usd-1000)', async function () {
+    assert.strictEqual(await text("[{d.v:formatC(2, 'USD')}]", { v: 1000 }, RURU), '[1,140.30 $]');
+  });
+  it('курсы по умолчанию как в EE (с RUB)', async function () {
+    assert.strictEqual(await text("{d.v:convCurr('USD')}", { v: 1000 }), '14.679643146796433');
+  });
+  it("padr/padl: '.' в кавычках — литерал, а не путь", async function () {
+    assert.strictEqual(await text("{d.s:padr(6,'.')}", { s: 'ab' }), 'ab....');
+    assert.strictEqual(await text("{d.s:padl(4,'.')}", { s: 'ab' }), '..ab');
+  });
+  it('относительный путь без кавычек по-прежнему путь', async function () {
+    assert.strictEqual(await text('{d.a:add(.b)}', { a: 1, b: 2 }), '3');
+  });
+  it('ifEmpty не обрывает цепочку', async function () {
+    assert.strictEqual(await text("{d.v:ifEmpty('—'):formatD('DD.MM.YYYY')}", { v: null }), 'Invalid Date');
+    assert.strictEqual(await text("{d.v:formatD('DD.MM.YYYY'):ifEmpty('—')}", { v: null }), '—');
+  });
+  it('неизвестный форматтер: подсказка mod и суффикс Source', async function () {
+    assert.strictEqual(await error('{d.n:fooBar()}', { n: 1 }), 'Formatter "fooBar" does not exist. Do you mean "mod"?');
+    assert.ok((await rawError('{d.n:fooBar()}', { n: 1 })).endsWith(' Source: "{d.n:fooBar()}"'));
+  });
+});

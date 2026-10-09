@@ -237,7 +237,8 @@ describe('Carbone', function () {
       const _xml = '<xml> {d.age:'+_injectedCode+'(3)} </xml>';
       const _data = { age : '1' };
       carbone.renderXML(_xml, _data, function (err, result) {
-        helper.assert(err+'', 'Error: Formatter \"a;process.exit.call`-1`;//\" does not exist. Do you mean \"and\"?');
+        // как в Carbone EE 5 (эталон matrix/tests3/unknown-formatter): сообщение заканчивается меткой Source
+        helper.assert(err+'', 'Error: Formatter \"a;process.exit.call`-1`;//\" does not exist. Do you mean \"and\"? Source: \"{d.age:a;process.exit.call`-1`;//(3)}\"');
         helper.assert(result, null);
         done();
       });
@@ -535,7 +536,8 @@ describe('Carbone', function () {
         param : 1
       };
       carbone.renderXML('<xml>{d.param:ifEkual(2, \'two\')}</xml>', data, function (err, result) {
-        helper.assert(err+'', 'Error: Formatter "ifEkual" does not exist. Do you mean "ifEqual"?');
+        // как в Carbone EE 5 (эталон matrix/tests3/unknown-formatter): сообщение заканчивается меткой Source
+        helper.assert(err+'', 'Error: Formatter "ifEkual" does not exist. Do you mean "ifEqual"? Source: "{d.param:ifEkual(2,\'two\')}"');
         helper.assert(result, null);
         done();
       });

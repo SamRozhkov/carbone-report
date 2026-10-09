@@ -430,6 +430,49 @@ function len (d) {
 }
 
 /**
+ * Carbone 5: проверка типа значения. Типы: string, number, integer, boolean, binary, object, array.
+ * binary — значения 0, 1, '0', '1', true, false. Используется с show / elseShow, как ifEQ.
+ *
+ * @exampleContextFormatter [ "homer" , "string"  ] true
+ * @exampleContextFormatter [ 10.5    , "number"  ] true
+ * @exampleContextFormatter [ 10.5    , "integer" ] false
+ * @exampleContextFormatter [ false   , "binary"  ] true
+ *
+ * @param  {Mixed}  d     data
+ * @param  {String} type  ожидаемый тип
+ */
+function ifTE (d, type) {
+  var _result = false;
+  switch (type) {
+    case 'string':
+      _result = typeof d === 'string';
+      break;
+    case 'number':
+      _result = typeof d === 'number' && Number.isFinite(d);
+      break;
+    case 'integer':
+      _result = Number.isInteger(d);
+      break;
+    case 'boolean':
+      _result = typeof d === 'boolean';
+      break;
+    case 'binary':
+      _result = d === 0 || d === 1 || d === '0' || d === '1' || d === true || d === false;
+      break;
+    case 'object':
+      _result = d !== null && typeof d === 'object' && Array.isArray(d) === false;
+      break;
+    case 'array':
+      _result = Array.isArray(d);
+      break;
+    default:
+      _result = false;
+  }
+  this.isConditionTrue = _updateCondition(this.isAndOperator, this.isConditionTrue, _result);
+  return d;
+}
+
+/**
  * Test if data is empty (null, undefined, [], {}, ...). The new formatter `ifEM` should be used instead of this one.
  *
  * @version 0.12.5
@@ -455,9 +498,8 @@ function ifEmpty (d, message, continueOnSuccess) {
     || d instanceof Array && d.length === 0
     || d.constructor === Object && Object.keys(d).length === 0
     || Number.isNaN(d) === true) {
-    if (continueOnSuccess !== true && continueOnSuccess !== 'true') {
-      this.stopPropagation = true;
-    }
+    // как в Carbone EE 5 (эталон matrix/tests2/ifempty-chain-with-formatd): цепочка не обрывается,
+    // следующий форматтер получает подставленное значение; continueOnSuccess оставлен для совместимости
     return message;
   }
   return d;
@@ -562,6 +604,7 @@ module.exports = {
   ifLTE,
   ifIN,
   ifNIN,
+  ifTE,
   hideBegin,
   hideEnd,
   showBegin,

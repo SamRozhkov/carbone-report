@@ -207,11 +207,51 @@ convCRLF.canInjectXML = true;
  * @param {Integer} end Zero-based index before which to end extraction
  * @return {String} return the formatted string
  */
-function substr (d, begin, end) {
+function substr (d, begin, end, wordMode) {
   if (typeof d === 'string') {
+    // Carbone 5: wordMode (true | 'last') не режет слова — граница внутри слова сдвигается к его началу;
+    // 'last' печатает всё до конца строки. Соседние куски substr(0,10,true) и substr(10,20,true) не теряют слов.
+    if (wordMode === true || wordMode === 'true' || wordMode === 'last') {
+      var _begin = _wordBoundary(d, _slicePosition(d, begin, 0));
+      var _end = (wordMode === 'last') ? d.length : _wordBoundary(d, _slicePosition(d, end, d.length));
+      return d.slice(_begin, Math.max(_begin, _end));
+    }
     return d.slice(begin, end);
   }
   return d;
+}
+
+/**
+ * Позиция в строке по правилам String.prototype.slice (отрицательная — от конца)
+ * @private
+ */
+function _slicePosition (str, position, defaultPosition) {
+  if (position === undefined || position === null || position === '') {
+    return defaultPosition;
+  }
+  var _pos = parseInt(position, 10);
+  if (isNaN(_pos) === true) {
+    return defaultPosition;
+  }
+  if (_pos < 0) {
+    _pos = Math.max(str.length + _pos, 0);
+  }
+  return Math.min(_pos, str.length);
+}
+
+/**
+ * Если позиция попадает внутрь слова, сдвинуть её к началу этого слова
+ * @private
+ */
+function _wordBoundary (str, position) {
+  var _pos = position;
+  if (_pos <= 0 || _pos >= str.length || /\s/.test(str[_pos]) === true) {
+    return _pos;
+  }
+  while (_pos > 0 && /\s/.test(str[_pos - 1]) === false) {
+    _pos--;
+  }
+  return _pos;
 }
 
 /**
@@ -286,6 +326,108 @@ function prepend (d, toPrepend) {
   return toPrepend + d;
 }
 
+/**
+ * Carbone 5: добавить текст в конец (зеркально prepend)
+ *
+ * @example ["abcdef", "123"]
+ *
+ * @param  {Mixed}  d
+ * @param  {String} toAppend
+ * @return {String}
+ */
+function append (d, toAppend) {
+  return d + toAppend;
+}
+
+/**
+ * Carbone 5: обрезать текст до maximum символов и дописать «...», если он длиннее
+ *
+ * @example ["abcdef", 3 ]
+ * @example ["abcdef", 6 ]
+ * @example ["abcdef", 10]
+ *
+ * @param  {Mixed}   d
+ * @param  {Integer} maximum
+ * @return {String}
+ */
+function ellipsis (d, maximum) {
+  if (typeof d === 'string' || typeof d === 'number') {
+    var _str = d + '';
+    var _max = parseInt(maximum, 10);
+    if (isNaN(_max) === false && _str.length > _max) {
+      return _str.slice(0, _max) + '...';
+    }
+    return _str;
+  }
+  return d;
+}
+
+/**
+ * Carbone 5: заменить все вхождения oldText на newText (без newText — удалить)
+ *
+ * @example ["abcdef abcde", "cd", "OK"]
+ * @example ["abcdef abcde", "cd"      ]
+ * @example ["abcdef abcde", "cd", 1000]
+ *
+ * @param  {Mixed}  d
+ * @param  {String} oldText
+ * @param  {String} newText  [optional]
+ * @return {String}
+ */
+function replace (d, oldText, newText) {
+  if ((typeof d === 'string' || typeof d === 'number') && oldText !== undefined && oldText !== null && oldText + '' !== '') {
+    return (d + '').split(oldText + '').join(newText === undefined || newText === null ? '' : newText + '');
+  }
+  return d;
+}
+
+/**
+ * Carbone 5: разбить строку в массив (обычно вместе с arrayJoin)
+ *
+ * @example ["abcdefc12", "c"]
+ * @example [1222.1     , "."]
+ *
+ * @param  {Mixed}  d
+ * @param  {String} delimiter
+ * @return {Array}
+ */
+function split (d, delimiter) {
+  if ((typeof d === 'string' || typeof d === 'number') && delimiter !== undefined && delimiter !== null) {
+    return (d + '').split(delimiter + '');
+  }
+  return d;
+}
+
+/**
+ * Carbone 5: напечатать значение как JSON
+ *
+ * @example [{"a":1}]
+ * @example ["my car"]
+ *
+ * @param  {Mixed} d
+ * @return {String}
+ */
+function printJSON (d) {
+  if (d === undefined) {
+    return d;
+  }
+  return JSON.stringify(d);
+}
+
+/**
+ * Carbone 5: перевести значение по словарю options.translations[lang]; без перевода — значение как есть
+ *
+ * @param  {Mixed} d
+ * @return {Mixed}
+ */
+function t (d) {
+  var _dict = this.translations ? this.translations[this.lang] : undefined;
+  if (d !== null && d !== undefined && _dict && Object.prototype.hasOwnProperty.call(_dict, d + '') === true) {
+    return _dict[d + ''];
+  }
+  return d;
+}
+
 module.exports = {
   lowerCase : lowerCase,
   upperCase : upperCase,
@@ -300,5 +442,11 @@ module.exports = {
   padl      : padl,
   padr      : padr,
   md5       : md5,
-  prepend   : prepend
+  prepend   : prepend,
+  append    : append,
+  ellipsis  : ellipsis,
+  replace   : replace,
+  split     : split,
+  printJSON : printJSON,
+  t         : t
 };

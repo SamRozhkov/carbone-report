@@ -56,8 +56,9 @@ var builder = {
           }
           catch (e) {
             // как в Carbone EE: ошибка отключённой функции заканчивается меткой, где она встретилась
-            if (e && e.disabledFormatter) {
-              var _source = builder.findDisabledSource(preprocessedMarkers, e.disabledFormatter);
+            // то же для неизвестного форматтера (sourceFormatter)
+            if (e && (e.disabledFormatter || e.sourceFormatter)) {
+              var _source = builder.findDisabledSource(preprocessedMarkers, e.disabledFormatter || e.sourceFormatter);
               if (_source !== null) {
                 e.message += ' Source: "' + _source + '"';
               }
@@ -78,7 +79,8 @@ var builder = {
    * @return {String|null}
    */
   findDisabledSource : function (markers, name) {
-    var _regex = new RegExp(':' + name + '(?=\\(|:|$)');
+    // имя экранируется: у неизвестного форматтера в имени может быть что угодно («a;process.exit…»)
+    var _regex = new RegExp(':' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=\\(|:|$)');
     for (var i = 0; i < markers.length; i++) {
       if (_regex.test(markers[i].name) === true) {
         return '{' + markers[i].name.replace(/^_root\./, '') + '}';
@@ -105,7 +107,9 @@ var builder = {
 
     function getInjectedVariable (variable) {
       var _injectedArgument = getSafeValue(variable);
-      if (variable.startsWith('.') === true) {
+      // как в Carbone EE: путь — только «.x» / «..x»; одиночные точки без имени («.», «..») печатаются как есть
+      // (эталон matrix/s4/group-header-detail-rows-nested-filter-by-parent: print(..) → «..»)
+      if (/^\.+[^.]/.test(variable) === true) {
         var _nbPoint = 0;
         for (; variable[_nbPoint] === '.'; _nbPoint++) {
           // count number of point nothing
@@ -135,7 +139,12 @@ var builder = {
             // remove existing quotes (everything is converted to a string for the momemt. It should change in the future)
             // Percent-Decode the commas to obtain the initial string argument: '%2c' to ','
             var _argument = _arguments[j].replace(/^ *'?/, '').replace(/'? *$/, '').replace(/%2c/g, ',');
-            if (existingFormatters?.[_functionStr]?.isAcceptingMathExpression === true) {
+            // как в Carbone EE: аргумент в кавычках — всегда литерал (padr(6, '.') → «ab....»),
+            // путь или выражение решается до снятия кавычек
+            if (/^ *'/.test(_arguments[j]) === true) {
+              _argumentStr += ', ' + getSafeValue(_argument);
+            }
+            else if (existingFormatters?.[_functionStr]?.isAcceptingMathExpression === true) {
               _argumentStr += ', ' + parser.parseMathematicalExpression(_argument, getInjectedVariable)
             }
             else {
@@ -154,7 +163,10 @@ var builder = {
       }
       if (existingFormatters[_functionStr] === undefined) {
         var _alternativeFnName = helper.findClosest(_functionStr, existingFormatters);
-        throw Error('Formatter "'+_functionStr+'" does not exist. Do you mean "'+_alternativeFnName+'"?');
+        var _unknownErr = Error('Formatter "'+_functionStr+'" does not exist. Do you mean "'+_alternativeFnName+'"?');
+        // как в Carbone EE: buildXML допишет суффикс Source с меткой (эталон matrix/tests3/unknown-formatter)
+        _unknownErr.sourceFormatter = _functionStr;
+        throw _unknownErr;
       }
       if ( (existingFormatters[_functionStr].canInjectXML === true && onlyFormatterWhichInjectXML === true)
         || (existingFormatters[_functionStr].canInjectXML !== true && onlyFormatterWhichInjectXML !== true)) {

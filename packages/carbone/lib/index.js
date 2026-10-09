@@ -1,6 +1,10 @@
 var os = require('os');
 var file = require('./file');
 var params = require('./params');
+// Курсы по умолчанию как в Carbone EE 5: исходная таблица params.js (EUR=1, USD=1.1403, RUB=77.6790, …).
+// Вывод из эталонов: convCurr('USD') на 1000 даёт 1140.3000000000002 (= 1000 × 1.1403) при lang ru-ru
+// и 14.679643146796433 (= 1000 / 77.6790 × 1.1403) при lang ru (help/fmt-convcurr) — ровно эта таблица.
+var DEFAULT_CURRENCY_RATES = Object.freeze(Object.assign({}, params.currencyRates));
 var builder = require('./builder');
 var input = require('./input');
 var translator = require('./translator');
@@ -55,7 +59,7 @@ var carbone = {
     params.translations            = {};
     params.currencySource          = '';
     params.currencyTarget          = '';
-    params.currencyRates           = { EUR : 1, USD : 1.14 };
+    params.currencyRates           = Object.assign({}, DEFAULT_CURRENCY_RATES);
   },
 
   /**

@@ -7,6 +7,9 @@ dayjs.extend(require('dayjs/plugin/customParseFormat'));
 dayjs.extend(require('dayjs/plugin/utc'));
 dayjs.extend(require('dayjs/plugin/isoWeek'));
 dayjs.extend(require('dayjs/plugin/timezone'));
+// Carbone 5: formatI ('human', 'human+') и интервалы
+dayjs.extend(require('dayjs/plugin/duration'));
+dayjs.extend(require('dayjs/plugin/relativeTime'));
 
 
 /**
@@ -198,9 +201,60 @@ function parse (d, patternIn) {
 }
 
 
+/**
+ * Carbone 5: разница между датами (toDate − d) в единицах unit (по умолчанию миллисекунды), с отбрасыванием дробной части.
+ * Единицы: day(s), week(s), month(s), quarter(s), year(s), hour(s), minute(s), second(s), millisecond(s),
+ * короткие d, w, Q, M, y, h, m, s, ms. Даты без смещения читаются как UTC (как parse).
+ *
+ * @example ["20101001", "20101201"        ]
+ * @example ["20101001", "20101201", "days"]
+ *
+ * @param  {String|Number} d               дата «от»
+ * @param  {String|Number} toDate          дата «до»
+ * @param  {String}        unit            [optional] единица результата
+ * @param  {String}        patternFromDate [optional] формат d, по умолчанию ISO 8601
+ * @param  {String}        patternToDate   [optional] формат toDate, по умолчанию ISO 8601
+ * @return {Number}
+ */
+function diffD (d, toDate, unit, patternFromDate, patternToDate) {
+  if (d === null || typeof d === 'undefined') {
+    return d;
+  }
+  return parse(toDate, patternToDate).diff(parse(d, patternFromDate), unit || 'millisecond');
+}
+
+/**
+ * Carbone 5: форматирование интервала. patternOut — единица результата или 'human' / 'human+' (текст на языке options.lang);
+ * patternIn — единица входного числа (по умолчанию миллисекунды); строка ISO 8601 вида 'P1Y2M' тоже понимается.
+ *
+ * @exampleContext {"lang":"en"}
+ * @example [2000   , "second"         ]
+ * @example [2000   , "human+"         ]
+ * @example [60     , "ms"   , "minute"]
+ * @example ["P1M"  , "ms"             ]
+ *
+ * @param  {Number|String} d
+ * @param  {String}        patternOut
+ * @param  {String}        patternIn   [optional]
+ * @return {Number|String}
+ */
+function formatI (d, patternOut, patternIn) {
+  if (d === null || typeof d === 'undefined' || d === '') {
+    return d;
+  }
+  var _duration = (typeof d === 'string' && /^[-+]?P/i.test(d) === true)
+    ? dayjs.duration(d)
+    : dayjs.duration(parseFloat(d), patternIn || 'millisecond');
+  if (patternOut === 'human' || patternOut === 'human+') {
+    return _duration.locale(this.lang).humanize(patternOut === 'human+');
+  }
+  return _duration.as(patternOut || 'millisecond');
+}
 
 module.exports = {
   formatD,
+  formatI,
+  diffD,
   convDate,
   addD,
   subD,

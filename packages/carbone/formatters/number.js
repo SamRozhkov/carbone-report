@@ -151,13 +151,16 @@ function formatN (d, precision) {
  *                                      - M  : print Major currency name without the number
  *                                      - L  : prints number with currency symbol (by default)
  *                                      - LL : prints number with Major currency name
+ * @param  {String} targetCurrency    [optional] Carbone 5: целевая валюта (по умолчанию options.currencyTarget)
  * @return {String}                   return converted values
  *
  */
-function formatC (d, precisionOrFormat) {
+function formatC (d, precisionOrFormat, targetCurrency) {
   if (d !== null && typeof d !== 'undefined') {
     var _locale       = locale[this.lang] || locale.en; // TODO optimize, this test should be done before
-    var _currency     = this.modifiedCurrencyTarget || this.currency.target;
+    // Carbone 5: второй аргумент — целевая валюта, сумма переводится в неё по курсам (как convCurr)
+    var _target       = (targetCurrency !== undefined && targetCurrency !== null && targetCurrency !== '') ? targetCurrency : undefined;
+    var _currency     = _target || this.modifiedCurrencyTarget || this.currency.target;
     var _currencyInfo = currency[_currency];
     var _precision    = _currencyInfo.precision;
     var _customPrec   = parseInt(precisionOrFormat, 10);
@@ -168,7 +171,7 @@ function formatC (d, precisionOrFormat) {
     else if ( _locale.currency[precisionOrFormat] instanceof Function ) {
       _formatFn = _locale.currency[precisionOrFormat];
     }
-    var _valueRaw  = _format(convCurr.call(this, d), _locale.number, _precision);
+    var _valueRaw  = _format(convCurr.call(this, d, _target), _locale.number, _precision);
     // reset modifiedCurrencyTarget for next use
     this.modifiedCurrencyTarget = null;
     return _formatFn(_valueRaw,
@@ -260,6 +263,70 @@ function div (d, value) {
 }
 div.isAcceptingMathExpression = true;
 
+/**
+ * Carbone 5: остаток от деления
+ *
+ * @example [10, 3]
+ * @example [-3, 2]
+ *
+ * @param {Number} value делитель
+ * @return {Number}
+ */
+function mod (d, value) {
+  if (d !== null && typeof d !== 'undefined' && parseFloat(value) !== 0) {
+    return parseFloat(d) % parseFloat(value);
+  }
+  return d;
+}
+mod.isAcceptingMathExpression = true;
+
+/**
+ * Carbone 5: модуль числа
+ *
+ * @example [-5.5]
+ * @example ["-2"]
+ *
+ * @return {Number}
+ */
+function abs (d) {
+  if (d !== null && typeof d !== 'undefined') {
+    return Math.abs(parseFloat(d));
+  }
+  return d;
+}
+
+/**
+ * Carbone 5: округление вверх до целого
+ *
+ * @example [10.1]
+ * @example [-10.1]
+ *
+ * @return {Number}
+ */
+function ceil (d) {
+  if (d !== null && typeof d !== 'undefined') {
+    return Math.ceil(parseFloat(d));
+  }
+  return d;
+}
+
+/**
+ * Carbone 5: округление вниз до целого
+ *
+ * @example [10.9]
+ * @example [-10.9]
+ *
+ * @return {Number}
+ */
+function floor (d) {
+  if (d !== null && typeof d !== 'undefined') {
+    return Math.floor(parseFloat(d));
+  }
+  return d;
+}
+
+// порядок ключей важен для подсказки «Do you mean»: helper.findClosest берёт первый минимум,
+// и для fooBar EE предлагает mod (эталон matrix/tests3/unknown-formatter), поэтому mod раньше floor
 module.exports = {
   formatN  : formatN,
   formatC  : formatC,
@@ -269,6 +336,10 @@ module.exports = {
   sub      : sub,
   mul      : mul,
   div      : div,
+  mod      : mod,
+  abs      : abs,
+  ceil     : ceil,
+  floor    : floor,
 
   /**
    * Converts a number to an INT

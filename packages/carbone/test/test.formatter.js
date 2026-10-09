@@ -114,20 +114,21 @@ describe('formatter', function () {
     });
   });
   describe('ifEmpty', function () {
-    it('should show a message if data is empty. It should stop propagation to next formatter', function () {
+    it('should show a message if data is empty and keep on propagation to next formatter', function () {
+      // как в Carbone EE 5 (эталон matrix/tests2/ifempty-chain-with-formatd): ifEmpty не обрывает цепочку
       var _context = {};
       helper.assert(callWithContext(conditionFormatter.ifEmpty, _context, ''       , 'msgIfEmpty'), 'msgIfEmpty');
-      helper.assert(_context.stopPropagation, true);
+      helper.assert(_context.stopPropagation, false);
       helper.assert(callWithContext(conditionFormatter.ifEmpty, _context, null     , 'msgIfEmpty'), 'msgIfEmpty');
-      helper.assert(_context.stopPropagation, true);
+      helper.assert(_context.stopPropagation, false);
       helper.assert(callWithContext(conditionFormatter.ifEmpty, _context, undefined, 'msgIfEmpty'), 'msgIfEmpty');
-      helper.assert(_context.stopPropagation, true);
+      helper.assert(_context.stopPropagation, false);
       helper.assert(callWithContext(conditionFormatter.ifEmpty, _context, []       , 'msgIfEmpty'), 'msgIfEmpty');
-      helper.assert(_context.stopPropagation, true);
+      helper.assert(_context.stopPropagation, false);
       helper.assert(callWithContext(conditionFormatter.ifEmpty, _context, NaN      , 'msgIfEmpty'), 'msgIfEmpty');
-      helper.assert(_context.stopPropagation, true);
+      helper.assert(_context.stopPropagation, false);
       helper.assert(callWithContext(conditionFormatter.ifEmpty, _context, {}       , 'msgIfEmpty'), 'msgIfEmpty');
-      helper.assert(_context.stopPropagation, true);
+      helper.assert(_context.stopPropagation, false);
       helper.assert(callWithContext(conditionFormatter.ifEmpty, _context, {}       , 'msgIfEmpty', 'true'), 'msgIfEmpty');
       helper.assert(_context.stopPropagation, false);
       helper.assert(callWithContext(conditionFormatter.ifEmpty, _context, {}       , 'msgIfEmpty', true), 'msgIfEmpty');

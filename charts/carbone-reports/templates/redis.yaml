@@ -1,0 +1,79 @@
+{{- if .Values.redis.enabled }}
+{{- $name := include "cr.component" (dict "root" . "name" "redis") }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  serviceName: {{ $name }}
+  selector:
+    matchLabels:
+      {{- include "cr.selectorLabels" (dict "root" . "component" "redis") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cr.selectorLabels" (dict "root" . "component" "redis") | nindent 8 }}
+      {{- if or (not .Values.existingSecret) .Values.redis.podAnnotations }}
+      annotations:
+        {{- if not .Values.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.redis.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    spec:
+      {{- include "cr.podDefaults" . | nindent 6 }}
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          # Как в compose: пароль подставляет shell в контейнере (его нет в спецификации пода),
+          # без персистентности, флаг обслуживания агент перезаписывает каждые 5 с.
+          command:
+            - sh
+            - -c
+            - |-
+              case "$REDIS_PASSWORD" in ""|*[!0-9a-fA-F]*) echo "REDIS_PASSWORD: только шестнадцатеричные символы (openssl rand -hex 32)" >&2; exit 1;; esac
+              exec redis-server --requirepass "$REDIS_PASSWORD" --save "" --appendonly no --maxmemory 128mb --maxmemory-policy volatile-lru
+          env:
+            {{- include "cr.secretEnv" (dict "root" . "env" "REDIS_PASSWORD" "key" "REDIS_PASSWORD") | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "REDISCLI_AUTH" "key" "REDIS_PASSWORD") | nindent 12 }}
+            {{- with .Values.redis.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: [redis-cli, ping]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: [redis-cli, ping]
+            periodSeconds: 20
+          {{- with .Values.redis.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- include "cr.scheduling" .Values.redis | nindent 6 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cr.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  selector:
+    {{- include "cr.selectorLabels" (dict "root" . "component" "redis") | nindent 4 }}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+{{- end }}

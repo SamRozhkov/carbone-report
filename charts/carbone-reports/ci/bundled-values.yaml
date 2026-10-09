@@ -1,0 +1,20 @@
+# Пробная установка: встроенные Postgres, Redis и SeaweedFS.
+ingress:
+  host: reports.example.com
+secrets:
+  appSecret: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  encryptionKey: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+  onlyofficeJwtSecret: oooooooooooooooooooooooooooooooooooooooo
+  adminLogin: admin
+  adminPassword: admin-password
+  postgresPassword: postgres-password
+  redisPassword: 0123456789abcdef0123456789abcdef
+  backupAgentToken: tttttttttttttttttttttttttttttttttttttttt
+  s3AccessKeyId: 0123456789abcdef
+  s3SecretAccessKey: 0123456789abcdef0123456789abcdef
+postgresql:
+  enabled: true
+redis:
+  enabled: true
+s3:
+  enabled: true

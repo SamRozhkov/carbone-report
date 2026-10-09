@@ -1,0 +1,136 @@
+suite: встроенные зависимости
+templates:
+  - postgresql.yaml
+  - redis.yaml
+  - s3.yaml
+  - configmap-api.yaml
+  - configmap-backup-agent.yaml
+  - secret.yaml
+values:
+  - ../ci/bundled-values.yaml
+release:
+  name: cr
+tests:
+  - it: Postgres — StatefulSet, PGDATA в подкаталоге тома, пароль из Secret, pg_isready
+    template: postgresql.yaml
+    documentIndex: 0
+    asserts:
+      - isKind: { of: StatefulSet }
+      - equal: { path: 'spec.template.spec.containers[0].image', value: postgres:17-alpine }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom: { secretKeyRef: { name: cr-carbone-reports, key: POSTGRES_PASSWORD } }
+      - equal:
+          path: 'spec.template.spec.containers[0].readinessProbe.exec.command'
+          value: [pg_isready, -U, app, -d, app]
+      - equal: { path: 'spec.volumeClaimTemplates[0].spec.resources.requests.storage', value: 10Gi }
+  - it: API и агент ходят во встроенный Postgres без SSL
+    template: configmap-api.yaml
+    asserts:
+      - equal: { path: data.DATABASE_URL, value: 'postgres://app@cr-carbone-reports-postgresql:5432/app?sslmode=disable' }
+      - equal: { path: data.REDIS_URL, value: 'redis://cr-carbone-reports-redis:6379' }
+      - equal: { path: data.S3_ENDPOINT, value: 'http://cr-carbone-reports-s3:8333' }
+      - equal: { path: data.S3_BUCKET, value: carbone-reports }
+      - equal: { path: data.S3_FORCE_PATH_STYLE, value: 'true' }
+      - equal: { path: data.S3_CREATE_BUCKET, value: 'true' }
+  - it: агент — PGHOST встроенного Postgres, без PGSSLROOTCERT
+    template: configmap-backup-agent.yaml
+    asserts:
+      - equal: { path: data.PGHOST, value: cr-carbone-reports-postgresql }
+      - equal: { path: data.PGSSLMODE, value: disable }
+      - notExists: { path: data.PGSSLROOTCERT }
+      - notExists: { path: data.S3_RCLONE_PROVIDER }
+  - it: Redis — пароль только через окружение, без персистентности (как в compose)
+    template: redis.yaml
+    documentIndex: 0
+    asserts:
+      - equal: { path: 'spec.template.spec.containers[0].image', value: redis:7-alpine }
+      - matchRegex:
+          path: 'spec.template.spec.containers[0].command[2]'
+          pattern: 'exec redis-server --requirepass "\$REDIS_PASSWORD" --save "" --appendonly no'
+      - notExists: { path: spec.volumeClaimTemplates }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REDISCLI_AUTH
+            valueFrom: { secretKeyRef: { name: cr-carbone-reports, key: REDIS_PASSWORD } }
+  - it: SeaweedFS — скрипт запуска из ConfigMap, учётная запись из Secret, том /data
+    template: s3.yaml
+    documentIndex: 1
+    asserts:
+      - isKind: { of: StatefulSet }
+      - equal: { path: 'spec.template.spec.containers[0].command', value: [/s3-entrypoint.sh] }
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: { name: entrypoint, mountPath: /s3-entrypoint.sh, subPath: entrypoint.sh }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: S3_ACCESS_KEY_ID
+            valueFrom: { secretKeyRef: { name: cr-carbone-reports, key: S3_ACCESS_KEY_ID } }
+      - equal: { path: 'spec.template.spec.containers[0].readinessProbe.httpGet.path', value: /healthz }
+  - it: ConfigMap SeaweedFS содержит скрипт из files/
+    template: s3.yaml
+    documentIndex: 0
+    asserts:
+      - isKind: { of: ConfigMap }
+      - matchRegex: { path: 'data["entrypoint.sh"]', pattern: 'weed|/entrypoint.sh mini' }
+  - it: встроенный s3 без ключей — ошибка
+    template: secret.yaml
+    set: { secrets.s3AccessKeyId: '', secrets.s3SecretAccessKey: '' }
+    asserts:
+      - failedTemplate:
+          errorMessage: 'secrets.s3AccessKeyId и secrets.s3SecretAccessKey: обязательны при s3.enabled=true (учётная запись встроенного SeaweedFS)'
+  - it: встроенные выключены — их шаблоны пусты
+    template: postgresql.yaml
+    set: { postgresql.enabled: false, externalDatabase.host: pg.example.com }
+    asserts:
+      - hasDocuments: { count: 0 }
+  - it: размещение, аннотации и переменные — как у остальных компонентов
+    template: postgresql.yaml
+    documentIndex: 0
+    set:
+      postgresql.nodeSelector: { disk: ssd }
+      postgresql.podAnnotations: { team: db }
+      postgresql.extraEnv: [{ name: TZ, value: UTC }]
+    asserts:
+      - equal: { path: spec.template.spec.nodeSelector, value: { disk: ssd } }
+      - equal: { path: 'spec.template.metadata.annotations.team', value: db }
+      - exists: { path: 'spec.template.metadata.annotations["checksum/secret"]' }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: TZ, value: UTC }
+  - it: Redis и S3 — размещение, аннотации, extraEnv
+    template: redis.yaml
+    documentIndex: 0
+    set:
+      redis.tolerations: [{ key: k, operator: Exists }]
+      redis.podAnnotations: { team: cache }
+      redis.extraEnv: [{ name: TZ, value: UTC }]
+    asserts:
+      - equal: { path: spec.template.spec.tolerations, value: [{ key: k, operator: Exists }] }
+      - equal: { path: 'spec.template.metadata.annotations.team', value: cache }
+      - exists: { path: 'spec.template.metadata.annotations["checksum/secret"]' }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: TZ, value: UTC }
+  - it: S3 — размещение, аннотации, extraEnv, контрольная сумма скрипта
+    template: s3.yaml
+    documentIndex: 1
+    set:
+      s3.affinity: { nodeAffinity: { requiredDuringSchedulingIgnoredDuringExecution: { nodeSelectorTerms: [] } } }
+      s3.podAnnotations: { team: files }
+      s3.extraEnv: [{ name: TZ, value: UTC }]
+    asserts:
+      - exists: { path: spec.template.spec.affinity.nodeAffinity }
+      - equal: { path: 'spec.template.metadata.annotations.team', value: files }
+      - exists: { path: 'spec.template.metadata.annotations["checksum/secret"]' }
+      - exists: { path: 'spec.template.metadata.annotations["checksum/entrypoint"]' }
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: { name: TZ, value: UTC }

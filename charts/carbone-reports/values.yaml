@@ -164,6 +164,11 @@ postgresql:
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 1Gi }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
 externalDatabase:
   # Обязательно при postgresql.enabled=false.
   host: ''
@@ -184,6 +189,11 @@ redis:
   resources:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { memory: 256Mi }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
 externalRedis:
   # Обязательно при redis.enabled=false: URL без пароля (пароль — secrets.redisPassword), rediss:// — TLS.
   url: ''
@@ -199,6 +209,11 @@ s3:
   resources:
     requests: { cpu: 100m, memory: 256Mi }
     limits: { memory: 1Gi }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  extraEnv: []
 externalS3:
   # Пусто — AWS S3 по региону.
   endpoint: ''

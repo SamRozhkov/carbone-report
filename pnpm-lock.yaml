@@ -47,6 +47,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1147.0
         version: 3.1147.0
+      '@carbone-reports/carbone':
+        specifier: workspace:*
+        version: link:../../packages/carbone
       '@carbone-reports/shared':
         specifier: workspace:*
         version: link:../../packages/shared

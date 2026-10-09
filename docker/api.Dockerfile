@@ -20,9 +20,11 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
+COPY packages/carbone/package.json packages/carbone/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @carbone-reports/api...
 COPY packages/shared packages/shared
+COPY packages/carbone packages/carbone
 COPY apps/api apps/api
 RUN pnpm --filter @carbone-reports/api build
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \

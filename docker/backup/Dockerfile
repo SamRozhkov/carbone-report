@@ -16,6 +16,7 @@ COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/backup-agent/package.json apps/backup-agent/
 COPY packages/shared/package.json packages/shared/
+COPY packages/carbone/package.json packages/carbone/
 RUN pnpm install --frozen-lockfile --filter @carbone-reports/backup-agent...
 COPY apps/backup-agent apps/backup-agent
 RUN pnpm --filter @carbone-reports/backup-agent build

@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/server.ts'],
+  entry: { server: 'src/server.ts', 'render-worker': 'src/modules/render/worker.ts' },
   format: ['esm'],
   target: 'node22',
   clean: true,

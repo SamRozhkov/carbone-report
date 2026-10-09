@@ -153,7 +153,7 @@ async function selfTest(examples: HelpExample[]): Promise<number> {
 }
 
 async function liveCheck(examples: HelpExample[]): Promise<number> {
-  const timezone = process.env.TZ ?? 'Europe/Moscow';
+  const timezone = process.env.TZ || 'Europe/Moscow';
   let bad = 0;
   for (const e of examples) {
     let got: string;

@@ -3,6 +3,7 @@ import { outputFormatsFor, TemplateExt, type OutputFormat } from '@carbone-repor
 import { and, eq } from 'drizzle-orm';
 import { reportRunFiles, reportRuns, type RunRow } from '../../db/schema';
 import type { AppDeps, TemplateFileRef } from '../../deps';
+import { createBuildFlights } from '../../lib/build-flights';
 import type { Deadline } from '../../lib/deadline';
 import { AppError } from '../../lib/errors';
 import { renderReport } from './service';
@@ -138,11 +139,8 @@ export async function renderFromSnapshot(
   );
 }
 
-/**
- * Сборки в этом процессе: одновременные запросы того же запуска и формата ждут один промис
- * и не занимают соединений. Между экземплярами API — advisory-блокировка (runFileGate).
- */
-const inFlight = new Map<string, Promise<Buffer>>();
+/** Сборки в этом процессе; между экземплярами API — advisory-блокировка (runFileGate). */
+const inFlight = createBuildFlights<Buffer>();
 
 /** Готовый файл формата или сборка из снимка под блокировкой; всё — в пределах `deadline`. */
 export async function ensureRunFile(
@@ -156,16 +154,7 @@ export async function ensureRunFile(
     .from(reportRunFiles)
     .where(and(eq(reportRunFiles.runId, run.id), eq(reportRunFiles.format, format)));
   if (ready) return readSnapshotFile(deps, ready.filePath);
-  const key = `${run.id}:${format}`;
-  let build = inFlight.get(key);
-  if (!build) {
-    // Срок общей сборки — срок запроса, который её начал; каждый ждущий ограничен ещё и своим сроком.
-    build = buildRunFile(deps, run, format, deadline).finally(() => inFlight.delete(key));
-    // Ждущие могли уйти по своему сроку: отказ сборки не должен стать необработанным.
-    build.catch(() => {});
-    inFlight.set(key, build);
-  }
-  return deadline.race(build);
+  return inFlight(`${run.id}:${format}`, deadline, () => buildRunFile(deps, run, format, deadline));
 }
 
 async function buildRunFile(

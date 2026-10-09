@@ -393,8 +393,7 @@ describe('срок сборки', () => {
   };
 
   beforeAll(async () => {
-    // Срок с запасом на S3 (test:int:s3): первая запись в новый бакет SeaweedFS выделяет том.
-    s = await createTestApp({ carbone: slow }, { reportTimeoutMs: 2000 });
+    s = await createTestApp({ carbone: slow }, { reportTimeoutMs: 600 });
     const sAdmin = (await loginAs(s, 'admin')).cookie;
     sUser = (await loginAs(s, 'user')).cookie;
     const ds = await s.app.inject({
@@ -451,7 +450,7 @@ describe('срок сборки', () => {
 
   it('сборка, прерванная по сроку, снимает блокировку и не оставляет файла', async () => {
     const runId = await newSlowRun();
-    slowMs = 2500;
+    slowMs = 1500;
     const r = await getDocx(runId);
     expect(r.statusCode).toBe(504);
     expect(slowRenders).toBe(1);

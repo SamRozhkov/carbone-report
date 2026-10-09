@@ -248,13 +248,13 @@ rsync -a --exclude '*.partial' backups/ backup-host:/srv/carbone-reports-backups
 helm install cr charts/carbone-reports -n reports --create-namespace -f my-values.yaml
 ```
 
-После первого релиза чарт можно взять из OCI-реестра (его публикует CI на теги `vX.Y.Z`, версия чарта и `appVersion` равны версии тега):
+После первого релиза чарт можно взять из OCI-реестра (его публикует CI на теги `vX.Y.Z`; только у такого чарта `appVersion` равен версии тега и совпадает с тегом образов):
 
 ```bash
 helm install cr oci://ghcr.io/samrozhkov/charts/carbone-reports --version X.Y.Z -n reports -f my-values.yaml
 ```
 
-До первого тега `v*` образов с тегом `appVersion` нет: задайте `image.tag: main` или `image.tag: sha-<7 символов коммита>`. Пакеты GHCR приватные: сделайте их публичными или создайте Secret типа `docker-registry` и укажите его в `imagePullSecrets: [{ name: ghcr-pull }]`.
+При установке из каталога `image.tag` задавайте всегда: в репозитории `appVersion` — `0.1.0`, образов с таким тегом нет. Подойдут `main`, `sha-<7 символов коммита>` или `X.Y.Z` выпущенного релиза. Пакеты GHCR приватные: сделайте их публичными или создайте Secret типа `docker-registry` и укажите его в `imagePullSecrets: [{ name: ghcr-pull }]`.
 
 ### Пробная установка
 
@@ -339,22 +339,24 @@ serviceAccount:
 
 ### Бэкапы в кластере
 
-Агент бэкапа хранит бэкапы на PVC `<релиз>-carbone-reports-backups` (размер — `backup.persistence.size`). Том не удаляется при `helm uninstall`. Бэкапы лежат в том же кластере: копии вне его делайте средствами кластера (снапшоты тома, Velero). Восстановление из админки работает с несколькими репликами API.
+Агент бэкапа хранит бэкапы на PVC `$R-backups` (`<релиз>-carbone-reports-backups`, см. правило имён ниже) (размер — `backup.persistence.size`). Том не удаляется при `helm uninstall`. Бэкапы лежат в том же кластере: копии вне его делайте средствами кластера (снапшоты тома, Velero). Восстановление из админки работает с несколькими репликами API.
 
 ### Восстановление в Kubernetes без админки
 
-Если API не поднимается, используйте HTTP агента:
+Если API не поднимается, используйте HTTP агента. `R` — имя ресурсов релиза: `<релиз>-carbone-reports`, а если имя релиза уже содержит `carbone-reports` (или задан `nameOverride`), то имя релиза без приставки; при `fullnameOverride` — оно. Имя PVC бэкапов — `$R-backups`, Service агента — `$R-backup-agent` (имена длиннее 63 символов усекаются). Проверьте: `kubectl -n $NS get svc`. Ключ `-f` у curl показывает ошибку HTTP (код выходит ненулевым).
 
 ```bash
 NS=reports
 R=cr-carbone-reports
-kubectl -n $NS port-forward svc/$R-backup-agent 18080:8080 &
+kubectl -n $NS port-forward svc/$R-backup-agent 18080:8080 & PF=$!
+sleep 3   # дождаться проброса порта (или выполняйте port-forward в отдельном терминале)
 TOKEN=$(kubectl -n $NS get secret $R -o jsonpath='{.data.BACKUP_AGENT_TOKEN}' | base64 -d)   # или ваш existingSecret
 A="Authorization: Bearer $TOKEN"
-curl -s -H "$A" http://127.0.0.1:18080/backups                       # список
-curl -s -H "$A" -H 'content-type: application/json' -d '{"requestedBy":"kubectl"}' \
+curl -sf -H "$A" http://127.0.0.1:18080/backups                      # список
+curl -sf -H "$A" -H 'content-type: application/json' -d '{"requestedBy":"kubectl"}' \
   -X POST http://127.0.0.1:18080/backups/<имя>/restore                 # запуск
-curl -s -H "$A" http://127.0.0.1:18080/operation                      # ход и итог
+curl -sf -H "$A" http://127.0.0.1:18080/operation                     # ход и итог (204 — операций не было)
+kill $PF                                                              # по окончании
 ```
 
 Если восстановление прервалось, код повтора — в `kubectl -n $NS logs deploy/$R-backup-agent | grep 'КОД ВОССТАНОВЛЕНИЯ'`. Повтор — на экране обслуживания или запросом:
@@ -368,7 +370,7 @@ curl -s -H "$A" -H 'content-type: application/json' -d '{"code":"<код>","targ
 
 ### Безопасность
 
-API совместим с Pod Security «restricted». Web, агент, OnlyOffice, Carbone и встроенные зависимости работают от root, как их образы: чарт рассчитан на уровень «baseline». `networkPolicy.enabled: true` повторяет внутренние сети compose: к агенту ходит только api; к Redis, S3 и Postgres — api и агент; к api — web и OnlyOffice. Пробы kubelet при этом проходят (трафик узла). При внешнем OnlyOffice нужна дополнительная политика в api.
+API совместим с Pod Security «restricted». Web, агент, OnlyOffice, Carbone и встроенные зависимости работают от root, как их образы: чарт рассчитан на уровень «baseline». `networkPolicy.enabled: true` повторяет внутренние сети compose: к агенту ходит только api; к api — web и OnlyOffice; к OnlyOffice — web и api; к Carbone — api; к Redis, S3 и Postgres — api и агент (эти три политики есть только у встроенных зависимостей). Пробы kubelet при этом проходят (трафик узла). При внешнем OnlyOffice нужна дополнительная политика в api.
 
 ### Проверка чарта локально
 

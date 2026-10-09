@@ -225,7 +225,7 @@ jobs:
 
   chart-publish:
     name: Публикация чарта
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [chart, chart-kind, images]
     runs-on: ubuntu-latest
     timeout-minutes: 10

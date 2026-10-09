@@ -413,7 +413,7 @@
 - **Web (nginx):** `NGINX_MODE=tls|http|dev` (`dev` заменил монтирование `dev.conf` в `docker-compose.dev.yml`); в режиме `http` пробрасывается `X-Forwarded-Proto` от Ingress; апстримы — только полные имена (резолвер nginx не применяет домены поиска).
 - **Чарт** (`charts/carbone-reports`): компоненты web, api, агент, OnlyOffice, Carbone; встроенные Postgres, Redis и SeaweedFS за флагами; PVC бэкапов сохраняется при `helm uninstall`; `networkPolicy.enabled`; минимальная длина секретов проверяется при установке; `verify-ca`/`verify-full` для внешней БД требуют `caSecret`.
 - **Проверки:** `sh scripts/chart.sh all` (`pnpm chart:check`: lint, helm-unittest, kubeconform); в CI — задания `chart` и `chart-kind` (установка во временный кластер kind со встроенными зависимостями и `scripts/k8s-smoke.ts`: вход, бэкап, восстановление, перезапуски подов).
-- **Публикация:** задание `chart-publish` на теги `v*` кладёт чарт в `oci://ghcr.io/samrozhkov/charts/carbone-reports` (версия и `appVersion` = тег без `v`), после `chart`, `chart-kind` и `images`; `packages: write` только у него.
+- **Публикация:** задание `chart-publish` на теги `v*` кладёт чарт в `oci://ghcr.io/samrozhkov/charts/carbone-reports` (версия и `appVersion` = тег без `v`), после `chart`, `chart-kind` и `images`; `packages: write` только у заданий публикации (`images` и `chart-publish`).
 - **Решения исполнителей и контроллера по ходу работы:**
   - helm-unittest запускается как плагин Helm v1.2.1 внутри `alpine/helm:4.3.0` (каталог плагина кэшируется на хосте, ключ кэша — версия), а не образом `helmunittest` на 1,23 ГБ — экономия диска; установка плагина требует сети, в CI версия та же;
   - testcontainers собирает образ web с `.withBuildkit()` (классический сборщик не знает `RUN --mount` и `COPY --chmod`);
@@ -430,6 +430,7 @@
   - хвост «`restore.sh`: sed `api_backend` fail-open» остаётся (compose);
   - OnlyOffice и Carbone в CI не проверяются (ручной прогон по §27.9: шаблон в редакторе, отчёт, бэкап и восстановление из админки);
   - web и агент работают от root (уровень Pod Security baseline);
+  - сообщение агента `BAD_CODE` (`apps/backup-agent/src/server.ts`) отправляет за новым кодом в `docker compose logs backup`; в k8s нужно `kubectl logs deploy/<релиз>-backup-agent`;
   - внешний OnlyOffice вместе с `networkPolicy.enabled` требует отдельной политики на вход в api (описано в README, чартом не генерируется).
 - **Отложенные мелочи ревью** (на разбор при финальном ревью):
   - API/конфигурация: проверки секретов в `url-password.test` через try/catch (лучше `not.toThrow(/secret/)`); не покрыта ветка REDIS_URL без хоста при `REDIS_PASSWORD`; `hasHost` отклоняет URL Postgres с путём к сокету при `DATABASE_PASSWORD`; нет теста, что `buildApp` передаёт `trustedProxyHops` в `createFastify`; тест блокировки старта: `idleCount===totalCount` проходит и при уничтоженном клиенте (добавить `totalCount===1`), проверка `pg_locks` фильтрует только по `objid`;

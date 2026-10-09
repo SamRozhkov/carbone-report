@@ -18,3 +18,5 @@ parentPort.on('message', (m) => {
     parentPort.postMessage({ id: m.id, ok: false, message: 'Formatter "x" does not exist' });
   else if (mode === 'crash') process.exit(3);
 });
+
+parentPort.postMessage({ ready: true });

@@ -13,7 +13,7 @@ export interface RenderPoolOptions {
   execArgv?: string[];
   resourceLimits?: ResourceLimits;
   /** Аварийное завершение потока (в том числе без задачи) — для журнала. */
-  onCrash?(err: unknown): void;
+  onCrash?(err: unknown, ctx?: { hadTask: boolean; beforeReady: boolean }): void;
 }
 
 /** Срок рендера истёк — в очереди или в потоке. */
@@ -29,11 +29,16 @@ export class RenderCrashError extends Error {}
 /** Ошибка шаблона: message — текст Carbone. */
 export class TemplateRenderError extends Error {}
 
-type Reply = { id: number; ok: true; out: Uint8Array } | { id: number; ok: false; message: string };
+type Reply =
+  | { ready: true }
+  | { id: number; ok: true; out: Uint8Array }
+  | { id: number; ok: false; message: string };
 
 interface Task {
   id: number;
   job: RenderJob;
+  /** JSON данных, сериализованный до постановки в очередь. */
+  data: string;
   deadlineAt: number;
   resolve(out: Buffer): void;
   reject(err: Error): void;
@@ -43,22 +48,21 @@ interface Task {
 interface Slot {
   /** null — поток упал, пересоздание отложено (backoff). */
   worker: Worker | null;
+  /** Поток прислал { ready: true }: модули загружены, можно отдавать задачи. */
+  ready: boolean;
   task: Task | null;
-  spawnedAt: number;
   /** Текущая задержка пересоздания, мс (0 — без задержки). */
   backoff: number;
   respawnTimer?: NodeJS.Timeout;
 }
 
-/** Поток, умерший раньше этого срока после старта, считается «не стартующим». */
-const FAST_DEATH_MS = 1000;
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30_000;
 
 /**
  * Пул worker_threads для Carbone: сборка отчёта не блокирует основной поток API.
  * Поток, не уложившийся в срок, останавливается и пересоздаётся; срок тикает и в очереди.
- * Поток, который падает сразу после старта, пересоздаётся с нарастающей паузой (1 с … 30 с).
+ * Поток, который умирает до сигнала ready, пересоздаётся с нарастающей паузой (1 с … 30 с).
  */
 export class RenderPool {
   private slots: Slot[] = [];
@@ -68,7 +72,7 @@ export class RenderPool {
 
   constructor(private readonly opts: RenderPoolOptions) {
     for (let i = 0; i < opts.size; i++) {
-      const slot: Slot = { worker: null, task: null, spawnedAt: 0, backoff: 0 };
+      const slot: Slot = { worker: null, ready: false, task: null, backoff: 0 };
       this.slots.push(slot);
       this.spawn(slot);
     }
@@ -79,7 +83,21 @@ export class RenderPool {
       if (this.closed) return reject(new RenderCrashError('пул рендера остановлен'));
       const wait = deadlineAt - Date.now();
       if (wait <= 0) return reject(new RenderTimeoutError());
-      const task: Task = { id: ++this.seq, job, deadlineAt, resolve, reject };
+      // Сериализуем сразу: BigInt/циклы не должны занимать поток и падать внутри postMessage.
+      let data: string | undefined;
+      try {
+        data = JSON.stringify(job.data);
+      } catch (err) {
+        return reject(
+          new TemplateRenderError(
+            `данные отчёта не сериализуются в JSON: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+      }
+      if (typeof data !== 'string') {
+        return reject(new TemplateRenderError('данные отчёта не сериализуются в JSON'));
+      }
+      const task: Task = { id: ++this.seq, job, data, deadlineAt, resolve, reject };
       task.timer = setTimeout(() => this.expireQueued(task), wait);
       this.queue.push(task);
       this.dispatch();
@@ -112,8 +130,14 @@ export class RenderPool {
       resourceLimits: this.opts.resourceLimits,
     });
     slot.worker = worker;
-    slot.spawnedAt = Date.now();
-    worker.on('message', (m: Reply) => this.finish(slot, m));
+    slot.ready = false;
+    worker.on('message', (m: Reply) => {
+      if ('ready' in m) {
+        slot.ready = true;
+        slot.backoff = 0;
+        this.dispatch();
+      } else this.finish(slot, m);
+    });
     worker.on('error', (err) => this.crash(slot, err));
     worker.on('exit', (code) =>
       this.crash(slot, new Error(`поток рендера завершился с кодом ${code}`)),
@@ -122,8 +146,14 @@ export class RenderPool {
 
   private dispatch(): void {
     for (const slot of this.slots) {
-      if (slot.task || !slot.worker) continue;
-      const task = this.queue.shift();
+      if (slot.task || !slot.worker || !slot.ready) continue;
+      let task = this.queue.shift();
+      // Просроченная задача поток не занимает.
+      while (task && task.deadlineAt <= Date.now()) {
+        clearTimeout(task.timer);
+        task.reject(new RenderTimeoutError());
+        task = this.queue.shift();
+      }
       if (!task) return;
       this.start(slot, slot.worker, task);
     }
@@ -132,22 +162,10 @@ export class RenderPool {
   private start(slot: Slot, worker: Worker, task: Task): void {
     clearTimeout(task.timer);
     slot.task = task;
-    // Передаём буфер без копии, если он целиком занимает свой ArrayBuffer; Buffer из общего пула Node
-    // делит ArrayBuffer с другими буферами — передача отсоединила бы их, поэтому копируем.
-    const src = task.job.template;
-    const owns =
-      src.byteOffset === 0 &&
-      src.byteLength === src.buffer.byteLength &&
-      src.buffer instanceof ArrayBuffer;
-    const template = owns ? new Uint8Array(src.buffer, 0, src.byteLength) : new Uint8Array(src);
+    // Всегда копия: шаблон вызывающего (в том числе из общего пула Node) не должен отсоединяться.
+    const template = new Uint8Array(task.job.template);
     worker.postMessage(
-      {
-        id: task.id,
-        template,
-        ext: task.job.ext,
-        data: JSON.stringify(task.job.data),
-        options: task.job.options,
-      },
+      { id: task.id, template, ext: task.job.ext, data: task.data, options: task.job.options },
       [template.buffer],
     );
     task.timer = setTimeout(
@@ -179,12 +197,16 @@ export class RenderPool {
     if (this.closed || !this.slots.includes(slot) || !slot.worker) return;
     const task = slot.task;
     slot.task = null;
-    const fast = Date.now() - slot.spawnedAt < FAST_DEATH_MS;
+    const beforeReady = !slot.ready;
     this.retire(slot);
-    this.opts.onCrash?.(err);
+    this.opts.onCrash?.(err, { hadTask: task !== null, beforeReady });
     this.scheduleRespawn(
       slot,
-      fast ? (slot.backoff ? Math.min(slot.backoff * 2, BACKOFF_MAX_MS) : BACKOFF_START_MS) : 0,
+      beforeReady
+        ? slot.backoff
+          ? Math.min(slot.backoff * 2, BACKOFF_MAX_MS)
+          : BACKOFF_START_MS
+        : 0,
     );
     if (task) {
       clearTimeout(task.timer);
@@ -197,6 +219,7 @@ export class RenderPool {
   private retire(slot: Slot): void {
     const worker = slot.worker;
     slot.worker = null;
+    slot.ready = false;
     if (!worker) return;
     worker.removeAllListeners();
     worker.on('error', () => {});

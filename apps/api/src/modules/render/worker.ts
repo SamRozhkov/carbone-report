@@ -34,3 +34,6 @@ port.on('message', (m: Request) => {
     },
   );
 });
+
+// Модули загружены — пул может отдавать задачи.
+port.postMessage({ ready: true });

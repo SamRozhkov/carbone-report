@@ -85,18 +85,18 @@ describe('RenderPool', () => {
     expect(template.toString()).toBe('tpl');
   });
 
-  it('поток, падающий при загрузке: нет плотного цикла пересоздания, задача ждёт срока', async () => {
-    const crashes: unknown[] = [];
+  it('поток, падающий при загрузке: ограниченные пересоздания, задача получает RenderTimeoutError', async () => {
+    const crashes: { beforeReady?: boolean }[] = [];
     pool = new RenderPool({
       size: 1,
       workerUrl: new URL('./test-workers/broken.mjs', import.meta.url),
-      onCrash: (e) => crashes.push(e),
+      onCrash: (_e, ctx) => crashes.push(ctx ?? {}),
     });
-    await new Promise((r) => setTimeout(r, 300)); // поток уже упал, пересоздание отложено
-    await expect(pool.run(job('echo'), soon(600))).rejects.toThrow(RenderTimeoutError);
-    // старт + одно пересоздание после паузы в 1 с (без задержки были бы десятки)
+    // дедлайн позже первого пересоздания (1 с): задача не отдаётся неготовому потоку
+    await expect(pool.run(job('echo'), soon(1500))).rejects.toThrow(RenderTimeoutError);
     expect(crashes.length).toBeGreaterThanOrEqual(1);
     expect(crashes.length).toBeLessThanOrEqual(3);
+    expect(crashes.every((c) => c.beforeReady)).toBe(true);
   });
 
   it('поток, упавший без задачи, попадает в onCrash', async () => {
@@ -108,5 +108,36 @@ describe('RenderPool', () => {
     });
     await new Promise((r) => setTimeout(r, 300));
     expect(crashes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('падение готового потока не вводит задержку для следующей задачи', async () => {
+    pool = new RenderPool({ size: 1, workerUrl });
+    await pool.run(job('echo'), soon(5000)); // поток точно готов
+    await expect(pool.run(job('crash'), soon(5000))).rejects.toThrow(RenderCrashError);
+    const t0 = Date.now();
+    expect((await pool.run(job('echo'), soon(5000))).toString()).toBe('tpl!');
+    expect(Date.now() - t0).toBeLessThan(800);
+    await expect(pool.run(job('crash'), soon(5000))).rejects.toThrow(RenderCrashError);
+    const t1 = Date.now();
+    await pool.run(job('echo'), soon(5000));
+    expect(Date.now() - t1).toBeLessThan(800);
+  });
+
+  it('данные, не сериализуемые в JSON, отклоняются сразу и не занимают поток', async () => {
+    pool = new RenderPool({ size: 1, workerUrl });
+    await expect(pool.run({ ...job('echo'), data: { n: 1n } }, soon(5000))).rejects.toThrow(
+      TemplateRenderError,
+    );
+    await expect(pool.run({ ...job('echo'), data: undefined }, soon(5000))).rejects.toThrow(
+      TemplateRenderError,
+    );
+    expect((await pool.run(job('echo'), soon(5000))).toString()).toBe('tpl!');
+  });
+
+  it('шаблон вызывающего не отсоединяется (100 КБ)', async () => {
+    pool = new RenderPool({ size: 1, workerUrl });
+    const template = Buffer.alloc(100 * 1024, 1);
+    await pool.run({ ...job('echo'), template }, soon(5000));
+    expect(template.length).toBe(100 * 1024);
   });
 });

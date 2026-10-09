@@ -37,13 +37,18 @@ export const run: Runner = (cmd, args, o) =>
   });
 
 /**
- * Окружение скриптов: без токена агента и REDIS_URL (скриптам они не нужны), умолчания PG*
+ * Окружение скриптов: без токена агента, REDIS_URL и REDIS_PASSWORD (скриптам они не нужны), умолчания PG*
  * — как в backup.sh. extra — переменные для конкретного вызова (BACKUP_NAME, RESTORE_DIR).
  */
 export function childEnv(
   env: NodeJS.ProcessEnv,
   extra: Record<string, string> = {},
 ): NodeJS.ProcessEnv {
-  const { BACKUP_AGENT_TOKEN: _token, REDIS_URL: _redis, ...rest } = env;
+  const {
+    BACKUP_AGENT_TOKEN: _token,
+    REDIS_URL: _redis,
+    REDIS_PASSWORD: _redisPassword,
+    ...rest
+  } = env;
   return { PGHOST: 'postgres', PGUSER: 'app', PGDATABASE: 'app', ...rest, ...extra };
 }

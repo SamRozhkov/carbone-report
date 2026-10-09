@@ -37,11 +37,12 @@ describe('run', () => {
 });
 
 describe('childEnv', () => {
-  it('без токена агента и REDIS_URL; умолчания PG* как в backup.sh; extra перекрывает', () => {
+  it('без токена агента, REDIS_URL и REDIS_PASSWORD; умолчания PG* как в backup.sh; extra перекрывает', () => {
     const env = childEnv(
       {
         BACKUP_AGENT_TOKEN: 't'.repeat(32),
         REDIS_URL: 'redis://:p@r',
+        REDIS_PASSWORD: 'rp',
         PGPASSWORD: 'x',
         PGHOST: 'db',
       },
@@ -49,6 +50,7 @@ describe('childEnv', () => {
     );
     expect(env).not.toHaveProperty('BACKUP_AGENT_TOKEN');
     expect(env).not.toHaveProperty('REDIS_URL');
+    expect(env).not.toHaveProperty('REDIS_PASSWORD');
     expect(env).toMatchObject({
       PGHOST: 'db',
       PGUSER: 'app',

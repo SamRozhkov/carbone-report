@@ -408,3 +408,16 @@ describe('EE: Task 7, доработка 1 (граничные случаи)', f
     assert.ok(Date.now() - started < 5000, 'слишком долго: ' + (Date.now() - started) + ' мс');
   });
 });
+
+describe('EE: метки в строке-разделителе [i+1] (2.0.1)', function () {
+  const cars = { cars: [{ brand: 'Лада', qty: 3, ok: true }, { brand: 'Тесла', qty: 1, ok: false }], f: true };
+  it('метка [i] в строке [i+1] не начинает новый цикл', async function () {
+    assert.strictEqual(await text('| {d.cars[i].brand} |\n| {d.cars[i+1].brand} {d.cars[i].qty} |', cars), '| Лада |\n| Тесла |');
+  });
+  it('пара hideBegin/hideEnd с меткой в строке [i+1] отбрасывается целиком', async function () {
+    assert.strictEqual(await text('| {d.cars[i].brand} |\n| {d.cars[i+1].brand} {d.f:ifEQ(true):hideBegin} |\nX{d.f:hideEnd}', cars), '| Лада |\n| Тесла |\nX');
+  });
+  it('непарный hideBegin вне строки [i+1] — по-прежнему ошибка', async function () {
+    assert.strictEqual(await error('| {d.cars[i].brand}{d.cars[i].ok:ifEQ(false):hideBegin} |\n| {d.cars[i+1].brand} |', cars), 'Missing at least one showEnd or hideEnd');
+  });
+});

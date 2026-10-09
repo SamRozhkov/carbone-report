@@ -7,7 +7,12 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Redis } from 'ioredis';
 import pg from 'pg';
-import { GenericContainer, Wait, type StartedTestContainer } from 'testcontainers';
+import {
+  GenericContainer,
+  Wait,
+  type StartedTestContainer,
+  type WaitStrategy,
+} from 'testcontainers';
 import { inject } from 'vitest';
 
 /** Миграции приложения — те же, что Dockerfile кладёт в /agent/drizzle. */
@@ -89,6 +94,12 @@ export async function startAgent(o: {
   env?: Record<string, string>;
   /** Сетевые псевдонимы контейнера (в compose — backup-agent в сети backup). */
   aliases?: string[];
+  /**
+   * Готовность агента. По умолчанию — /health через проброшенный порт; агент, привязанный к адресу
+   * псевдонима, проверяется изнутри сети (как healthcheck compose): проброс порта на такой адрес
+   * в CI иногда не доходит до агента, хотя в сети он отвечает.
+   */
+  wait?: WaitStrategy;
   files?: { content: string; target: string; mode?: number }[];
 }): Promise<StartedAgent> {
   const token = randomBytes(32).toString('hex');
@@ -121,7 +132,7 @@ export async function startAgent(o: {
       (o.files ?? []).map((f) => ({ content: f.content, target: f.target, mode: f.mode ?? 0o755 })),
     )
     .withExposedPorts(8080)
-    .withWaitStrategy(Wait.forHttp('/health', 8080))
+    .withWaitStrategy(o.wait ?? Wait.forHttp('/health', 8080))
     .withLogConsumer((stream) => {
       stream.on('data', (d: Buffer | string) => {
         logs += d.toString();

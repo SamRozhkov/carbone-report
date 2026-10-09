@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import pg from 'pg';
+import { Wait } from 'testcontainers';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { bundledMigrationHashes, FUTURE_BACKUP } from '../src/migrations';
 import {
@@ -104,13 +105,8 @@ describe('агент бэкапа в образе', () => {
   beforeAll(async () => {
     db = await createAppDatabase();
     pool = hostPool(db);
-    // Как в compose: агент слушает только адрес псевдонима backup-agent (§26.1).
-    agent = await startAgent({
-      db,
-      bucket: bucketName(),
-      aliases: ['backup-agent'],
-      env: { BACKUP_AGENT_HOST: 'backup-agent' },
-    });
+    // Слушает 0.0.0.0: тесты ходят к агенту через проброшенный порт. Привязка к псевдониму — ниже.
+    agent = await startAgent({ db, bucket: bucketName() });
   });
   afterAll(async () => {
     await pool.end();
@@ -125,11 +121,24 @@ describe('агент бэкапа в образе', () => {
   });
 
   it('BACKUP_AGENT_HOST=backup-agent: агент отвечает по псевдониму (healthcheck compose), но не на 127.0.0.1', async () => {
-    const alias = await agent.sh('wget -q -O /dev/null http://backup-agent:8080/health');
-    expect(alias.exitCode, alias.output).toBe(0);
-    expect(
-      (await agent.sh('wget -q -T 3 -O /dev/null http://127.0.0.1:8080/health')).exitCode,
-    ).not.toBe(0);
+    // Как в compose: агент слушает только адрес псевдонима backup-agent (§26.1); готовность — изнутри сети.
+    const aliased = await startAgent({
+      db,
+      bucket: bucketName(),
+      aliases: ['backup-agent'],
+      env: { BACKUP_AGENT_HOST: 'backup-agent' },
+      wait: Wait.forSuccessfulCommand('wget -q -O /dev/null http://backup-agent:8080/health'),
+    });
+    try {
+      const listening = await aliased.sh('netstat -tln');
+      expect(listening.output).toMatch(/\d+\.\d+\.\d+\.\d+:8080\s/);
+      expect(listening.output).not.toMatch(/(0\.0\.0\.0|:::):8080\s/);
+      expect(
+        (await aliased.sh('wget -q -T 3 -O /dev/null http://127.0.0.1:8080/health')).exitCode,
+      ).not.toBe(0);
+    } finally {
+      await aliased.stop();
+    }
   });
 
   it('/health без токена; остальное — только с верным токеном', async () => {

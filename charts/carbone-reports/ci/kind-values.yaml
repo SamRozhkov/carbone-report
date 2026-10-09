@@ -1,0 +1,39 @@
+# kind в CI (§27.9): образы текущего коммита с тегом kind, встроенные зависимости,
+# без Ingress, Carbone и OnlyOffice (их образы — несколько ГБ; smoke отчёты не формирует).
+image:
+  tag: kind
+  pullPolicy: IfNotPresent
+ingress:
+  enabled: false
+config:
+  # Smoke ходит через port-forward по HTTP.
+  cookieSecure: false
+secrets:
+  appSecret: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  encryptionKey: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+  onlyofficeJwtSecret: oooooooooooooooooooooooooooooooooooooooo
+  adminLogin: admin
+  adminPassword: admin-password
+  postgresPassword: 'p@ss/w:rd#%'
+  redisPassword: 0123456789abcdef0123456789abcdef
+  backupAgentToken: tttttttttttttttttttttttttttttttttttttttt
+  s3AccessKeyId: 0123456789abcdef
+  s3SecretAccessKey: 0123456789abcdef0123456789abcdef
+carbone:
+  enabled: false
+  url: http://carbone.invalid:4000
+onlyoffice:
+  enabled: false
+  internalUrl: http://onlyoffice.invalid
+postgresql:
+  enabled: true
+  persistence: { size: 1Gi }
+redis:
+  enabled: true
+s3:
+  enabled: true
+  persistence: { size: 1Gi }
+backup:
+  persistence: { size: 1Gi }
+networkPolicy:
+  enabled: true

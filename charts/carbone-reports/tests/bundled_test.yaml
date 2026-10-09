@@ -28,6 +28,13 @@ tests:
       - equal:
           path: 'spec.template.spec.containers[0].readinessProbe.exec.command'
           value: [pg_isready, -U, app, -d, app]
+      # Запас для медленного узла (kind в CI): initdb до 5 минут, таймауты проб 5 с.
+      - equal:
+          path: 'spec.template.spec.containers[0].startupProbe.exec.command'
+          value: [pg_isready, -U, app, -d, app]
+      - equal: { path: 'spec.template.spec.containers[0].startupProbe.failureThreshold', value: 60 }
+      - equal: { path: 'spec.template.spec.containers[0].livenessProbe.timeoutSeconds', value: 5 }
+      - equal: { path: 'spec.template.spec.containers[0].readinessProbe.timeoutSeconds', value: 5 }
       - equal: { path: 'spec.volumeClaimTemplates[0].spec.resources.requests.storage', value: 10Gi }
   - it: API и агент ходят во встроенный Postgres без SSL
     template: configmap-api.yaml
@@ -53,6 +60,7 @@ tests:
       - matchRegex:
           path: 'spec.template.spec.containers[0].command[2]'
           pattern: 'exec redis-server --requirepass "\$REDIS_PASSWORD" --save "" --appendonly no'
+      - equal: { path: 'spec.template.spec.containers[0].livenessProbe.timeoutSeconds', value: 5 }
       - notExists: { path: spec.volumeClaimTemplates }
       - contains:
           path: spec.template.spec.containers[0].env
@@ -74,6 +82,9 @@ tests:
             name: S3_ACCESS_KEY_ID
             valueFrom: { secretKeyRef: { name: cr-carbone-reports, key: S3_ACCESS_KEY_ID } }
       - equal: { path: 'spec.template.spec.containers[0].readinessProbe.httpGet.path', value: /healthz }
+      - equal: { path: 'spec.template.spec.containers[0].startupProbe.httpGet.path', value: /healthz }
+      - equal: { path: 'spec.template.spec.containers[0].startupProbe.failureThreshold', value: 60 }
+      - equal: { path: 'spec.template.spec.containers[0].livenessProbe.timeoutSeconds', value: 5 }
   - it: ConfigMap SeaweedFS содержит скрипт из files/
     template: s3.yaml
     documentIndex: 0

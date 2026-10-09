@@ -46,14 +46,24 @@ spec:
           ports:
             - name: postgres
               containerPort: 5432
+          # Первый запуск (initdb) на медленном узле дольше минуты: liveness включается после startupProbe.
+          # Таймауты 5 с: под нагрузкой exec pg_isready не укладывается в секунду по умолчанию.
+          startupProbe:
+            exec:
+              command: [pg_isready, -U, {{ .Values.postgresql.user }}, -d, {{ .Values.postgresql.database }}]
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 60
           readinessProbe:
             exec:
               command: [pg_isready, -U, {{ .Values.postgresql.user }}, -d, {{ .Values.postgresql.database }}]
             periodSeconds: 5
+            timeoutSeconds: 5
           livenessProbe:
             exec:
               command: [pg_isready, -U, {{ .Values.postgresql.user }}, -d, {{ .Values.postgresql.database }}]
             periodSeconds: 20
+            timeoutSeconds: 5
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data

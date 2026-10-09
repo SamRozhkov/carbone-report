@@ -52,12 +52,20 @@ spec:
           ports:
             - name: s3
               containerPort: 8333
+          # Первый запуск (создание бакета) на медленном узле: liveness включается после startupProbe.
+          startupProbe:
+            httpGet: { path: /healthz, port: s3 }
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 60
           readinessProbe:
             httpGet: { path: /healthz, port: s3 }
             periodSeconds: 5
+            timeoutSeconds: 5
           livenessProbe:
             httpGet: { path: /healthz, port: s3 }
             periodSeconds: 20
+            timeoutSeconds: 5
           volumeMounts:
             - name: entrypoint
               mountPath: /s3-entrypoint.sh

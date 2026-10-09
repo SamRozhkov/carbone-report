@@ -68,6 +68,102 @@ jobs:
       # helm lint, helm-unittest (плагин закреплённой версии) и kubeconform — в Docker, как локально.
       - run: sh scripts/chart.sh all
 
+  chart-kind:
+    name: Чарт в kind
+    needs: [chart, integration]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Образы текущего коммита собираются здесь, не тянутся из GHCR; кэш общий с заданием images,
+      # здесь только чтение.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/api.Dockerfile
+          load: true
+          tags: ghcr.io/samrozhkov/carbone-report-api:kind
+          cache-from: type=gha,scope=api
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/web.Dockerfile
+          load: true
+          tags: ghcr.io/samrozhkov/carbone-report-web:kind
+          cache-from: type=gha,scope=web
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/backup/Dockerfile
+          load: true
+          tags: ghcr.io/samrozhkov/carbone-report-backup:kind
+          cache-from: type=gha,scope=backup
+      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          cluster_name: cr
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.0
+      - name: Образы в kind
+        run: for n in api web backup; do kind load docker-image "ghcr.io/samrozhkov/carbone-report-$n:kind" --name cr; done
+      - name: Установка чарта
+        run: >-
+          helm install cr charts/carbone-reports --namespace cr --create-namespace
+          -f charts/carbone-reports/ci/kind-values.yaml --wait --timeout 10m
+      - name: Smoke
+        env:
+          BASE_URL: http://127.0.0.1:8080
+          ADMIN_LOGIN: admin
+          ADMIN_PASSWORD: admin-password
+        run: |
+          kubectl -n cr port-forward svc/cr-carbone-reports-web 8080:80 > /tmp/port-forward.log 2>&1 &
+          # Перезапуски API при установке (пока встроенные Postgres и S3 не готовы) допустимы;
+          # смысл проверки — восстановление не перезапускает реплики: счётчики до и после smoke.
+          restarts() {
+            kubectl -n cr get pods -l app.kubernetes.io/component=api \
+              -o jsonpath='{range .items[*]}{.metadata.name} {.status.containerStatuses[0].restartCount}{"\n"}{end}' | sort
+          }
+          restarts > /tmp/api-restarts-before.txt
+          cat /tmp/api-restarts-before.txt
+          pnpm exec tsx scripts/k8s-smoke.ts
+          # Обе реплики API пережили восстановление: /api/health доступен в режиме обслуживания.
+          test "$(kubectl -n cr get deploy cr-carbone-reports-api -o jsonpath='{.status.readyReplicas}')" = 2
+          test "$(kubectl -n cr get deploy cr-carbone-reports-api -o jsonpath='{.status.updatedReplicas}')" = 2
+          restarts > /tmp/api-restarts-after.txt
+          if ! diff -u /tmp/api-restarts-before.txt /tmp/api-restarts-after.txt; then
+            echo "реплики API перезапускались или сменились во время smoke" >&2
+            exit 1
+          fi
+      # Без секретов: describe показывает только ссылки на Secret, значения не выводятся.
+      - name: Диагностика
+        if: failure()
+        run: |
+          kubectl get nodes -o wide || true
+          helm -n cr status cr || true
+          kubectl -n cr get all,pvc,networkpolicy -o wide || true
+          kubectl -n cr get events --sort-by=.lastTimestamp || true
+          for p in $(kubectl -n cr get pods -o name); do
+            echo "::group::$p"
+            kubectl -n cr describe "$p" || true
+            kubectl -n cr logs "$p" --all-containers --tail=300 || true
+            echo "-- предыдущий запуск (если был перезапуск)"
+            kubectl -n cr logs "$p" --all-containers --previous --tail=100 2>/dev/null || true
+            echo "::endgroup::"
+          done
+          echo "== port-forward"
+          cat /tmp/port-forward.log || true
+          echo "== счётчики перезапусков API до/после smoke"
+          cat /tmp/api-restarts-before.txt /tmp/api-restarts-after.txt 2>/dev/null || true
+
   images:
     name: Образы ${{ matrix.name }}
     needs: [checks, integration]

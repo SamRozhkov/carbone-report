@@ -57,4 +57,6 @@ export interface AppDeps {
   backupAgent: AgentClient | null;
   /** Разовые файлы рендера для Document Server в памяти этой реплики. */
   renderFiles: RenderHandoff;
+  /** Состояние остановки процесса; нет — считается «не останавливаемся». */
+  drain?: { isDraining(): boolean };
 }

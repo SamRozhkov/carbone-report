@@ -12,7 +12,15 @@ import { backupsDisabled } from '../backups/routes';
 import { watchMaintenance } from './flag';
 
 /** Доступны во время обслуживания (§26.3). */
-const EXEMPT = new Set(['GET /api/health', 'GET /api/maintenance', 'POST /api/maintenance/retry']);
+const EXEMPT = new Set([
+  'GET /api/health',
+  'GET /api/ready',
+  'GET /api/maintenance',
+  'POST /api/maintenance/retry',
+]);
+
+/** Document Server доконвертирует отчёт, начатый до режима; доступ закрыт разовым токеном. */
+const EXEMPT_GET_PREFIX = '/internal/render-files/';
 
 export const RETRY_LIMIT = 10;
 export const RETRY_WINDOW_MS = 15 * 60_000;
@@ -44,7 +52,9 @@ export function registerMaintenance(app: App, deps: AppDeps): void {
   app.addHook('onClose', async () => watch.stop());
 
   app.addHook('onRequest', async (req) => {
-    if (EXEMPT.has(`${req.method} ${req.url.split('?')[0]}`)) return;
+    const path = req.url.split('?')[0]!;
+    if (EXEMPT.has(`${req.method} ${path}`)) return;
+    if (req.method === 'GET' && path.startsWith(EXEMPT_GET_PREFIX)) return;
     const flag = await watch.get();
     if (flag)
       throw new AppError('maintenance', 503, 'идёт восстановление из бэкапа, повторите позже', {

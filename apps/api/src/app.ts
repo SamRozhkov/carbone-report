@@ -69,6 +69,16 @@ export function createFastify(hops: number = TRUSTED_PROXY_HOPS) {
 
 export type App = ReturnType<typeof createFastify>;
 
+/** health — startup/liveness; ready — readiness: при остановке пода отвечает 503, чтобы балансировщик снял реплику. */
+export function registerHealthRoutes(app: App, deps: Pick<AppDeps, 'drain'>): void {
+  app.get('/api/health', async () => ({ status: 'ok' }));
+  app.get('/api/ready', async (_req, reply) =>
+    deps.drain?.isDraining()
+      ? reply.status(503).send({ status: 'draining' })
+      : reply.send({ status: 'ok' }),
+  );
+}
+
 export async function buildApp(deps: AppDeps): Promise<App> {
   const app = createFastify(deps.config.trustedProxyHops);
   registerErrorHandler(app);
@@ -88,7 +98,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
   const guards = makeGuards(deps);
 
-  app.get('/api/health', async () => ({ status: 'ok' }));
+  registerHealthRoutes(app, deps);
   registerAuthRoutes(app, deps, guards);
   registerUserRoutes(app, deps, guards);
   registerAccessRoutes(app, deps, guards);

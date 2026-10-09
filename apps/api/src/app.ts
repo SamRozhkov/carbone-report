@@ -32,7 +32,7 @@ export const redactToken = (url?: string) => url?.replace(/([?&])t=[^&]*/g, '$1t
  * учитываются. Если перед nginx появится ещё один прокси, число нужно увеличить.
  * Менять нужно именно эту константу, а не `trustProxy`: число в `trustProxy` Fastify 5
  * не доверяет ни одному хопу, и все клиенты получат адрес nginx. Заголовок
- * X-Forwarded-Host при доверии тоже учитывается, его задаёт nginx (docker/nginx/common.conf).
+ * X-Forwarded-Host при доверии тоже учитывается, его задаёт nginx (docker/nginx/templates/common.conf.template).
  * Значение по умолчанию; в работе — `config.trustedProxyHops` (TRUSTED_PROXY_HOPS, чарт Helm ставит 2: Ingress и nginx).
  */
 export const TRUSTED_PROXY_HOPS = 1;

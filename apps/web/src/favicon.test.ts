@@ -21,7 +21,7 @@ describe('favicon', () => {
   });
 
   it('nginx не отдаёт index.html вместо /favicon.ico', () => {
-    expect(read('../../../docker/nginx/common.conf')).toMatch(
+    expect(read('../../../docker/nginx/templates/common.conf.template')).toMatch(
       /location = \/favicon\.ico \{ return 404; \}/,
     );
   });

@@ -17,9 +17,19 @@ COPY packages/shared packages/shared
 COPY apps/web apps/web
 RUN pnpm --filter @carbone-reports/web build
 
-FROM nginx:1.30-alpine
+# Конфигурация nginx без SPA (стадию собирает тест apps/web/test/nginx.int.test.ts).
+FROM nginx:1.30-alpine AS nginx
+# common.conf — шаблон envsubst: подставляются только эти переменные, $host и прочие переменные nginx не трогаются.
+ENV NGINX_MODE=tls \
+    API_UPSTREAM=http://api:3000 \
+    ONLYOFFICE_UPSTREAM=http://onlyoffice \
+    NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx/snippets \
+    NGINX_ENVSUBST_FILTER='^(NGINX_RESOLVER|API_UPSTREAM|ONLYOFFICE_UPSTREAM)$'
 COPY docker/nginx/maps.conf /etc/nginx/conf.d/00-maps.conf
-COPY docker/nginx/common.conf /etc/nginx/snippets/common.conf
+COPY docker/nginx/templates/ /etc/nginx/templates/
 COPY docker/nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
-COPY docker/nginx/prod.conf /etc/nginx/conf.d/default.conf
+COPY docker/nginx/server-tls.conf docker/nginx/server-http.conf docker/nginx/server-dev.conf /etc/nginx/modes/
+COPY --chmod=755 docker/nginx/15-carbone-reports.envsh /docker-entrypoint.d/15-carbone-reports.envsh
+
+FROM nginx
 COPY --from=build /repo/apps/web/dist/ /usr/share/nginx/html/

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Конфигурация nginx при старте контейнера (сорсится /docker-entrypoint.sh официального образа
+# до 20-envsubst-on-templates.sh). set -e не меняем: файл выполняется в оболочке точки входа.
+# NGINX_MODE — какой server подключить: tls (compose), http (k8s, TLS на Ingress), dev.
+case "${NGINX_MODE:-tls}" in
+  tls | http | dev) cp "/etc/nginx/modes/server-${NGINX_MODE:-tls}.conf" /etc/nginx/conf.d/default.conf ;;
+  *)
+    echo "NGINX_MODE: ожидается tls, http или dev" >&2
+    exit 1
+    ;;
+esac
+# NGINX_RESOLVER — DNS для proxy_pass с переменными: по умолчанию первый nameserver контейнера.
+if [ -z "${NGINX_RESOLVER:-}" ]; then
+  NGINX_RESOLVER=$(awk '$1 == "nameserver" { print $2; exit }' /etc/resolv.conf)
+  if [ -z "$NGINX_RESOLVER" ]; then
+    echo "в /etc/resolv.conf нет nameserver: задайте NGINX_RESOLVER" >&2
+    exit 1
+  fi
+  case $NGINX_RESOLVER in *:*) NGINX_RESOLVER="[$NGINX_RESOLVER]" ;; esac
+fi
+export NGINX_RESOLVER

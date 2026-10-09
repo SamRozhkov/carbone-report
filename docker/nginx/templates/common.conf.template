@@ -1,7 +1,8 @@
 root /usr/share/nginx/html;
 
-# Встроенный DNS Docker: адреса api и onlyoffice перерезолвятся без перезапуска nginx.
-resolver 127.0.0.11 valid=10s ipv6=off;
+# Резолвер — первый nameserver из /etc/resolv.conf (15-carbone-reports.envsh): встроенный DNS Docker
+# в compose, DNS кластера в k8s. Адреса api и onlyoffice перерезолвятся без перезапуска nginx.
+resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
 
 # Маршруты для Document Server доступны только во внутренней сети.
 location = /internal { return 404; }
@@ -12,7 +13,7 @@ location /api/ {
     # а в api уходит исходный. Пропускаем только запросы, чей исходный путь начинается с /api/.
     if ($request_uri !~ "^/api/") { return 404; }
 
-    set $api_upstream http://api:3000;
+    set $api_upstream ${API_UPSTREAM};
     proxy_pass $api_upstream;
     proxy_http_version 1.1;
     proxy_set_header Host $http_host;
@@ -32,7 +33,7 @@ location /api/ {
 }
 
 location /onlyoffice/ {
-    set $oo_upstream http://onlyoffice;
+    set $oo_upstream ${ONLYOFFICE_UPSTREAM};
     rewrite ^/onlyoffice/(.*)$ /$1 break;
     proxy_pass $oo_upstream;
     proxy_http_version 1.1;

@@ -245,6 +245,9 @@ importers:
       jsdom:
         specifier: ^29.1.1
         version: 29.1.1
+      testcontainers:
+        specifier: ^12.2.0
+        version: 12.2.0
       typescript:
         specifier: 5.9.3
         version: 5.9.3

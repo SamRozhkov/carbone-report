@@ -2,8 +2,9 @@ services:
   web:
     ports: !override
       - '127.0.0.1:${WEB_DEV_PORT:-8080}:80'
-    volumes: !override
-      - ./docker/nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
+    volumes: !override []
+    environment:
+      NGINX_MODE: dev
 
   api:
     image: carbone-reports-api:dev

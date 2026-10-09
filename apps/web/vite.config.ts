@@ -25,6 +25,7 @@ export default defineConfig({
   // Самый большой чанк после Плана 11 (3507.8 kB), округлено вверх до сотни.
   build: { chunkSizeWarningLimit: 3600 },
   test: {
+    include: ['src/**/*.test.{ts,tsx}'],
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.tsx'],

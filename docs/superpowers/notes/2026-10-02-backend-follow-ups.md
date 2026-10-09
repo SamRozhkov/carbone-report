@@ -401,3 +401,39 @@
   - отдельная учётная запись S3 только для чтения у бэкапа;
   - скачивание и удаление бэкапов из админки (вне Плана 15);
   - восстановление в k8s — План 16.
+
+## Итоги Плана 16 (Helm-чарт)
+
+- **API и агент:**
+  - пароли `DATABASE_PASSWORD` и `REDIS_PASSWORD` отдельно от URL (пароль вставляется с кодированием, любые символы); `PGPASSWORD` в окружении API запрещён;
+  - `TRUSTED_PROXY_HOPS` (1–5, по умолчанию 1; чарт ставит 2: Ingress и nginx), в compose — `${TRUSTED_PROXY_HOPS:-1}`;
+  - ключи S3 необязательны, но оба или ни одного (IRSA);
+  - миграции при старте API — под advisory-блокировкой `726100003`; агент после восстановления тоже мигрирует под этой блокировкой (копии `url-password.ts` и `withStartupLock` в агенте закреплены тестами на совпадение с `apps/api`);
+  - агент при восстановлении сбрасывает в Redis только ключи `cr:*`, понимает `PGSSLMODE`/`PGSSLROOTCERT` и `REDIS_PASSWORD`, rclone работает с `env_auth` без ключей.
+- **Web (nginx):** `NGINX_MODE=tls|http|dev` (`dev` заменил монтирование `dev.conf` в `docker-compose.dev.yml`); в режиме `http` пробрасывается `X-Forwarded-Proto` от Ingress; апстримы — только полные имена (резолвер nginx не применяет домены поиска).
+- **Чарт** (`charts/carbone-reports`): компоненты web, api, агент, OnlyOffice, Carbone; встроенные Postgres, Redis и SeaweedFS за флагами; PVC бэкапов сохраняется при `helm uninstall`; `networkPolicy.enabled`; минимальная длина секретов проверяется при установке; `verify-ca`/`verify-full` для внешней БД требуют `caSecret`.
+- **Проверки:** `sh scripts/chart.sh all` (`pnpm chart:check`: lint, helm-unittest, kubeconform); в CI — задания `chart` и `chart-kind` (установка во временный кластер kind со встроенными зависимостями и `scripts/k8s-smoke.ts`: вход, бэкап, восстановление, перезапуски подов).
+- **Публикация:** задание `chart-publish` на теги `v*` кладёт чарт в `oci://ghcr.io/samrozhkov/charts/carbone-reports` (версия и `appVersion` = тег без `v`), после `chart`, `chart-kind` и `images`; `packages: write` только у него.
+- **Решения исполнителей и контроллера по ходу работы:**
+  - helm-unittest запускается как плагин Helm v1.2.1 внутри `alpine/helm:4.3.0` (каталог плагина кэшируется на хосте, ключ кэша — версия), а не образом `helmunittest` на 1,23 ГБ — экономия диска; установка плагина требует сети, в CI версия та же;
+  - testcontainers собирает образ web с `.withBuildkit()` (классический сборщик не знает `RUN --mount` и `COPY --chmod`);
+  - `redis` `command[2]` — блочный скаляр `>-` (неэкранированное двоеточие читалось как отображение);
+  - проверка CA — для внешней БД (у встроенной `sslMode` всегда `disable`); платформам с БД за публичным CA всё равно нужно передать `caSecret`;
+  - smoke сравнивает `restartCount` до и после, а не абсолютное значение (встроенные зависимости стартуют поздно) — ранний crash loop не ловится;
+  - smoke принимает предупреждение «флаг обслуживания не наблюдался», но проверяет появление бэкапа `pre-restore-*` (доказывает, что путь восстановления выполнился);
+  - `X-Forwarded-Proto` в режиме `http` берётся из входящего заголовка, иначе `$scheme`: при выставленном наружу web без Ingress клиент может подставить схему (влияет только на схему в URL);
+  - `.prettierignore` получил `charts/` (строки YAML в тестах длиннее 100 символов);
+  - шаги 4.7 (пересборка compose и живая проверка :8443) пропущены из-за диска (2,5 ГиБ при нужных 5): режим `tls` покрыт интеграционным тестом nginx, `http` — smoke в kind.
+- **Аварийный путь в k8s:** HTTP агента (`kubectl port-forward` на Service агента + `curl` с Bearer-токеном: `GET /backups`, `POST /backups/<имя>/restore`, `GET /operation`, `POST /recovery`); отдельного скрипта нет.
+- **Открыто:**
+  - хвост Плана 14 «отдельная учётная запись S3 только на чтение для бэкапа» снят: восстановлению из админки нужна запись;
+  - хвост «`restore.sh`: sed `api_backend` fail-open» остаётся (compose);
+  - OnlyOffice и Carbone в CI не проверяются (ручной прогон по §27.9: шаблон в редакторе, отчёт, бэкап и восстановление из админки);
+  - web и агент работают от root (уровень Pod Security baseline);
+  - внешний OnlyOffice вместе с `networkPolicy.enabled` требует отдельной политики на вход в api (описано в README, чартом не генерируется).
+- **Отложенные мелочи ревью** (на разбор при финальном ревью):
+  - API/конфигурация: проверки секретов в `url-password.test` через try/catch (лучше `not.toThrow(/secret/)`); не покрыта ветка REDIS_URL без хоста при `REDIS_PASSWORD`; `hasHost` отклоняет URL Postgres с путём к сокету при `DATABASE_PASSWORD`; нет теста, что `buildApp` передаёт `trustedProxyHops` в `createFastify`; тест блокировки старта: `idleCount===totalCount` проходит и при уничтоженном клиенте (добавить `totalCount===1`), проверка `pg_locks` фильтрует только по `objid`;
+  - агент: `require` с `PGSSLROOTCERT` не повышается до `verify-ca`, как в libpq (комментарий преувеличивает); интеграционный тест `env_auth` проверяет только экспортируемые переменные, но не реальную авторизацию rclone; `rm(dir)` в `config.test` не в `finally`; редактор секретов не маскирует форму пароля с процентным кодированием; `calls.every` в `steps.test` пуст при отсутствии вызовов (страхует проверка числа);
+  - web: пользовательский IPv6 в `NGINX_RESOLVER` не берётся в скобки; `envsh` дублирует официальный `15-local-resolvers.envsh` (так требовал план); тест `tls` не проверяет `ONLYOFFICE_UPSTREAM` по умолчанию;
+  - чарт: `urlquery` для пользователя БД (пробел становится `+`), имя БД не экранируется; OnlyOffice рендерит пустое `annotations:` при `existingSecret` без `podAnnotations`; том `pg-ca` у агента не покрыт тестом; пробы `readinessProbe` OnlyOffice и агента с `timeoutSeconds` 1 с (в compose 5 с), у остальных компонентов `timeoutSeconds` не задан (по умолчанию 1 с, в compose 3 с); у liveness встроенных Postgres и S3 нет `startupProbe` и запаса; governing Services StatefulSet и OnlyOffice не headless; нет тестов на отключённые встроенные Redis и S3, на `S3_SECRET_ACCESS_KEY` и на `s3.enabled` с одним ключом; аннотации `checksum/secret` у OnlyOffice и агента не проверены; тесты NetworkPolicy не покрывают политики onlyoffice, carbone, postgresql, s3;
+  - скрипты: `scripts/chart.sh` без `trap` для временного файла при прерывании, `len` на числовых и многобайтных секретах; в `scripts/k8s-smoke.ts` port-forward без `trap`/kill, реплики подтверждаются только готовностью, не проверен таймаут readiness у Redis и S3.

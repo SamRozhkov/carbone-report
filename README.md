@@ -111,7 +111,7 @@ Redis подключён только к внутренней сети `cache` (
 
 Счётчики лежат в Redis и общие для всех экземпляров API. Если Redis недоступен или отвечает ошибкой, лимиты продолжают действовать, но считаются в памяти каждого экземпляра API отдельно (при N экземплярах — до N × лимит попыток). После ошибки API 5 с не обращается к Redis, затем пробует снова; в журнале — «Redis недоступен — лимиты запросов считаются в памяти экземпляра» (не чаще раза за 5 с).
 
-IP клиента API берёт из `X-Forwarded-For`, который дописывает nginx: доверяется ровно одному прокси (`TRUSTED_PROXY_HOPS = 1` в `apps/api/src/app.ts`, аналог `trustProxy: 1`), так что адреса, подставленные клиентом в заголовок, не учитываются. В Fastify 5 число в `trustProxy` не доверяет ни одному хопу (fail-closed): все клиенты получили бы адрес nginx и делили один общий лимит входа 30 в минуту на весь сайт. Поэтому доверие задано функцией `trustProxyHops()`. Если перед nginx стоит ещё один прокси или балансировщик, все клиенты получат его адрес и разделят один лимит — увеличьте `TRUSTED_PROXY_HOPS`, а не `trustProxy`; это изменение кода, а не настройка. Пользователи за общим NAT или корпоративным прокси тоже делят лимит по IP. Если исходный адрес клиента теряется, все клиенты делят один лимит по IP: например, при публикации портов в Docker Desktop/OrbStack (адрес шлюза хоста) или IPv6 через docker-proxy; один злоумышленник тогда может на минуту исчерпать попытки входа для всех. Если это важно, поставьте nginx в сеть хоста или используйте прокси, сохраняющий исходный адрес. Остаточный риск: код внутри контейнера, который достаёт до `api:3000` напрямую (в сети compose по умолчанию или через опубликованный в dev 127.0.0.1:3000), может подделать `X-Forwarded-For` и обойти только лимит по IP; лимит по логину это не затрагивает.
+IP клиента API берёт из `X-Forwarded-For`, который дописывает nginx: по умолчанию доверяется ровно одному прокси (`TRUSTED_PROXY_HOPS=1`, 1–5, аналог `trustProxy: 1`; в Helm-чарте 2: Ingress и nginx), так что адреса, подставленные клиентом в заголовок, не учитываются. В Fastify 5 число в `trustProxy` не доверяет ни одному хопу (fail-closed): все клиенты получили бы адрес nginx и делили один общий лимит входа 30 в минуту на весь сайт. Поэтому доверие задано функцией `trustProxyHops()`. Если перед nginx стоит ещё один прокси или балансировщик, все клиенты получат его адрес и разделят один лимит — увеличьте `TRUSTED_PROXY_HOPS` (в `.env` или `config.trustedProxyHops` чарта), а не `trustProxy`. Пользователи за общим NAT или корпоративным прокси тоже делят лимит по IP. Если исходный адрес клиента теряется, все клиенты делят один лимит по IP: например, при публикации портов в Docker Desktop/OrbStack (адрес шлюза хоста) или IPv6 через docker-proxy; один злоумышленник тогда может на минуту исчерпать попытки входа для всех. Если это важно, поставьте nginx в сеть хоста или используйте прокси, сохраняющий исходный адрес. Остаточный риск: код внутри контейнера, который достаёт до `api:3000` напрямую (в сети compose по умолчанию или через опубликованный в dev 127.0.0.1:3000), может подделать `X-Forwarded-For` и обойти только лимит по IP; лимит по логину это не затрагивает.
 
 ### Запуск из готовых образов
 
@@ -235,6 +235,144 @@ rsync -a --exclude '*.partial' backups/ backup-host:/srv/carbone-reports-backups
   Если бэкапа перед восстановлением нет, второй вариант недоступен: `POST /api/maintenance/retry` отвечает `400` с кодом `BAD_TARGET` «нет бэкапа до восстановления», попытка кода при этом не расходуется. После 5 неверных попыток код заменяется новым; новый код печатается и при каждом новом сбое, и при перезапуске агента. Ввод кода ограничен 10 попытками за 15 минут с одного адреса.
 
 - **Аварийный путь без веб-интерфейса** — `scripts/restore.sh` (см. выше). Он останавливает агент, отмечает незавершённое восстановление как выполненное вручную и очищает Redis вместе с флагом обслуживания.
+
+## Kubernetes (Helm)
+
+Чарт — `charts/carbone-reports`: web (nginx), API, агент бэкапа, OnlyOffice, Carbone; Postgres, Redis и S3 — внешние или встроенные (по флагам). Нужны Kubernetes 1.27+ и Helm 3.8+ (проверяется на Helm 4.3).
+
+### Установка
+
+Из каталога репозитория:
+
+```bash
+helm install cr charts/carbone-reports -n reports --create-namespace -f my-values.yaml
+```
+
+После первого релиза чарт можно взять из OCI-реестра (его публикует CI на теги `vX.Y.Z`, версия чарта и `appVersion` равны версии тега):
+
+```bash
+helm install cr oci://ghcr.io/samrozhkov/charts/carbone-reports --version X.Y.Z -n reports -f my-values.yaml
+```
+
+До первого тега `v*` образов с тегом `appVersion` нет: задайте `image.tag: main` или `image.tag: sha-<7 символов коммита>`. Пакеты GHCR приватные: сделайте их публичными или создайте Secret типа `docker-registry` и укажите его в `imagePullSecrets: [{ name: ghcr-pull }]`.
+
+### Пробная установка
+
+Встроенные Postgres, Redis и SeaweedFS: возьмите `charts/carbone-reports/ci/bundled-values.yaml`, замените `ingress.host` и все значения в `secrets`. Пароли и токены — `openssl rand -hex 32`, `encryptionKey` — `openssl rand -base64 32`. Без TLS на Ingress добавьте `config.cookieSecure: false`.
+
+### Прод
+
+Минимальные values для внешних Postgres, Redis и S3 (как `ci/external-values.yaml`; значения секретов ниже — заглушки):
+
+```yaml
+ingress:
+  host: reports.example.com
+  className: nginx
+  tls:
+    secretName: reports-tls
+existingSecret: carbone-reports-secrets # или secrets.* для чарта-управляемого Secret
+externalDatabase:
+  host: pg.example.com
+  sslMode: verify-full
+  caSecret:
+    name: pg-ca
+externalRedis:
+  url: rediss://redis.example.com:6380
+externalS3:
+  endpoint: https://storage.example.com
+  bucket: reports
+  forcePathStyle: true
+  rcloneProvider: Other
+```
+
+`existingSecret` — готовый Secret со следующими ключами (без `existingSecret` чарт создаёт его из `secrets.*`):
+
+| Ключ                    | Обязателен        | Требования                                                                                                       |
+| ----------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `APP_SECRET`            | да                | не короче 32 символов                                                                                            |
+| `ENCRYPTION_KEY`        | да                | 32 байта в base64 (`openssl rand -base64 32`)                                                                    |
+| `ONLYOFFICE_JWT_SECRET` | да                | не короче 32 символов                                                                                            |
+| `ADMIN_LOGIN`           | да                | логин первого администратора                                                                                     |
+| `ADMIN_PASSWORD`        | да                | не короче 8 символов                                                                                             |
+| `POSTGRES_PASSWORD`     | да                | любые символы                                                                                                    |
+| `REDIS_PASSWORD`        | да                | любые символы; для встроенного Redis — только шестнадцатеричные (`openssl rand -hex 32`)                         |
+| `BACKUP_AGENT_TOKEN`    | да                | не короче 32 символов                                                                                            |
+| `S3_ACCESS_KEY_ID`      | встроенный S3: да | оба ключа S3 или ни одного (внешний S3 без ключей — IRSA); для встроенного S3 только `A-Z a-z 0-9 . _ ~ + / = -` |
+| `S3_SECRET_ACCESS_KEY`  | встроенный S3: да | то же                                                                                                            |
+| `LDAP_BIND_PASSWORD`    | нет               | пароль привязки LDAP (`config.ldap.bindDn`)                                                                      |
+
+Пароли Postgres и Redis могут содержать любые символы: в URL они вставляются с кодированием.
+
+### Ingress
+
+Задайте `ingress.host`, `ingress.className` и `ingress.tls.secretName`. Для ingress-nginx обязательны аннотации — без них не работает загрузка в OnlyOffice:
+
+```yaml
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '300'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '300'
+```
+
+`config.trustedProxyHops: 2` (по умолчанию в чарте) — это Ingress и nginx образа web. Если перед Ingress есть ещё балансировщик, добавляющий `X-Forwarded-For`, поставьте 3: иначе все клиенты разделят один лимит попыток входа.
+
+### Внешний Postgres с TLS
+
+`externalDatabase.sslMode` — `disable`, `require`, `verify-ca` или `verify-full`, как в libpq. Для `verify-ca` и `verify-full` нужен `externalDatabase.caSecret` (Secret с корневым сертификатом в PEM, ключ `externalDatabase.caSecret.key`, по умолчанию `ca.crt`); без него чарт не устанавливается.
+
+### S3 без ключей (IRSA)
+
+Не задавайте ключи S3 и укажите роль у ServiceAccount:
+
+```yaml
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role>
+```
+
+Для S3-совместимых хранилищ задайте `externalS3.rcloneProvider` (`Other`, `Minio`, `Ceph`…): так агент бэкапа настраивает rclone.
+
+### Обновление
+
+`helm upgrade cr … -f my-values.yaml`. Реплики API выкатываются по одной; миграции накатывает первая стартовавшая реплика под блокировкой Postgres. Правило для разработчиков: миграция должна быть совместима с предыдущей версией приложения (добавлять, а не переименовывать и удалять): старые реплики несколько секунд работают на новой схеме.
+
+### Бэкапы в кластере
+
+Агент бэкапа хранит бэкапы на PVC `<релиз>-carbone-reports-backups` (размер — `backup.persistence.size`). Том не удаляется при `helm uninstall`. Бэкапы лежат в том же кластере: копии вне его делайте средствами кластера (снапшоты тома, Velero). Восстановление из админки работает с несколькими репликами API.
+
+### Восстановление в Kubernetes без админки
+
+Если API не поднимается, используйте HTTP агента:
+
+```bash
+NS=reports
+R=cr-carbone-reports
+kubectl -n $NS port-forward svc/$R-backup-agent 18080:8080 &
+TOKEN=$(kubectl -n $NS get secret $R -o jsonpath='{.data.BACKUP_AGENT_TOKEN}' | base64 -d)   # или ваш existingSecret
+A="Authorization: Bearer $TOKEN"
+curl -s -H "$A" http://127.0.0.1:18080/backups                       # список
+curl -s -H "$A" -H 'content-type: application/json' -d '{"requestedBy":"kubectl"}' \
+  -X POST http://127.0.0.1:18080/backups/<имя>/restore                 # запуск
+curl -s -H "$A" http://127.0.0.1:18080/operation                      # ход и итог
+```
+
+Если восстановление прервалось, код повтора — в `kubectl -n $NS logs deploy/$R-backup-agent | grep 'КОД ВОССТАНОВЛЕНИЯ'`. Повтор — на экране обслуживания или запросом:
+
+```bash
+curl -s -H "$A" -H 'content-type: application/json' -d '{"code":"<код>","target":"same"}' \
+  -X POST http://127.0.0.1:18080/recovery
+```
+
+`target`: `same` — повторить восстановление из того же бэкапа, `pre-restore` — вернуться к состоянию до него (бэкап `pre-restore-*`). Токен не вставляйте в историю shell на общих машинах.
+
+### Безопасность
+
+API совместим с Pod Security «restricted». Web, агент, OnlyOffice, Carbone и встроенные зависимости работают от root, как их образы: чарт рассчитан на уровень «baseline». `networkPolicy.enabled: true` повторяет внутренние сети compose: к агенту ходит только api; к Redis, S3 и Postgres — api и агент; к api — web и OnlyOffice. Пробы kubelet при этом проходят (трафик узла). При внешнем OnlyOffice нужна дополнительная политика в api.
+
+### Проверка чарта локально
+
+`pnpm chart:check` (lint, helm-unittest, kubeconform; нужен только Docker).
 
 ## Вход через LDAP/Active Directory
 
@@ -367,12 +505,14 @@ SSL источника задаётся одним из трёх режимов:
 текущей директории процесса.
 
 `STORAGE_BACKEND` — где API хранит файлы: `local` (по умолчанию, каталог `STORAGE_DIR`) или `s3`.
-Для `s3`: `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` обязательны (иначе API не запускается:
-«S3_BUCKET: обязателен при STORAGE_BACKEND=s3»); `S3_ENDPOINT` — адрес S3-совместимого хранилища
+Для `s3`: `S3_BUCKET` обязателен (иначе API не запускается: «S3_BUCKET: обязателен при STORAGE_BACKEND=s3»);
+`S3_ACCESS_KEY_ID` и `S3_SECRET_ACCESS_KEY` задаются вместе или не задаются совсем (тогда учётные данные берутся из окружения пода, например IRSA); `S3_ENDPOINT` — адрес S3-совместимого хранилища
 (пусто — AWS S3), `S3_REGION` (по умолчанию `us-east-1`), `S3_FORCE_PATH_STYLE` (`true` для SeaweedFS,
 по умолчанию `false`), `S3_CREATE_BUCKET` (по умолчанию `false`). При старте API проверяет бакет:
 если его нет, при `S3_CREATE_BUCKET=true` создаёт, иначе завершается с ошибкой «бакет S3_BUCKET не найден».
 Ключи доступа в журнал не попадают. В Docker все эти значения задаёт `docker-compose.yml`.
+
+`DATABASE_PASSWORD` и `REDIS_PASSWORD` — пароли отдельно от `DATABASE_URL` и `REDIS_URL` (URL без пароля; пароль вставляется в URL с кодированием, допустимы любые символы). `TRUSTED_PROXY_HOPS` — число доверенных прокси перед API (1–5, по умолчанию 1). При старте API накатывает миграции под advisory-блокировкой Postgres, поэтому несколько реплик запускаются безопасно.
 
 `REPORT_TIMEOUT_MS` — общий срок формирования отчёта и предпросмотра в миллисекундах (по умолчанию
 120000, то есть 2 минуты). В него входят проверка параметров (запросы вариантов SQL-списков),

@@ -1,8 +1,8 @@
-// Сверка примеров «Справки по шаблонам» с Carbone поднятого стека (§23.3).
-// Запуск: pnpm help:check               — рендер каждого примера через контейнер api (docker compose exec);
-//         pnpm help:check -- --self-test — без Docker: сборка DOCX и разбор текста обратимы.
-// Carbone наружу не открыт, поэтому раннер выполняется внутри api, как и пробы матрицы Community.
-import { execFileSync } from 'node:child_process';
+// Сверка примеров «Справки по шаблонам» со встроенной сборкой Carbone (§23.3).
+// Запуск: pnpm help:check               — рендер каждого примера встроенной сборкой Carbone
+//                                         (`packages/carbone`) так же, как API; стек не нужен;
+//         pnpm help:check -- --self-test — только сборка DOCX и разбор текста обратимы.
+import carbone from '@carbone-reports/carbone';
 import { CARBONE_LANG } from '@carbone-reports/shared';
 import JSZip from 'jszip';
 import { communityErrorMessage } from '../apps/api/src/modules/carbone/community';
@@ -152,86 +152,29 @@ async function selfTest(examples: HelpExample[]): Promise<number> {
   return bad;
 }
 
-/** Выполняется внутри контейнера api: как CarboneClient (carbone-version 5, download=true). */
-const RUNNER = String.raw`
-const base = process.env.CARBONE_URL.replace(/\/$/, '');
-const H = { 'carbone-version': '5' };
-let buf = '';
-process.stdin.on('data', (d) => (buf += d));
-process.stdin.on('end', async () => {
-  const { lang, convertTo, cases } = JSON.parse(buf);
-  const out = [];
-  for (const c of cases) {
-    const r = { id: c.id };
-    try {
-      const form = new FormData();
-      form.append('template', new Blob([Buffer.from(c.tpl, 'base64')]), 'template.docx');
-      const up = await fetch(base + '/template', { method: 'POST', headers: H, body: form });
-      const ub = await up.json().catch(() => null);
-      const id = ub && ub.data && ub.data.templateId;
-      if (!id) {
-        r.error = 'загрузка шаблона: HTTP ' + up.status + ' ' + ((ub && ub.error) || '');
-        out.push(r);
-        continue;
-      }
-      const res = await fetch(base + '/render/' + encodeURIComponent(id) + '?download=true', {
-        method: 'POST',
-        headers: { ...H, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          data: c.data,
-          convertTo,
-          lang,
-          timezone: process.env.TZ || 'Europe/Moscow',
-        }),
-      });
-      const isJson = (res.headers.get('content-type') || '').includes('application/json');
-      if (res.ok && !isJson) r.out = Buffer.from(await res.arrayBuffer()).toString('base64');
-      else {
-        const b = isJson ? await res.json().catch(() => null) : null;
-        r.error = (b && b.error) || 'HTTP ' + res.status;
-      }
-    } catch (e) {
-      r.error = 'исключение: ' + e.message;
-    }
-    out.push(r);
-  }
-  process.stdout.write(JSON.stringify(out));
-});
-`;
-
-interface RunnerResult {
-  id: string;
-  out?: string;
-  error?: string;
-}
-
 async function liveCheck(examples: HelpExample[]): Promise<number> {
-  const cases = await Promise.all(
-    examples.map(async (e) => ({
-      id: e.id,
-      tpl: (await buildDocx(e.template)).toString('base64'),
-      data: JSON.parse(e.data) as unknown,
-    })),
-  );
-  const raw = execFileSync('docker', ['compose', 'exec', '-T', 'api', 'node', '-e', RUNNER], {
-    input: JSON.stringify({ lang: CARBONE_LANG, convertTo: 'docx', cases }),
-    maxBuffer: 256 * 1024 * 1024,
-    stdio: ['pipe', 'pipe', 'inherit'],
-  });
-  const results = JSON.parse(raw.toString('utf8')) as RunnerResult[];
+  const timezone = process.env.TZ ?? 'Europe/Moscow';
   let bad = 0;
   for (const e of examples) {
-    const r = results.find((x) => x.id === e.id);
     let got: string;
-    if (!r) got = '(нет ответа раннера)';
-    else if (e.unavailable) {
-      got = r.error
-        ? (communityErrorMessage(r.error) ?? `другая ошибка: ${r.error}`)
-        : 'отчёт сформирован, а ожидалась ошибка «disabled in the Community Edition»';
-    } else if (r.error || !r.out) got = `ошибка: ${r.error ?? 'пустой ответ'}`;
-    else {
-      got = docxText(await documentXml(Buffer.from(r.out, 'base64')));
-      if (got.trim() === '') got = 'пустой текст документа';
+    try {
+      const out = await carbone.renderBuffer(
+        await buildDocx(e.template),
+        'docx',
+        JSON.parse(e.data) as unknown,
+        { lang: CARBONE_LANG, timezone },
+      );
+      if (e.unavailable) {
+        got = 'отчёт сформирован, а ожидалась ошибка «disabled in the Community Edition»';
+      } else {
+        got = docxText(await documentXml(out));
+        if (got.trim() === '') got = 'пустой текст документа';
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      got = e.unavailable
+        ? (communityErrorMessage(message) ?? `другая ошибка: ${message}`)
+        : `ошибка: ${message}`;
     }
     if (got === e.result) console.log(`✓ ${e.id}`);
     else {

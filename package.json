@@ -24,6 +24,7 @@
     "e2e": "pnpm --filter @carbone-reports/e2e e2e"
   },
   "devDependencies": {
+    "@carbone-reports/carbone": "workspace:*",
     "@carbone-reports/shared": "workspace:*",
     "@eslint/js": "^10.0.0",
     "@types/node": "^22.20.5",

@@ -121,13 +121,24 @@ tests:
           path: 'spec.template.spec.containers[0].volumeMounts'
           content: { name: tmp, mountPath: /tmp }
       - equal: { path: spec.template.spec.automountServiceAccountToken, value: false }
-  - it: пробы /api/health, startupProbe с запасом на миграции
+  - it: terminationGracePeriodSeconds — срок отчёта в секундах плюс 30 с
+    template: api.yaml
+    documentIndex: 0
+    asserts:
+      - equal: { path: spec.template.spec.terminationGracePeriodSeconds, value: 150 }
+  - it: terminationGracePeriodSeconds округляет срок вверх
+    template: api.yaml
+    documentIndex: 0
+    set: { config.renderTimeoutMs: 30500 }
+    asserts:
+      - equal: { path: spec.template.spec.terminationGracePeriodSeconds, value: 61 }
+  - it: startup/liveness — /api/health, readiness — /api/ready, startupProbe с запасом на миграции
     template: api.yaml
     documentIndex: 0
     asserts:
       - equal: { path: 'spec.template.spec.containers[0].startupProbe.httpGet.path', value: /api/health }
       - equal: { path: 'spec.template.spec.containers[0].startupProbe.failureThreshold', value: 60 }
-      - equal: { path: 'spec.template.spec.containers[0].readinessProbe.httpGet.path', value: /api/health }
+      - equal: { path: 'spec.template.spec.containers[0].readinessProbe.httpGet.path', value: /api/ready }
       - equal: { path: 'spec.template.spec.containers[0].livenessProbe.httpGet.path', value: /api/health }
   - it: CA внешнего Postgres монтируется и указан в DATABASE_URL
     template: api.yaml

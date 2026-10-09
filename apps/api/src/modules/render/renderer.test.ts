@@ -143,3 +143,31 @@ describe('createEmbeddedRenderer', () => {
     );
   });
 });
+
+describe('createEmbeddedRenderer: учёт активных отчётов', () => {
+  it('active() = 1 во время рендера, 0 после успеха; idle() ждёт завершения', async () => {
+    let finish!: (b: Buffer) => void;
+    const { renderer } = setup(() => new Promise<Buffer>((r) => (finish = r)));
+    expect(renderer.active()).toBe(0);
+    await renderer.idle(); // при 0 — сразу
+    const p = renderer.render(tpl(), {}, opts('docx'));
+    await vi.waitFor(() => expect(renderer.active()).toBe(1));
+    let idle = false;
+    void renderer.idle().then(() => (idle = true));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(idle).toBe(false);
+    finish(Buffer.from('OUT'));
+    await p;
+    expect(renderer.active()).toBe(0);
+    await vi.waitFor(() => expect(idle).toBe(true));
+  });
+
+  it('после ошибки active() снова 0', async () => {
+    const { renderer } = setup(async () => {
+      throw new RenderCrashError('x');
+    });
+    await expect(renderer.render(tpl(), {}, opts('docx'))).rejects.toThrow();
+    expect(renderer.active()).toBe(0);
+    await renderer.idle();
+  });
+});

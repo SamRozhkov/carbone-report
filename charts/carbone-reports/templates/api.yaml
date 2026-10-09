@@ -31,6 +31,8 @@ spec:
         {{- end }}
     spec:
       {{- include "cr.podDefaults" . | nindent 6 }}
+      # При остановке API ждёт активные отчёты до renderTimeoutMs + 5 с (округлено вверх до секунд), плюс запас 30 с на закрытие.
+      terminationGracePeriodSeconds: {{ add (div (add .Values.config.renderTimeoutMs 999) 1000) 30 }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -72,13 +74,14 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
           # /api/health не трогает базу и доступен в режиме обслуживания: восстановление не делает поды NotReady.
+          # /api/ready тоже доступен в режиме обслуживания, но при остановке отвечает 503: под снимается с балансировки, пока доделываются отчёты.
           startupProbe:
             httpGet: { path: /api/health, port: http }
             # До 5 минут: миграции и ожидание блокировки старта, пока мигрирует другая реплика.
             periodSeconds: 5
             failureThreshold: 60
           readinessProbe:
-            httpGet: { path: /api/health, port: http }
+            httpGet: { path: /api/ready, port: http }
             periodSeconds: 10
             timeoutSeconds: 5
           livenessProbe:

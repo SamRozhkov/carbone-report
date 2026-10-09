@@ -5,6 +5,7 @@ import { createDb, migrateDb } from './db/client';
 import type { AppDeps } from './deps';
 import { fetchFile } from './lib/fetch-file';
 import { createRedis } from './lib/redis';
+import { drainAndClose } from './lib/drain';
 import { createStorage } from './lib/create-storage';
 import { withStartupLock } from './lib/startup-lock';
 import { createRunFileGate } from './lib/run-file-gate';
@@ -78,6 +79,8 @@ const carbone = createEmbeddedRenderer({
   selfUrl: config.apiSelfUrl,
   log: { info: (o, m) => appLog.info(o, m) },
 });
+// Остановка: /api/ready отвечает 503, пока доделываются активные отчёты.
+let draining = false;
 const deps: AppDeps = {
   config,
   db,
@@ -94,6 +97,7 @@ const deps: AppDeps = {
   ldap: config.ldap ? createLdapAuthenticator(config.ldap, console) : null,
   backupAgent: config.backupAgent ? createAgentClient(config.backupAgent) : null,
   renderFiles,
+  drain: { isDraining: () => draining },
 };
 
 await ensureAdmin(deps, console);
@@ -113,10 +117,20 @@ await withStartupLock(pool, () =>
 );
 const stopCleanup = startCleanupTimer(deps, app.log);
 
+let shuttingDown = false;
 async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
   app.log.info(`${signal}: остановка`);
+  draining = true;
   stopCleanup();
-  await app.close();
+  await drainAndClose({
+    idle: carbone.idle,
+    active: carbone.active,
+    timeoutMs: config.renderTimeoutMs + 5000,
+    close: () => app.close(),
+    log: app.log,
+  });
   await deps.sources.closeAll();
   await gatePool.end();
   await runFilePool.end();

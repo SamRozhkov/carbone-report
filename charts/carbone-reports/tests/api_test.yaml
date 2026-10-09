@@ -32,7 +32,7 @@ tests:
     set: { api.replicas: 1 }
     asserts:
       - hasDocuments: { count: 2 }
-  - it: образ ghcr с тегом appVersion по умолчанию и с image.tag
+  - it: образ ghcr с тегом appVersion по умолчанию
     template: api.yaml
     documentIndex: 0
     asserts:

@@ -7,10 +7,10 @@
 {{- if and (not $v.postgresql.enabled) (not $v.externalDatabase.host) }}
 {{- fail "externalDatabase.host: задайте внешний Postgres или postgresql.enabled=true" }}
 {{- end }}
-{{- if not (has $v.externalDatabase.sslMode (list "disable" "require" "verify-ca" "verify-full")) }}
+{{- if and (not $v.postgresql.enabled) (not (has $v.externalDatabase.sslMode (list "disable" "require" "verify-ca" "verify-full"))) }}
 {{- fail "externalDatabase.sslMode: disable, require, verify-ca или verify-full" }}
 {{- end }}
-{{- if and (has $v.externalDatabase.sslMode (list "verify-ca" "verify-full")) (not $v.externalDatabase.caSecret.name) }}
+{{- if and (not $v.postgresql.enabled) (has $v.externalDatabase.sslMode (list "verify-ca" "verify-full")) (not $v.externalDatabase.caSecret.name) }}
 {{- fail "externalDatabase.caSecret.name: для sslMode verify-ca и verify-full задайте Secret с CA (скрипты бэкапа проверяют сертификат)" }}
 {{- end }}
 {{- if and (not $v.redis.enabled) (not $v.externalRedis.url) }}

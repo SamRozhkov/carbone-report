@@ -36,11 +36,17 @@ tests:
     set: { config.trustedProxyHops: 0 }
     asserts:
       - failedTemplate: { errorMessage: 'config.trustedProxyHops: целое от 1 до 5' }
-  - it: встроенный Postgres не поддерживает verify-ca и verify-full без CA
+  - it: внешний Postgres, verify-full без CA
+    set:
+      externalDatabase.sslMode: verify-full
+      externalDatabase.caSecret.name: ''
+    asserts:
+      - failedTemplate: { errorMessage: 'externalDatabase.caSecret.name: для sslMode verify-ca и verify-full задайте Secret с CA (скрипты бэкапа проверяют сертификат)' }
+  - it: встроенный Postgres игнорирует остатки externalDatabase.sslMode
     set:
       postgresql.enabled: true
       externalDatabase.host: ''
       externalDatabase.sslMode: verify-full
       externalDatabase.caSecret.name: ''
     asserts:
-      - failedTemplate: { errorMessage: 'externalDatabase.caSecret.name: для sslMode verify-ca и verify-full задайте Secret с CA (скрипты бэкапа проверяют сертификат)' }
+      - matchRegex: { path: data.DATABASE_URL, pattern: 'sslmode=disable$' }

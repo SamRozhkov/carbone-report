@@ -36,8 +36,8 @@ describe('RenderHandoff', () => {
     // Часы настоящие: токен (срок ≤ срока рендера) ещё действителен, а таймер удаления уже сработал.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     h = createRenderHandoff(secret);
-    const { id, token } = await h.put(Buffer.from('a'), 'docx', Date.now() + 1_000);
-    vi.advanceTimersByTime(1_001);
+    const { id, token } = await h.put(Buffer.from('a'), 'docx', Date.now() + 10_000);
+    vi.advanceTimersByTime(10_001);
     expect(await h.take(id, token)).toBe('gone');
   });
 

@@ -43,7 +43,8 @@ jobs:
     runs-on: ubuntu-latest
     # API: все файлы на local, затем выбранные потоки на S3 (SeaweedFS в testcontainers).
     # Агент бэкапа: сборка образа docker/backup/Dockerfile и тесты в контейнере.
-    timeout-minutes: 45
+    # И Document Server для конвертации отчётов (docx → pdf и т. п.): загрузка образа и старт.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,6 +56,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:int
+        env:
+          TEST_ONLYOFFICE: '1'
 
   chart:
     name: Чарт Helm

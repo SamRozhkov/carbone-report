@@ -4,16 +4,7 @@ import { AppError } from '../../lib/errors';
 import { communityErrorMessage } from '../carbone/community';
 import type { RenderHandoff } from './handoff';
 import type { Converter } from './onlyoffice-convert';
-import { RenderCrashError, RenderTimeoutError, TemplateRenderError, type RenderPool } from './pool';
-
-export interface RenderLog {
-  error(obj: object, msg: string): void;
-}
-
-/** Рендерер с изменяемым журналом: логгер Fastify появляется после buildApp. */
-export interface EmbeddedRenderer extends CarboneRenderer {
-  log?: RenderLog;
-}
+import { RenderTimeoutError, TemplateRenderError, type RenderPool } from './pool';
 
 const timeout = () => new AppError('TIMEOUT', 504, 'превышено время ожидания');
 
@@ -26,11 +17,9 @@ export function createEmbeddedRenderer(opts: {
   handoff: RenderHandoff;
   convert: Converter;
   selfUrl: string;
-  log?: RenderLog;
-}): EmbeddedRenderer {
+}): CarboneRenderer {
   const selfUrl = opts.selfUrl.replace(/\/$/, '');
-  const renderer: EmbeddedRenderer = {
-    log: opts.log,
+  return {
     async render(tpl, data, ro) {
       if (!outputFormatsFor(tpl.ext).includes(ro.convertTo)) {
         throw new AppError(
@@ -54,9 +43,6 @@ export function createEmbeddedRenderer(opts: {
           if (community) throw new AppError('CARBONE_COMMUNITY', 400, community);
           throw new AppError('CARBONE_ERROR', 502, `ошибка генерации: ${e.message}`);
         }
-        if (e instanceof RenderCrashError) {
-          renderer.log?.error({ err: e }, 'поток рендера завершился аварийно');
-        }
         throw new AppError('CARBONE_ERROR', 502, 'сервис генерации недоступен', undefined, e);
       }
       if (ro.convertTo === tpl.ext) return out;
@@ -77,5 +63,4 @@ export function createEmbeddedRenderer(opts: {
       }
     },
   };
-  return renderer;
 }

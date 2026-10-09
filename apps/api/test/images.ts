@@ -14,3 +14,10 @@ export const S3_ENTRYPOINT_TARGET = '/s3-entrypoint.sh';
  * dc=planetexpress,dc=com, у пользователей пароль совпадает с uid. Есть сборки amd64 и arm64.
  */
 export const LDAP_IMAGE = 'ghcr.io/ldapjs/docker-test-openldap/openldap:2023-10-30';
+
+/**
+ * Document Server для конвертации отчётов (docx → pdf и т. п.) — тот же образ, что у сервиса
+ * onlyoffice в docker-compose.yml. Тяжёлый (около 3,4 ГБ): тест render-onlyoffice идёт только
+ * в CI (TEST_ONLYOFFICE=1).
+ */
+export const ONLYOFFICE_IMAGE = 'onlyoffice/documentserver:9.4.0.1';

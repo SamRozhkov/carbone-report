@@ -48,15 +48,16 @@ const redis = createRedis(config.redisUrl, {
   warn: (o, m) => console.warn(m, o),
 });
 // Встроенный Carbone в worker_threads. Логгер Fastify появится после buildApp:
-// аварии потоков до этого пишем в консоль, потом — в журнал приложения (carbone.log).
+// аварии потоков до этого пишем в консоль, потом — в журнал приложения (appLog).
 const consoleLog = { error: (o: object, m: string) => console.error(m, o) };
+let appLog: { error(o: object, m: string): void } = consoleLog;
 const worker = renderWorkerUrl();
 const renderPool = new RenderPool({
   size: config.renderWorkers,
   workerUrl: worker.url,
   execArgv: worker.execArgv,
   onCrash: (err, ctx) =>
-    (carbone.log ?? consoleLog).error(
+    appLog.error(
       { err, hadTask: ctx?.hadTask, beforeReady: ctx?.beforeReady },
       'поток рендера завершился аварийно',
     ),
@@ -70,7 +71,6 @@ const carbone = createEmbeddedRenderer({
     secret: config.onlyofficeJwtSecret,
   }),
   selfUrl: config.apiSelfUrl,
-  log: consoleLog,
 });
 const deps: AppDeps = {
   config,
@@ -92,7 +92,7 @@ const deps: AppDeps = {
 
 await ensureAdmin(deps, console);
 const app = await buildApp(deps);
-carbone.log = app.log;
+appLog = app.log;
 // До listen: к первому запросу все строки уже указывают на пути с версией.
 await withStartupLock(pool, () =>
   migrateTemplateFiles({ db, storage: deps.storage, log: app.log }),

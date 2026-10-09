@@ -1032,3 +1032,114 @@ scripts/smoke.ts            сквозная проверка работающе
 - **Web:** страница «Бэкапы», диалог подтверждения, экран обслуживания и форма кода.
 - **E2E:** бэкап из админки → изменение данных → восстановление → повторный вход → данные из бэкапа на месте.
 - **Живой прогон в compose:** то же на реальном стеке, сбой с повтором по коду, `scripts/restore.sh` как аварийный путь.
+
+## 27. План 16: Helm-чарт
+
+Цель — разворачивать приложение в свой кластер Kubernetes командой `helm install`. Чарт ставит администратор кластера сам; публичный каталог чартов и OpenShift не цели.
+
+Не входит в план:
+- копии бэкапов вне кластера: снапшоты тома и Velero — средства кластера, чарт за них не отвечает;
+- автоматическое масштабирование (HPA), Gateway API, OpenShift Routes;
+- E2E Playwright в кластере в CI;
+- скрипт аварийного восстановления для k8s — вместо него инструкция в README (27.5).
+
+### 27.1 Состав чарта (`charts/carbone-reports`)
+- Один чарт с обычными шаблонами, без подчартов. Имена ресурсов — `<fullname>-<компонент>`, где `fullname` — стандартный `<release>-carbone-reports` с усечением до 63 символов.
+
+| Компонент | Ресурс | Реплики по умолчанию | Хранение |
+|---|---|---|---|
+| web | Deployment, Service :80 | 2 | — |
+| api | Deployment, Service :3000, PodDisruptionBudget `minAvailable: 1` | 2 | — |
+| carbone (`carbone.enabled`) | Deployment, Service :4000 | 1 | emptyDir `/app/template` |
+| onlyoffice (`onlyoffice.enabled`) | StatefulSet, Service :80 | 1, не масштабируется | PVC `Data` и `lib` |
+| агент бэкапа | Deployment `strategy: Recreate`, Service :8080 | 1 | PVC RWO `/backups` |
+| postgres (`postgresql.enabled`) | StatefulSet, Service :5432 | 1 | PVC |
+| redis (`redis.enabled`) | StatefulSet, Service :6379 | 1 | нет (как в compose: без персистентности) |
+| s3 (`s3.enabled`, SeaweedFS) | StatefulSet, Service :8333 | 1 | PVC |
+
+- Хранилище файлов в чарте — всегда S3 (`STORAGE_BACKEND=s3`): общего тома у реплик API нет.
+- Встроенные postgres, redis и s3 по умолчанию выключены. Это те же образы и настройки, что в compose: `postgres:17-alpine`, `redis:7-alpine` с паролем и `--save ""`, `chrislusf/seaweedfs:4.48` с `docker/s3/entrypoint.sh`. Скрипт попадает в под через ConfigMap; его копия в чарте проверяется тестом на совпадение с `docker/s3/entrypoint.sh`. Встроенные зависимости — для пробной установки и проверки чарта; для прода — внешние.
+- Выключенный встроенный компонент требует внешнего:
+  - `externalDatabase`: хост, порт, база, пользователь, `sslMode`, необязательный CA из Secret;
+  - `externalRedis`: URL без пароля и пароль из секрета;
+  - `externalS3`: endpoint, регион, бакет, `forcePathStyle`, необязательные ключи;
+  - `carbone.url`, `onlyoffice.internalUrl` при выключенных Carbone и OnlyOffice.
+- Пропущенное обязательное значение — ошибка `helm install`/`helm template` с понятным текстом (`fail`/`required`), как `:?` в compose.
+
+### 27.2 Вход и образ web
+- Ingress (`ingress.enabled`, по умолчанию включён): `className`, `host`, `tls.secretName`, `annotations`. Все пути ведут на Service web:80. TLS завершает Ingress.
+- В `values.yaml` — закомментированный пример аннотаций ingress-nginx: `proxy-body-size: 100m`, `proxy-read-timeout`/`proxy-send-timeout: 300`. Без них не работает загрузка в OnlyOffice; аннотации зависят от контроллера, поэтому только пример.
+- Образ web получает конфигурацию nginx из шаблона `envsubst` (механизм `/etc/nginx/templates` официального образа):
+  - `NGINX_MODE`: `tls` (по умолчанию, compose — как сейчас: 80 → 301, 443 с сертификатами и HSTS) или `http` (k8s: только `listen 80`, без редиректа; HSTS по-прежнему отдаётся, TLS — на Ingress);
+  - `API_UPSTREAM` (по умолчанию `http://api:3000`) и `ONLYOFFICE_UPSTREAM` (по умолчанию `http://onlyoffice`);
+  - адрес резолвера читается при старте из первой строки `nameserver` в `/etc/resolv.conf`. В Docker это `127.0.0.11`, в k8s — DNS кластера. Чарт передаёт полные имена сервисов (`<svc>.<ns>.svc.<clusterDomain>`, `clusterDomain` по умолчанию `cluster.local`), потому что резолвер nginx не применяет домены поиска.
+- Правила nginx (блок `/internal`, CSP и заголовки, лимиты, страницы 413 и 502) не меняются и работают в обоих режимах.
+- `X-Forwarded-For`: Ingress добавляет свой хоп. Доверие хопам в API задаётся переменной `TRUSTED_PROXY_HOPS` (сейчас константа 1): в compose остаётся 1, чарт по умолчанию ставит 2 (Ingress + web). Значение в values.
+
+### 27.3 Секреты и настройки
+- Секреты: `existingSecret` (имя готового Secret с ключами по таблице в README) или значения в `secrets.*` — тогда чарт создаёт Secret сам. Случайные значения чарт не генерирует (`lookup` ломается в Argo CD и `helm template`).
+- Ключи: `APP_SECRET`, `ENCRYPTION_KEY`, `ONLYOFFICE_JWT_SECRET`, `ADMIN_LOGIN`, `ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `BACKUP_AGENT_TOKEN`, необязательные `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `LDAP_BIND_PASSWORD`. `DATABASE_URL` и `REDIS_URL` собираются в контейнере из частей (`$(VAR)` в env), пароль в values-шаблоне не появляется.
+- Настройки приложения из compose (`TZ`, `QUERY_TIMEOUT_MS`, `QUERY_MAX_ROWS`, `RENDER_TIMEOUT_MS`, `REPORT_TIMEOUT_MS`, `REPORT_RETENTION_DAYS`, `LDAP_*` кроме пароля, `BACKUP_CRON`, `BACKUP_KEEP`, `BACKUP_TIMEOUT`) — в values, в ConfigMap. Для каждого компонента: `resources`, `nodeSelector`, `tolerations`, `affinity`, `podAnnotations`, `extraEnv`.
+- Изменение ConfigMap или Secret перезапускает поды: аннотация `checksum/config` и `checksum/secret` (для `existingSecret` — нет, это забота владельца секрета).
+- Пробы:
+  - api: readiness и liveness `GET /api/health`;
+  - web: `GET /`;
+  - агент: `GET /health`;
+  - onlyoffice: `GET /healthcheck`, startupProbe до 5 минут;
+  - postgres: `pg_isready`, redis: `redis-cli ping`, s3: `GET /healthz` (как в compose).
+
+### 27.4 Несколько реплик API
+- `migrateDb` и `migrateTemplateFiles` при старте выполняются под сессионной advisory-блокировкой Postgres на отдельном соединении (новый ключ `726100003`; `726100001` — бэкап и удаление файлов, `726100002` — сборка файлов запуска). Вторая реплика ждёт первую, затем видит, что миграции применены. В compose то же самое.
+- Миграции должны быть совместимы с предыдущей версией приложения (добавляют, а не переименовывают и удаляют): при `helm upgrade` старые реплики несколько секунд работают на новой схеме. Правило — в README.
+- Выкатка api: `maxUnavailable: 0`, `maxSurge: 1`.
+- Хвосты Плана 14 в S3-клиенте API:
+  - `maxAttempts: 2`, `requestTimeout` 30 с (общий срок вызова — до минуты, раньше до трёх);
+  - `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` необязательны: без них SDK берёт учётные данные из цепочки по умолчанию (IRSA, переменные окружения пода). Задан только один из двух ключей — ошибка конфигурации.
+- Отдельная учётная запись S3 только на чтение для бэкапа снимается с повестки: восстановлению из админки нужна запись.
+
+### 27.5 Бэкап и восстановление в k8s
+- Агент: Deployment из одной реплики, `strategy: Recreate`, PVC RWO на `/backups` (`backup.persistence.size` по умолчанию 20Gi, `storageClass`). Расписание — внутри агента (`BACKUP_CRON`), не CronJob.
+- Агент слушает `0.0.0.0:8080` (`BACKUP_AGENT_HOST` не задаётся). Service `<fullname>-backup-agent`; API получает `BACKUP_AGENT_URL=http://<fullname>-backup-agent:8080`.
+- Восстановление из админки работает как в §26 без изменений протокола: все реплики API читают `cr:maintenance` из Redis, все подключаются с `application_name=api`, поэтому `pg_terminate_backend` закрывает сессии всех реплик; закрывать сессии своей роли Postgres разрешает без прав суперпользователя.
+- Правки агента и скриптов (действуют и в compose):
+  - фаза `redis` удаляет только ключи `cr:*`, кроме `cr:maintenance` (`SCAN MATCH cr:*`): общий внешний Redis не теряет чужие ключи. Все ключи приложения уже начинаются с `cr:`;
+  - агент и скрипты принимают `PGHOST`, `PGPORT`, `PGUSER`, `PGDATABASE`, `PGSSLMODE`, `PGSSLROOTCERT`; пул агента передаёт SSL-параметры в `pg`. API — через `DATABASE_URL` с `sslmode` и `sslrootcert`;
+  - без ключей S3 rclone работает с `env_auth=true` (IRSA).
+- Аварийный путь — раздел README «Восстановление в Kubernetes вручную»:
+  1. `kubectl scale deploy/<fullname>-api --replicas=0`;
+  2. `kubectl exec` в под агента: восстановление базы и файлов из выбранного каталога теми же шагами, что `restore.sh`;
+  3. вернуть число реплик.
+- README прямо говорит, что бэкапы лежат на томе в том же кластере, и советует снапшоты тома или Velero.
+
+### 27.6 Безопасность и сеть
+- api: `runAsNonRoot`, `readOnlyRootFilesystem` (emptyDir на `/tmp`), `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, `seccompProfile: RuntimeDefault` — совместимо с Pod Security «restricted».
+- web, агент, OnlyOffice, Carbone и встроенные зависимости работают так же, как их образы (web, агент, OnlyOffice и Carbone — от root). Чарт в целом рассчитан на уровень «baseline»; README это говорит.
+- `networkPolicy.enabled` (по умолчанию `false`) повторяет внутренние сети compose:
+  - к агенту — только поды api;
+  - к redis — api и агент; к s3 — api и агент; к postgres — api и агент;
+  - к api — web и onlyoffice; к onlyoffice — web и api; к carbone — api;
+  - выход наружу не ограничивается (внешние Postgres, Redis, S3, LDAP).
+- ServiceAccount на релиз с `automountServiceAccountToken: false`; `serviceAccount.annotations` — для IRSA.
+
+### 27.7 Образы и версии
+- Все три образа приложения — `ghcr.io/samrozhkov/carbone-report-{api,web,backup}` с общим тегом `image.tag` (по умолчанию `appVersion` чарта). Агент несёт миграции из того же коммита, поэтому разные версии api и агента не допускаются: отдельного тега для агента нет.
+- `image.registry`, `image.pullPolicy`, `imagePullSecrets` (пакеты GHCR приватные, пока их не сделали публичными).
+- Образы Carbone, OnlyOffice и зависимостей — те же версии, что в compose, переопределяются в values.
+
+### 27.8 Публикация
+- Чарт — в `charts/carbone-reports`, `version` и `appVersion` в `Chart.yaml`.
+- На тег `vX.Y.Z` задание CI упаковывает чарт с `--version X.Y.Z --app-version X.Y.Z` и публикует `oci://ghcr.io/samrozhkov/charts/carbone-reports`. На `main` и PR — только проверки.
+- README: раздел «Kubernetes (Helm)» — установка из OCI и из каталога, минимальные values для внешних зависимостей и для пробной установки со встроенными, таблица ключей Secret, Ingress, обновление, бэкапы.
+
+### 27.9 Проверка
+- **CI, задание `chart`** (после `checks`):
+  - `helm lint` с наборами values `ci/*.yaml`: встроенные зависимости; всё внешнее с `existingSecret`; NetworkPolicy и выключенные Carbone/OnlyOffice;
+  - helm-unittest: секреты (`existingSecret` против `secrets.*`), флаги встроенных зависимостей и адреса в env, ошибки при пропущенных обязательных значениях, NetworkPolicy, `TRUSTED_PROXY_HOPS`, `securityContext` api, совпадение скрипта SeaweedFS;
+  - `kubeconform -strict` для каждого набора `ci/*.yaml`.
+- **CI, задание `chart-kind`** (после `chart` и `integration`):
+  - образы api, web и backup собираются из текущего коммита и загружаются в kind;
+  - установка со встроенными postgres, redis и s3, Carbone и OnlyOffice выключены (`carbone.url`/`onlyoffice.internalUrl` указывают на несуществующий адрес: smoke отчёты не формирует), `helm install --wait`;
+  - smoke через `kubectl port-forward` к web: `/api/health`, вход администратора, страница отдаётся с CSP; бэкап через API (`POST /api/admin/backups`, ожидание `succeeded`), изменение данных, восстановление, ожидание снятия `cr:maintenance`, данные из бэкапа на месте; две реплики api после восстановления отвечают;
+  - при провале — `kubectl get events`, описания подов и журналы в выводе задания.
+- **Модульные и интеграционные тесты** правок приложения: advisory-блокировка старта (два параллельных старта — миграции один раз), S3 без ключей, `TRUSTED_PROXY_HOPS`, `flushExcept` по `cr:*`, SSL-параметры агента, шаблон nginx в обоих режимах (compose-тест образа web).
+- **Вручную:** полный прогон в kind или в кластере с Carbone и OnlyOffice — открыть шаблон в редакторе, сформировать отчёт, бэкап и восстановление из админки.

@@ -1,0 +1,5893 @@
+{
+ "version": 1,
+ "engine": "carbone/carbone-ee:full-5.15.3-fonts, no licence (Community mode)",
+ "source": "carbone-probe/tests.py, tests2.py, tests3.py (2026-10-07 run, results*.pkl / results3.txt)",
+ "compare": "text = docxText(word/document.xml) as in scripts/help-check.ts; error = message without \"Unable to generate the document. Error: \" prefix and \" Source: ...\" suffix",
+ "defaults": {
+  "ext": "docx"
+ },
+ "cases": [
+  {
+   "id": "matrix/s1/d-name",
+   "probe": "tests.py :: {d.name}",
+   "template": "[{d.name}]",
+   "data": {
+    "name": "Иван"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Иван]"
+   }
+  },
+  {
+   "id": "matrix/s1/d-client-address-city",
+   "probe": "tests.py :: {d.client.address.city}",
+   "template": "[{d.client.address.city}]",
+   "data": {
+    "client": {
+     "address": {
+      "city": "Москва"
+     }
+    }
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Москва]"
+   }
+  },
+  {
+   "id": "matrix/s1/d-missing",
+   "probe": "tests.py :: {d.missing}",
+   "template": "[{d.missing}]",
+   "data": {},
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[]"
+   }
+  },
+  {
+   "id": "matrix/s1/d-items-0-name-d-items-1-name",
+   "probe": "tests.py :: {d.items[0].name} {d.items[1].name}",
+   "template": "[{d.items[0].name} {d.items[1].name}]",
+   "data": {
+    "items": [
+     {
+      "name": "a"
+     },
+     {
+      "name": "b"
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[a b]"
+   }
+  },
+  {
+   "id": "matrix/s1/array-search-id-2",
+   "probe": "tests.py :: array search [id=2]",
+   "template": "[{d.items[id=2].name}]",
+   "data": {
+    "items": [
+     {
+      "id": 1,
+      "name": "a"
+     },
+     {
+      "id": 2,
+      "name": "b"
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[b]"
+   }
+  },
+  {
+   "id": "matrix/s1/array-search-string",
+   "probe": "tests.py :: array search string",
+   "template": "[{d.items[code='X'].name}]",
+   "data": {
+    "items": [
+     {
+      "code": "Y",
+      "name": "a"
+     },
+     {
+      "code": "X",
+      "name": "b"
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[b]"
+   }
+  },
+  {
+   "id": "matrix/s1/parent",
+   "probe": "tests.py :: parent ..",
+   "template": "[{d.client.sub..name}]",
+   "data": {
+    "client": {
+     "name": "Родитель",
+     "sub": {
+      "x": 1
+     }
+    }
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Родитель]"
+   }
+  },
+  {
+   "id": "matrix/s1/literal-xml-chars",
+   "probe": "tests.py :: literal xml chars",
+   "template": "[<&> \"кавычки\"]",
+   "data": {},
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[<&> \"кавычки\"]"
+   }
+  },
+  {
+   "id": "matrix/s1/data-with-xml-chars",
+   "probe": "tests.py :: data with xml chars",
+   "template": "[{d.s}]",
+   "data": {
+    "s": "<b>&\"'"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[<b>&\"']"
+   }
+  },
+  {
+   "id": "matrix/s1/complement-c",
+   "probe": "tests.py :: complement c.",
+   "template": "[{c.param} {c.org.name}]",
+   "data": {},
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow",
+    "complement": {
+     "param": "X",
+     "org": {
+      "name": "ООО Ромашка"
+     }
+    }
+   },
+   "expect": {
+    "text": "[X ООО Ромашка]"
+   }
+  },
+  {
+   "id": "matrix/s1/c-now",
+   "probe": "tests.py :: c.now",
+   "template": "[{c.now:formatD('YYYY')}]",
+   "data": {},
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[2026]"
+   },
+   "volatile": "depends on current date"
+  },
+  {
+   "id": "matrix/s1/alias",
+   "probe": "tests.py :: alias",
+   "template": "[{#cl = d.client}{$cl.name}]",
+   "data": {
+    "client": {
+     "name": "Пётр"
+    }
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Пётр]"
+   }
+  },
+  {
+   "id": "matrix/s1/param-alias",
+   "probe": "tests.py :: param alias",
+   "template": "[{#byId($x) = d.items[id=$x]}{$byId(2).name}]",
+   "data": {
+    "items": [
+     {
+      "id": 1,
+      "name": "a"
+     },
+     {
+      "id": 2,
+      "name": "b"
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[b]"
+   }
+  },
+  {
+   "id": "matrix/s1/table-i-i-1",
+   "probe": "tests.py :: table [i]/[i+1]",
+   "template": "| № | Марка | Кол-во |\n| {d.cars[i].brand} | {d.cars[i].qty} | |\n| {d.cars[i+1].brand} | |  |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| № | Марка | Кол-во |\n| Лада | 3 | |\n| Тесла | 1 | |\n| Лада | 2 | |\n| БМВ | 5 | |"
+   }
+  },
+  {
+   "id": "matrix/s1/paragraph-loop",
+   "probe": "tests.py :: paragraph loop",
+   "template": "{d.cars[i].brand}\n{d.cars[i+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Лада\nТесла\nЛада\nБМВ"
+   }
+  },
+  {
+   "id": "matrix/s1/inline-loop-same-paragraph",
+   "probe": "tests.py :: inline loop same paragraph",
+   "template": "[{d.cars[i].brand}, {d.cars[i+1].brand}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Лада, Тесла, Лада, БМВ, ]"
+   }
+  },
+  {
+   "id": "matrix/s1/nested-loop-paragraphs",
+   "probe": "tests.py :: nested loop paragraphs",
+   "template": "{d.groups[i].name}:\n- {d.groups[i].items[i].x}\n- {d.groups[i].items[i+1].x}\n{d.groups[i+1].name}",
+   "data": {
+    "groups": [
+     {
+      "name": "Г1",
+      "items": [
+       {
+        "x": "a"
+       },
+       {
+        "x": "b"
+       }
+      ]
+     },
+     {
+      "name": "Г2",
+      "items": [
+       {
+        "x": "c"
+       }
+      ]
+     },
+     {
+      "name": "Г3",
+      "items": []
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Г1:\n- a\n- b\nГ2:\n- c\nГ3:"
+   }
+  },
+  {
+   "id": "matrix/s1/nested-loop-table-rows",
+   "probe": "tests.py :: nested loop table rows",
+   "template": "| {d.groups[i].name} | |\n| | {d.groups[i].items[i].x} |\n| | {d.groups[i].items[i+1].x} |\n| {d.groups[i+1].name} | |",
+   "data": {
+    "groups": [
+     {
+      "name": "Г1",
+      "items": [
+       {
+        "x": "a"
+       },
+       {
+        "x": "b"
+       }
+      ]
+     },
+     {
+      "name": "Г2",
+      "items": [
+       {
+        "x": "c"
+       }
+      ]
+     },
+     {
+      "name": "Г3",
+      "items": []
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| Г1 | |\n| | a |\n| | b |\n| Г2 | |\n| | c |\n| Г3 | |"
+   }
+  },
+  {
+   "id": "matrix/s1/nested-table-inside-paragraph-loop",
+   "probe": "tests.py :: nested: table inside paragraph loop",
+   "template": "== {d.groups[i].name}\n| {d.groups[i].items[i].x} |\n| {d.groups[i].items[i+1].x} |\n{d.groups[i+1].name}",
+   "data": {
+    "groups": [
+     {
+      "name": "Г1",
+      "items": [
+       {
+        "x": "a"
+       },
+       {
+        "x": "b"
+       }
+      ]
+     },
+     {
+      "name": "Г2",
+      "items": [
+       {
+        "x": "c"
+       }
+      ]
+     },
+     {
+      "name": "Г3",
+      "items": []
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "== Г1\n| a |\n| b |\n== Г2\n| c |\n== Г3"
+   }
+  },
+  {
+   "id": "matrix/s1/numbering-i",
+   "probe": "tests.py :: numbering .i",
+   "template": "| {d.cars[i].i} | {d.cars[i].brand} |\n| {d.cars[i+1].i} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| | Лада |\n| | Тесла |\n| | Лада |\n| | БМВ |"
+   }
+  },
+  {
+   "id": "matrix/s1/numbering-i-add-1",
+   "probe": "tests.py :: numbering .i:add(1)",
+   "template": "| {d.cars[i].i:add(1)} | {d.cars[i].brand} |\n| {d.cars[i+1].i} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| | Лада |\n| | Тесла |\n| | Лада |\n| | БМВ |"
+   }
+  },
+  {
+   "id": "matrix/s1/numbering-count",
+   "probe": "tests.py :: numbering :count()",
+   "template": "| {d.cars[i].brand:count()} | {d.cars[i].brand} |\n| {d.cars[i+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"cumCount\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[i].brand:cumCount}"
+   }
+  },
+  {
+   "id": "matrix/s1/numbering-cumcount",
+   "probe": "tests.py :: numbering :cumCount",
+   "template": "| {d.cars[i].brand:cumCount} | {d.cars[i].brand} |\n| {d.cars[i+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"cumCount\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[i].brand:cumCount}"
+   }
+  },
+  {
+   "id": "matrix/s1/empty-array-table",
+   "probe": "tests.py :: empty array table",
+   "template": "до\n| H |\n| {d.cars[i].brand} |\n| {d.cars[i+1].brand} |\nпосле",
+   "data": {
+    "cars": []
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "до\n| H |\nпосле"
+   }
+  },
+  {
+   "id": "matrix/s1/missing-array-table",
+   "probe": "tests.py :: missing array table",
+   "template": "до\n| H |\n| {d.cars[i].brand} |\n| {d.cars[i+1].brand} |\nпосле",
+   "data": {},
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "до\n| H |\nпосле"
+   }
+  },
+  {
+   "id": "matrix/s1/loop-over-object-att-val",
+   "probe": "tests.py :: loop over object .att/.val",
+   "template": "{d.obj[i].att}={d.obj[i].val}\n{d.obj[i+1].att}",
+   "data": {
+    "obj": {
+     "a": 1,
+     "b": 2
+    }
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "a=1\nb=2"
+   }
+  },
+  {
+   "id": "matrix/s1/loop-over-string-array",
+   "probe": "tests.py :: loop over string array",
+   "template": "{d.tags[i]}\n{d.tags[i+1]}",
+   "data": {
+    "tags": [
+     "x",
+     "y"
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "x\ny"
+   }
+  },
+  {
+   "id": "matrix/s1/horizontal-loop-columns",
+   "probe": "tests.py :: horizontal loop (columns)",
+   "template": "| {d.cols[i].n} | {d.cols[i+1].n} |\n| {d.cols[i].v} | {d.cols[i+1].v} |",
+   "data": {
+    "cols": [
+     {
+      "n": "A",
+      "v": 1
+     },
+     {
+      "n": "B",
+      "v": 2
+     },
+     {
+      "n": "C",
+      "v": 3
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| A | B | C |\n| 1 | 2 | 3 |"
+   }
+  },
+  {
+   "id": "matrix/s1/root-array-d-i",
+   "probe": "tests.py :: root array d[i]",
+   "template": "{d[i].brand}\n{d[i+1].brand}",
+   "data": [
+    {
+     "brand": "Лада",
+     "qty": 3,
+     "price": 100.5,
+     "ok": true
+    },
+    {
+     "brand": "Тесла",
+     "qty": 1,
+     "price": 2000,
+     "ok": false
+    },
+    {
+     "brand": "Лада",
+     "qty": 2,
+     "price": 120,
+     "ok": true
+    },
+    {
+     "brand": "БМВ",
+     "qty": 5,
+     "price": 1500,
+     "ok": true
+    }
+   ],
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Лада\nТесла\nЛада\nБМВ"
+   }
+  },
+  {
+   "id": "matrix/s1/lookup-prerelease-5-2",
+   "probe": "tests.py :: lookup (prerelease 5.2)",
+   "template": "{o.preReleaseFeatureIn=5002000}\n{d.movies[i].actorId:print(..actors[id=.actorId].name)}\n{d.movies[i+1].actorId}",
+   "data": {
+    "movies": [
+     {
+      "actorId": 2
+     },
+     {
+      "actorId": 1
+     }
+    ],
+    "actors": [
+     {
+      "id": 1,
+      "name": "A1"
+     },
+     {
+      "id": 2,
+      "name": "A2"
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "A2\nA1"
+   }
+  },
+  {
+   "id": "matrix/s1/lookup-in-loop-without-prerelease",
+   "probe": "tests.py :: lookup in loop without prerelease",
+   "template": "{d.movies[i].actorId:print(..actors[id=.actorId].name)}\n{d.movies[i+1].actorId}",
+   "data": {
+    "movies": [
+     {
+      "actorId": 2
+     },
+     {
+      "actorId": 1
+     }
+    ],
+    "actors": [
+     {
+      "id": 1,
+      "name": "A1"
+     },
+     {
+      "id": 2,
+      "name": "A2"
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Forbidden array access in \"actors[id=.actorId].name\". Only positive integers are allowed in []",
+    "errorSource": "{d.movies[i].actorId:print(..actors[id=.actorId].name)}"
+   }
+  },
+  {
+   "id": "matrix/s1/parent-access-in-loop",
+   "probe": "tests.py :: parent access in loop ..",
+   "template": "{d.items[i].x} {d.items[i]..title}\n{d.items[i+1].x}",
+   "data": {
+    "title": "T",
+    "items": [
+     {
+      "x": 1
+     },
+     {
+      "x": 2
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "1 T\n2 T"
+   }
+  },
+  {
+   "id": "matrix/s1/multiline-convcrlf",
+   "probe": "tests.py :: multiline :convCRLF",
+   "template": "[{d.text:convCRLF}]",
+   "data": {
+    "text": "строка1\nстрока2"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[строка1\nстрока2]"
+   }
+  },
+  {
+   "id": "matrix/s1/multiline-without-convcrlf",
+   "probe": "tests.py :: multiline without convCRLF",
+   "template": "[{d.text}]",
+   "data": {
+    "text": "строка1\nстрока2"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[строка1\nстрока2]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-dd-mmmm-yyyy-2026-03-08",
+   "probe": "tests.py :: formatD('DD MMMM YYYY') ← \"2026-03-08\"",
+   "template": "[{d.v:formatD('DD MMMM YYYY')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[08 марта 2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-d-mmmm-yyyy-г-2026-03-08",
+   "probe": "tests.py :: formatD('D MMMM YYYY г.') ← \"2026-03-08\"",
+   "template": "[{d.v:formatD('D MMMM YYYY г.')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[8 марта 2026 г.]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-mmmm-yyyy-2026-03-08",
+   "probe": "tests.py :: formatD('MMMM YYYY') ← \"2026-03-08\"",
+   "template": "[{d.v:formatD('MMMM YYYY')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[март 2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-dd-mm-yyyy-2026-03-08",
+   "probe": "tests.py :: formatD('DD.MM.YYYY') ← \"2026-03-08\"",
+   "template": "[{d.v:formatD('DD.MM.YYYY')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[08.03.2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-l-2026-03-08",
+   "probe": "tests.py :: formatD('L') ← \"2026-03-08\"",
+   "template": "[{d.v:formatD('L')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[08.03.2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-ll-2026-03-08",
+   "probe": "tests.py :: formatD('LL') ← \"2026-03-08\"",
+   "template": "[{d.v:formatD('LL')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[8 марта 2026 г.]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-llll-2026-03-08t10-00-00z",
+   "probe": "tests.py :: formatD('LLLL') ← \"2026-03-08T10:00:00Z\"",
+   "template": "[{d.v:formatD('LLLL')}]",
+   "data": {
+    "v": "2026-03-08T10:00:00Z",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[воскресенье, 8 марта 2026 г., 13:00]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-dddd-d-mmm-2026-03-08",
+   "probe": "tests.py :: formatD('dddd, D MMM') ← \"2026-03-08\"",
+   "template": "[{d.v:formatD('dddd, D MMM')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[воскресенье, 8 мар.]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-dd-mm-yyyy-hh-mm-2026-03-08t22-30-00z",
+   "probe": "tests.py :: formatD('DD.MM.YYYY HH:mm') ← \"2026-03-08T22:30:00Z\"",
+   "template": "[{d.v:formatD('DD.MM.YYYY HH:mm')}]",
+   "data": {
+    "v": "2026-03-08T22:30:00Z",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[09.03.2026 01:30]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-dd-mm-yyyy-hh-mm-2026-03-08t22-30-00",
+   "probe": "tests.py :: formatD('DD.MM.YYYY HH:mm') ← \"2026-03-08T22:30:00\"",
+   "template": "[{d.v:formatD('DD.MM.YYYY HH:mm')}]",
+   "data": {
+    "v": "2026-03-08T22:30:00",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[09.03.2026 01:30]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-dd-mm-yyyy-2026-03-08-00-00-00",
+   "probe": "tests.py :: formatD('DD.MM.YYYY') ← \"2026-03-08 00:00:00\"",
+   "template": "[{d.v:formatD('DD.MM.YYYY')}]",
+   "data": {
+    "v": "2026-03-08 00:00:00",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[08.03.2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-dd-mm-yyyy-yyyymmdd-20260308",
+   "probe": "tests.py :: formatD('DD.MM.YYYY', 'YYYYMMDD') ← \"20260308\"",
+   "template": "[{d.v:formatD('DD.MM.YYYY', 'YYYYMMDD')}]",
+   "data": {
+    "v": "20260308",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[08.03.2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-dd-mm-yyyy-x-1772928000",
+   "probe": "tests.py :: formatD('DD.MM.YYYY', 'X') ← 1772928000",
+   "template": "[{d.v:formatD('DD.MM.YYYY', 'X')}]",
+   "data": {
+    "v": 1772928000,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[08.03.2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-dd-mm-yyyy-null",
+   "probe": "tests.py :: formatD('DD.MM.YYYY') ← null",
+   "template": "[{d.v:formatD('DD.MM.YYYY')}]",
+   "data": {
+    "v": null,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-dd-mm-yyyy-не-дата",
+   "probe": "tests.py :: formatD('DD.MM.YYYY') ← \"не дата\"",
+   "template": "[{d.v:formatD('DD.MM.YYYY')}]",
+   "data": {
+    "v": "не дата",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Invalid Date]"
+   }
+  },
+  {
+   "id": "matrix/s2/addd-1-month-formatd-dd-mm-yyyy-2026-01-31",
+   "probe": "tests.py :: addD(1, 'month'):formatD('DD.MM.YYYY') ← \"2026-01-31\"",
+   "template": "[{d.v:addD(1, 'month'):formatD('DD.MM.YYYY')}]",
+   "data": {
+    "v": "2026-01-31",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[28.02.2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/subd-7-day-formatd-dd-mm-yyyy-2026-03-08",
+   "probe": "tests.py :: subD(7, 'day'):formatD('DD.MM.YYYY') ← \"2026-03-08\"",
+   "template": "[{d.v:subD(7, 'day'):formatD('DD.MM.YYYY')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[01.03.2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/startofd-month-formatd-dd-mm-yyyy-2026-03-08",
+   "probe": "tests.py :: startOfD('month'):formatD('DD.MM.YYYY') ← \"2026-03-08\"",
+   "template": "[{d.v:startOfD('month'):formatD('DD.MM.YYYY')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[01.03.2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/endofd-month-formatd-dd-mm-yyyy-2026-03-08",
+   "probe": "tests.py :: endOfD('month'):formatD('DD.MM.YYYY') ← \"2026-03-08\"",
+   "template": "[{d.v:endOfD('month'):formatD('DD.MM.YYYY')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[01.04.2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/diffd-2026-12-31-days-2026-03-08",
+   "probe": "tests.py :: diffD('2026-12-31', 'days') ← \"2026-03-08\"",
+   "template": "[{d.v:diffD('2026-12-31', 'days')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[298]"
+   }
+  },
+  {
+   "id": "matrix/s2/convdate-yyyy-mm-dd-dd-mm-yyyy-2026-03-08",
+   "probe": "tests.py :: convDate('YYYY-MM-DD', 'DD.MM.YYYY') ← \"2026-03-08\"",
+   "template": "[{d.v:convDate('YYYY-MM-DD', 'DD.MM.YYYY')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[08.03.2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/formati-human-7200000",
+   "probe": "tests.py :: formatI('human') ← 7200000",
+   "template": "[{d.v:formatI('human')}]",
+   "data": {
+    "v": 7200000,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[2 часа]"
+   }
+  },
+  {
+   "id": "matrix/s2/formati-human-7200000-2",
+   "probe": "tests.py :: formatI('human+') ← 7200000",
+   "template": "[{d.v:formatI('human+')}]",
+   "data": {
+    "v": 7200000,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[через 2 часа]"
+   }
+  },
+  {
+   "id": "matrix/s2/formati-days-hours-48",
+   "probe": "tests.py :: formatI('days', 'hours') ← 48",
+   "template": "[{d.v:formatI('days', 'hours')}]",
+   "data": {
+    "v": 48,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[2]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatn-1234567-891",
+   "probe": "tests.py :: formatN() ← 1234567.891",
+   "template": "[{d.v:formatN()}]",
+   "data": {
+    "v": 1234567.891,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1,234,567.891]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatn-2-1234567-891",
+   "probe": "tests.py :: formatN(2) ← 1234567.891",
+   "template": "[{d.v:formatN(2)}]",
+   "data": {
+    "v": 1234567.891,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1,234,567.89]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatn-0-1234567-5",
+   "probe": "tests.py :: formatN(0) ← 1234567.5",
+   "template": "[{d.v:formatN(0)}]",
+   "data": {
+    "v": 1234567.5,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1,234,568]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatn-2-1234-5",
+   "probe": "tests.py :: formatN(2) ← \"1234.5\"",
+   "template": "[{d.v:formatN(2)}]",
+   "data": {
+    "v": "1234.5",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1,234.50]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatn-2-null",
+   "probe": "tests.py :: formatN(2) ← null",
+   "template": "[{d.v:formatN(2)}]",
+   "data": {
+    "v": null,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[]"
+   }
+  },
+  {
+   "id": "matrix/s2/round-2-10-055",
+   "probe": "tests.py :: round(2) ← 10.055",
+   "template": "[{d.v:round(2)}]",
+   "data": {
+    "v": 10.055,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[10.06]"
+   }
+  },
+  {
+   "id": "matrix/s2/add-2-1000-4",
+   "probe": "tests.py :: add(2) ← 1000.4",
+   "template": "[{d.v:add(2)}]",
+   "data": {
+    "v": 1000.4,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1002.4]"
+   }
+  },
+  {
+   "id": "matrix/s2/sub-b-10",
+   "probe": "tests.py :: sub(.b) ← 10",
+   "template": "[{d.v:sub(.b)}]",
+   "data": {
+    "v": 10,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[7]"
+   }
+  },
+  {
+   "id": "matrix/s2/mul-b-formatn-2-10",
+   "probe": "tests.py :: mul(.b):formatN(2) ← 10",
+   "template": "[{d.v:mul(.b):formatN(2)}]",
+   "data": {
+    "v": 10,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[30.00]"
+   }
+  },
+  {
+   "id": "matrix/s2/div-3-round-2-10",
+   "probe": "tests.py :: div(3):round(2) ← 10",
+   "template": "[{d.v:div(3):round(2)}]",
+   "data": {
+    "v": 10,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[3.33]"
+   }
+  },
+  {
+   "id": "matrix/s2/div-0-10",
+   "probe": "tests.py :: div(0) ← 10",
+   "template": "[{d.v:div(0)}]",
+   "data": {
+    "v": 10,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[10]"
+   }
+  },
+  {
+   "id": "matrix/s2/mod-3-10",
+   "probe": "tests.py :: mod(3) ← 10",
+   "template": "[{d.v:mod(3)}]",
+   "data": {
+    "v": 10,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1]"
+   }
+  },
+  {
+   "id": "matrix/s2/abs-5-5",
+   "probe": "tests.py :: abs() ← -5.5",
+   "template": "[{d.v:abs()}]",
+   "data": {
+    "v": -5.5,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[5.5]"
+   }
+  },
+  {
+   "id": "matrix/s2/ceil-10-1",
+   "probe": "tests.py :: ceil() ← 10.1",
+   "template": "[{d.v:ceil()}]",
+   "data": {
+    "v": 10.1,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[11]"
+   }
+  },
+  {
+   "id": "matrix/s2/floor-10-9",
+   "probe": "tests.py :: floor() ← 10.9",
+   "template": "[{d.v:floor()}]",
+   "data": {
+    "v": 10.9,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[10]"
+   }
+  },
+  {
+   "id": "matrix/s2/tofixed-2-10-1",
+   "probe": "tests.py :: toFixed(2) ← 10.1",
+   "template": "[{d.v:toFixed(2)}]",
+   "data": {
+    "v": 10.1,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[10.10]"
+   }
+  },
+  {
+   "id": "matrix/s2/add-b-2-1-10",
+   "probe": "tests.py :: add(.b * 2 - 1) ← 10",
+   "template": "[{d.v:add(.b * 2 - 1)}]",
+   "data": {
+    "v": 10,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[15]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatc-1234567-891",
+   "probe": "tests.py :: formatC() ← 1234567.891",
+   "template": "[{d.v:formatC()}]",
+   "data": {
+    "v": 1234567.891,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1,234,567.89 €]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatc-0-1234-5",
+   "probe": "tests.py :: formatC(0) ← 1234.5",
+   "template": "[{d.v:formatC(0)}]",
+   "data": {
+    "v": 1234.5,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1,235 €]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatc-m-5",
+   "probe": "tests.py :: formatC('M') ← 5",
+   "template": "[{d.v:formatC('M')}]",
+   "data": {
+    "v": 5,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[5.00 €]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatc-ll-5",
+   "probe": "tests.py :: formatC('LL') ← 5",
+   "template": "[{d.v:formatC('LL')}]",
+   "data": {
+    "v": 5,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[5.00 €]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatc-2-usd-1000",
+   "probe": "tests.py :: formatC(2, 'USD') ← 1000",
+   "template": "[{d.v:formatC(2, 'USD')}]",
+   "data": {
+    "v": 1000,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1,140.30 $]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatc-2-eur-1000",
+   "probe": "tests.py :: formatC(2, 'EUR') ← 1000",
+   "template": "[{d.v:formatC(2, 'EUR')}]",
+   "data": {
+    "v": 1000,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1,000.00 €]"
+   }
+  },
+  {
+   "id": "matrix/s2/convcurr-usd-1000",
+   "probe": "tests.py :: convCurr('USD') ← 1000",
+   "template": "[{d.v:convCurr('USD')}]",
+   "data": {
+    "v": 1000,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1140.3000000000002]"
+   }
+  },
+  {
+   "id": "matrix/s2/lowercase-привет-мир",
+   "probe": "tests.py :: lowerCase() ← \"ПРИВЕТ Мир\"",
+   "template": "[{d.v:lowerCase()}]",
+   "data": {
+    "v": "ПРИВЕТ Мир",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[привет мир]"
+   }
+  },
+  {
+   "id": "matrix/s2/uppercase-привет-ёж",
+   "probe": "tests.py :: upperCase() ← \"привет ёж\"",
+   "template": "[{d.v:upperCase()}]",
+   "data": {
+    "v": "привет ёж",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[ПРИВЕТ ЁЖ]"
+   }
+  },
+  {
+   "id": "matrix/s2/ucfirst-иванов-иван",
+   "probe": "tests.py :: ucFirst() ← \"иванов иван\"",
+   "template": "[{d.v:ucFirst()}]",
+   "data": {
+    "v": "иванов иван",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Иванов иван]"
+   }
+  },
+  {
+   "id": "matrix/s2/ucwords-иванов-иван",
+   "probe": "tests.py :: ucWords() ← \"иванов иван\"",
+   "template": "[{d.v:ucWords()}]",
+   "data": {
+    "v": "иванов иван",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Иванов Иван]"
+   }
+  },
+  {
+   "id": "matrix/s2/substr-0-5-длинная-строка",
+   "probe": "tests.py :: substr(0, 5) ← \"Длинная строка\"",
+   "template": "[{d.v:substr(0, 5)}]",
+   "data": {
+    "v": "Длинная строка",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Длинн]"
+   }
+  },
+  {
+   "id": "matrix/s2/substr-0-10-true-длинная-строка-текста",
+   "probe": "tests.py :: substr(0, 10, true) ← \"Длинная строка текста\"",
+   "template": "[{d.v:substr(0, 10, true)}]",
+   "data": {
+    "v": "Длинная строка текста",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Длинная ]"
+   }
+  },
+  {
+   "id": "matrix/s2/padl-6-0-42",
+   "probe": "tests.py :: padl(6, '0') ← \"42\"",
+   "template": "[{d.v:padl(6, '0')}]",
+   "data": {
+    "v": "42",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[000042]"
+   }
+  },
+  {
+   "id": "matrix/s2/padr-6-ab",
+   "probe": "tests.py :: padr(6, '.') ← \"ab\"",
+   "template": "[{d.v:padr(6, '.')}]",
+   "data": {
+    "v": "ab",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[ab....]"
+   }
+  },
+  {
+   "id": "matrix/s2/ellipsis-7-длинная-строка",
+   "probe": "tests.py :: ellipsis(7) ← \"Длинная строка\"",
+   "template": "[{d.v:ellipsis(7)}]",
+   "data": {
+    "v": "Длинная строка",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Длинная...]"
+   }
+  },
+  {
+   "id": "matrix/s2/prepend-15",
+   "probe": "tests.py :: prepend('№ ') ← \"15\"",
+   "template": "[{d.v:prepend('№ ')}]",
+   "data": {
+    "v": "15",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[№ 15]"
+   }
+  },
+  {
+   "id": "matrix/s2/append-руб-15",
+   "probe": "tests.py :: append(' руб.') ← \"15\"",
+   "template": "[{d.v:append(' руб.')}]",
+   "data": {
+    "v": "15",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[15 руб.]"
+   }
+  },
+  {
+   "id": "matrix/s2/replace-2026-03-08",
+   "probe": "tests.py :: replace('-', '/') ← \"2026-03-08\"",
+   "template": "[{d.v:replace('-', '/')}]",
+   "data": {
+    "v": "2026-03-08",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[2026/03/08]"
+   }
+  },
+  {
+   "id": "matrix/s2/len-привет",
+   "probe": "tests.py :: len() ← \"Привет\"",
+   "template": "[{d.v:len()}]",
+   "data": {
+    "v": "Привет",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[6]"
+   }
+  },
+  {
+   "id": "matrix/s2/print-x-anything",
+   "probe": "tests.py :: print('X') ← \"anything\"",
+   "template": "[{d.v:print('X')}]",
+   "data": {
+    "v": "anything",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[X]"
+   }
+  },
+  {
+   "id": "matrix/s2/unaccent-caf-ёлка",
+   "probe": "tests.py :: unaccent() ← \"café ёлка\"",
+   "template": "[{d.v:unaccent()}]",
+   "data": {
+    "v": "café ёлка",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[cafe елка]"
+   }
+  },
+  {
+   "id": "matrix/s2/printjson-a-1",
+   "probe": "tests.py :: printJSON() ← {\"a\": 1}",
+   "template": "[{d.v:printJSON()}]",
+   "data": {
+    "v": {
+     "a": 1
+    },
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[{\"a\":1}]"
+   }
+  },
+  {
+   "id": "matrix/s2/split-a-b",
+   "probe": "tests.py :: split(',') ← \"a,b\"",
+   "template": "[{d.v:split(',')}]",
+   "data": {
+    "v": "a,b",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[a,b]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatr-ru",
+   "probe": "tests.py :: formatR() ← \"RU\"",
+   "template": "[{d.v:formatR()}]",
+   "data": {
+    "v": "RU",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"formatR\" is disabled in the Community Edition.",
+    "errorSource": "{d.v:formatR()}"
+   }
+  },
+  {
+   "id": "matrix/s2/arrayjoin-a-b-c",
+   "probe": "tests.py :: arrayJoin() ← [\"a\", \"b\", \"c\"]",
+   "template": "[{d.v:arrayJoin()}]",
+   "data": {
+    "v": [
+     "a",
+     "b",
+     "c"
+    ],
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[a, b, c]"
+   }
+  },
+  {
+   "id": "matrix/s2/arrayjoin-1-1-a-b-c",
+   "probe": "tests.py :: arrayJoin('; ', 1, 1) ← [\"a\", \"b\", \"c\"]",
+   "template": "[{d.v:arrayJoin('; ', 1, 1)}]",
+   "data": {
+    "v": [
+     "a",
+     "b",
+     "c"
+    ],
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[b]"
+   }
+  },
+  {
+   "id": "matrix/s2/arraymap-name-name-a-x-1-name-b-x-2",
+   "probe": "tests.py :: arrayMap(', ', ':', 'name') ← [{\"name\": \"a\", \"x\": 1}, {\"name\": \"b\", \"x\": 2}]",
+   "template": "[{d.v:arrayMap(', ', ':', 'name')}]",
+   "data": {
+    "v": [
+     {
+      "name": "a",
+      "x": 1
+     },
+     {
+      "name": "b",
+      "x": 2
+     }
+    ],
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[a, b]"
+   }
+  },
+  {
+   "id": "matrix/s2/len-1-2-3",
+   "probe": "tests.py :: len() ← [1, 2, 3]",
+   "template": "[{d.v:len()}]",
+   "data": {
+    "v": [
+     1,
+     2,
+     3
+    ],
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[3]"
+   }
+  },
+  {
+   "id": "matrix/s2/defaulturl-https-example-com-not-a-url",
+   "probe": "tests.py :: defaultURL('https://example.com') ← \"not a url\"",
+   "template": "[{d.v:defaultURL('https://example.com')}]",
+   "data": {
+    "v": "not a url",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"defaultURL\" is disabled in the Community Edition.",
+    "errorSource": "{d.v:defaultURL('https://example.com')}"
+   }
+  },
+  {
+   "id": "matrix/s2/lowercase-uppercase-prepend-append-аб",
+   "probe": "tests.py :: lowerCase:upperCase:prepend('<'):append('>') ← \"Аб\"",
+   "template": "[{d.v:lowerCase:upperCase:prepend('<'):append('>')}]",
+   "data": {
+    "v": "Аб",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[<АБ>]"
+   }
+  },
+  {
+   "id": "matrix/s2/usehighprecisionarithmetic-0-1-0-2",
+   "probe": "tests.py :: useHighPrecisionArithmetic 0.1+0.2",
+   "template": "[{o.useHighPrecisionArithmetic=true}{d.a:add(.b)}]",
+   "data": {
+    "a": 0.1,
+    "b": 0.2
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[0.3]"
+   }
+  },
+  {
+   "id": "matrix/s2/plain-float-0-1-0-2",
+   "probe": "tests.py :: plain float 0.1+0.2",
+   "template": "[{d.a:add(.b)}]",
+   "data": {
+    "a": 0.1,
+    "b": 0.2
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[0.30000000000000004]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatn-with-lang-en-us",
+   "probe": "tests.py :: formatN with lang en-us",
+   "template": "[{d.v:formatN(2)}]",
+   "data": {
+    "v": 1234.5
+   },
+   "options": {
+    "lang": "en-us",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1,234.50]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatd-with-lang-en-us",
+   "probe": "tests.py :: formatD with lang en-us",
+   "template": "[{d.v:formatD('DD MMMM YYYY')}]",
+   "data": {
+    "v": "2026-03-08"
+   },
+   "options": {
+    "lang": "en-us",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[08 March 2026]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatn-with-lang-ru-not-ru-ru",
+   "probe": "tests.py :: formatN with lang ru (not ru-ru)",
+   "template": "[{d.v:formatN(2)}]",
+   "data": {
+    "v": 1234.5
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[1 234,50]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatc-currency-opts-target-usd-rates",
+   "probe": "tests.py :: formatC currency opts target USD + rates",
+   "template": "[{d.v:formatC(2)}]",
+   "data": {
+    "v": 1000
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow",
+    "currency": {
+     "source": "RUB",
+     "target": "USD",
+     "rates": {
+      "RUB": 1,
+      "USD": 0.011
+     }
+    }
+   },
+   "expect": {
+    "text": "[1,000.00 €]"
+   }
+  },
+  {
+   "id": "matrix/s2/convcurr-with-rates",
+   "probe": "tests.py :: convCurr with rates",
+   "template": "[{d.v:convCurr('USD', 'RUB')}]",
+   "data": {
+    "v": 1000
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow",
+    "currency": {
+     "source": "RUB",
+     "target": "USD",
+     "rates": {
+      "RUB": 1,
+      "USD": 0.011
+     }
+    }
+   },
+   "expect": {
+    "text": "[14.679643146796433]"
+   }
+  },
+  {
+   "id": "matrix/s2/formatc-with-currency-source-only",
+   "probe": "tests.py :: formatC with currency source only",
+   "template": "[{d.v:formatC(2)}]",
+   "data": {
+    "v": 1000
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow",
+    "currency": {
+     "source": "RUB"
+    }
+   },
+   "expect": {
+    "text": "[1,000.00 €]"
+   }
+  },
+  {
+   "id": "matrix/s2/timezone-utc-option",
+   "probe": "tests.py :: timezone UTC option",
+   "template": "[{d.v:formatD('DD.MM.YYYY HH:mm')}]",
+   "data": {
+    "v": "2026-03-08T22:30:00Z"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "UTC"
+   },
+   "expect": {
+    "text": "[08.03.2026 22:30]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifeq-paid-show-оплачен-elseshow-не-оплачен-paid",
+   "probe": "tests.py :: ifEQ('paid'):show('Оплачен'):elseShow('Не оплачен') ← \"paid\"",
+   "template": "[{d.v:ifEQ('paid'):show('Оплачен'):elseShow('Не оплачен')}]",
+   "data": {
+    "v": "paid",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Оплачен]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifeq-paid-show-оплачен-elseshow-не-оплачен-new",
+   "probe": "tests.py :: ifEQ('paid'):show('Оплачен'):elseShow('Не оплачен') ← \"new\"",
+   "template": "[{d.v:ifEQ('paid'):show('Оплачен'):elseShow('Не оплачен')}]",
+   "data": {
+    "v": "new",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[Не оплачен]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifeq-1-show-один-2",
+   "probe": "tests.py :: ifEQ(1):show('один') ← 2",
+   "template": "[{d.v:ifEQ(1):show('один')}]",
+   "data": {
+    "v": 2,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[2]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifne-0-show-ненулевой-5",
+   "probe": "tests.py :: ifNE(0):show('ненулевой') ← 5",
+   "template": "[{d.v:ifNE(0):show('ненулевой')}]",
+   "data": {
+    "v": 5,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[ненулевой]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifgt-100-show-100-elseshow-100-150",
+   "probe": "tests.py :: ifGT(100):show('>100'):elseShow('<=100') ← 150",
+   "template": "[{d.v:ifGT(100):show('>100'):elseShow('<=100')}]",
+   "data": {
+    "v": 150,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[>100]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifgte-100-show-ok-100",
+   "probe": "tests.py :: ifGTE(100):show('ok') ← 100",
+   "template": "[{d.v:ifGTE(100):show('ok')}]",
+   "data": {
+    "v": 100,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[ok]"
+   }
+  },
+  {
+   "id": "matrix/s3/iflt-0-show-минус-elseshow-плюс-1",
+   "probe": "tests.py :: ifLT(0):show('минус'):elseShow('плюс') ← -1",
+   "template": "[{d.v:ifLT(0):show('минус'):elseShow('плюс')}]",
+   "data": {
+    "v": -1,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[минус]"
+   }
+  },
+  {
+   "id": "matrix/s3/iflte-0-show-0-0",
+   "probe": "tests.py :: ifLTE(0):show('<=0') ← 0",
+   "template": "[{d.v:ifLTE(0):show('<=0')}]",
+   "data": {
+    "v": 0,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[<=0]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifin-лада-show-есть-лада-бмв",
+   "probe": "tests.py :: ifIN('Лада'):show('есть') ← \"Лада, БМВ\"",
+   "template": "[{d.v:ifIN('Лада'):show('есть')}]",
+   "data": {
+    "v": "Лада, БМВ",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[есть]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifin-лада-show-есть-elseshow-нет-лада-бмв",
+   "probe": "tests.py :: ifIN('Лада'):show('есть'):elseShow('нет') ← [\"Лада\", \"БМВ\"]",
+   "template": "[{d.v:ifIN('Лада'):show('есть'):elseShow('нет')}]",
+   "data": {
+    "v": [
+     "Лада",
+     "БМВ"
+    ],
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[есть]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifnin-x-show-нет-x-лада",
+   "probe": "tests.py :: ifNIN('X'):show('нет X') ← [\"Лада\"]",
+   "template": "[{d.v:ifNIN('X'):show('нет X')}]",
+   "data": {
+    "v": [
+     "Лада"
+    ],
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[нет X]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifem-show-пусто-elseshow-не-пусто",
+   "probe": "tests.py :: ifEM():show('пусто'):elseShow('не пусто') ← \"\"",
+   "template": "[{d.v:ifEM():show('пусто'):elseShow('не пусто')}]",
+   "data": {
+    "v": "",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[пусто]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifem-show-пусто-elseshow-не-пусто-null",
+   "probe": "tests.py :: ifEM():show('пусто'):elseShow('не пусто') ← null",
+   "template": "[{d.v:ifEM():show('пусто'):elseShow('не пусто')}]",
+   "data": {
+    "v": null,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[пусто]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifem-show-пусто-elseshow-не-пусто-2",
+   "probe": "tests.py :: ifEM():show('пусто'):elseShow('не пусто') ← []",
+   "template": "[{d.v:ifEM():show('пусто'):elseShow('не пусто')}]",
+   "data": {
+    "v": [],
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[пусто]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifnem-show-есть-x",
+   "probe": "tests.py :: ifNEM():show('есть') ← \"x\"",
+   "template": "[{d.v:ifNEM():show('есть')}]",
+   "data": {
+    "v": "x",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[есть]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifte-number-show-число-elseshow-не-число-5",
+   "probe": "tests.py :: ifTE('number'):show('число'):elseShow('не число') ← 5",
+   "template": "[{d.v:ifTE('number'):show('число'):elseShow('не число')}]",
+   "data": {
+    "v": 5,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[число]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifte-string-show-строка-x",
+   "probe": "tests.py :: ifTE('string'):show('строка') ← \"x\"",
+   "template": "[{d.v:ifTE('string'):show('строка')}]",
+   "data": {
+    "v": "x",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[строка]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifgt-0-and-b-ifeq-3-show-оба-elseshow-нет-1",
+   "probe": "tests.py :: ifGT(0):and(.b):ifEQ(3):show('оба'):elseShow('нет') ← 1",
+   "template": "[{d.v:ifGT(0):and(.b):ifEQ(3):show('оба'):elseShow('нет')}]",
+   "data": {
+    "v": 1,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[оба]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifeq-0-or-b-ifeq-3-show-хотя-бы-одно-elseshow-нет-1",
+   "probe": "tests.py :: ifEQ(0):or(.b):ifEQ(3):show('хотя бы одно'):elseShow('нет') ← 1",
+   "template": "[{d.v:ifEQ(0):or(.b):ifEQ(3):show('хотя бы одно'):elseShow('нет')}]",
+   "data": {
+    "v": 1,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[хотя бы одно]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifeq-true-show-да-elseshow-нет-true",
+   "probe": "tests.py :: ifEQ(true):show('да'):elseShow('нет') ← true",
+   "template": "[{d.v:ifEQ(true):show('да'):elseShow('нет')}]",
+   "data": {
+    "v": true,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[да]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifeq-true-show-да-elseshow-нет-true-2",
+   "probe": "tests.py :: ifEQ('true'):show('да'):elseShow('нет') ← true",
+   "template": "[{d.v:ifEQ('true'):show('да'):elseShow('нет')}]",
+   "data": {
+    "v": true,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[да]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifempty-null",
+   "probe": "tests.py :: ifEmpty('—') ← null",
+   "template": "[{d.v:ifEmpty('—')}]",
+   "data": {
+    "v": null,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[—]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifempty",
+   "probe": "tests.py :: ifEmpty('—') ← \"\"",
+   "template": "[{d.v:ifEmpty('—')}]",
+   "data": {
+    "v": "",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[—]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifempty-0",
+   "probe": "tests.py :: ifEmpty('—') ← 0",
+   "template": "[{d.v:ifEmpty('—')}]",
+   "data": {
+    "v": 0,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[0]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifempty-2",
+   "probe": "tests.py :: ifEmpty('—') ← []",
+   "template": "[{d.v:ifEmpty('—')}]",
+   "data": {
+    "v": [],
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[—]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifempty-текст",
+   "probe": "tests.py :: ifEmpty('—') ← \"текст\"",
+   "template": "[{d.v:ifEmpty('—')}]",
+   "data": {
+    "v": "текст",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[текст]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifem-show-elseshow-v-x",
+   "probe": "tests.py :: ifEM():show('—'):elseShow(.v) ← \"x\"",
+   "template": "[{d.v:ifEM():show('—'):elseShow(.v)}]",
+   "data": {
+    "v": "x",
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[x]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifeq-b-show-равно-3",
+   "probe": "tests.py :: ifEQ(.b):show('равно') ← 3",
+   "template": "[{d.v:ifEQ(.b):show('равно')}]",
+   "data": {
+    "v": 3,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[равно]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifeq-1-show-t-hello-1",
+   "probe": "tests.py :: ifEQ(1):show({t(hello)}) ← 1",
+   "template": "[{d.v:ifEQ(1):show({t(hello)})}]",
+   "data": {
+    "v": 1,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow",
+    "translations": {
+     "ru-ru": {
+      "hello": "Здравствуйте"
+     }
+    }
+   },
+   "expect": {
+    "text": "[Здравствуйте]"
+   }
+  },
+  {
+   "id": "matrix/s3/ifempty-on-missing-field",
+   "probe": "tests.py :: ifEmpty on missing field",
+   "template": "[{d.missing:ifEmpty('—')}]",
+   "data": {},
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[—]"
+   }
+  },
+  {
+   "id": "matrix/s3/showbegin-showend-true",
+   "probe": "tests.py :: showBegin/showEnd true",
+   "template": "A{d.f:ifEQ(true):showBegin}B{d.f:showEnd}C",
+   "data": {
+    "f": true
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "ABC"
+   }
+  },
+  {
+   "id": "matrix/s3/showbegin-showend-false",
+   "probe": "tests.py :: showBegin/showEnd false",
+   "template": "A{d.f:ifEQ(true):showBegin}B{d.f:showEnd}C",
+   "data": {
+    "f": false
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "AC"
+   }
+  },
+  {
+   "id": "matrix/s3/hidebegin-hideend-paragraphs",
+   "probe": "tests.py :: hideBegin/hideEnd paragraphs",
+   "template": "до\n{d.f:ifEQ(true):hideBegin}\nскрыто1\nскрыто2\n{d.f:hideEnd}\nпосле",
+   "data": {
+    "f": true
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "до\nпосле"
+   }
+  },
+  {
+   "id": "matrix/s3/drop-p",
+   "probe": "tests.py :: drop(p)",
+   "template": "до\n{d.f:ifEQ(true):drop(p)}удалить абзац\nпосле",
+   "data": {
+    "f": true
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"drop\" is disabled in the Community Edition.",
+    "errorSource": "{d.f:ifEQ(true):drop(p)}"
+   }
+  },
+  {
+   "id": "matrix/s3/drop-p-false",
+   "probe": "tests.py :: drop(p) false",
+   "template": "до\n{d.f:ifEQ(true):drop(p)}остаётся\nпосле",
+   "data": {
+    "f": false
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"drop\" is disabled in the Community Edition.",
+    "errorSource": "{d.f:ifEQ(true):drop(p)}"
+   }
+  },
+  {
+   "id": "matrix/s3/keep-p",
+   "probe": "tests.py :: keep(p)",
+   "template": "до\n{d.f:ifEQ(true):keep(p)}оставить\nпосле",
+   "data": {
+    "f": false
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"keep\" is disabled in the Community Edition.",
+    "errorSource": "{d.f:ifEQ(true):keep(p)}"
+   }
+  },
+  {
+   "id": "matrix/s3/drop-row-in-loop",
+   "probe": "tests.py :: drop(row) in loop",
+   "template": "| H |\n| {d.cars[i].brand}{d.cars[i].ok:ifEQ(false):drop(row)} |\n| {d.cars[i+1].brand} |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"drop\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[i].ok:ifEQ(false):drop(row)}"
+   }
+  },
+  {
+   "id": "matrix/s3/drop-table",
+   "probe": "tests.py :: drop(table)",
+   "template": "до\n| {d.f:ifEQ(true):drop(table)}x |\nпосле",
+   "data": {
+    "f": true
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"drop\" is disabled in the Community Edition.",
+    "errorSource": "{d.f:ifEQ(true):drop(table)}"
+   }
+  },
+  {
+   "id": "matrix/s3/hide-row-via-hidebegin-hideend-in-row",
+   "probe": "tests.py :: hide row via hideBegin/hideEnd in row",
+   "template": "| H | |\n| {d.cars[i].ok:ifEQ(false):hideBegin}{d.cars[i].brand} | {d.cars[i].qty}{d.cars[i].ok:hideEnd} |\n| {d.cars[i+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| H | |\n| Лада | 3 |\n| |\n| Лада | 2 |\n| БМВ | 5 |"
+   }
+  },
+  {
+   "id": "matrix/s3/hide-static-row-via-showbegin-across-rows",
+   "probe": "tests.py :: hide static row via showBegin across rows",
+   "template": "| A |\n| {d.f:ifEQ(true):showBegin}скрытая строка |\n| {d.f:showEnd}B |",
+   "data": {
+    "f": false
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| A |\n| |\n| B |"
+   }
+  },
+  {
+   "id": "matrix/s3/filter-number-i-qty-1",
+   "probe": "tests.py :: filter number [i, qty > 1]",
+   "template": "{d.cars[i, qty > 1].brand}\n{d.cars[i+1, qty > 1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Лада\nЛада\nБМВ"
+   }
+  },
+  {
+   "id": "matrix/s3/filter-v5-single-i-1-filter",
+   "probe": "tests.py :: filter v5 single [i+1] filter",
+   "template": "{d.cars[i, qty > 1].brand}\n{d.cars[i+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Лада\nЛада\nБМВ"
+   }
+  },
+  {
+   "id": "matrix/s3/filter-string-i-brand-лада",
+   "probe": "tests.py :: filter string [i, brand=Лада]",
+   "template": "{d.cars[i, brand='Лада'].qty}\n{d.cars[i+1, brand='Лада'].qty}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "3\n2"
+   }
+  },
+  {
+   "id": "matrix/s3/filter-string-unquoted",
+   "probe": "tests.py :: filter string unquoted",
+   "template": "{d.cars[i, brand=Лада].qty}\n{d.cars[i+1, brand=Лада].qty}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "3\n2"
+   }
+  },
+  {
+   "id": "matrix/s3/filter-bool-i-ok-true",
+   "probe": "tests.py :: filter bool [i, ok=true]",
+   "template": "{d.cars[i, ok=true].brand}\n{d.cars[i+1, ok=true].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Лада\nЛада\nБМВ"
+   }
+  },
+  {
+   "id": "matrix/s3/filter-multi-and",
+   "probe": "tests.py :: filter multi AND",
+   "template": "{d.cars[i, qty > 1, qty < 5].brand}\n{d.cars[i+1, qty > 1, qty < 5].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Лада\nЛада"
+   }
+  },
+  {
+   "id": "matrix/s3/filter-index-i-i-2",
+   "probe": "tests.py :: filter index [i, i < 2]",
+   "template": "{d.cars[i, i < 2].brand}\n{d.cars[i+1, i < 2].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Лада\nТесла"
+   }
+  },
+  {
+   "id": "matrix/s3/filter-exclude-last-i-i-1",
+   "probe": "tests.py :: filter exclude last [i, i!=-1]",
+   "template": "{d.cars[i, i!=-1].brand}\n{d.cars[i+1, i!=-1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Лада\nТесла\nЛада"
+   }
+  },
+  {
+   "id": "matrix/s3/filter-in-table-row",
+   "probe": "tests.py :: filter in table row",
+   "template": "| {d.cars[i, ok=true].brand} |\n| {d.cars[i+1, ok=true].brand} |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| Лада |\n| Лада |\n| БМВ |"
+   }
+  },
+  {
+   "id": "matrix/s3/sort-qty-i",
+   "probe": "tests.py :: sort [qty, i]",
+   "template": "{d.cars[qty, i].brand}\n{d.cars[qty+1, i+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Тесла\nЛада\nЛада\nБМВ"
+   }
+  },
+  {
+   "id": "matrix/s3/sort-multi-brand-qty-i",
+   "probe": "tests.py :: sort multi [brand, qty, i]",
+   "template": "{d.cars[brand, qty, i].brand}{d.cars[brand, qty, i].qty}\n{d.cars[brand+1, qty+1, i+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "БМВ5\nЛада2\nЛада3\nТесла1"
+   }
+  },
+  {
+   "id": "matrix/s3/sort-desc-qty-i",
+   "probe": "tests.py :: sort desc [-qty, i]?",
+   "template": "{d.cars[-qty, i].brand}\n{d.cars[-qty+1, i+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Лада\nТесла\nЛада\nБМВ"
+   }
+  },
+  {
+   "id": "matrix/s3/distinct-brand",
+   "probe": "tests.py :: distinct [brand]",
+   "template": "{d.cars[brand].brand}\n{d.cars[brand+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "БМВ\nЛада\nТесла"
+   }
+  },
+  {
+   "id": "matrix/s3/translations-t",
+   "probe": "tests.py :: translations {t()}",
+   "template": "{t(Итого)}: {d.v:t}",
+   "data": {
+    "v": "apple"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow",
+    "translations": {
+     "ru-ru": {
+      "Итого": "Total",
+      "apple": "яблоко"
+     }
+    }
+   },
+   "expect": {
+    "text": "Total: яблоко"
+   }
+  },
+  {
+   "id": "matrix/s3/translations-missing-key",
+   "probe": "tests.py :: translations missing key",
+   "template": "{t(Итого)}",
+   "data": {},
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Итого"
+   }
+  },
+  {
+   "id": "matrix/s4/aggsum",
+   "probe": "tests.py :: aggSum",
+   "template": "[{d.cars[].qty:aggSum}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[].qty:aggSum}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggsum-formatn",
+   "probe": "tests.py :: aggSum:formatN",
+   "template": "[{d.cars[].qty:aggSum:formatN(2)}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[].qty:aggSum:formatN(2)}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggsum-formatc",
+   "probe": "tests.py :: aggSum:formatC",
+   "template": "[{d.cars[].price:aggSum:formatC()}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[].price:aggSum:formatC()}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggsum-of-qty-price",
+   "probe": "tests.py :: aggSum of qty*price",
+   "template": "[{d.cars[].qty:mul(.price):aggSum:formatN(2)}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[].qty:mul(.price):aggSum:formatN(2)}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggavg",
+   "probe": "tests.py :: aggAvg",
+   "template": "[{d.cars[].qty:aggAvg}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggAvg\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[].qty:aggAvg}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggmin-aggmax",
+   "probe": "tests.py :: aggMin/aggMax",
+   "template": "[{d.cars[].qty:aggMin} {d.cars[].qty:aggMax}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggMin\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[].qty:aggMin}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggcount",
+   "probe": "tests.py :: aggCount",
+   "template": "[{d.cars[].qty:aggCount}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggCount\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[].qty:aggCount}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggcountd",
+   "probe": "tests.py :: aggCountD",
+   "template": "[{d.cars[].brand:aggCountD}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggCountD\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[].brand:aggCountD}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggstr",
+   "probe": "tests.py :: aggStr",
+   "template": "[{d.cars[].brand:aggStr(', ')}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggStr\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[].brand:aggStr(', ')}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggstrd",
+   "probe": "tests.py :: aggStrD",
+   "template": "[{d.cars[].brand:aggStrD(' | ')}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggStrD\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[].brand:aggStrD(' | ')}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggsum-with-filter",
+   "probe": "tests.py :: aggSum with filter",
+   "template": "[{d.cars[ok=true].qty:aggSum}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[ok=true].qty:aggSum}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggsum-empty-array",
+   "probe": "tests.py :: aggSum empty array",
+   "template": "[{d.cars[].qty:aggSum}]",
+   "data": {
+    "cars": []
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[].qty:aggSum}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggsum-nested-arrays",
+   "probe": "tests.py :: aggSum nested arrays",
+   "template": "[{d.groups[].items[].q:aggSum}]",
+   "data": {
+    "groups": [
+     {
+      "items": [
+       {
+        "q": 1
+       },
+       {
+        "q": 2
+       }
+      ]
+     },
+     {
+      "items": [
+       {
+        "q": 10
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.groups[].items[].q:aggSum}"
+   }
+  },
+  {
+   "id": "matrix/s4/length-property",
+   "probe": "tests.py :: .length property",
+   "template": "[{d.cars.length}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[4]"
+   }
+  },
+  {
+   "id": "matrix/s4/array-len",
+   "probe": "tests.py :: array:len()",
+   "template": "[{d.cars:len()}]",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[4]"
+   }
+  },
+  {
+   "id": "matrix/s4/cumsum-in-loop",
+   "probe": "tests.py :: cumSum in loop",
+   "template": "| {d.cars[i].brand} | {d.cars[i].qty:cumSum} |\n| {d.cars[i+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"cumSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[i].qty:cumSum}"
+   }
+  },
+  {
+   "id": "matrix/s4/cumcountd",
+   "probe": "tests.py :: cumCountD",
+   "template": "| {d.cars[i].brand} | {d.cars[i].brand:cumCountD} |\n| {d.cars[i+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"cumCountD\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[i].brand:cumCountD}"
+   }
+  },
+  {
+   "id": "matrix/s4/total-row-after-table",
+   "probe": "tests.py :: total row after table",
+   "template": "| {d.cars[i].brand} | {d.cars[i].qty} |\n| {d.cars[i+1].brand} | |\n| Итого | {d.cars[].qty:aggSum} |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[].qty:aggSum}"
+   }
+  },
+  {
+   "id": "matrix/s4/aggsum-inside-loop-per-group-subtotal",
+   "probe": "tests.py :: aggSum inside loop (per-group subtotal)",
+   "template": "| {d.groups[i].name} | {d.groups[i].items[].q:aggSum} |\n| {d.groups[i+1].name} | |",
+   "data": {
+    "groups": [
+     {
+      "name": "A",
+      "items": [
+       {
+        "q": 1
+       },
+       {
+        "q": 2
+       }
+      ]
+     },
+     {
+      "name": "B",
+      "items": [
+       {
+        "q": 10
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.groups[i].items[].q:aggSum}"
+   }
+  },
+  {
+   "id": "matrix/s4/group-by-brand-aggsum-brand",
+   "probe": "tests.py :: group-by [brand] + aggSum(.brand)",
+   "template": "| {d.cars[brand].brand} | {d.cars[brand].qty:aggSum(.brand)} |\n| {d.cars[brand+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[brand].qty:aggSum(.brand)}"
+   }
+  },
+  {
+   "id": "matrix/s4/group-by-aggcount-brand",
+   "probe": "tests.py :: group-by + aggCount(.brand)",
+   "template": "| {d.cars[brand].brand} | {d.cars[brand].qty:aggCount(.brand)} |\n| {d.cars[brand+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggCount\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[brand].qty:aggCount(.brand)}"
+   }
+  },
+  {
+   "id": "matrix/s4/partition-aggsum-brand-in-plain-loop",
+   "probe": "tests.py :: partition aggSum(.brand) in plain loop",
+   "template": "| {d.cars[i].brand} | {d.cars[i].qty:aggSum(.brand)} |\n| {d.cars[i+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[i].qty:aggSum(.brand)}"
+   }
+  },
+  {
+   "id": "matrix/s4/cumcount-brand-partition",
+   "probe": "tests.py :: cumCount(.brand) partition",
+   "template": "| {d.cars[i].brand} | {d.cars[i].qty:cumCount(.brand)} |\n| {d.cars[i+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"cumCount\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[i].qty:cumCount(.brand)}"
+   }
+  },
+  {
+   "id": "matrix/s4/group-header-detail-rows-nested-filter-by-parent",
+   "probe": "tests.py :: group header + detail rows (nested filter by parent)",
+   "template": "| {d.cars[brand].brand} | |\n| | {d.cars[brand].brand:print(..)} |\n| {d.cars[brand+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| БМВ | |\n| | .. |\n| Лада | |\n| | .. |\n| Тесла | |\n| | .. |"
+   }
+  },
+  {
+   "id": "matrix/s4/grouping-via-set-v5-enterprise",
+   "probe": "tests.py :: grouping via :set (v5 enterprise)",
+   "template": "{d.cars[].brand:set(c.g[id=.brand].rows[].brand)}{d.cars[].qty:set(c.g[id=.brand].rows[].qty)}\n{c.g[i].id}\n- {c.g[i].rows[i].qty}\n- {c.g[i].rows[i+1].qty}\n{c.g[i+1].id}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Лада\n- \n- \n- 3\n- 2\nТесла\n- \n- 1\nБМВ\n- \n- 5"
+   }
+  },
+  {
+   "id": "matrix/s4/grouping-with-pre-grouped-json",
+   "probe": "tests.py :: grouping with pre-grouped JSON",
+   "template": "| {d.groups[i].name} | {d.groups[i].items[].q:aggSum} |\n|   {d.groups[i].items[i].x} | {d.groups[i].items[i].q} |\n|   {d.groups[i].items[i+1].x} | |\n| {d.groups[i+1].name} | |",
+   "data": {
+    "groups": [
+     {
+      "name": "A",
+      "items": [
+       {
+        "x": "a1",
+        "q": 1
+       },
+       {
+        "x": "a2",
+        "q": 2
+       }
+      ]
+     },
+     {
+      "name": "B",
+      "items": [
+       {
+        "x": "b1",
+        "q": 10
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
+    "errorSource": "{d.groups[i].items[].q:aggSum}"
+   }
+  },
+  {
+   "id": "matrix/s5/html",
+   "probe": "tests.py :: :html",
+   "template": "[{d.h:html}]",
+   "data": {
+    "h": "<b>жирный</b> текст"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"html\" is disabled in the Community Edition.",
+    "errorSource": "{d.h:html}"
+   }
+  },
+  {
+   "id": "matrix/s5/color-p",
+   "probe": "tests.py :: :color(p)",
+   "template": "[{d.c:color(p)}цветной]",
+   "data": {
+    "c": "#FF0000"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"color\" is disabled in the Community Edition.",
+    "errorSource": "{d.c:color(p)}"
+   }
+  },
+  {
+   "id": "matrix/s5/bindcolor-legacy",
+   "probe": "tests.py :: bindColor legacy",
+   "template": "[{bindColor(ff0000, #hexa) = d.c}текст ff0000]",
+   "data": {
+    "c": "00FF00"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[текст ff0000]"
+   }
+  },
+  {
+   "id": "matrix/s5/barcode-in-text",
+   "probe": "tests.py :: :barcode in text",
+   "template": "[{d.v:barcode(qrcode)}]",
+   "data": {
+    "v": "123"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"barcode\" is disabled in the Community Edition.",
+    "errorSource": "{d.v:barcode(qrcode)}"
+   }
+  },
+  {
+   "id": "matrix/s5/barcode-ean13-text-font-mode",
+   "probe": "tests.py :: :barcode ean13 text (font mode)",
+   "template": "[{d.v:barcode(ean13)}]",
+   "data": {
+    "v": "5901234123457"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"barcode\" is disabled in the Community Edition.",
+    "errorSource": "{d.v:barcode(ean13)}"
+   }
+  },
+  {
+   "id": "matrix/s5/defaulturl-text",
+   "probe": "tests.py :: defaultURL text",
+   "template": "[{d.u:defaultURL('https://carbone.io')}]",
+   "data": {
+    "u": "bad"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"defaultURL\" is disabled in the Community Edition.",
+    "errorSource": "{d.u:defaultURL('https://carbone.io')}"
+   }
+  },
+  {
+   "id": "matrix/s5/o-prereleasefeaturein",
+   "probe": "tests.py :: o.preReleaseFeatureIn",
+   "template": "[{o.preReleaseFeatureIn=5002000}{d.v}]",
+   "data": {
+    "v": "ok"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[ok]"
+   }
+  },
+  {
+   "id": "matrix/s5/set-store-value",
+   "probe": "tests.py :: :set store value",
+   "template": "[{d.v:set(c.x)}{c.x}]",
+   "data": {
+    "v": "stored"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "[stored]"
+   }
+  },
+  {
+   "id": "matrix/s5/t-formatter",
+   "probe": "tests.py :: :t formatter",
+   "template": "[{d.v:t}]",
+   "data": {
+    "v": "apple"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow",
+    "translations": {
+     "ru-ru": {
+      "apple": "яблоко"
+     }
+    }
+   },
+   "expect": {
+    "text": "[яблоко]"
+   }
+  },
+  {
+   "id": "matrix/tests2/locale-lang-ru-ru",
+   "probe": "tests2.py :: locale lang=ru-ru",
+   "template": "{d.n:formatN()} | {d.n:formatN(2)} | {d.n:formatC()} | {d.n:formatC(0)} | {d.five:formatC('M')} | {d.five:formatC('LL')} | {d.d:formatD('DD MMMM YYYY, dddd')} | {d.d:formatD('LL')}",
+   "data": {
+    "n": 1234567.891,
+    "five": 5,
+    "d": "2026-03-08"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "1,234,567.891 | 1,234,567.89 | 1,234,567.89 € | 1,234,568 € | 5.00 € | 5.00 € | 08 марта 2026, воскресенье | 8 марта 2026 г."
+   }
+  },
+  {
+   "id": "matrix/tests2/locale-lang-ru-ru-2",
+   "probe": "tests2.py :: locale lang=ru-RU",
+   "template": "{d.n:formatN()} | {d.n:formatN(2)} | {d.n:formatC()} | {d.n:formatC(0)} | {d.five:formatC('M')} | {d.five:formatC('LL')} | {d.d:formatD('DD MMMM YYYY, dddd')} | {d.d:formatD('LL')}",
+   "data": {
+    "n": 1234567.891,
+    "five": 5,
+    "d": "2026-03-08"
+   },
+   "options": {
+    "lang": "ru-RU",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "1,234,567.891 | 1,234,567.89 | 1,234,567.89 € | 1,234,568 € | 5.00 € | 5.00 € | 08 марта 2026, воскресенье | 8 марта 2026 г."
+   }
+  },
+  {
+   "id": "matrix/tests2/locale-lang-ru",
+   "probe": "tests2.py :: locale lang=ru",
+   "template": "{d.n:formatN()} | {d.n:formatN(2)} | {d.n:formatC()} | {d.n:formatC(0)} | {d.five:formatC('M')} | {d.five:formatC('LL')} | {d.d:formatD('DD MMMM YYYY, dddd')} | {d.d:formatD('LL')}",
+   "data": {
+    "n": 1234567.891,
+    "five": 5,
+    "d": "2026-03-08"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "1 234 567,891 | 1 234 567,89 | 1 234 567,89 ₽ | 1 234 568 ₽ | roubles | 5,00 roubles | 08 марта 2026, воскресенье | 8 марта 2026 г."
+   }
+  },
+  {
+   "id": "matrix/tests2/locale-lang-ru-ru-2-2",
+   "probe": "tests2.py :: locale lang=ru_RU",
+   "template": "{d.n:formatN()} | {d.n:formatN(2)} | {d.n:formatC()} | {d.n:formatC(0)} | {d.five:formatC('M')} | {d.five:formatC('LL')} | {d.d:formatD('DD MMMM YYYY, dddd')} | {d.d:formatD('LL')}",
+   "data": {
+    "n": 1234567.891,
+    "five": 5,
+    "d": "2026-03-08"
+   },
+   "options": {
+    "lang": "ru_RU",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "1,234,567.891 | 1,234,567.89 | 1,234,567.89 € | 1,234,568 € | 5.00 € | 5.00 € | 08 марта 2026, воскресенье | 8 марта 2026 г."
+   }
+  },
+  {
+   "id": "matrix/tests2/locale-lang-none",
+   "probe": "tests2.py :: locale lang=None",
+   "template": "{d.n:formatN()} | {d.n:formatN(2)} | {d.n:formatC()} | {d.n:formatC(0)} | {d.five:formatC('M')} | {d.five:formatC('LL')} | {d.d:formatD('DD MMMM YYYY, dddd')} | {d.d:formatD('LL')}",
+   "data": {
+    "n": 1234567.891,
+    "five": 5,
+    "d": "2026-03-08"
+   },
+   "options": {
+    "lang": null,
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "1,234,567.891 | 1,234,567.89 | 1,234,567.89 € | 1,234,568 € | 5.00 € | 5.00 € | 08 March 2026, Sunday | March 8, 2026"
+   }
+  },
+  {
+   "id": "matrix/tests2/formatc-ru-currencytarget-rub",
+   "probe": "tests2.py :: formatC ru + currencyTarget RUB",
+   "template": "{d.n:formatC()} | {d.n:formatC(2,'RUB')} | {d.n:formatC(2,'USD')} | {d.n:convCurr('USD')}",
+   "data": {
+    "n": 1000
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow",
+    "currencySource": "RUB",
+    "currencyTarget": "RUB"
+   },
+   "expect": {
+    "text": "1 000,00 ₽ | 1 000,00 ₽ | 14,68 $ | 14.679643146796433"
+   }
+  },
+  {
+   "id": "matrix/tests2/ru-ru-currencysource-target-rub",
+   "probe": "tests2.py :: ru-ru + currencySource/Target RUB",
+   "template": "{d.n:formatC()} | {d.n:formatC(2,'USD')} | {d.n:convCurr('USD')} | {d.n:formatN(2)}",
+   "data": {
+    "n": 1000
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow",
+    "currencySource": "RUB",
+    "currencyTarget": "RUB"
+   },
+   "expect": {
+    "text": "1,000.00 ₽ | 14.68 $ | 14.679643146796433 | 1,000.00"
+   }
+  },
+  {
+   "id": "matrix/tests2/ru-currencyrates",
+   "probe": "tests2.py :: ru + currencyRates",
+   "template": "{d.n:formatC(2,'USD')} | {d.n:convCurr('USD')}",
+   "data": {
+    "n": 1000
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow",
+    "currencySource": "RUB",
+    "currencyTarget": "RUB",
+    "currencyRates": {
+     "RUB": 1,
+     "USD": 0.011
+    }
+   },
+   "expect": {
+    "text": "11,00 $ | 11"
+   }
+  },
+  {
+   "id": "matrix/tests2/ru-no-currency-opts",
+   "probe": "tests2.py :: ru no currency opts",
+   "template": "{d.n:formatC(2,'USD')} | {d.n:convCurr('USD')} | {d.n:formatC(2,'RUB')}",
+   "data": {
+    "n": 1000
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "14,68 $ | 14.679643146796433 | 1 000,00 ₽"
+   }
+  },
+  {
+   "id": "matrix/tests2/count-alone",
+   "probe": "tests2.py :: count() alone",
+   "template": "{d.cars[i].brand:count()} {d.cars[i].brand}\n{d.cars[i+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"cumCount\" is disabled in the Community Edition.",
+    "errorSource": "{d.cars[i].brand:cumCount}"
+   }
+  },
+  {
+   "id": "matrix/tests2/iterator-via-print-i",
+   "probe": "tests2.py :: iterator via print(.i)",
+   "template": "{d.cars[i].brand:print(.i)} {d.cars[i].brand}\n{d.cars[i+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "0 Лада\n1 Тесла\n2 Лада\n3 БМВ"
+   }
+  },
+  {
+   "id": "matrix/tests2/iterator-via-qty-mul-0-add-i-add-1",
+   "probe": "tests2.py :: iterator via qty:mul(0):add(.i):add(1)",
+   "template": "{d.cars[i].qty:mul(0):add(.i):add(1)}. {d.cars[i].brand}\n{d.cars[i+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "1. Лада\n2. Тесла\n3. Лада\n4. БМВ"
+   }
+  },
+  {
+   "id": "matrix/tests2/iterator-d-cars-i-brand-add-i",
+   "probe": "tests2.py :: iterator {d.cars[i].brand:add(.i)}",
+   "template": "{d.cars[i].i:add(1)}|{d.cars[i]..i}|{d.cars[i].brand}\n{d.cars[i+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "||Лада\n||Тесла\n||Лада\n||БМВ"
+   }
+  },
+  {
+   "id": "matrix/tests2/sum-via-set-accumulator",
+   "probe": "tests2.py :: sum via :set accumulator",
+   "template": "{d.cars[].qty:add(c.total):set(c.total)}Итого: {c.total}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow",
+    "complement": {
+     "total": 0
+    }
+   },
+   "expect": {
+    "text": "Итого: 14"
+   }
+  },
+  {
+   "id": "matrix/tests2/sum-via-set-accumulator-no-init",
+   "probe": "tests2.py :: sum via :set accumulator no init",
+   "template": "{d.cars[].qty:add(c.total):set(c.total)}Итого: {c.total}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Итого: NaN"
+   }
+  },
+  {
+   "id": "matrix/tests2/sum-via-set-accumulator-mul",
+   "probe": "tests2.py :: sum via :set accumulator mul",
+   "template": "{d.cars[].qty:mul(.price):add(c.total):set(c.total)}Итого: {c.total:formatN(2)}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow",
+    "complement": {
+     "total": 0
+    }
+   },
+   "expect": {
+    "text": "Итого: 10,343.00"
+   }
+  },
+  {
+   "id": "matrix/tests2/group-via-set-whole-object",
+   "probe": "tests2.py :: group via :set whole object",
+   "template": "{d.cars[]:set(c.g[id=.brand].rows[])}\n{c.g[i].id}\n- {c.g[i].rows[i].brand} {c.g[i].rows[i].qty}\n- {c.g[i].rows[i+1].qty}\n{c.g[i+1].id}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Лада\n- Лада 3\n- Лада 2\nТесла\n- Тесла 1\nБМВ\n- БМВ 5"
+   }
+  },
+  {
+   "id": "matrix/tests2/group-via-set-table",
+   "probe": "tests2.py :: group via :set table",
+   "template": "{d.cars[]:set(c.g[id=.brand].rows[])}\n| {c.g[i].id} | |\n| | {c.g[i].rows[i].qty} |\n| | {c.g[i].rows[i+1].qty} |\n| {c.g[i+1].id} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| Лада | |\n| | 3 |\n| | 2 |\n| Тесла | |\n| | 1 |\n| БМВ | |\n| | 5 |"
+   }
+  },
+  {
+   "id": "matrix/tests2/group-via-set-subtotal-set",
+   "probe": "tests2.py :: group via :set + subtotal :set",
+   "template": "{d.cars[]:set(c.g[id=.brand].rows[])}{d.cars[].qty:add(c.g[id=.brand].sum):set(c.g[id=.brand].sum)}\n{c.g[i].id}: {c.g[i].sum}\n{c.g[i+1].id}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Forbidden array access in \"c.g[id=.brand].sum\". Only positive integers are allowed in []",
+    "errorSource": "{d.cars[i].qty:add(c.g[id=.brand].sum):_setInit(c.g):_setObj(c):_setArr(g):_setObjInArr(id,.brand):_setVal(sum)}"
+   }
+  },
+  {
+   "id": "matrix/tests2/hide-row-hidebegin-at-end-of-prev-row-hideend-at-end-of-row",
+   "probe": "tests2.py :: hide row: hideBegin at end of prev row, hideEnd at end of row",
+   "template": "| H | |\n| {d.cars[i].brand} | {d.cars[i].qty}{d.cars[i].ok:ifEQ(false):hideBegin} |\n| {d.cars[i+1].brand} | {d.cars[i].ok:hideEnd} |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| H | |\n| Лада | 3 |\n| Тесла | 1 |\n| Лада | 2 |\n| БМВ | 5 |"
+   }
+  },
+  {
+   "id": "matrix/tests2/empty-array-paragraphs-ifem-message",
+   "probe": "tests2.py :: empty array paragraphs + ifEM message",
+   "template": "{d.cars[i].brand}\n{d.cars[i+1].brand}\n{d.cars:ifEM():show('Нет данных')}",
+   "data": {
+    "cars": []
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Нет данных"
+   }
+  },
+  {
+   "id": "matrix/tests2/pdf-output",
+   "probe": "tests2.py :: pdf output",
+   "template": "Привет {d.n:formatN(2)}",
+   "data": {
+    "n": 1
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "convertTo": "pdf",
+   "skip": "conversion (LibreOffice in EE) — out of renderBuffer scope; covered by OnlyOffice integration test",
+   "expect": {
+    "note": "<16622 bytes, starts b'%PDF-1.7'>"
+   }
+  },
+  {
+   "id": "matrix/tests2/txt-output",
+   "probe": "tests2.py :: txt output",
+   "template": "Привет {d.n}",
+   "data": {
+    "n": 1
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "convertTo": "txt",
+   "skip": "conversion (LibreOffice in EE) — out of renderBuffer scope; covered by OnlyOffice integration test",
+   "expect": {
+    "note": "<10 bytes, starts b'?????? 1'>"
+   }
+  },
+  {
+   "id": "matrix/tests2/pdf-formatoptions",
+   "probe": "tests2.py :: pdf formatOptions",
+   "template": "Привет",
+   "data": {},
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "convertTo": {
+    "formatName": "pdf",
+    "formatOptions": {
+     "EncryptFile": true,
+     "DocumentOpenPassword": "x"
+    }
+   },
+   "skip": "conversion (LibreOffice in EE) — out of renderBuffer scope; covered by OnlyOffice integration test",
+   "expect": {
+    "note": "<16219 bytes, starts b'%PDF-1.7'>"
+   }
+  },
+  {
+   "id": "matrix/tests2/naive-datetime-tz",
+   "probe": "tests2.py :: naive datetime tz",
+   "template": "{d.v:formatD('DD.MM.YYYY HH:mm')} | {d.w:formatD('DD.MM.YYYY HH:mm')} | {d.v:formatD('DD.MM.YYYY HH:mm','YYYY-MM-DD HH:mm:ss')}",
+   "data": {
+    "v": "2026-03-08 23:30:00",
+    "w": "2026-03-08T23:30:00+03:00"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "09.03.2026 02:30 | 08.03.2026 23:30 | 09.03.2026 02:30"
+   }
+  },
+  {
+   "id": "matrix/tests2/endofd-tz",
+   "probe": "tests2.py :: endOfD tz",
+   "template": "{d.v:endOfD('month'):formatD('DD.MM.YYYY HH:mm')} | {d.v:endOfD('month'):formatD('DD.MM.YYYY HH:mm')}",
+   "data": {
+    "v": "2026-03-08"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "UTC"
+   },
+   "expect": {
+    "text": "31.03.2026 23:59 | 31.03.2026 23:59"
+   }
+  },
+  {
+   "id": "matrix/tests2/ifempty-chain-with-formatd",
+   "probe": "tests2.py :: ifEmpty chain with formatD",
+   "template": "{d.v:ifEmpty('—'):formatD('DD.MM.YYYY')} | {d.v:formatD('DD.MM.YYYY'):ifEmpty('—')}",
+   "data": {
+    "v": null
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Invalid Date | —"
+   }
+  },
+  {
+   "id": "matrix/tests2/ifempty-on-formatted-number",
+   "probe": "tests2.py :: ifEmpty on formatted number",
+   "template": "{d.v:formatN(2):ifEmpty('—')}",
+   "data": {
+    "v": null
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "—"
+   }
+  },
+  {
+   "id": "matrix/tests2/bindcolor-with-colored-run",
+   "probe": "tests2.py :: bindColor with colored run",
+   "template": "<<RAW>>",
+   "data": {
+    "c": "#00FF00"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "raw": [
+    "<w:p><w:r><w:t>{bindColor(ff0000, #hexa) = d.c}</w:t></w:r><w:r><w:rPr><w:color w:val=\"FF0000\"/></w:rPr><w:t>цвет</w:t></w:r></w:p>"
+   ],
+   "expect": {
+    "text": "цвет"
+   }
+  },
+  {
+   "id": "matrix/tests2/dynamic-image-alt-text",
+   "probe": "tests2.py :: dynamic image (alt text)",
+   "template": "<<RAW>>",
+   "data": {
+    "img": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "raw": [
+    "<w:p><w:r><w:drawing><wp:inline><wp:extent cx=\"914400\" cy=\"914400\"/><wp:docPr id=\"1\" name=\"Picture 1\" descr=\"{d.img}\"/><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:nvPicPr><pic:cNvPr id=\"1\" name=\"p.png\" descr=\"{d.img}\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\"rIdImg\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"914400\" cy=\"914400\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
+   ],
+   "rels": "<Relationship Id=\"rIdImg\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/p.png\"/>",
+   "expect": {
+    "text": ""
+   },
+   "skip": "needs word/media/p.png (media) — add media support to the golden format or drop"
+  },
+  {
+   "id": "matrix/tests2/dynamic-hyperlink",
+   "probe": "tests2.py :: dynamic hyperlink",
+   "template": "<<RAW>>",
+   "data": {
+    "url": "https://example.org/x"
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "raw": [
+    "<w:p><w:hyperlink r:id=\"rIdL\"><w:r><w:t>ссылка</w:t></w:r></w:hyperlink></w:p>"
+   ],
+   "rels": "<Relationship Id=\"rIdL\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"{d.url}\" TargetMode=\"External\"/>",
+   "expect": {
+    "text": "ссылка"
+   }
+  },
+  {
+   "id": "matrix/tests3/numbering-print-i-add-1",
+   "probe": "tests3.py :: numbering print(.i):add(1)",
+   "template": "{d.cars[i].brand:print(.i):add(1)}. {d.cars[i].brand}\n{d.cars[i+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "1. Лада\n2. Тесла\n3. Лада\n4. БМВ",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  },
+  {
+   "id": "matrix/tests3/numbering-in-table-print-i-add-1",
+   "probe": "tests3.py :: numbering in table print(.i):add(1)",
+   "template": "| № | Марка |\n| {d.cars[i].brand:print(.i):add(1)} | {d.cars[i].brand} |\n| {d.cars[i+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| № | Марка |\n| 1 | Лада |\n| 2 | Тесла |\n| 3 | Лада |\n| 4 | БМВ |",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  },
+  {
+   "id": "matrix/tests3/numbering-with-filter",
+   "probe": "tests3.py :: numbering with filter",
+   "template": "{d.cars[i, ok=true].brand:print(.i):add(1)}. {d.cars[i, ok=true].brand}\n{d.cars[i+1, ok=true].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "1. Лада\n3. Лада\n4. БМВ",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  },
+  {
+   "id": "matrix/tests3/set-accumulator-separate-paragraph",
+   "probe": "tests3.py :: set accumulator separate paragraph",
+   "template": "{d.cars[].qty:add(c.total):set(c.total)}\nИтого: {c.total}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow",
+    "complement": {
+     "total": 0
+    }
+   },
+   "expect": {
+    "text": "Итого: 14",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  },
+  {
+   "id": "matrix/tests3/set-accumulator-1-item",
+   "probe": "tests3.py :: set accumulator 1 item",
+   "template": "{d.cars[].qty:add(c.total):set(c.total)}Итого: {c.total}",
+   "data": {
+    "cars": [
+     {
+      "qty": 7
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow",
+    "complement": {
+     "total": 0
+    }
+   },
+   "expect": {
+    "text": "Итого: 14",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  },
+  {
+   "id": "matrix/tests3/set-accumulator-init-via-set",
+   "probe": "tests3.py :: set accumulator init via set",
+   "template": "{d.zero:set(c.total)}{d.cars[].qty:add(c.total):set(c.total)}Итого: {c.total}",
+   "data": {
+    "zero": 0,
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Итого: 14",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  },
+  {
+   "id": "matrix/tests3/nbsp-check",
+   "probe": "tests3.py :: nbsp check",
+   "template": "{d.n:formatN(2)}",
+   "data": {
+    "n": 1234567.5
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "1 234 567,50",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  },
+  {
+   "id": "matrix/tests3/translations-with-lang-ru",
+   "probe": "tests3.py :: translations with lang ru",
+   "template": "{t(Итого)}",
+   "data": {},
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow",
+    "translations": {
+     "ru": {
+      "Итого": "Всего"
+     }
+    }
+   },
+   "expect": {
+    "text": "Всего",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  },
+  {
+   "id": "matrix/tests3/translations-ru-ru-key-with-lang-ru",
+   "probe": "tests3.py :: translations ru-ru key with lang ru",
+   "template": "{t(Итого)}",
+   "data": {},
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow",
+    "translations": {
+     "ru-ru": {
+      "Итого": "Всего"
+     }
+    }
+   },
+   "expect": {
+    "text": "Итого",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  },
+  {
+   "id": "matrix/tests3/unknown-formatter",
+   "probe": "tests3.py :: unknown formatter",
+   "template": "{d.n:fooBar()}",
+   "data": {
+    "n": 1
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"fooBar\" does not exist. Do you mean \"mod\"?",
+    "errorSource": "{d.n:fooBar()}"
+   }
+  },
+  {
+   "id": "matrix/tests3/unclosed-tag",
+   "probe": "tests3.py :: unclosed tag",
+   "template": "{d.n",
+   "data": {
+    "n": 1
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "{d.n",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  },
+  {
+   "id": "matrix/tests3/bad-loop-missing-i-1",
+   "probe": "tests3.py :: bad loop (missing i+1)",
+   "template": "{d.cars[i].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "price": 100.5,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "price": 2000,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "price": 120,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "price": 1500,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "The marker {d.cars[i].brand} has no corresponding [i+1] for array \"cars\". Add at least one tag with cars[i+1] to describe where is the i+1-th item."
+   }
+  },
+  {
+   "id": "matrix/tests3/ifempty-missing-nested",
+   "probe": "tests3.py :: ifEmpty missing nested",
+   "template": "{d.a.b.c:ifEmpty('—')}",
+   "data": {},
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "—",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  },
+  {
+   "id": "matrix/tests3/pdf-encrypt-check",
+   "probe": "tests3.py :: pdf encrypt check",
+   "template": "Привет",
+   "data": {},
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "convertTo": {
+    "formatName": "pdf",
+    "formatOptions": {
+     "EncryptFile": true,
+     "DocumentOpenPassword": "x"
+    }
+   },
+   "skip": "conversion (LibreOffice in EE) — out of renderBuffer scope; covered by OnlyOffice integration test",
+   "expect": {
+    "note": "<16218 bytes, starts b'%PDF-1.7'>"
+   }
+  },
+  {
+   "id": "matrix/tests3/pdf-plain",
+   "probe": "tests3.py :: pdf plain",
+   "template": "Привет",
+   "data": {},
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "convertTo": "pdf",
+   "skip": "conversion (LibreOffice in EE) — out of renderBuffer scope; covered by OnlyOffice integration test",
+   "expect": {
+    "note": "<15981 bytes, starts b'%PDF-1.7'>"
+   }
+  },
+  {
+   "id": "matrix/tests3/txt",
+   "probe": "tests3.py :: txt",
+   "template": "Привет {d.n}",
+   "data": {
+    "n": 1
+   },
+   "options": {
+    "lang": "ru-ru",
+    "timezone": "Europe/Moscow"
+   },
+   "convertTo": "txt",
+   "skip": "conversion (LibreOffice in EE) — out of renderBuffer scope; covered by OnlyOffice integration test",
+   "expect": {
+    "note": "<10 bytes, starts b'?????? 1'>"
+   }
+  },
+  {
+   "id": "matrix/tests3/formatc-m-ll-lang-ru",
+   "probe": "tests3.py :: formatC M/LL lang ru",
+   "template": "{d.a:formatC('M')} | {d.b:formatC('M')} | {d.b:formatC('LL')}",
+   "data": {
+    "a": 1,
+    "b": 2
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "rouble | roubles | 2,00 roubles",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  },
+  {
+   "id": "matrix/tests3/formatd-ru-dates-lang-ru",
+   "probe": "tests3.py :: formatD ru dates lang ru",
+   "template": "{d.d:formatD('DD MMMM YYYY')} | {d.d:formatD('LLL')}",
+   "data": {
+    "d": "2026-03-08T10:00:00Z"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "08 марта 2026 | 8 марта 2026 г., 13:00",
+    "textFrom": "results3.txt (python text_of, converted)"
+   }
+  }
+ ]
+}

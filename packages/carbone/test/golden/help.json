@@ -1,0 +1,952 @@
+{
+ "version": 1,
+ "engine": "carbone/carbone-ee:full-5.15.3-fonts, no licence (Community mode)",
+ "source": "apps/web/src/pages/admin/help/content.ts (HELP_SECTIONS, verified by pnpm help:check against EE)",
+ "compare": "text = docxText(word/document.xml) as in scripts/help-check.ts; error = message without \"Unable to generate the document. Error: \" prefix and \" Source: ...\" suffix",
+ "cases": [
+  {
+   "id": "help/basics-field",
+   "template": "Покупатель: {d.name}",
+   "data": {
+    "name": "Иван"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Покупатель: Иван"
+   }
+  },
+  {
+   "id": "help/basics-nested",
+   "template": "{d.client.address.city}",
+   "data": {
+    "client": {
+     "address": {
+      "city": "Москва"
+     }
+    }
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Москва"
+   }
+  },
+  {
+   "id": "help/basics-search",
+   "template": "{d.items[id=2].name}",
+   "data": {
+    "items": [
+     {
+      "id": 1,
+      "name": "a"
+     },
+     {
+      "id": 2,
+      "name": "b"
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "b"
+   }
+  },
+  {
+   "id": "help/basics-params",
+   "template": "Период с {d.params.from:formatD('DD.MM.YYYY')}",
+   "data": {
+    "params": {
+     "from": "2026-03-01"
+    }
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Период с 01.03.2026"
+   }
+  },
+  {
+   "id": "help/basics-ifempty",
+   "template": "Оплачен: {d.paid_on:formatD('DD.MM.YYYY'):ifEmpty('—')}",
+   "data": {
+    "paid_on": null
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Оплачен: —"
+   }
+  },
+  {
+   "id": "help/basics-alias",
+   "template": "{#cl = d.client}{$cl.name}",
+   "data": {
+    "client": {
+     "name": "Пётр"
+    }
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Пётр"
+   }
+  },
+  {
+   "id": "help/tables-rows",
+   "template": "| Марка | Кол-во |\n| {d.cars[i].brand} | {d.cars[i].qty} |\n| {d.cars[i+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| Марка | Кол-во |\n| Лада | 3 |\n| Тесла | 1 |\n| Лада | 2 |\n| БМВ | 5 |"
+   }
+  },
+  {
+   "id": "help/tables-nested",
+   "template": "{d.groups[i].name}:\n- {d.groups[i].items[i].x}\n- {d.groups[i].items[i+1].x}\n{d.groups[i+1].name}",
+   "data": {
+    "groups": [
+     {
+      "name": "Г1",
+      "items": [
+       {
+        "x": "a"
+       },
+       {
+        "x": "b"
+       }
+      ]
+     },
+     {
+      "name": "Г2",
+      "items": [
+       {
+        "x": "c"
+       }
+      ]
+     },
+     {
+      "name": "Г3",
+      "items": []
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Г1:\n- a\n- b\nГ2:\n- c\nГ3:"
+   }
+  },
+  {
+   "id": "help/tables-nested-rows",
+   "template": "| {d.groups[i].name} | |\n| | {d.groups[i].items[i].x} |\n| | {d.groups[i].items[i+1].x} |\n| {d.groups[i+1].name} | |",
+   "data": {
+    "groups": [
+     {
+      "name": "Г1",
+      "items": [
+       {
+        "x": "a"
+       },
+       {
+        "x": "b"
+       }
+      ]
+     },
+     {
+      "name": "Г2",
+      "items": [
+       {
+        "x": "c"
+       }
+      ]
+     },
+     {
+      "name": "Г3",
+      "items": []
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| Г1 | |\n| | a |\n| | b |\n| Г2 | |\n| | c |\n| Г3 | |"
+   }
+  },
+  {
+   "id": "help/tables-empty",
+   "template": "до\n| Марка |\n| {d.cars[i].brand} |\n| {d.cars[i+1].brand} |\nпосле\n{d.cars:ifEM():show('Нет данных'):elseShow('')}",
+   "data": {
+    "cars": []
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "до\n| Марка |\nпосле\nНет данных"
+   }
+  },
+  {
+   "id": "help/tables-numbering",
+   "template": "| № | Марка |\n| {d.cars[i].brand:print(.i):add(1)} | {d.cars[i].brand} |\n| {d.cars[i+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| № | Марка |\n| 1 | Лада |\n| 2 | Тесла |\n| 3 | Лада |\n| 4 | БМВ |"
+   }
+  },
+  {
+   "id": "help/tables-filter",
+   "template": "| {d.cars[i, ok=true].brand} |\n| {d.cars[i+1, ok=true].brand} |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| Лада |\n| Лада |\n| БМВ |"
+   }
+  },
+  {
+   "id": "help/tables-sort",
+   "template": "{d.cars[qty, i].brand}\n{d.cars[qty+1, i+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Тесла\nЛада\nЛада\nБМВ"
+   }
+  },
+  {
+   "id": "help/fmt-date-long",
+   "template": "{d.date:formatD('DD MMMM YYYY')}",
+   "data": {
+    "date": "2026-03-08"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "08 марта 2026"
+   }
+  },
+  {
+   "id": "help/fmt-date-short",
+   "template": "{d.date:formatD('DD.MM.YYYY')}",
+   "data": {
+    "date": "2026-03-08"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "08.03.2026"
+   }
+  },
+  {
+   "id": "help/fmt-date-time",
+   "template": "{d.at:formatD('DD.MM.YYYY HH:mm')}",
+   "data": {
+    "at": "2026-03-08T23:30:00+03:00"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "08.03.2026 23:30"
+   }
+  },
+  {
+   "id": "help/fmt-date-naive",
+   "template": "{d.at:formatD('DD.MM.YYYY HH:mm')}",
+   "data": {
+    "at": "2026-03-08 23:30:00"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "09.03.2026 02:30"
+   }
+  },
+  {
+   "id": "help/fmt-number",
+   "template": "{d.n:formatN(2)}",
+   "data": {
+    "n": 1234567.891
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "1 234 567,89"
+   }
+  },
+  {
+   "id": "help/fmt-money",
+   "template": "{d.sum:formatC()}",
+   "data": {
+    "sum": 1234567.891
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "1 234 567,89 ₽"
+   }
+  },
+  {
+   "id": "help/fmt-convcurr",
+   "template": "{d.sum:convCurr('USD')}",
+   "data": {
+    "sum": 1000
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "14.679643146796433"
+   }
+  },
+  {
+   "id": "help/fmt-case",
+   "template": "{d.name:ucWords()}",
+   "data": {
+    "name": "иванов иван"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Иванов Иван"
+   }
+  },
+  {
+   "id": "help/fmt-ellipsis",
+   "template": "{d.title:ellipsis(7)}",
+   "data": {
+    "title": "Длинная строка"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Длинная..."
+   }
+  },
+  {
+   "id": "help/fmt-math",
+   "template": "{d.v:add(.b * 2 - 1)}",
+   "data": {
+    "v": 10,
+    "b": 3
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "15"
+   }
+  },
+  {
+   "id": "help/fmt-array-join",
+   "template": "{d.tags:arrayJoin()}",
+   "data": {
+    "tags": [
+     "a",
+     "b",
+     "c"
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "a, b, c"
+   }
+  },
+  {
+   "id": "help/fmt-multiline",
+   "template": "{d.text:convCRLF}",
+   "data": {
+    "text": "строка1\nстрока2"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "строка1\nстрока2"
+   }
+  },
+  {
+   "id": "help/cond-if",
+   "template": "{d.status:ifEQ('paid'):show('Оплачен'):elseShow('Не оплачен')}",
+   "data": {
+    "status": "new"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Не оплачен"
+   }
+  },
+  {
+   "id": "help/cond-and",
+   "template": "{d.qty:ifGT(0):and(.paid):ifEQ(true):show('к отгрузке'):elseShow('ждём')}",
+   "data": {
+    "qty": 2,
+    "paid": true
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "к отгрузке"
+   }
+  },
+  {
+   "id": "help/cond-inline",
+   "template": "Итого{d.vat:ifEQ(true):showBegin}, включая НДС{d.vat:showEnd}.",
+   "data": {
+    "vat": false
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Итого."
+   }
+  },
+  {
+   "id": "help/cond-paragraphs",
+   "template": "Счёт\n{d.paid:ifEQ(true):hideBegin}\nПросим оплатить в течение 5 дней.\n{d.paid:hideEnd}\nСпасибо!",
+   "data": {
+    "paid": true
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Счёт\nСпасибо!"
+   }
+  },
+  {
+   "id": "help/cond-table-row",
+   "template": "| Марка | Кол-во |\n| {d.cars[i].ok:ifEQ(false):hideBegin}{d.cars[i].brand} | {d.cars[i].qty}{d.cars[i].ok:hideEnd} |\n| {d.cars[i+1].brand} | |",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| Марка | Кол-во |\n| Лада | 3 |\n| |\n| Лада | 2 |\n| БМВ | 5 |"
+   },
+   "antiPattern": true
+  },
+  {
+   "id": "help/totals-sum",
+   "template": "Позиций: {d.totals.positions}, на сумму {d.totals.amount:formatC()}",
+   "data": {
+    "totals": {
+     "positions": 3,
+     "amount": 13775
+    }
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Позиций: 3, на сумму 13 775,00 ₽"
+   }
+  },
+  {
+   "id": "help/totals-rownum",
+   "template": "| № | Наименование | Кол-во |\n| {d.items[i].n} | {d.items[i].name} | {d.items[i].qty} |\n| {d.items[i+1].n} | | |",
+   "data": {
+    "items": [
+     {
+      "n": 1,
+      "name": "Бумага А4",
+      "qty": 10
+     },
+     {
+      "n": 2,
+      "name": "Картридж",
+      "qty": 2
+     },
+     {
+      "n": 3,
+      "name": "Ручки шариковые",
+      "qty": 50
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "| № | Наименование | Кол-во |\n| 1 | Бумага А4 | 10 |\n| 2 | Картридж | 2 |\n| 3 | Ручки шариковые | 50 |"
+   }
+  },
+  {
+   "id": "help/totals-groups",
+   "template": "{d.groups[i].company} — {d.groups[i].subtotal:formatC()}\n- {d.groups[i].items[i].name}: {d.groups[i].items[i].qty}\n- {d.groups[i].items[i+1].name}\n{d.groups[i+1].company}",
+   "data": {
+    "groups": [
+     {
+      "company": "ООО «Ромашка»",
+      "subtotal": 13775,
+      "items": [
+       {
+        "name": "Бумага А4",
+        "qty": 10
+       },
+       {
+        "name": "Картридж",
+        "qty": 2
+       },
+       {
+        "name": "Ручки шариковые",
+        "qty": 50
+       }
+      ]
+     },
+     {
+      "company": "АО «Лютик»",
+      "subtotal": 34300,
+      "items": [
+       {
+        "name": "Стол офисный",
+        "qty": 1
+       },
+       {
+        "name": "Кресло",
+        "qty": 2
+       },
+       {
+        "name": "Лампа настольная",
+        "qty": 3
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "ООО «Ромашка» — 13 775,00 ₽\n- Бумага А4: 10\n- Картридж: 2\n- Ручки шариковые: 50\nАО «Лютик» — 34 300,00 ₽\n- Стол офисный: 1\n- Кресло: 2\n- Лампа настольная: 3"
+   }
+  },
+  {
+   "id": "help/totals-set-group",
+   "template": "{d.cars[]:set(c.g[id=.brand].rows[])}\n{c.g[i].id}\n- {c.g[i].rows[i].brand} {c.g[i].rows[i].qty}\n- {c.g[i].rows[i+1].qty}\n{c.g[i+1].id}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Лада\n- Лада 3\n- Лада 2\nТесла\n- Тесла 1\nБМВ\n- БМВ 5"
+   }
+  },
+  {
+   "id": "help/totals-set-sum",
+   "template": "{d.zero:set(c.total)}{d.cars[].qty:add(c.total):set(c.total)}Итого: {c.total}",
+   "data": {
+    "zero": 0,
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "text": "Итого: 14"
+   },
+   "antiPattern": true
+  },
+  {
+   "id": "help/na-aggregators",
+   "template": "Итого: {d.cars[].qty:aggSum}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"aggSum\" is disabled in the Community Edition."
+   },
+   "apiMessage": "в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+  },
+  {
+   "id": "help/na-count",
+   "template": "{d.cars[i].brand:count()} {d.cars[i].brand}\n{d.cars[i+1].brand}",
+   "data": {
+    "cars": [
+     {
+      "brand": "Лада",
+      "qty": 3,
+      "ok": true
+     },
+     {
+      "brand": "Тесла",
+      "qty": 1,
+      "ok": false
+     },
+     {
+      "brand": "Лада",
+      "qty": 2,
+      "ok": true
+     },
+     {
+      "brand": "БМВ",
+      "qty": 5,
+      "ok": true
+     }
+    ]
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"cumCount\" is disabled in the Community Edition."
+   },
+   "apiMessage": "в шаблоне используется cumCount — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+  },
+  {
+   "id": "help/na-drop",
+   "template": "до\n{d.f:ifEQ(true):drop(p)}удалить абзац\nпосле",
+   "data": {
+    "f": true
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"drop\" is disabled in the Community Edition."
+   },
+   "apiMessage": "в шаблоне используется drop — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+  },
+  {
+   "id": "help/na-html",
+   "template": "{d.h:html}",
+   "data": {
+    "h": "<b>жирный</b> текст"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"html\" is disabled in the Community Edition."
+   },
+   "apiMessage": "в шаблоне используется html — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+  },
+  {
+   "id": "help/na-color",
+   "template": "{d.c:color(p)}цветной",
+   "data": {
+    "c": "#FF0000"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"color\" is disabled in the Community Edition."
+   },
+   "apiMessage": "в шаблоне используется color — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+  },
+  {
+   "id": "help/na-barcode",
+   "template": "{d.v:barcode(qrcode)}",
+   "data": {
+    "v": "123"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"barcode\" is disabled in the Community Edition."
+   },
+   "apiMessage": "в шаблоне используется barcode — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+  },
+  {
+   "id": "help/na-chart",
+   "template": "{d.v:chart}",
+   "data": {
+    "v": 1
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"chart\" is disabled in the Community Edition."
+   },
+   "apiMessage": "в шаблоне используется chart — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+  },
+  {
+   "id": "help/na-format-region",
+   "template": "{d.v:formatR()}",
+   "data": {
+    "v": "RU"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"formatR\" is disabled in the Community Edition."
+   },
+   "apiMessage": "в шаблоне используется formatR — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+  },
+  {
+   "id": "help/na-default-url",
+   "template": "{d.u:defaultURL('https://example.com')}",
+   "data": {
+    "u": "not a url"
+   },
+   "options": {
+    "lang": "ru",
+    "timezone": "Europe/Moscow"
+   },
+   "expect": {
+    "error": "Formatter \"defaultURL\" is disabled in the Community Edition."
+   },
+   "apiMessage": "в шаблоне используется defaultURL — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+  }
+ ]
+}

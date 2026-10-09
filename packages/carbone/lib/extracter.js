@@ -691,7 +691,8 @@ function findAndSetExactPositionOfArrays (xml, descriptor) {
 
 /**
  * Можно ли повторять xml между метками [i] и [i+1] как есть: отрезок внутри одного абзаца, то есть состоит
- * только из тегов уровня run (DOCX w:r/w:t/w:rPr, ODT text:span, PPTX a:r/a:t/a:rPr; одиночные теги вида
+ * только из тегов уровня run (DOCX w:r/w:t/w:rPr и контейнеры w:hyperlink/w:smartTag/w:ins/w:del/w:fldSimple,
+ * ODT text:span/text:a, PPTX a:r/a:t/a:rPr; одиночные теги вида
  * <w:b/> — любые), и каждый тег, закрытый в отрезке, в нём же открыт снова (баланс по имени — ноль).
  * Пример: «</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">, ».
  * Прочий xml (абзацы, ячейки, строки, теги тестов апстрима) повторяется как в 3.8.2 — через findPivot.
@@ -699,7 +700,12 @@ function findAndSetExactPositionOfArrays (xml, descriptor) {
  * @return {Boolean}
  */
 function isInlineSlice (xml) {
-  var _runLevel = { 'w:r' : true, 'w:t' : true, 'w:rPr' : true, 'w:rFonts' : true, 'w:lang' : true, 'text:span' : true, 'a:r' : true, 'a:t' : true, 'a:rPr' : true };
+  // теги run и сбалансированные контейнеры внутри абзаца (ссылка, smartTag, правки, простое поле)
+  var _runLevel = {
+    'w:r'     : true, 'w:t'        : true, 'w:rPr' : true, 'w:rFonts'   : true, 'w:lang'  : true,
+    'w:hyperlink' : true, 'w:smartTag' : true, 'w:ins' : true, 'w:del' : true, 'w:delText' : true, 'w:fldSimple' : true,
+    'text:span' : true, 'text:a' : true, 'a:r' : true, 'a:t' : true, 'a:rPr' : true
+  };
   var _balance = {};
   var _regex = /<(\/?)([^\s/>!?]+)[^>]*?(\/?)>/g;
   var _match;

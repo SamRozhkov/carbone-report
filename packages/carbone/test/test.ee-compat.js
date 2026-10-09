@@ -352,3 +352,54 @@ describe('EE: решения контроллера по Task 7', function () {
     assert.strictEqual(await text('[{d.cars[i]:ifEmpty(\'E\')}]\n{d.cars[i+1]}', cars), '[]\n[]\n[]\n[]');
   });
 });
+
+describe('EE: Task 7, доработка 1 (граничные случаи)', function () {
+  const cars = { cars: [{ brand: 'Лада' }, { brand: 'Тесла' }, { brand: 'БМВ' }] };
+  const render = async (raw, data) => docxText(await renderBuffer(await buildDocx('<<RAW>>', [raw]), 'docx', data, RU));
+  it('повтор в абзаце через ссылку w:hyperlink между метками сохраняет разделители', async function () {
+    const raw = '<w:p><w:r><w:t xml:space="preserve">[{d.cars[i].brand}</w:t></w:r>'
+      + '<w:hyperlink w:anchor="x"><w:r><w:t xml:space="preserve">; </w:t></w:r></w:hyperlink>'
+      + '<w:r><w:t xml:space="preserve">{d.cars[i+1].brand}]</w:t></w:r></w:p>';
+    assert.strictEqual(await render(raw, cars), '[Лада; Тесла; БМВ; ]');
+  });
+  it('повтор в абзаце через w:ins / w:smartTag', async function () {
+    const raw = '<w:p><w:r><w:t xml:space="preserve">[{d.cars[i].brand}</w:t></w:r>'
+      + '<w:ins w:id="1" w:author="a"><w:smartTag w:uri="u" w:element="e"><w:r><w:t xml:space="preserve">, </w:t></w:r></w:smartTag></w:ins>'
+      + '<w:r><w:t xml:space="preserve">{d.cars[i+1].brand}]</w:t></w:r></w:p>';
+    assert.strictEqual(await render(raw, cars), '[Лада, Тесла, БМВ, ]');
+  });
+  it('повтор строк таблицы и абзацев со ссылкой внутри по-прежнему повторяет строки и абзацы', async function () {
+    assert.strictEqual(await text('| {d.cars[i].brand} |\n| {d.cars[i+1].brand} |', cars), '| Лада |\n| Тесла |\n| БМВ |');
+    const raw = '<w:p><w:hyperlink w:anchor="x"><w:r><w:t xml:space="preserve">{d.cars[i].brand}</w:t></w:r></w:hyperlink></w:p>'
+      + '<w:p><w:r><w:t xml:space="preserve">{d.cars[i+1].brand}</w:t></w:r></w:p>';
+    assert.strictEqual(await render(raw, cars), 'Лада\nТесла\nБМВ');
+  });
+  it('строка [i] только с метками :set: разделитель [i+1] без пары убирается, значения записаны', async function () {
+    const t = '| {d.cars[i].brand:set(c.b[])} |\n| {d.cars[i+1].brand} |\n{c.b[i]}\n{c.b[i+1]}';
+    assert.strictEqual(await text(t, cars), '| |\n| |\nЛада\nТесла\nБМВ');
+  });
+  it(':set и на строке [i+1] — она ничего не записывает, ошибок нет', async function () {
+    const t = '| {d.cars[i].brand:set(c.b[])} |\n| {d.cars[i+1].brand:set(c.b[])} |\n{c.b[i]}\n{c.b[i+1]}';
+    assert.strictEqual(await text(t, cars), '| |\n| |\nЛада\nТесла\nБМВ');
+  });
+  it('ошибки меток :set не показывают служебный __set', async function () {
+    const m1 = await rawError('{d.cars[].brand:nope:set(c.x)}', cars);
+    assert.ok(/Source: "\{d\.cars\[\]\.brand:nope:set\(c\.x\)\}"$/.test(m1) && !/__set/.test(m1), m1);
+    const m2 = await rawError('{d.cars[].brand:aggStr:set(c.x)}', cars);
+    assert.ok(!/__set/.test(m2), m2);
+  });
+  it('группировка: ключи 1 и \'1\' — одна группа, как в поиске по ключу', async function () {
+    const data = { items: [{ k: 1, v: 'a' }, { k: '1', v: 'b' }, { k: 2, v: 'c' }] };
+    const t = '{d.items[]:set(c.g[id=.k].rows[])}{c.g[i].id}\n{c.g[i+1].id}\n{c.g[0].rows[1].v}';
+    assert.strictEqual(await text(t, data), '1\n2\nb');
+  });
+  it('группировка 10 000 разных ключей — быстро (индекс ключей, а не линейный поиск)', async function () {
+    this.timeout(20000);
+    const items = [];
+    for (let n = 0; n < 10000; n++) items.push({ k: 'k' + n });
+    const started = Date.now();
+    assert.strictEqual(await text('{d.items[]:set(c.g[id=.k].rows[])}[{c.g[9999].id}]', { items }), '[k9999]');
+    // с запасом: на рабочей машине — доли секунды
+    assert.ok(Date.now() - started < 5000, 'слишком долго: ' + (Date.now() - started) + ' мс');
+  });
+});

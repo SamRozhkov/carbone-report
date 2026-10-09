@@ -14,7 +14,13 @@ async function run (c) {
     return { text: await docxText(out) };
   }
   catch (e) {
-    return { error: normalizeError(e.message) };
+    const got = { error: normalizeError(e.message) };
+    // метку из суффикса « Source: "{…}"» сравниваем, только если эталон её записал (в справке её нет)
+    if (c.expect && c.expect.errorSource !== undefined) {
+      const m = / Source: "([\s\S]*)"$/.exec(e.message);
+      got.errorSource = m ? m[1] : null;
+    }
+    return got;
   }
 }
 

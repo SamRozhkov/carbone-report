@@ -71,6 +71,21 @@ describe('renderBuffer', function () {
     await assert.rejects(carbone.renderBuffer(Buffer.from('<xml/>'), 'docx', {}, {}), /not a zip archive/);
   });
 
+  it('проверка PK-сигнатуры не зависит от регистра расширения', async function () {
+    await assert.rejects(carbone.renderBuffer(Buffer.from('<xml/>'), 'DOCX', {}, {}), /not a zip archive/);
+  });
+
+  it('options.complement вызывающего не изменяется и годится для повторной сборки', async function () {
+    const complement = { who: 'Пётр' };
+    const options = { lang: 'ru', timezone: 'Europe/Moscow', complement: complement };
+    for (let n = 0; n < 2; n++) {
+      const out = await carbone.renderBuffer(await docx(p('{c.who}')), 'docx', {}, options);
+      assert.ok((await documentXml(out)).includes('Пётр'));
+    }
+    assert.deepStrictEqual(Object.getOwnPropertyNames(complement), ['who']);
+    assert.strictEqual(options.complement, complement);
+  });
+
   it('синхронное исключение внутри цепочки — отклонённый Promise, не uncaught exception', async function () {
     const preprocessor = require('../lib/preprocessor');
     const original = preprocessor.execute;

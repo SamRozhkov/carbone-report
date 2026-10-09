@@ -1,6 +1,7 @@
 var extracter = require('./extracter');
 var parser = require('./parser');
 var helper = require('./helper');
+var community = require('./community');
 
 var builder = {
 
@@ -54,6 +55,13 @@ var builder = {
             _xmlResult = builder.assembleXmlParts(_xmlParts, 20, _builder.builderDictionary); // TODO -> adapt the depth of the sort according to the maximum depth in _xmlParts
           }
           catch (e) {
+            // как в Carbone EE: ошибка отключённой функции заканчивается меткой, где она встретилась
+            if (e && e.disabledFormatter) {
+              var _source = builder.findDisabledSource(preprocessedMarkers, e.disabledFormatter);
+              if (_source !== null) {
+                e.message += ' Source: "' + _source + '"';
+              }
+            }
             return callback(e, null);
           }
           return callback(null, _xmlResult);
@@ -61,6 +69,22 @@ var builder = {
       });
     });
 
+  },
+
+  /**
+   * Метка, в которой встретилась отключённая функция, в виде, как её показывает EE: «{d.v:html()}»
+   * @param  {Array}  markers  маркеры после parser.preprocessMarkers
+   * @param  {String} name     имя функции из сообщения (count уже переписан парсером в cumCount)
+   * @return {String|null}
+   */
+  findDisabledSource : function (markers, name) {
+    var _regex = new RegExp(':' + name + '(?=\\(|:|$)');
+    for (var i = 0; i < markers.length; i++) {
+      if (_regex.test(markers[i].name) === true) {
+        return '{' + markers[i].name.replace(/^_root\./, '') + '}';
+      }
+    }
+    return null;
   },
 
   /**
@@ -122,6 +146,11 @@ var builder = {
       }
       else {
         _functionStr = _formatter;
+      }
+      // функции, отключённые в бесплатном режиме Carbone EE, — ошибка с текстом EE раньше проверки существования
+      var _disabled = community.disabledName(_functionStr);
+      if (_disabled !== null) {
+        throw community.disabledError(_disabled);
       }
       if (existingFormatters[_functionStr] === undefined) {
         var _alternativeFnName = helper.findClosest(_functionStr, existingFormatters);

@@ -421,7 +421,9 @@ describe('Carbone', function () {
         ]
       };
       carbone.renderXML(_xml, _data, function (err, _xmlBuilt) {
-        assert.equal(_xmlBuilt, '<xml><t_row> 1 Lumeneo </t_row><t_row> 2 Toyota </t_row><t_row> 3 Tesla motors </t_row></xml>');
+        // как в Carbone EE 5 (эталон help/na-count): count() отключён и называется cumCount
+        assert.equal(_xmlBuilt, null);
+        assert.match(err.message, /^Formatter "cumCount" is disabled in the Community Edition\. Source: "\{d\.cars.*:cumCount\}"$/);
         done();
       });
     });
@@ -466,34 +468,9 @@ describe('Carbone', function () {
         }
       ];
       carbone.renderXML(_xml, _data, function (err, _xmlBuilt) {
-        var _expectedResult =
-           '<xml>'
-          +  '<tr>'
-          +    '<td>1 mich</td>'
-          +    '<td>0 site_A</td>'
-          +  '</tr>'
-          +  '<tr>'
-          +    '<td>2 cont</td>'
-          +    '<td>1 site_A</td>'
-          +  '</tr>'
-          +  '<tr>'
-          +    '<td>3 mich</td>'
-          +    '<td>2 site_A</td>'
-          +  '</tr>'
-          +  '<tr>'
-          +    '<td>4 mich</td>'
-          +    '<td>3 site_B</td>'
-          +  '</tr>'
-          +  '<tr>'
-          +    '<td>5 uni</td>'
-          +    '<td>4 site_B</td>'
-          +  '</tr>'
-          +  '<tr>'
-          +    '<td>6 cont</td>'
-          +    '<td>5 site_B</td>'
-          +  '</tr>'
-          +'</xml>';
-        assert.equal(_xmlBuilt, _expectedResult);
+        // как в Carbone EE 5 (эталон help/na-count): count() отключён и называется cumCount
+        assert.equal(_xmlBuilt, null);
+        assert.match(err.message, /^Formatter "cumCount" is disabled in the Community Edition\. Source: "\{d\[i\]\.cars.*:cumCount\}"$/);
         done();
       });
     });
@@ -827,7 +804,9 @@ describe('Carbone', function () {
         ]
       };
       carbone.renderXML(_xml, _data, function (err, _xmlBuilt) {
-        assert.equal(_xmlBuilt, '<xml><t_row> 1 Lumeneo </t_row><t_row> 2 Toyota </t_row><t_row> 3 Tesla motors </t_row></xml>');
+        // как в Carbone EE 5 (эталон help/na-count): count() отключён и называется cumCount
+        assert.equal(_xmlBuilt, null);
+        assert.match(err.message, /^Formatter "cumCount" is disabled in the Community Edition\. Source: "\{d\.cars.*:cumCount\}"$/);
         done();
       });
     });
@@ -872,34 +851,9 @@ describe('Carbone', function () {
         }
       ];
       carbone.renderXML(_xml, _data, function (err, _xmlBuilt) {
-        var _expectedResult =
-           '<xml>'
-          +  '<tr>'
-          +    '<td>1 mich</td>'
-          +    '<td>0 site_A</td>'
-          +  '</tr>'
-          +  '<tr>'
-          +    '<td>2 cont</td>'
-          +    '<td>1 site_A</td>'
-          +  '</tr>'
-          +  '<tr>'
-          +    '<td>3 mich</td>'
-          +    '<td>2 site_A</td>'
-          +  '</tr>'
-          +  '<tr>'
-          +    '<td>4 mich</td>'
-          +    '<td>3 site_B</td>'
-          +  '</tr>'
-          +  '<tr>'
-          +    '<td>5 uni</td>'
-          +    '<td>4 site_B</td>'
-          +  '</tr>'
-          +  '<tr>'
-          +    '<td>6 cont</td>'
-          +    '<td>5 site_B</td>'
-          +  '</tr>'
-          +'</xml>';
-        assert.equal(_xmlBuilt, _expectedResult);
+        // как в Carbone EE 5 (эталон help/na-count): count() отключён и называется cumCount
+        assert.equal(_xmlBuilt, null);
+        assert.match(err.message, /^Formatter "cumCount" is disabled in the Community Edition\. Source: "\{d\[i\]\.cars.*:cumCount\}"$/);
         done();
       });
     });

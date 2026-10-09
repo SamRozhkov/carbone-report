@@ -1,7 +1,6 @@
 var assert  = require('assert');
 var parser  = require('../lib/parser');
 var helper  = require('../lib/helper');
-var count   = require('../formatters/array').count;
 
 describe('parser', function () {
 
@@ -1566,7 +1565,7 @@ describe('parser', function () {
 
     describe('Preprocess', function () {
 
-      it('should assign loop id (without parenthesis)', function (done) {
+      it('should rename count to cumCount (without parenthesis)', function (done) {
         var _xml = '<xml><p>{d.cars[i].brand:count}:{d.cars[i].brand }</p><p>{d.cars[i+1].brand} : {d.cars[i+1].brand}</p></xml>';
         // eslint-disable-next-line no-unused-vars
         var _data = {
@@ -1579,13 +1578,14 @@ describe('parser', function () {
 
         parser.findMarkers(_xml, function (err, xmlWithoutMarkers, markers) {
           parser.preprocessMarkers(markers, [], function (err, markers) {
-            helper.assert(markers[0].name, '_root.d.cars[i].brand:count(09)');
+            // как в Carbone EE 5 (эталон help/na-count): count() переписывается в cumCount
+            helper.assert(markers[0].name, '_root.d.cars[i].brand:cumCount');
             done();
           });
         });
       });
 
-      it('should assign loop id (with parenthesis)', function (done) {
+      it('should rename count to cumCount (with parenthesis)', function (done) {
         var _xml = '<xml><p>{d.cars[i].brand:count()}:{d.cars[i].brand }</p><p>{d.cars[i+1].brand} : {d.cars[i+1].brand}</p></xml>';
         // eslint-disable-next-line no-unused-vars
         var _data = {
@@ -1598,12 +1598,13 @@ describe('parser', function () {
 
         parser.findMarkers(_xml, function (err, xmlWithoutMarkers, markers) {
           parser.preprocessMarkers(markers, [], function (err, markers) {
-            helper.assert(markers[0].name, '_root.d.cars[i].brand:count(09)');
+            // как в Carbone EE 5 (эталон help/na-count): count() переписывается в cumCount
+            helper.assert(markers[0].name, '_root.d.cars[i].brand:cumCount');
             done();
           });
         });
       });
-      it('should assign loop id (with start given)', function (done) {
+      it('should rename count to cumCount (with start given)', function (done) {
         var _xml = '<xml><p>{d.cars[i].brand:count(42)}:{d.cars[i].brand }</p><p>{d.cars[i+1].brand} : {d.cars[i+1].brand}</p></xml>';
         // eslint-disable-next-line no-unused-vars
         var _data = {
@@ -1616,7 +1617,8 @@ describe('parser', function () {
 
         parser.findMarkers(_xml, function (err, xmlWithoutMarkers, markers) {
           parser.preprocessMarkers(markers, [], function (err, markers) {
-            helper.assert(markers[0].name, '_root.d.cars[i].brand:count(09, 42)');
+            // как в Carbone EE 5 (эталон help/na-count): count() переписывается в cumCount
+            helper.assert(markers[0].name, '_root.d.cars[i].brand:cumCount');
             done();
           });
         });
@@ -1642,31 +1644,7 @@ describe('parser', function () {
     });
 
 
-    describe('Exec', function () {
-
-      it('should return __COUNT_0_0__ each time', function () {
-        helper.assert(count('', 0), '__COUNT_0_1__');
-        helper.assert(count('', 0), '__COUNT_0_1__');
-        helper.assert(count('', 0), '__COUNT_0_1__');
-      });
-
-      it('should return __COUNT_1337_42__ each time', function () {
-        helper.assert(count('', 1337, 42), '__COUNT_1337_42__');
-        helper.assert(count('', 1337, 42), '__COUNT_1337_42__');
-        helper.assert(count('', 1337, 42), '__COUNT_1337_42__');
-      });
-
-      it('should return __COUNT_1337_42__ then __COUNT_42_1337__', function () {
-        helper.assert(count('', 1337, 42), '__COUNT_1337_42__');
-        helper.assert(count('', 1337, 42), '__COUNT_1337_42__');
-        helper.assert(count('', 1337, 42), '__COUNT_1337_42__');
-
-        helper.assert(count('', 42, 1337), '__COUNT_42_1337__');
-        helper.assert(count('', 42, 1337), '__COUNT_42_1337__');
-        helper.assert(count('', 42, 1337), '__COUNT_42_1337__');
-      });
-
-    });
+    // Exec: формата count больше нет — как в Carbone EE 5 он отключён в бесплатном режиме (lib/community.js)
 
 
   });

@@ -101,26 +101,8 @@ function arrayMap (d, objSeparator, attributeSeparator) {
   return d;
 }
 
-/**
- * Count and print row number of any array
- *
- * Usage example: `d[i].id:count()` will print a counter of the current row no matter the value of `id`
- *
- * @version 1.1.0
- *
- * @param   {String}  d       Array passed by carbone
- * @param   {String}  start   Number to start with (default: 1)
- * @return  {String}          Counter value
- */
-function count (d, loopId, start) {
-  if (start === undefined) {
-    start = 1;
-  }
-  return '__COUNT_' + loopId + '_' + start + '__';
-}
-
 module.exports = {
   arrayJoin : arrayJoin,
-  arrayMap  : arrayMap,
-  count     : count
+  arrayMap  : arrayMap
+  // count убран: как в Carbone EE 5, он отключён в бесплатном режиме (lib/community.js)
 };

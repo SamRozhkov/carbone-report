@@ -349,45 +349,20 @@ var parser = {
         }
       }
     }
-    parser.assignLoopId(markers);
+    parser.renameCountToCumCount(markers);
     callback(null, markers);
   },
 
   /**
-   * Assign loop IDs for count formatter
+   * Как в Carbone EE 5: count() переписывается в cumCount (в бесплатном режиме отключён,
+   * ошибка и Source показывают метку уже с cumCount, эталон help/na-count).
+   * Прежний счётчик строк с loopId (count формата 3.8.2) убран.
    *
    * @param   {Array}  markers  Array of markers
-   * @return  {Array}           Array of markers with loop ID in count parameters
    */
-  assignLoopId : function (markers) {
-    var _loopWithRowNumberRegex = /.*?:count(\((.*?)\))?/g;
-    var match;
-
-    for (var _key in markers) {
-      var _marker = markers[_key];
-
-      // If the marker has a count formatter
-      match = _loopWithRowNumberRegex.exec(_marker.name);
-      if (match) {
-        var _parameters = '()';
-        var _before = '(';
-        var _after = ', ' + match[2] + ')';
-        var _loopId = _key + _marker.pos;
-
-        // If parameters are given, we store it
-        if (match[1]) {
-          _parameters = match[1];
-        }
-        // If no parameters are given, _after is set to )
-        if (match[2] === undefined || match[2] === '') {
-          _after = ')';
-        }
-        // Now we can concatenate _before, _loopId and _after
-        // _after are the given parameters
-        _parameters = _parameters.replace(/\(.*?\)/, _before + _loopId + _after);
-        // And we can replace _marker.name by the new one
-        _marker.name = _marker.name.replace(/count(\(.*?\))?/, 'count' + _parameters);
-      }
+  renameCountToCumCount : function (markers) {
+    for (var i = 0; i < markers.length; i++) {
+      markers[i].name = markers[i].name.replace(/:count(\([^)]*\))?(?=:|$)/g, ':cumCount');
     }
   },
 

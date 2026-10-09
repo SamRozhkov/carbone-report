@@ -251,10 +251,16 @@ function renderBuffer (template, extension, data, options) {
     if (typeof extension !== 'string' || extension === '') {
       return _fail(new Error('renderBuffer: extension is required'));
     }
-    if (ZIP_EXTENSIONS.indexOf(extension) !== -1 && !(template.length >= 2 && template[0] === 0x50 && template[1] === 0x4B)) {
+    // регистр расширения не важен: 'DOCX' — тоже zip
+    if (ZIP_EXTENSIONS.indexOf(extension.toLowerCase()) !== -1 && !(template.length >= 2 && template[0] === 0x50 && template[1] === 0x4B)) {
       return _fail(new Error('renderBuffer: template is not a zip archive (PK signature expected) for extension "' + extension + '"'));
     }
-    input.parseOptions(Object.assign({}, options), _fail, _guard(function (_options) {
+    // parseOptions дописывает в complement неизменяемое свойство now — работаем с копией, объект вызывающего не трогаем
+    var _userOptions = Object.assign({}, options);
+    if (typeof _userOptions.complement === 'object' && _userOptions.complement !== null) {
+      _userOptions.complement = Object.assign({}, _userOptions.complement);
+    }
+    input.parseOptions(_userOptions, _fail, _guard(function (_options) {
       _options.extension = extension;
       file.openTemplateBuffer(template, extension, _guard(function (err, _template) {
         if (err) {

@@ -1,0 +1,27 @@
+/**
+ * Функции, отключённые в бесплатном режиме Carbone EE 5.15.3 (эталоны test/golden).
+ * Их нет в реестре форматтеров, чтобы подсказка «Do you mean» не предлагала их.
+ */
+const DISABLED = new Set([
+  'aggSum', 'aggAvg', 'aggMin', 'aggMax', 'aggCount', 'aggCountD', 'aggStr', 'aggStrD',
+  'cumSum', 'cumCount', 'cumCountD', 'drop', 'keep', 'html', 'color', 'barcode', 'chart',
+  'formatR', 'defaultURL', 'autoOrient'
+]);
+
+/** EE сообщает count() под именем cumCount. */
+const ALIAS = { count : 'cumCount' };
+
+/** Имя для сообщения об ошибке или null, если функция не отключена. */
+function disabledName (name) {
+  const _name = Object.prototype.hasOwnProperty.call(ALIAS, name) ? ALIAS[name] : name;
+  return DISABLED.has(_name) ? _name : null;
+}
+
+/** Ошибка с текстом EE; имя функции сохраняется, чтобы buildXML дописал суффикс Source с меткой. */
+function disabledError (name) {
+  const _err = new Error('Formatter "' + name + '" is disabled in the Community Edition.');
+  _err.disabledFormatter = name;
+  return _err;
+}
+
+module.exports = { disabledName, disabledError };

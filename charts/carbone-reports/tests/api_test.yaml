@@ -78,6 +78,18 @@ tests:
           content: { name: API_SELF_URL, value: 'http://$(POD_IP):3000' }
       - equal: { path: 'spec.template.spec.containers[0].env[0].name', value: POD_IP }
       - equal: { path: 'spec.template.spec.containers[0].env[1].name', value: API_SELF_URL }
+  - it: api.selfUrl переопределяет API_SELF_URL без дубликата
+    template: api.yaml
+    documentIndex: 0
+    set: { api.selfUrl: 'http://[$(POD_IP)]:3000' }
+    asserts:
+      - contains:
+          path: 'spec.template.spec.containers[0].env'
+          content: { name: API_SELF_URL, value: 'http://[$(POD_IP)]:3000' }
+      - equal: { path: 'spec.template.spec.containers[0].env[1].name', value: API_SELF_URL }
+      - notContains:
+          path: 'spec.template.spec.containers[0].env'
+          content: { name: API_SELF_URL, value: 'http://$(POD_IP):3000' }
   - it: ресурсы api по умолчанию — сборка отчётов в самом API
     template: api.yaml
     documentIndex: 0

@@ -98,6 +98,9 @@ web:
 
 api:
   replicas: 2
+  # Адрес пода API для Document Server (API_SELF_URL). Пусто — http://$(POD_IP):3000 (IPv4).
+  # В кластере только с IPv6: http://[$(POD_IP)]:3000. $(POD_IP) подставляет Kubernetes.
+  selfUrl: ''
   resources:
     requests: { cpu: 500m, memory: 512Mi }
     limits: { memory: 2Gi }

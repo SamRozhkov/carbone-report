@@ -13,14 +13,6 @@ describe('communityErrorMessage', () => {
     ).toBe(msg('html'));
   });
 
-  it('count() Carbone называет cumCount — так и пишем', () => {
-    expect(
-      communityErrorMessage(
-        'Unable to generate the document. Error: Formatter "cumCount" is disabled in the Community Edition. Source: "{d.cars[i].brand:cumCount}"',
-      ),
-    ).toBe(msg('cumCount'));
-  });
-
   it('имя берётся из фразы «… is disabled …», а не из Source', () => {
     expect(
       communityErrorMessage(

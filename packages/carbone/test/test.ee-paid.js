@@ -429,6 +429,24 @@ describe('EE платные: drop/keep — условие', function () {
     ['{d.yes:ifEQ(true):and(.no):ifEQ(true):drop(p)}', false],
     ['{d.yes:ifEQ(true):or(.no):ifEQ(true):drop(p)}', true]
   ];
+  // правило истинности без ifXX (§31.2): флаги 0/1 и 'false' из БД
+  const values = [
+    [0, false], [1, true], [-2, true], [0.5, true], [NaN, false],
+    ['0', false], ['1', true], ['false', false], ['FALSE', false], [' false ', false], ['  ', false], ['true', true], ['нет', true],
+    [null, false], [[], false], [[0], true], [{}, false], [{ a: 1 }, true]
+  ];
+  for (const [v, removed] of values) {
+    it('{d.v:drop(p)} при v = ' + JSON.stringify(v) + (Number.isNaN(v) ? ' (NaN)' : '') + (removed ? ' → удалён' : ' → остался'), async function () {
+      const out = await renderAs('docx', '<w:body>' + wp('a{d.v:drop(p)}') + wp('b') + '</w:body>', { v });
+      assert.strictEqual(out, '<w:body>' + (removed ? '' : wp('a')) + wp('b') + '</w:body>');
+    });
+  }
+  it('флаг 0/1 в цикле: {d.rows[i].archived:drop(row)} удаляет только archived = 1, keep — наоборот', async function () {
+    const rows = { rows: [{ n: 'A', archived: 0 }, { n: 'B', archived: 1 }, { n: 'C', archived: 0 }, { n: 'D', archived: '1' }, { n: 'E', archived: 'false' }] };
+    const t = (f) => '<w:body>' + wtbl(1, wtr('{d.rows[i].n}{d.rows[i].archived:' + f + '(row)}'), wtr('{d.rows[i+1].n}')) + '</w:body>';
+    assert.strictEqual(await renderAs('docx', t('drop'), rows), '<w:body>' + wtbl(1, wtr('A'), wtr('C'), wtr('E')) + '</w:body>');
+    assert.strictEqual(await renderAs('docx', t('keep'), rows), '<w:body>' + wtbl(1, wtr('B'), wtr('D')) + '</w:body>');
+  });
   for (const [marker, removed] of cases) {
     it(marker + (removed ? ' → удалён' : ' → остался'), async function () {
       const out = await docx(wp('до') + wp('a' + marker + 'b') + wp('после'));

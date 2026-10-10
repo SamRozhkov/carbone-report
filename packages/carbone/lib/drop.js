@@ -165,21 +165,34 @@ function prepare (markers, extension) {
 }
 
 /**
- * Условие для drop/keep: результат ifXX, иначе само значение — булево как есть, прочее — «не пусто» по правилам ifNEM
+ * Условие для drop/keep: результат ifXX; без ifXX — само значение (спецификация §31.2):
+ * истинно true, ненулевое число, строка кроме '', '0', 'false' (без пробелов по краям, false — в любом регистре),
+ * непустой массив или объект; ложно false, 0, NaN, '', '0', 'false', null, отсутствующее значение, [] и {}.
  */
 function isTrue (context, d) {
   if (context.isConditionTrue === true || context.isConditionTrue === false) {
     return context.isConditionTrue;
   }
-  if (d === true || d === false) {
+  if (d === null || d === undefined) {
+    return false;
+  }
+  if (typeof d === 'boolean') {
     return d;
   }
-  return !(d === null
-    || d === undefined
-    || d === ''
-    || d instanceof Array && d.length === 0
-    || d instanceof Object && d.constructor === Object && Object.keys(d).length === 0
-    || Number.isNaN(d) === true);
+  if (typeof d === 'number') {
+    return d !== 0 && Number.isNaN(d) === false;
+  }
+  if (typeof d === 'string') {
+    var _str = d.trim();
+    return _str !== '' && _str !== '0' && _str.toLowerCase() !== 'false';
+  }
+  if (d instanceof Array) {
+    return d.length > 0;
+  }
+  if (typeof d === 'object') {
+    return Object.keys(d).length > 0;
+  }
+  return Boolean(d);
 }
 
 function tokenFormatter (d, id) {

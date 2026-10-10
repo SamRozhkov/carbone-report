@@ -316,25 +316,53 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
   }, 240_000);
 
   it(
-    'drop/keep: docx → pdf (drop(row) в цикле, drop(p), таблица без строк)',
+    'drop/keep: docx → pdf и odt (drop(row) в цикле, drop(p), таблица без строк)',
     async () => {
       const out = await diagnose('drop docx→pdf', async () =>
         renderer.render(tpl('docx', await docxTemplate(DROP_DOCX)), DROP_DATA, ro('pdf')),
       );
       expect(out.subarray(0, 4).toString()).toBe('%PDF');
       expect(out.length).toBeGreaterThan(1024);
+      // без конвертации: удалено именно то, что должно (строка «Тесла», абзац, вторая таблица)
+      const docx = await renderer.render(
+        tpl('docx', await docxTemplate(DROP_DOCX)),
+        DROP_DATA,
+        ro('docx'),
+      );
+      const xml = await (await JSZip.loadAsync(docx)).file('word/document.xml')!.async('string');
+      expect(xml).toContain('БМВ');
+      expect(xml).not.toContain('Тесла');
+      expect(xml).not.toContain('скрытый абзац');
+      expect(xml.match(/<w:tbl>/g)).toHaveLength(1);
+      // настоящий читатель: Document Server открывает результат и видит тот же текст
+      const odt = await diagnose('drop docx→odt', async () =>
+        renderer.render(tpl('docx', await docxTemplate(DROP_DOCX)), DROP_DATA, ro('odt')),
+      );
+      const content = await (await JSZip.loadAsync(odt)).file('content.xml')!.async('string');
+      expect(content).toContain('Лада');
+      expect(content).toContain('конец');
+      expect(content).not.toContain('Тесла');
+      expect(content).not.toContain('скрытый абзац');
     },
     CONVERT_TIMEOUT,
   );
 
   it(
-    'drop: xlsx → pdf (drop(row) в цикле, drop(col))',
+    'drop: xlsx → pdf и ods (drop(row) в цикле, drop(col))',
     async () => {
       const out = await diagnose('drop xlsx→pdf', async () =>
         renderer.render(tpl('xlsx', await xlsxTemplate(DROP_XLSX)), DROP_DATA, ro('pdf')),
       );
       expect(out.subarray(0, 4).toString()).toBe('%PDF');
       expect(out.length).toBeGreaterThan(1024);
+      const ods = await diagnose('drop xlsx→ods', async () =>
+        renderer.render(tpl('xlsx', await xlsxTemplate(DROP_XLSX)), DROP_DATA, ro('ods')),
+      );
+      const content = await (await JSZip.loadAsync(ods)).file('content.xml')!.async('string');
+      expect(content).toContain('марка');
+      expect(content).toContain('БМВ');
+      expect(content).not.toContain('Тесла');
+      expect(content).not.toContain('скрыть');
     },
     CONVERT_TIMEOUT,
   );

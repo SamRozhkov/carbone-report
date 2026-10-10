@@ -838,15 +838,15 @@ var builder = {
           _code.add('main', '_strPart.rowEnd = true;\n');
         }
         // insert the data only if it not null
-        // как в Carbone EE: метка прямо на элементе массива ({d.tags[i]}) печатает сам элемент, если он примитив
-        // (эталон matrix/s1/loop-over-string-array). Объект без форматтеров ({d.list[i]} как якорь цикла) остаётся
-        // невидимым, как в 3.8.2; объект с форматтерами проходит цепочку, а объект в результате печатается пустым.
+        // как в Carbone EE: метка прямо на элементе массива ({d.tags[i]}) печатает сам элемент
+        // (эталон matrix/s1/loop-over-string-array). null и объект тоже дают строку цикла: null проходит цепочку
+        // форматтеров (ifEmpty срабатывает), объект в результате печатается пустым (эталоны matrix/s4/string-array-*).
+        // Пропускается только отсутствующий элемент (undefined).
         // (служебные части начала/конца повтора — array: 'start'|'end' — данных не несут)
         var _isItemPart = !_dataAttr && _xmlPart.array === undefined && _dynamicData[_dataObj] !== undefined && _dynamicData[_dataObj].type === 'array';
         if (_isItemPart === true) {
           var _itemG = _getSafeVar(_dataObj);
-          var _isPrimitiveG = "(typeof("+_itemG+") === 'string' || typeof("+_itemG+") === 'number' || typeof("+_itemG+") === 'boolean')";
-          _code.add('main', 'if (' + _isPrimitiveG + (_formatters.length > 0 ? ' || (' + _itemG + ' instanceof Object)' : '') + ') {\n');
+          _code.add('main', 'if (' + _itemG + ' !== undefined) {\n');
         }
         if (_dataAttr || _isItemPart === true) {
           // handle conditions

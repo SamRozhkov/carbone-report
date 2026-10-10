@@ -433,3 +433,13 @@ describe('EE: метки в строке-разделителе [i+1] (2.0.1)', 
     assert.strictEqual(await error('| {d.cars[i].brand}{d.cars[i].ok:ifEQ(false):hideBegin} |\n| {d.cars[i+1].brand} |', cars), 'Missing at least one showEnd or hideEnd');
   });
 });
+
+describe('EE: null и объект в массиве строк (2.0.2)', function () {
+  it('null в таблице даёт пустую строку, а не теряет её', async function () {
+    assert.strictEqual(await text('| {d.tags[i]} |\n| {d.tags[i+1]} |', { tags: ['x', null, 'z'] }), '| x |\n| |\n| z |');
+  });
+  it('[null] — одна пустая строка, ifEmpty срабатывает на null', async function () {
+    assert.strictEqual(await text('[{d.tags[i]}]\n[{d.tags[i+1]}]', { tags: [null] }), '[]');
+    assert.strictEqual(await text('[{d.tags[i]:ifEmpty(\'-\')}]\n[{d.tags[i+1]}]', { tags: [null, 'z'] }), '[-]\n[z]');
+  });
+});

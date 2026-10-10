@@ -14,7 +14,7 @@ const canonicalRow = (line: string) => {
 };
 
 describe('содержание справки', () => {
-  it('семь разделов в порядке §23.2', () => {
+  it('восемь разделов в порядке §23.2 (+ §32)', () => {
     expect(HELP_SECTIONS.map((s) => [s.id, s.title])).toEqual([
       ['basics', 'Основы'],
       ['tables', 'Таблицы'],
@@ -22,6 +22,7 @@ describe('содержание справки', () => {
       ['conditions', 'Условия'],
       ['aggregates', 'Итоги и нумерация'],
       ['totals', 'Итоги и группировка'],
+      ['media', 'Изображения, штрихкоды, цвета, ссылки'],
       ['unavailable', 'Недоступно в бесплатной версии'],
     ]);
     for (const s of HELP_SECTIONS) expect(s.examples.length, s.id).toBeGreaterThan(0);
@@ -67,11 +68,38 @@ describe('содержание справки', () => {
     }
     const limits = HELP_SECTIONS.find((s) => s.id === 'unavailable')!.limits ?? [];
     expect(limits.map((l) => l.id)).toEqual([
-      'na-images',
       'na-autoorient',
+      'na-bindcolor',
+      'na-svg',
       'na-sort-desc',
       'na-txt',
     ]);
+  });
+
+  it('picture — только в разделе «Изображения…»: одна метка без таблиц, data — изображение', () => {
+    const pictures = HELP_SECTIONS.flatMap((s) =>
+      s.examples.filter((e) => e.picture).map((e) => [s.id, e] as const),
+    );
+    expect(pictures.map(([, e]) => e.id)).toEqual([
+      'media-image',
+      'media-image-fit',
+      'media-qrcode',
+    ]);
+    for (const [sid, e] of pictures) {
+      expect(sid, e.id).toBe('media');
+      expect(e.template, e.id).toMatch(/^\{d\.[^{}\n]+\}$/);
+      expect(e.unavailable, e.id).toBeUndefined();
+    }
+  });
+
+  it('примеры, которые больше не «недоступны», убраны из последнего раздела', () => {
+    const ids = [
+      ...examples.map((e) => e.id),
+      ...HELP_SECTIONS.flatMap((s) => (s.limits ?? []).map((l) => l.id)),
+    ];
+    for (const gone of ['na-color', 'na-barcode', 'na-default-url', 'na-images']) {
+      expect(ids).not.toContain(gone);
+    }
   });
 
   it('antiPattern — только cond-table-row и totals-set-sum, не в последнем разделе', () => {

@@ -21,6 +21,11 @@ export interface HelpExample {
   unavailable?: true;
   /** Показан как «так нельзя»: кнопки «Копировать» нет. */
   antiPattern?: true;
+  /**
+   * Тег ставится в замещающий текст картинки-заглушки, результат — изображение: `result` описывает его
+   * словами, а `pnpm help:check` проверяет только, что отчёт собран без ошибки и картинка заменена.
+   */
+  picture?: true;
 }
 
 /** Недоступное без проверяемого тега: что происходит и что делать вместо. */
@@ -50,6 +55,9 @@ const CARS = [
   { brand: 'Лада', qty: 2, ok: true },
   { brand: 'БМВ', qty: 5, ok: true },
 ];
+/** PNG 1×1 — настоящее изображение для примеров (`pnpm help:check` его декодирует). */
+const PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const GROUPS = [
   { name: 'Г1', items: [{ x: 'a' }, { x: 'b' }] },
   { name: 'Г2', items: [{ x: 'c' }] },
@@ -694,6 +702,70 @@ export const HELP_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    id: 'media',
+    title: 'Изображения, штрихкоды, цвета, ссылки',
+    intro: [
+      'Изображение или штрихкод из данных заменяет картинку-заглушку. Вставьте в шаблон любую картинку нужного размера и впишите тег в её замещающий текст: в Word — «Формат рисунка» → «Замещающий текст» (или правой кнопкой → «Изменить замещающий текст»), в LibreOffice — «Свойства» → вкладка «Параметры» → «Текстовая альтернатива» или «Описание», в редакторе шаблонов — «Дополнительные параметры изображения» → «Альтернативный текст» → «Описание». Тот же тег в обычном абзаце просто печатает значение.',
+      'Изображение в данных — data URI (`data:image/png;base64,…`; PNG, JPEG или GIF) или адрес `https://…`. Адреса загружаются только с хостов из настройки `IMAGE_URL_ALLOWLIST`; по умолчанию она пуста, и адрес даёт ошибку шаблона. SVG не поддерживается. Пустое значение убирает картинку-заглушку. Лимиты — 10 МБ на изображение и 50 МБ на отчёт. Работает в DOCX, XLSX, PPTX, ODT, ODS, ODP; несколько картинок в цикле — в DOCX (картинка «в тексте») и ODT (привязка «как символ»).',
+      'Неверное значение (не изображение, хост вне списка, неверный тег) — ошибка шаблона с тегом в тексте, отчёт не формируется. Если картинку по адресу не удалось загрузить (тайм-аут, ответ не 2xx), она убирается, а отчёт формируется.',
+    ],
+    examples: [
+      {
+        id: 'media-image',
+        title: 'Изображение из данных',
+        picture: true,
+        template: '{d.photo}',
+        data: j({ photo: PNG }),
+        result:
+          'Картинка-заглушка заменена изображением: ширина — как у заглушки, высота — по пропорциям изображения.',
+        note: 'Тег пишется в замещающий текст картинки, а не в абзац. Вместо data URI можно передать адрес `https://…`, если его хост указан в `IMAGE_URL_ALLOWLIST`.',
+      },
+      {
+        id: 'media-image-fit',
+        title: 'Вписать изображение в рамку (imageFit)',
+        picture: true,
+        template: '{d.logo:imageFit(contain)}',
+        data: j({ logo: PNG }),
+        result: 'Изображение целиком вписано в рамку заглушки, пропорции сохранены.',
+        note: '`fillWidth` (по умолчанию) — ширина рамки, высота по пропорциям; `contain` — вписать целиком; `fill` — растянуть на всю рамку.',
+      },
+      {
+        id: 'media-qrcode',
+        title: 'QR-код',
+        picture: true,
+        template: '{d.invoice:barcode(qrcode)}',
+        data: j({ invoice: 'INV-2026-0042' }),
+        result: 'Картинка-заглушка заменена QR-кодом со значением INV-2026-0042.',
+        note: 'Другие типы — `ean13`, `code128`, `datamatrix`, `pdf417` и остальные из документации Carbone. Опции через запятую: `{d.v:barcode(ean13, includetext:true, scale:2)}`; `width` и `height` — в мм, `scale` — от 1 до 10 (по умолчанию 3), цвета `barcolor`, `textcolor`, `backgroundcolor` — `#RRGGBB`, `eclevel:H` — для QR. Значение, которое нельзя закодировать (буквы в `ean13`), — ошибка шаблона. `barcode` в обычном тексте — ошибка «штрихкод ставится в замещающий текст картинки»; штрихкоды шрифтом не поддерживаются.',
+      },
+      {
+        id: 'media-color-cell',
+        title: 'Цвет ячейки из данных (:color)',
+        template: L(
+          '| Задача | Статус |',
+          '| {d.tasks[i].name} | {d.tasks[i].color:color(cell, background)}{d.tasks[i].status} |',
+          '| {d.tasks[i+1].name} | |',
+        ),
+        data: j({
+          tasks: [
+            { name: 'Отчёт', status: 'готово', color: '#C6EFCE' },
+            { name: 'Сверка', status: 'просрочено', color: 'FFC7CE' },
+          ],
+        }),
+        result: L('| Задача | Статус |', '| Отчёт | готово |', '| Сверка | просрочено |'),
+        note: 'Тег ничего не печатает, а красит то, в чём стоит: `color(p)` — абзац (по умолчанию), `cell` — ячейку, `row` — строку таблицы, `shape` — фигуру (PPTX, ODP, ODT), `part` — фрагмент текста (только ODT). Второй аргумент — что красить: `text` (по умолчанию), `background`, `highlight` (не в DOCX), `border` — контур фигуры (PPTX). В DOCX — только `text` и `background`. Цвет — 6 hex-цифр с `#` или без; другое значение даёт серый `#888888`. В XLSX и ODS — ошибка шаблона.',
+      },
+      {
+        id: 'media-default-url',
+        title: 'Запасная ссылка (:defaultURL)',
+        template: "{d.site:defaultURL('https://example.com')}",
+        data: j({ site: 'not a url' }),
+        result: 'https://example.com',
+        note: "Обычно тег ставят адресом гиперссылки: в Word — «Вставка» → «Ссылка», в поле «Адрес» — `{d.site:defaultURL('https://example.com')}`. Адрес ссылки из данных проверяется: без схемы добавляется `https://`, допустимы `http`, `https`, `mailto`, `tel`. Недопустимый адрес — `javascript:`, `localhost`, IP-адрес или имя без домена верхнего уровня (`http://server:8080`) — заменяется значением `:defaultURL` (можно поле: `:defaultURL(.fallback)`), а без него — `#`. В адресе со статической частью (`https://site.ru/?id={d.id}`) значение тега кодируется, проверяется весь адрес.",
+      },
+    ],
+  },
+  {
     id: 'unavailable',
     title: 'Недоступно в бесплатной версии',
     intro: [
@@ -708,24 +780,6 @@ export const HELP_SECTIONS: HelpSection[] = [
         result: community('html'),
         unavailable: true,
         note: 'Передавайте обычный текст; переносы строк — через `convCRLF`.',
-      },
-      {
-        id: 'na-color',
-        title: 'Цвет из данных',
-        template: '{d.c:color(p)}цветной',
-        data: j({ c: '#FF0000' }),
-        result: community('color'),
-        unavailable: true,
-        note: 'Старый `bindColor` ошибки не даёт, но и цвет не меняет. Цвет задайте в самом шаблоне.',
-      },
-      {
-        id: 'na-barcode',
-        title: 'Штрихкоды и QR-коды',
-        template: '{d.v:barcode(qrcode)}',
-        data: j({ v: '123' }),
-        result: community('barcode'),
-        unavailable: true,
-        note: 'Отключены все виды кодов, в том числе `ean13`. Печатайте значение текстом.',
       },
       {
         id: 'na-chart',
@@ -745,28 +799,25 @@ export const HELP_SECTIONS: HelpSection[] = [
         unavailable: true,
         note: 'Название берите из справочника в SQL.',
       },
-      {
-        id: 'na-default-url',
-        title: 'Ссылка по умолчанию (defaultURL)',
-        template: "{d.u:defaultURL('https://example.com')}",
-        data: j({ u: 'not a url' }),
-        result: community('defaultURL'),
-        unavailable: true,
-        note: 'Запасную ссылку подставляйте в SQL (`coalesce`). Адрес гиперссылки из данных работает: укажите тег `{d.url}` адресом ссылки в Word.',
-      },
     ],
     limits: [
-      {
-        id: 'na-images',
-        title: 'Изображения из данных',
-        instead:
-          'Тег в замещающем тексте картинки не работает: остаётся картинка-заглушка, ошибки нет. Вставляйте изображения в шаблон заранее.',
-      },
       {
         id: 'na-autoorient',
         title: 'autoOrient',
         instead:
-          'Отключён, шаблон с ним не формируется. Поворачивайте изображение в самом шаблоне.',
+          'Отключён, шаблон с ним не формируется. Изображение из данных вставляется как есть — поворачивайте его до передачи в отчёт.',
+      },
+      {
+        id: 'na-bindcolor',
+        title: 'bindColor',
+        instead:
+          'Старый `bindColor` ошибки не даёт, но и цвет не меняет. Используйте `:color` (раздел «Изображения, штрихкоды, цвета, ссылки»).',
+      },
+      {
+        id: 'na-svg',
+        title: 'SVG и штрихкоды шрифтом',
+        instead:
+          'SVG-изображение из данных — ошибка шаблона «SVG не поддерживается»: передавайте PNG, JPEG или GIF. Штрихкод шрифтом не поддерживается — используйте `:barcode` в картинке-заглушке.',
       },
       {
         id: 'na-sort-desc',

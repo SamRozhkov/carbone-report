@@ -11,8 +11,18 @@ import { HELP_SECTIONS, type HelpExample } from '../apps/web/src/pages/admin/hel
 const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const RELS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+const NS =
+  `xmlns:w="${W}"` +
+  ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"' +
+  ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"' +
+  ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"' +
+  ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+/** PNG 1×1 — картинка-заглушка для примеров с `picture`. */
+const PLACEHOLDER_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escAttr = (s: string) => esc(s).replace(/"/g, '&quot;');
 const unesc = (s: string) =>
   s
     .replace(/&lt;/g, '<')
@@ -66,20 +76,43 @@ function templateBody(template: string): string {
   return out.join('');
 }
 
-export async function buildDocx(template: string): Promise<Buffer> {
+/** Абзац с картинкой-заглушкой 2,54 × 2,54 см («в тексте»); тег — в её замещающем тексте (descr). */
+function pictureBody(tag: string): string {
+  const alt = escAttr(tag);
+  return (
+    '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="914400" cy="914400"/>' +
+    `<wp:docPr id="1" name="Picture 1" descr="${alt}"/>` +
+    '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>' +
+    `<pic:nvPicPr><pic:cNvPr id="1" name="p.png" descr="${alt}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    '<pic:blipFill><a:blip r:embed="rIdImg"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+    '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm>' +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>' +
+    '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>'
+  );
+}
+
+/** DOCX из шаблона в нотации справки; `picture` — тег в замещающем тексте картинки-заглушки. */
+export async function buildDocx(template: string, picture = false): Promise<Buffer> {
   const zip = new JSZip();
   zip.file(
     '[Content_Types].xml',
-    `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+    `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
   );
   zip.file(
     '_rels/.rels',
     `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
   );
-  zip.file('word/_rels/document.xml.rels', `${XML}<Relationships xmlns="${RELS}"></Relationships>`);
+  zip.file(
+    'word/_rels/document.xml.rels',
+    picture
+      ? `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/p.png"/></Relationships>`
+      : `${XML}<Relationships xmlns="${RELS}"></Relationships>`,
+  );
+  if (picture) zip.file('word/media/p.png', Buffer.from(PLACEHOLDER_PNG, 'base64'));
+  const body = picture ? pictureBody(template) : templateBody(template);
   zip.file(
     'word/document.xml',
-    `${XML}<w:document xmlns:w="${W}"><w:body>${templateBody(template)}<w:p/><w:sectPr/></w:body></w:document>`,
+    `${XML}<w:document ${NS}><w:body>${body}<w:p/><w:sectPr/></w:body></w:document>`,
   );
   return zip.generateAsync({ type: 'nodebuffer' });
 }
@@ -126,6 +159,20 @@ async function documentXml(docx: Buffer): Promise<string> {
   return file.async('string');
 }
 
+/**
+ * Пример с `picture`: результат — изображение, текст сверить нельзя. Проверяется, что картинка-заглушка
+ * заменена новым файлом (`cr-img-…` в связях и в архиве), а тег убран из замещающего текста.
+ */
+async function pictureProblem(docx: Buffer, tag: string): Promise<string | null> {
+  const zip = await JSZip.loadAsync(docx);
+  const rels = (await zip.file('word/_rels/document.xml.rels')?.async('string')) ?? '';
+  const target = /Target="(media\/cr-img-[^"]+)"/.exec(rels)?.[1];
+  if (!target) return 'картинка-заглушка не заменена (нет связи media/cr-img-…)';
+  if (!zip.file(`word/${target}`)) return `в архиве нет word/${target}`;
+  if ((await documentXml(docx)).includes(escAttr(tag))) return 'тег остался в замещающем тексте';
+  return null;
+}
+
 // ---- проверки ----
 
 function mismatch(e: HelpExample, want: string, got: string): void {
@@ -138,6 +185,17 @@ function mismatch(e: HelpExample, want: string, got: string): void {
 async function selfTest(examples: HelpExample[]): Promise<number> {
   let bad = 0;
   for (const e of examples) {
+    if (e.picture) {
+      const ok = (await documentXml(await buildDocx(e.template, true))).includes(
+        `descr="${escAttr(e.template)}"`,
+      );
+      if (ok) console.log(`✓ ${e.id}`);
+      else {
+        bad++;
+        console.log(`✗ ${e.id} «${e.title}»: тега нет в замещающем тексте картинки`);
+      }
+      continue;
+    }
     const got = docxText(await documentXml(await buildDocx(e.template)));
     const want = e.template
       .split('\n')
@@ -159,13 +217,15 @@ async function liveCheck(examples: HelpExample[]): Promise<number> {
     let got: string;
     try {
       const out = await carbone.renderBuffer(
-        await buildDocx(e.template),
+        await buildDocx(e.template, e.picture === true),
         'docx',
         JSON.parse(e.data) as unknown,
         { lang: CARBONE_LANG, timezone },
       );
       if (e.unavailable) {
         got = 'отчёт сформирован, а ожидалась ошибка «disabled in the Community Edition»';
+      } else if (e.picture) {
+        got = (await pictureProblem(out, e.template)) ?? e.result;
       } else {
         got = docxText(await documentXml(out));
         if (got.trim() === '') got = 'пустой текст документа';

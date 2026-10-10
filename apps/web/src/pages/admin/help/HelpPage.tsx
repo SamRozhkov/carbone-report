@@ -54,7 +54,7 @@ function ExampleCard({ example }: { example: HelpExample }) {
         />
       )}
       <Block
-        label="Тег в шаблоне"
+        label={example.picture ? 'Тег в замещающем тексте картинки' : 'Тег в шаблоне'}
         text={example.template}
         action={
           example.antiPattern ? undefined : (

@@ -51,6 +51,15 @@ describe('HelpPage', () => {
     expect(await screen.findByText(`Скопировано: ${e.title}`)).toBeInTheDocument();
   });
 
+  it('пример с картинкой: тег подписан как замещающий текст картинки', async () => {
+    renderWithProviders(<HelpPage />);
+    const e = HELP_SECTIONS.flatMap((s) => s.examples).find((x) => x.picture)!;
+    const card = await screen.findByRole('article', { name: e.title });
+    expect(within(card).getByText('Тег в замещающем тексте картинки')).toBeInTheDocument();
+    expect(within(card).queryByText('Тег в шаблоне')).not.toBeInTheDocument();
+    expect(within(card).getByText(e.template)).toBeInTheDocument();
+  });
+
   it('антипримеры без кнопки «Копировать», у обычной карточки она есть', async () => {
     renderWithProviders(<HelpPage />);
     const all = HELP_SECTIONS.flatMap((s) => s.examples);

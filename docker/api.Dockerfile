@@ -34,17 +34,17 @@ RUN rm -rf /out/src /out/test
 
 # --- Прод ---
 FROM node:22-bookworm-slim AS prod
-# Версия сборки: CI передаёт build-args; без них образ — dev.
-ARG APP_VERSION=dev
-ARG APP_COMMIT=unknown
-ARG APP_BUILD_DATE=unknown
-ENV NODE_ENV=production \
-    APP_VERSION=$APP_VERSION \
-    APP_COMMIT=$APP_COMMIT \
-    APP_BUILD_DATE=$APP_BUILD_DATE
+ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
 RUN mkdir -p /data && chown node:node /data
+# Версия сборки: CI передаёт build-args; без них образ — dev. В конце стадии, чтобы новый коммит не сбрасывал кэш слоёв выше.
+ARG APP_VERSION=dev
+ARG APP_COMMIT=unknown
+ARG APP_BUILD_DATE=unknown
+ENV APP_VERSION=$APP_VERSION \
+    APP_COMMIT=$APP_COMMIT \
+    APP_BUILD_DATE=$APP_BUILD_DATE
 USER node
 EXPOSE 3000
 CMD ["node", "dist/server.js"]

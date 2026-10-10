@@ -34,7 +34,14 @@ RUN rm -rf /out/src /out/test
 
 # --- Прод ---
 FROM node:22-bookworm-slim AS prod
-ENV NODE_ENV=production
+# Версия сборки: CI передаёт build-args; без них образ — dev.
+ARG APP_VERSION=dev
+ARG APP_COMMIT=unknown
+ARG APP_BUILD_DATE=unknown
+ENV NODE_ENV=production \
+    APP_VERSION=$APP_VERSION \
+    APP_COMMIT=$APP_COMMIT \
+    APP_BUILD_DATE=$APP_BUILD_DATE
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
 RUN mkdir -p /data && chown node:node /data

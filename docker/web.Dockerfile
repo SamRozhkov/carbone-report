@@ -16,6 +16,13 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @carbone-reports/web...
 COPY packages/shared packages/shared
 COPY apps/web apps/web
+# Версия сборки встраивается в интерфейс при сборке Vite (vite.config.ts); без build-args — dev.
+ARG APP_VERSION=dev
+ARG APP_COMMIT=unknown
+ARG APP_BUILD_DATE=unknown
+ENV APP_VERSION=$APP_VERSION \
+    APP_COMMIT=$APP_COMMIT \
+    APP_BUILD_DATE=$APP_BUILD_DATE
 RUN pnpm --filter @carbone-reports/web build
 
 # Конфигурация nginx без SPA (стадию собирает тест apps/web/test/nginx.int.test.ts).

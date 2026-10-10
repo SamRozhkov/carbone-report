@@ -106,6 +106,10 @@ await ensureAdmin(deps, console);
 const app = await buildApp(deps);
 appLog = app.log;
 app.log.info(
+  { version: config.appVersion, commit: config.appCommit, builtAt: config.appBuildDate },
+  'carbone-reports запущен',
+);
+app.log.info(
   {
     renderWorkers: config.renderWorkers,
     renderWorkerMemoryMb: config.renderWorkerMemoryMb,

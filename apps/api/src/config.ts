@@ -19,6 +19,10 @@ const Env = z
     // Пароли отдельно от URL (чарт Helm): вставляются с кодированием, допустимы любые символы.
     DATABASE_PASSWORD: z.string().optional(),
     REDIS_PASSWORD: z.string().optional(),
+    // Версия сборки: образ получает их из ARG (CI), пустая строка — «не задано».
+    APP_VERSION: z.preprocess((v) => (v === '' ? undefined : v), z.string().default('dev')),
+    APP_COMMIT: z.preprocess((v) => (v === '' ? undefined : v), z.string().default('unknown')),
+    APP_BUILD_DATE: z.preprocess((v) => (v === '' ? undefined : v), z.string().default('unknown')),
     // Сколько прокси перед API: compose — nginx (1), k8s — Ingress и nginx (2).
     TRUSTED_PROXY_HOPS: z.coerce
       .number({ error: 'целое от 1 до 5' })
@@ -217,6 +221,12 @@ export interface Config {
   tz: string;
   port: number;
   cookieSecure: boolean;
+  /** Версия сборки: тег выпуска без `v` или `dev`. */
+  appVersion: string;
+  /** Короткий SHA коммита сборки или `unknown`. */
+  appCommit: string;
+  /** Дата коммита сборки (ISO 8601) или `unknown`. */
+  appBuildDate: string;
   /** Сколько прокси перед API (X-Forwarded-For): compose — 1, k8s — 2. */
   trustedProxyHops: number;
   ldap: LdapConfig | null;
@@ -309,6 +319,9 @@ export function loadConfig(
     tz: e.TZ,
     port: e.PORT,
     cookieSecure: e.COOKIE_SECURE === 'true',
+    appVersion: e.APP_VERSION,
+    appCommit: e.APP_COMMIT,
+    appBuildDate: e.APP_BUILD_DATE,
     trustedProxyHops: e.TRUSTED_PROXY_HOPS,
     ldap:
       e.LDAP_ENABLED === 'true'

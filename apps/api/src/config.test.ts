@@ -24,6 +24,23 @@ describe('loadConfig', () => {
     expect(c.cookieSecure).toBe(false);
     expect(c.redisUrl).toBe('redis://redis:6379');
   });
+  it('версия сборки: по умолчанию dev/unknown/unknown, пустые значения — тоже', () => {
+    const c = loadConfig(base);
+    expect([c.appVersion, c.appCommit, c.appBuildDate]).toEqual(['dev', 'unknown', 'unknown']);
+    const e = loadConfig({ ...base, APP_VERSION: '', APP_COMMIT: '', APP_BUILD_DATE: '' });
+    expect([e.appVersion, e.appCommit, e.appBuildDate]).toEqual(['dev', 'unknown', 'unknown']);
+    const v = loadConfig({
+      ...base,
+      APP_VERSION: '2.1.0',
+      APP_COMMIT: 'abc1234',
+      APP_BUILD_DATE: '2026-10-10T12:00:00+03:00',
+    });
+    expect([v.appVersion, v.appCommit, v.appBuildDate]).toEqual([
+      '2.1.0',
+      'abc1234',
+      '2026-10-10T12:00:00+03:00',
+    ]);
+  });
   it('берёт REDIS_URL из окружения', () => {
     expect(loadConfig({ ...base, REDIS_URL: 'redis://localhost:6380' }).redisUrl).toBe(
       'redis://localhost:6380',

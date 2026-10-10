@@ -37,6 +37,10 @@ try {
   process.exit(2);
 }
 
+log(
+  `carbone-reports backup запущен: версия ${process.env.APP_VERSION || 'dev'}, коммит ${process.env.APP_COMMIT || 'unknown'}, сборка ${process.env.APP_BUILD_DATE || 'unknown'}`,
+);
+
 const redact = createRedactor(process.env);
 const redis = new Redis(cfg.redisUrl, {
   maxRetriesPerRequest: 2,

@@ -22,6 +22,10 @@ services:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+        APP_COMMIT: ${APP_COMMIT:-unknown}
+        APP_BUILD_DATE: ${APP_BUILD_DATE:-unknown}
     ports:
       - '${WEB_HTTP_PORT:-80}:80'
       - '${WEB_HTTPS_PORT:-443}:443'
@@ -41,6 +45,10 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
       target: prod
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+        APP_COMMIT: ${APP_COMMIT:-unknown}
+        APP_BUILD_DATE: ${APP_BUILD_DATE:-unknown}
     # При остановке API ждёт незавершённые запросы до max(RENDER_TIMEOUT_MS, REPORT_TIMEOUT_MS) + 5 с (по умолчанию 125 с).
     stop_grace_period: 130s
     environment:
@@ -214,6 +222,10 @@ services:
     build:
       context: .
       dockerfile: docker/backup/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+        APP_COMMIT: ${APP_COMMIT:-unknown}
+        APP_BUILD_DATE: ${APP_BUILD_DATE:-unknown}
     command: ['agent']
     environment:
       <<: *s3-env

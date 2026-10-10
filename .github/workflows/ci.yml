@@ -209,6 +209,16 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Версия сборки для build-args: тег выпуска без «v», иначе dev; коммит — 7 символов SHA;
+      # дата — дата коммита (одного коммита checkout достаточно).
+      - id: version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v=dev; fi
+          {
+            echo "version=$v"
+            echo "commit=${GITHUB_SHA::7}"
+            echo "date=$(git log -1 --format=%cI)"
+          } >> "$GITHUB_OUTPUT"
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
@@ -228,6 +238,10 @@ jobs:
           push: ${{ env.PUBLISH == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
+            APP_COMMIT=${{ steps.version.outputs.commit }}
+            APP_BUILD_DATE=${{ steps.version.outputs.date }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 

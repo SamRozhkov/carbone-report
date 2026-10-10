@@ -27,7 +27,15 @@ describe('docker-compose.yml: агент бэкапа', () => {
     expect(b.ports).toBeUndefined();
     expect(b.entrypoint).toBeUndefined();
     expect(b.command).toEqual(['agent']);
-    expect(b.build).toEqual({ context: '.', dockerfile: 'docker/backup/Dockerfile' });
+    expect(b.build).toEqual({
+      context: '.',
+      dockerfile: 'docker/backup/Dockerfile',
+      args: {
+        APP_VERSION: '${APP_VERSION:-dev}',
+        APP_COMMIT: '${APP_COMMIT:-unknown}',
+        APP_BUILD_DATE: '${APP_BUILD_DATE:-unknown}',
+      },
+    });
     expect(b.volumes).toEqual(['${BACKUP_DIR:-./backups}:/backups']);
     expect(b.environment.BACKUP_AGENT_TOKEN).toMatch(/^\$\{BACKUP_AGENT_TOKEN:\?/);
     expect(b.environment.REDIS_URL).toMatch(/^redis:\/\/:\$\{REDIS_PASSWORD:\?[^}]*\}@redis:6379$/);

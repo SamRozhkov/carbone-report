@@ -27,6 +27,13 @@ RUN pnpm --filter @carbone-reports/backup-agent deploy --prod --legacy /out \
 
 # --- Образ ---
 FROM postgres:17-alpine
+# Версия сборки: CI передаёт build-args; без них образ — dev.
+ARG APP_VERSION=dev
+ARG APP_COMMIT=unknown
+ARG APP_BUILD_DATE=unknown
+ENV APP_VERSION=$APP_VERSION \
+    APP_COMMIT=$APP_COMMIT \
+    APP_BUILD_DATE=$APP_BUILD_DATE
 RUN apk add --no-cache rclone nodejs
 COPY docker/backup/entrypoint.sh docker/backup/backup.sh docker/backup/archive-storage.sh docker/backup/lib.sh /backup/
 RUN chmod 755 /backup/*.sh

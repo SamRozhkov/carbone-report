@@ -21,6 +21,7 @@ import { registerRenderRoutes } from './modules/render/routes';
 import { registerReportRoutes } from './modules/reports/routes';
 import { registerTemplateRoutes } from './modules/templates/routes';
 import { registerUserRoutes } from './modules/users/routes';
+import { registerVersionRoutes } from './modules/version/routes';
 
 export type { AppDeps };
 
@@ -114,6 +115,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   const guards = makeGuards(deps);
 
   registerHealthRoutes(app, deps);
+  registerVersionRoutes(app, deps, guards);
   registerAuthRoutes(app, deps, guards);
   registerUserRoutes(app, deps, guards);
   registerAccessRoutes(app, deps, guards);

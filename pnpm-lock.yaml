@@ -284,6 +284,9 @@ importers:
 
   packages/carbone:
     dependencies:
+      bwip-js:
+        specifier: '=4.11.4'
+        version: 4.11.4
       dayjs:
         specifier: '=1.11.20'
         version: 1.11.20
@@ -2419,6 +2422,10 @@ packages:
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
     peerDependencies:
       esbuild: '>=0.18'
+
+  bwip-js@4.11.4:
+    resolution: {integrity: sha512-FOXnOQkinxog8FwxdnPB+8k2wRqwPnqXwxX37KcXOtMNW+9CinOkGv9MtIoRC4HX/UyogT0/9lIp6FDm2DcquQ==}
+    hasBin: true
 
   byline@5.0.0:
     resolution: {integrity: sha512-s6webAy+R4SR8XVuJWt2V2rGvhnrhxN+9S15GNuTK3wKPOXFF6RNc+8ug2XhH+2s4f+uudG4kUVYmYOQWL2g0Q==}
@@ -6376,6 +6383,8 @@ snapshots:
     dependencies:
       esbuild: 0.27.7
       load-tsconfig: 0.2.5
+
+  bwip-js@4.11.4: {}
 
   byline@5.0.0: {}
 

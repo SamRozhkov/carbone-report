@@ -330,7 +330,7 @@ carbone.addFormatters(require('../formatters/string.js'));
 carbone.addFormatters(require('./drop').formatters);
 // изображения из данных (2.4.0): imageFit — для шаблонов; служебный __img неперечисляемый, чтобы не попасть
 // в подсказку «Do you mean …» (lib/media.js)
-carbone.addFormatters({ imageFit : media.formatters.imageFit });
+carbone.addFormatters({ imageFit : media.formatters.imageFit, barcode : media.formatters.barcode });
 Object.defineProperty(input.formatters, '__img', { enumerable : false, configurable : true, writable : true, value : media.formatters.__img });
 
 // We must include all locales like this for PKG

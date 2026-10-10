@@ -21,8 +21,8 @@ async function run (c) {
   }
   catch (e) {
     const got = { error: normalizeError(e.message) };
-    // метку из суффикса « Source: "{…}"» сравниваем, только если эталон её записал (в справке её нет)
-    if (c.expect && c.expect.errorSource !== undefined) {
+    // метку из суффикса « Source: "{…}"» сравниваем, только если эталон (или deviation) её записал (в справке её нет)
+    if (expected(c).errorSource !== undefined) {
       const m = / Source: "([\s\S]*)"$/.exec(e.message);
       got.errorSource = m ? m[1] : null;
     }
@@ -32,8 +32,12 @@ async function run (c) {
 
 // сравниваем только text / error / errorSource: прочие поля expect (например, textFrom) — метаданные происхождения эталона
 function expected (c) {
-  // deviation.ours — текст сборки или { error } (ошибка вместо текста EE)
-  if (c.deviation) return typeof c.deviation.ours === 'string' ? { text: c.deviation.ours } : { error: c.deviation.ours.error };
+  // deviation.ours — текст сборки или { error[, errorSource] } (ошибка вместо текста EE или другая ошибка)
+  if (c.deviation) {
+    const ours = c.deviation.ours;
+    if (typeof ours === 'string') return { text: ours };
+    return ours.errorSource !== undefined ? { error: ours.error, errorSource: ours.errorSource } : { error: ours.error };
+  }
   const want = {};
   for (const k of ['text', 'error', 'errorSource']) {
     if (c.expect[k] !== undefined) want[k] = c.expect[k];

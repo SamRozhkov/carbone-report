@@ -27,13 +27,17 @@ async function error (template, data, options) {
 describe('EE: отключённые функции', function () {
   const cars = { cars: [{ brand: 'Лада', qty: 3 }, { brand: 'Тесла', qty: 2 }] };
   // агрегаторы (aggSum … cumCountD, count()), drop и keep реализованы в 2.2.0 — test/test.ee-paid.js
-  for (const f of ['html', 'color', 'barcode', 'chart', 'formatR', 'defaultURL', 'autoOrient']) {
+  // barcode реализован в 2.4.0 — test/test.ee-images.js
+  for (const f of ['html', 'color', 'chart', 'formatR', 'defaultURL', 'autoOrient']) {
     it(f, async function () {
       assert.strictEqual(await error('{d.v:' + f + '()}', { v: 'x' }), 'Formatter "' + f + '" is disabled in the Community Edition.');
     });
   }
   it('imageFit (2.4.0) — только в метке изображения, в тексте — ошибка', async function () {
     assert.match(await rawError('{d.v:imageFit()}', { v: 'x' }), /^imageFit ставится в метку изображения .* Source: "\{d\.v:imageFit\(\)\}"$/);
+  });
+  it('barcode (2.4.0) — только в замещающем тексте картинки, в тексте — ошибка', async function () {
+    assert.strictEqual(await rawError('{d.v:barcode(qrcode)}', { v: 'x' }), 'штрихкод ставится в замещающий текст картинки Source: "{d.v:barcode(qrcode)}"');
   });
   it('сообщение несёт суффикс Source с меткой, как в EE', async function () {
     assert.ok((await rawError('{d.v:html()}', { v: 'x' })).endsWith(' Source: "{d.v:html()}"'));
@@ -55,6 +59,7 @@ describe('EE: отключённые функции', function () {
     assert.strictEqual(disabledName('count'), null);
     assert.strictEqual(disabledName('aggSum'), null);
     assert.strictEqual(disabledName('formatN'), null);
+    assert.strictEqual(disabledName('barcode'), null);
   });
   it('отключённая функция в колонтитуле тоже даёт ошибку', async function () {
     // Колонтитул: отдельный word/header1.xml. Собрать DOCX с header через buildDocx не получится —

@@ -30,6 +30,7 @@
     "json"
   ],
   "dependencies": {
+    "bwip-js": "=4.11.4",
     "dayjs": "=1.11.20",
     "debug": "=4.4.3",
     "image-size": "=2.0.4",

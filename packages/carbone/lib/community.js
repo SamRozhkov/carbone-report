@@ -1,10 +1,11 @@
 /**
  * Функции, отключённые в бесплатном режиме Carbone EE 5.15.3 (эталоны test/golden).
  * Их нет в реестре форматтеров, чтобы подсказка «Do you mean» не предлагала их.
- * Агрегаторы (aggSum … cumCountD, count()) реализованы в 2.2.0 — lib/aggregate.js, drop/keep — lib/drop.js.
+ * Агрегаторы (aggSum … cumCountD, count()) реализованы в 2.2.0 — lib/aggregate.js, drop/keep — lib/drop.js;
+ * штрихкоды (barcode) — в 2.4.0, lib/media.js.
  */
 const DISABLED = new Set([
-  'html', 'color', 'barcode', 'chart', 'formatR', 'defaultURL', 'autoOrient'
+  'html', 'color', 'chart', 'formatR', 'defaultURL', 'autoOrient'
 ]);
 
 /** Имя для сообщения об ошибке или null, если функция не отключена. */

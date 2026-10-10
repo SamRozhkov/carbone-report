@@ -17,8 +17,13 @@
 //
 // Форматы (DOCX, PPTX, XLSX, ODT, ODS, ODP): правила разметки — lib/media-formats.js, по семействам
 // (xmltree.family); источники данных — LOADERS по виду записи реестра (kind).
+//
+// Штрихкоды (§32.3): «{d.code:barcode(qrcode, scale:4)}» в замещающем тексте — та же метка изображения: форматтер
+// barcode передаёт тип и опции своему __img (как imageFit), запись реестра получает kind 'barcode', а LOADERS.barcode
+// строит PNG через bwip-js. Дальше — общий путь картинок (imageFit, лимиты 10/50 МБ, пустое значение — удаление).
 
 var crypto = require('crypto');
+var bwipjs = require('bwip-js');
 var imageSize = require('image-size').imageSize;
 var splitChain = require('./set').splitChain;
 var xmltree = require('./xmltree');
@@ -43,6 +48,56 @@ var DEFAULT_FIT = 'fillWidth';
 
 var DATA_MIMES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
 
+// штрихкоды: типы bwip-js (имена совпадают с документацией Carbone), масштаб по умолчанию, предел размера растра
+var BARCODE_TYPES = new Set(bwipjs.symbolList.map(function (symbol) {
+  return symbol.bcid;
+}));
+var BARCODE_SCALE = 3;
+var BARCODE_PIXELS = 16000000; // ширина × высота до выделения памяти под растр (опция sizelimit bwip-js)
+
+/**
+ * Опции штрихкода «имя:значение» (§32.3) в порядке записи в реестр: проверка значения → значение для bwip-js
+ * (undefined — недопустимое) и подсказка для ошибки. svg принимается и игнорируется: вывод всегда PNG.
+ */
+var BARCODE_OPTIONS = {
+  width           : { hint : 'число миллиметров больше 0', parse : positive },
+  height          : { hint : 'число миллиметров больше 0', parse : positive },
+  scale           : { hint : 'целое от 1 до 10', parse : function (v) {
+    return /^\d+$/.test(v) === true && Number(v) >= 1 && Number(v) <= 10 ? Number(v) : undefined;
+  } },
+  includetext     : { hint : 'true или false', parse : bool },
+  textsize        : { hint : 'число больше 0', parse : positive },
+  textxalign      : { hint : 'left, center, right или justify', parse : oneOf(['left', 'center', 'right', 'justify'], false) },
+  textyalign      : { hint : 'below, center или above', parse : oneOf(['below', 'center', 'above'], false) },
+  rotate          : { hint : 'N, R, L или I', parse : oneOf(['N', 'R', 'L', 'I'], true) },
+  barcolor        : { hint : 'цвет #RRGGBB', parse : color },
+  textcolor       : { hint : 'цвет #RRGGBB', parse : color },
+  backgroundcolor : { hint : 'цвет #RRGGBB', parse : color },
+  eclevel         : { hint : 'L, M, Q или H', parse : oneOf(['L', 'M', 'Q', 'H'], true) },
+  svg             : { hint : 'true или false', parse : bool, ignored : true }
+};
+
+function positive (v) {
+  return /^\d+(?:\.\d+)?$/.test(v) === true && Number(v) > 0 ? Number(v) : undefined;
+}
+
+function bool (v) {
+  return v === 'true' ? true : (v === 'false' ? false : undefined);
+}
+
+/** «#RRGGBB» → «RRGGBB» (bwip-js ждёт цвет без решётки) */
+function color (v) {
+  return /^#[0-9a-fA-F]{6}$/.test(v) === true ? v.slice(1).toUpperCase() : undefined;
+}
+
+/** одно из значений; upper — без учёта регистра, к верхнему регистру */
+function oneOf (list, upper) {
+  return function (v) {
+    var _v = upper === true ? v.toUpperCase() : v;
+    return list.indexOf(_v) !== -1 ? _v : undefined;
+  };
+}
+
 // метки, которые не становятся метками изображения: удаление элемента и условные блоки
 var NOT_IMAGE_MARKER = /:\s*(?:__img|drop|keep|showBegin|showEnd|hideBegin|hideEnd)\b/;
 
@@ -57,6 +112,10 @@ var MSG = {
   badUrl      : 'неверный адрес изображения',
   urlAuth     : 'адрес изображения с именем пользователя или паролем не поддерживается',
   fitOutside  : 'imageFit ставится в метку изображения — в замещающий текст (название или описание) картинки',
+  barcodeOutside : 'штрихкод ставится в замещающий текст картинки',
+  barcodeType    : 'barcode: укажите тип штрихкода, например barcode(qrcode)',
+  barcodeValue   : 'значение штрихкода должно быть строкой или числом',
+  barcodeTooBig  : 'штрихкод больше 16 млн пикселей (уменьшите scale, width или height)',
   outside     : 'метка изображения должна стоять в замещающем тексте (названии или описании) картинки'
 };
 
@@ -66,6 +125,10 @@ function badType (mime) {
 
 function badFit (mode) {
   return 'imageFit: неизвестный режим «' + mode + '» (fillWidth, contain или fill)';
+}
+
+function badBarcodeValue (name, value) {
+  return 'barcode: недопустимое значение «' + value + '» опции ' + name + ' (' + BARCODE_OPTIONS[name].hint + ')';
 }
 
 function templateError (message, source) {
@@ -132,7 +195,7 @@ function prepare (markers, options) {
   var _registry = options !== null && options !== undefined ? options.__media : undefined;
   for (var i = 0; i < markers.length; i++) {
     var _marker = markers[i];
-    if (/:\s*(?:__img|imageFit)\b/.test(_marker.name) === false) {
+    if (/:\s*(?:__img|imageFit|barcode)\b/.test(_marker.name) === false) {
       continue;
     }
     var _chain = splitChain(_marker.name);
@@ -140,6 +203,9 @@ function prepare (markers, options) {
       return part.trim().split('(')[0].trim();
     });
     var _source = sourceOf(_marker);
+    if (_names.indexOf('barcode', 1) !== -1 && _names.indexOf('__img', 1) === -1) {
+      throw templateError(MSG.barcodeOutside, _source);
+    }
     if (_names.indexOf('imageFit', 1) !== -1 && _names.indexOf('__img', 1) === -1) {
       throw templateError(MSG.fitOutside, _source);
     }
@@ -163,10 +229,90 @@ function prepare (markers, options) {
         }
         _chain[j] = 'imageFit(' + _arg.trim() + ', ' + _k + ')';
       }
+      else if (_names[j] === 'barcode') {
+        var _bstr = _chain[j].trim();
+        var _bopen = _bstr.indexOf('(');
+        var _bargs = _bopen === -1 ? '' : _bstr.slice(_bopen + 1, _bstr.lastIndexOf(')')).trim();
+        // литералы проверяются сразу (и в метке, которая при сборке не выполнится); пути (.type, d.x, c.x) — при сборке
+        parseBarcode(splitArgs(_bargs).map(function (arg) {
+          return /^\s*'/.test(arg) === false && /^\s*(?:\.|[dc]\.)/.test(arg) === true ? null : unquote(arg);
+        }), _source);
+        _chain[j] = 'barcode(' + (_bargs !== '' ? _bargs + ', ' : '') + _k + ')';
+      }
     }
     _marker.source = _source.slice(1, -1);
     _marker.name = _chain.join(':');
   }
+}
+
+/** Аргументы форматтера через запятую; запятая в кавычках — часть аргумента (как в builder.getFormatterString) */
+function splitArgs (str) {
+  if (str.trim() === '') {
+    return [];
+  }
+  var _args = [];
+  var _current = '';
+  var _quote = false;
+  for (var i = 0; i < str.length; i++) {
+    if (str[i] === '\'') {
+      _quote = !_quote;
+    }
+    else if (str[i] === ',' && _quote === false) {
+      _args.push(_current);
+      _current = '';
+      continue;
+    }
+    _current += str[i];
+  }
+  _args.push(_current);
+  return _args;
+}
+
+/**
+ * Тип и опции штрихкода из аргументов barcode(тип, имя:значение, …)
+ * @param  {Array}  args    аргументы без кавычек; null — путь, значение известно только при сборке (не проверяется)
+ * @param  {String} source  метка (для ошибки)
+ * @return {Object} { type, options } — options в порядке BARCODE_OPTIONS, значения для bwip-js
+ */
+function parseBarcode (args, source) {
+  var _type = args.length > 0 ? args[0] : '';
+  if (typeof _type === 'string') {
+    _type = _type.trim();
+    if (_type === '') {
+      throw templateError(MSG.barcodeType, source);
+    }
+    if (BARCODE_TYPES.has(_type) === false) {
+      throw templateError('неизвестный тип штрихкода «' + _type + '»', source);
+    }
+  }
+  var _parsed = {};
+  for (var i = 1; i < args.length; i++) {
+    if (args[i] === null || args[i] === undefined) {
+      continue;
+    }
+    var _arg = String(args[i]).trim();
+    var _colon = _arg.indexOf(':');
+    if (_colon === -1) {
+      throw templateError('barcode: опция «' + _arg + '» записывается как имя:значение', source);
+    }
+    var _name = _arg.slice(0, _colon).trim().toLowerCase();
+    var _raw = _arg.slice(_colon + 1).trim();
+    if (Object.prototype.hasOwnProperty.call(BARCODE_OPTIONS, _name) === false) {
+      throw templateError('barcode: неизвестная опция «' + _arg.slice(0, _colon).trim() + '» (' + Object.keys(BARCODE_OPTIONS).join(', ') + ')', source);
+    }
+    var _value = BARCODE_OPTIONS[_name].parse(_raw);
+    if (_value === undefined) {
+      throw templateError(badBarcodeValue(_name, _raw), source);
+    }
+    _parsed[_name] = _value;
+  }
+  var _options = {};
+  Object.keys(BARCODE_OPTIONS).forEach(function (name) {
+    if (_parsed[name] !== undefined && BARCODE_OPTIONS[name].ignored !== true) {
+      _options[name] = _parsed[name];
+    }
+  });
+  return { type : _type, options : _options };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -195,6 +341,31 @@ function imageFit (d, mode, k) {
 }
 
 /**
+ * Штрихкод вместо картинки-заглушки: barcode(тип, опция:значение, …) в замещающем тексте картинки. Типы — bwip-js
+ * (qrcode, ean13, code128, …); опции: width, height (мм), scale (1–10, по умолчанию 3), includetext, textsize,
+ * textxalign, textyalign, rotate (N/R/L/I), barcolor, textcolor, backgroundcolor (#RRGGBB), eclevel (L/M/Q/H),
+ * svg (игнорируется: вывод PNG). Значение не меняется — его забирает __img этой же метки.
+ *
+ * @version 2.4.0
+ * @param {Mixed}  d
+ * @param {String} type  тип штрихкода, затем опции «имя:значение»; последний аргумент — внутренний номер метки
+ */
+function barcode (d) {
+  var _registry = this.__media;
+  if (_registry === undefined || _registry === null || arguments.length < 2) {
+    return d;
+  }
+  var _args = Array.prototype.slice.call(arguments, 1);
+  var _k = String(_args.pop());
+  var _parsed = parseBarcode(_args.map(function (arg) {
+    return arg === null || arg === undefined ? '' : String(arg);
+  }), _registry.sources[_k]);
+  // тип и опции передаются __img этой же метки (номер k), чужой метке они не достанутся
+  this.__mediaBarcode = { k : _k, type : _parsed.type, options : _parsed.options };
+  return d;
+}
+
+/**
  * Служебный: значение метки изображения — в реестр рендера, в документ — жетон
  *
  * @private
@@ -211,7 +382,13 @@ function __img (d, k) {
     _fit = this.__mediaFit.mode;
   }
   this.__mediaFit = null;
-  _registry.items.push({ value : d, fit : _fit, kind : 'image', source : _registry.sources[k] });
+  var _item = { value : d, fit : _fit, kind : 'image', source : _registry.sources[k] };
+  if (this.__mediaBarcode !== undefined && this.__mediaBarcode !== null && this.__mediaBarcode.k === String(k)) {
+    _item.kind = 'barcode';
+    _item.barcode = { type : this.__mediaBarcode.type, options : this.__mediaBarcode.options };
+  }
+  this.__mediaBarcode = null;
+  _registry.items.push(_item);
   return OPEN + 'm' + _registry.nonce + 'i' + (_registry.items.length - 1) + CLOSE;
 }
 
@@ -445,11 +622,61 @@ var CHECKS = {
     if (_image.kind === 'url') {
       checkUrl(_image.value, item, options);
     }
+  },
+  barcode : function (item) {
+    barcodeText(item);
   }
 };
 
-/** Источники данных записи реестра по виду (kind); barcode добавит Task 4 */
+/**
+ * Текст штрихкода: строка или число; пусто (null, undefined, '', одни пробелы) — null, заглушка удаляется
+ * @return {String|null}
+ */
+function barcodeText (item) {
+  var _value = item.value;
+  if (_value === null || _value === undefined || (typeof _value === 'string' && _value.trim() === '')) {
+    return null;
+  }
+  if (typeof _value === 'number' && Number.isFinite(_value) === true) {
+    return String(_value);
+  }
+  if (typeof _value !== 'string') {
+    throw templateError(MSG.barcodeValue, item.source);
+  }
+  return _value;
+}
+
+/**
+ * PNG штрихкода через bwip-js (toBuffer). Ошибка bwip-js (недопустимые данные для типа и т. п.) — ошибка шаблона
+ * с причиной от bwip-js; растр больше BARCODE_PIXELS не строится (sizelimit). PNG проходит те же проверки, что
+ * изображение (identify: 10 МБ).
+ * @return {Promise<Object|null>}
+ */
+function renderBarcode (item) {
+  var _text = barcodeText(item);
+  if (_text === null) {
+    return null;
+  }
+  var _type = item.barcode.type;
+  var _opts = Object.assign({ bcid : _type, text : _text, scale : BARCODE_SCALE }, item.barcode.options, { sizelimit : BARCODE_PIXELS });
+  return Promise.resolve().then(function () {
+    return bwipjs.toBuffer(_opts);
+  }).then(function (png) {
+    return identify(png, item.source);
+  }, function (error) {
+    var _message = String(error !== null && typeof error === 'object' && error.message !== undefined ? error.message : error);
+    if (/^Image size over (?:default )?limit/.test(_message) === true) {
+      throw templateError(MSG.barcodeTooBig, item.source);
+    }
+    // «bwipp.ean13badLength#6878: EAN-13 must be 12 or 13 digits» → причина без служебного префикса
+    var _reason = _message.replace(/^bwipp\.[\w-]+(?:#\d+)?:\s*/, '').replace(/^bwip-js:\s*/, '');
+    throw templateError('штрихкод ' + _type + ' не построен: ' + _reason, item.source);
+  });
+}
+
+/** Источники данных записи реестра по виду (kind) */
 var LOADERS = {
+  barcode : renderBarcode,
   image : function (item, options, signal) {
     var _image = imageValue(item);
     if (_image.kind === 'data') {
@@ -714,6 +941,6 @@ module.exports = {
   finish,
   loadImage,
   hostAllowed,
-  formatters : { imageFit, __img },
+  formatters : { imageFit, barcode, __img },
   TOKEN_REGEX
 };

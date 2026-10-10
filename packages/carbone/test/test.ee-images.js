@@ -1022,3 +1022,191 @@ describe('EE платные: изображения по адресу из бе�
     });
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// Штрихкоды (Task 4 плана 2.4.0, спецификация §32.3): PNG из bwip-js вместо картинки-заглушки
+
+describe('EE платные: штрихкоды (§32.3)', function () {
+  const bwipjs = require('bwip-js');
+  const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  /** размер PNG по заголовку IHDR */
+  const pngSize = (buf) => ({ width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) });
+  /** PNG, вставленный вместо первой картинки документа */
+  async function insertedPng (r) {
+    const ids = embeds(r.doc);
+    assert.strictEqual(ids.length, 1, r.doc);
+    const name = 'word/' + target(r.rels, ids[0]);
+    assert.match(name, /^word\/media\/cr-img-\d+\.png$/);
+    return Buffer.from(await readEntry(r.out, name, true));
+  }
+  /** то же, что вернёт bwip-js напрямую (масштаб по умолчанию — 3) */
+  const direct = (opts) => bwipjs.toBuffer(Object.assign({ scale: 3 }, opts));
+  const one = (marker, data, options) => render([para(drawing(marker))], data, options);
+  const oneError = (marker, data, options) => renderError([para(drawing(marker))], data, options);
+
+  it('qrcode в descr — PNG от bwip-js (масштаб 3 по умолчанию), метка убрана', async function () {
+    const r = await one('{d.code:barcode(qrcode)}', { code: 'https://example.org/?a=1' });
+    const buf = await insertedPng(r);
+    assert.ok(buf.subarray(0, 8).equals(PNG_SIGNATURE));
+    const size = pngSize(buf);
+    assert.ok(size.width > 0 && size.height > 0);
+    assert.ok(buf.equals(await direct({ bcid: 'qrcode', text: 'https://example.org/?a=1' })));
+    assert.ok(!r.doc.includes('barcode'), r.doc);
+    assert.ok(!r.doc.includes('descr="{'), r.doc);
+    assertWellFormed(r.doc);
+  });
+
+  it('ean13 с includetext:true; число в данных — как строка', async function () {
+    const r = await one('{d.code:barcode(ean13, includetext:true)}', { code: 5901234123457 });
+    const buf = await insertedPng(r);
+    assert.ok(buf.equals(await direct({ bcid: 'ean13', text: '5901234123457', includetext: true })));
+    assert.ok(!buf.equals(await direct({ bcid: 'ean13', text: '5901234123457' })));
+  });
+
+  it('width:40, height:20 (мм) — размер изображения: высота 20 мм, ширина не больше 40 мм (72 dpi × масштаб 3)', async function () {
+    const r = await one('{d.code:barcode(code128, width:40, height:20)}', { code: 'ABC123' });
+    const buf = await insertedPng(r);
+    assert.ok(buf.equals(await direct({ bcid: 'code128', text: 'ABC123', width: 40, height: 20 })));
+    const px = (mm) => mm / 25.4 * 72 * 3;
+    const size = pngSize(buf);
+    assert.ok(Math.abs(size.height - px(20)) <= 3, 'высота ' + size.height);
+    assert.ok(size.width <= px(40) + 3 && size.width >= px(30), 'ширина ' + size.width);
+  });
+
+  it('scale 1 и 10 — размер в 10 раз больше; 0, 11 и 2.5 — ошибка шаблона', async function () {
+    const s1 = pngSize(await insertedPng(await one('{d.c:barcode(qrcode, scale:1)}', { c: 'x' })));
+    const s10 = pngSize(await insertedPng(await one('{d.c:barcode(qrcode, scale:10)}', { c: 'x' })));
+    assert.strictEqual(s10.width, s1.width * 10);
+    assert.strictEqual(s10.height, s1.height * 10);
+    for (const bad of ['0', '11', '2.5', 'abc']) {
+      const msg = await oneError('{d.c:barcode(qrcode, scale:' + bad + ')}', { c: 'x' });
+      // в Source метка без пробелов, как её хранит разбор Carbone
+      assert.strictEqual(msg, 'barcode: недопустимое значение «' + bad + '» опции scale (целое от 1 до 10) Source: "{d.c:barcode(qrcode,scale:' + bad + ')}"');
+    }
+  });
+
+  it('rotate:R — ширина и высота меняются местами; rotate:X — ошибка', async function () {
+    const n = pngSize(await insertedPng(await one('{d.c:barcode(code128)}', { c: 'ABC' })));
+    const rr = pngSize(await insertedPng(await one('{d.c:barcode(code128, rotate:R)}', { c: 'ABC' })));
+    assert.deepStrictEqual(rr, { width: n.height, height: n.width });
+    const msg = await oneError('{d.c:barcode(code128, rotate:X)}', { c: 'ABC' });
+    assert.strictEqual(normalizeError(msg), 'barcode: недопустимое значение «X» опции rotate (N, R, L или I)');
+  });
+
+  it('barcolor:#FF0000 — цвет передаётся в bwip-js как FF0000; цвет не #RRGGBB — ошибка', async function () {
+    const buf = await insertedPng(await one('{d.c:barcode(qrcode, barcolor:#FF0000)}', { c: 'x' }));
+    assert.ok(buf.equals(await direct({ bcid: 'qrcode', text: 'x', barcolor: 'FF0000' })));
+    assert.ok(!buf.equals(await direct({ bcid: 'qrcode', text: 'x' })));
+    for (const bad of ['red', 'FF0000', '#F00', '#GG0000']) {
+      const msg = await oneError('{d.c:barcode(qrcode, barcolor:' + bad + ')}', { c: 'x' });
+      assert.strictEqual(normalizeError(msg), 'barcode: недопустимое значение «' + bad + '» опции barcolor (цвет #RRGGBB)');
+    }
+  });
+
+  it('textsize, textxalign, textyalign, textcolor, backgroundcolor передаются в bwip-js', async function () {
+    const marker = '{d.c:barcode(code128, includetext:true, textsize:14, textxalign:left, textyalign:above, textcolor:#00FF00, backgroundcolor:#FFFFEE)}';
+    const buf = await insertedPng(await one(marker, { c: 'ABC' }));
+    assert.ok(buf.equals(await direct({ bcid: 'code128', text: 'ABC', includetext: true, textsize: 14, textxalign: 'left', textyalign: 'above', textcolor: '00FF00', backgroundcolor: 'FFFFEE' })));
+  });
+
+  it('eclevel:H — уровень коррекции QR; eclevel:Z — ошибка', async function () {
+    const text = 'Съешь же ещё этих мягких французских булок, да выпей чаю';
+    const buf = await insertedPng(await one('{d.c:barcode(qrcode, eclevel:H)}', { c: text }));
+    assert.ok(buf.equals(await direct({ bcid: 'qrcode', text, eclevel: 'H' })));
+    assert.ok(!buf.equals(await direct({ bcid: 'qrcode', text, eclevel: 'L' })));
+    const msg = await oneError('{d.c:barcode(qrcode, eclevel:Z)}', { c: 'x' });
+    assert.strictEqual(normalizeError(msg), 'barcode: недопустимое значение «Z» опции eclevel (L, M, Q или H)');
+  });
+
+  it('svg:true игнорируется — вывод PNG', async function () {
+    const buf = await insertedPng(await one('{d.c:barcode(qrcode, svg:true)}', { c: 'x' }));
+    assert.ok(buf.equals(await direct({ bcid: 'qrcode', text: 'x' })));
+  });
+
+  it('опция в кавычках и пробелы вокруг двоеточия', async function () {
+    const buf = await insertedPng(await one('{d.c:barcode(\'qrcode\', \'barcolor: #FF0000\')}', { c: 'x' }));
+    assert.ok(buf.equals(await direct({ bcid: 'qrcode', text: 'x', barcolor: 'FF0000' })));
+  });
+
+  describe('ошибки с меткой', function () {
+    it('неизвестный тип', async function () {
+      assert.strictEqual(await oneError('{d.c:barcode(nope)}', { c: 'x' }), 'неизвестный тип штрихкода «nope» Source: "{d.c:barcode(nope)}"');
+    });
+    it('тип не указан', async function () {
+      assert.strictEqual(normalizeError(await oneError('{d.c:barcode()}', { c: 'x' })), 'barcode: укажите тип штрихкода, например barcode(qrcode)');
+    });
+    it('данные abc для ean13 — причина от bwip-js', async function () {
+      assert.strictEqual(await oneError('{d.c:barcode(ean13)}', { c: 'abc' }),
+        'штрихкод ean13 не построен: EAN-13 must be 12 or 13 digits Source: "{d.c:barcode(ean13)}"');
+    });
+    it('неизвестная опция', async function () {
+      assert.strictEqual(normalizeError(await oneError('{d.c:barcode(qrcode, color:#FF0000)}', { c: 'x' })),
+        'barcode: неизвестная опция «color» (width, height, scale, includetext, textsize, textxalign, textyalign, rotate, barcolor, textcolor, backgroundcolor, eclevel, svg)');
+    });
+    it('опция без двоеточия', async function () {
+      assert.strictEqual(normalizeError(await oneError('{d.c:barcode(qrcode, includetext)}', { c: 'x' })), 'barcode: опция «includetext» записывается как имя:значение');
+    });
+    it('прочие недопустимые значения', async function () {
+      const cases = [
+        ['width:0', 'barcode: недопустимое значение «0» опции width (число миллиметров больше 0)'],
+        ['height:-5', 'barcode: недопустимое значение «-5» опции height (число миллиметров больше 0)'],
+        ['includetext:yes', 'barcode: недопустимое значение «yes» опции includetext (true или false)'],
+        ['textsize:big', 'barcode: недопустимое значение «big» опции textsize (число больше 0)'],
+        ['textxalign:middle', 'barcode: недопустимое значение «middle» опции textxalign (left, center, right или justify)'],
+        ['textyalign:top', 'barcode: недопустимое значение «top» опции textyalign (below, center или above)']
+      ];
+      for (const [opt, message] of cases) {
+        assert.strictEqual(await oneError('{d.c:barcode(code128, ' + opt + ')}', { c: 'x' }), message + ' Source: "{d.c:barcode(code128,' + opt + ')}"');
+      }
+    });
+    it('объект вместо строки — ошибка', async function () {
+      assert.strictEqual(normalizeError(await oneError('{d.c:barcode(qrcode)}', { c: { a: 1 } })), 'значение штрихкода должно быть строкой или числом');
+    });
+    it('слишком большое изображение — ошибка до выделения памяти', async function () {
+      const msg = await oneError('{d.c:barcode(code128, scale:10, width:500, height:500)}', { c: 'ABC' });
+      assert.strictEqual(normalizeError(msg), 'штрихкод больше 16 млн пикселей (уменьшите scale, width или height)');
+    });
+    it('ошибка в метке, которая не выполнялась (пустой цикл), — всё равно ошибка шаблона', async function () {
+      const raws = ['<w:p><w:r><w:t>{d.items[i].x}</w:t></w:r></w:p>', para(drawing('{d.items[i].c:barcode(qrcode, scale:11)}')), '<w:p><w:r><w:t>{d.items[i+1].x}</w:t></w:r></w:p>'];
+      assert.match(await renderError(raws, { items: [] }), /^barcode: недопустимое значение «11» опции scale/);
+    });
+  });
+
+  for (const [name, data] of [['null', { c: null }], ['пустая строка', { c: '' }], ['нет значения', {}]]) {
+    it(name + ' — заглушка удаляется', async function () {
+      const r = await one('{d.c:barcode(qrcode)}', data);
+      assert.ok(!r.doc.includes('<w:drawing'), r.doc);
+      assert.ok(!r.names.some((n) => n.includes('cr-img')));
+    });
+  }
+
+  it(':barcode в обычном тексте — ошибка «штрихкод ставится в замещающий текст картинки»', async function () {
+    const msg = await renderError([para('<w:t>[{d.c:barcode(qrcode)}]</w:t>')], { c: 'x' });
+    assert.strictEqual(msg, 'штрихкод ставится в замещающий текст картинки Source: "{d.c:barcode(qrcode)}"');
+  });
+
+  it('barcode + imageFit(contain): портретный штрихкод вписан в квадратную рамку по высоте', async function () {
+    const r = await one('{d.c:barcode(code128, rotate:R):imageFit(contain)}', { c: 'ABCDEFGHIJKL' });
+    const size = pngSize(await insertedPng(r));
+    assert.ok(size.height > size.width);
+    const cx = Math.round(2000000 * size.width / size.height);
+    assert.deepStrictEqual(sizes(r.doc), ['wp:extent ' + cx + '×2000000', 'a:ext ' + cx + '×2000000']);
+    // без imageFit (fillWidth) рамка вытянулась бы по высоте
+    const f = await one('{d.c:barcode(code128, rotate:R)}', { c: 'ABCDEFGHIJKL' });
+    assert.strictEqual(sizes(f.doc)[0], 'wp:extent 2000000×' + Math.round(2000000 * size.height / size.width));
+  });
+
+  it('цикл: одинаковые штрихкоды делят файл, другие опции — другой файл', async function () {
+    const raws = ['<w:p><w:r><w:t>{d.items[i].x}</w:t></w:r></w:p>' + para(drawing('{d.items[i].c:barcode(qrcode)}')) + '<w:p><w:r><w:t>{d.items[i+1].x}</w:t></w:r></w:p>', para(drawing('{d.items[0].c:barcode(qrcode, scale:5)}', { id: 9 }))];
+    const r = await render(raws, { items: [{ c: 'a' }, { c: 'b' }, { c: 'a' }] });
+    const list = embeds(r.doc);
+    assert.strictEqual(list.length, 4);
+    assert.strictEqual(list[0], list[2]);
+    assert.strictEqual(new Set(list).size, 3);
+  });
+
+  it('ODT: штрихкод в svg:desc — Pictures/cr-img-1.png', async function () {
+    const r = await renderAny(await buildOdf('odt', '<text:p>' + odfFrame({ desc: '{d.c:barcode(qrcode)}' }) + '</text:p>'), 'odt', { c: 'x' });
+    assert.ok(Buffer.from(await r.read('Pictures/cr-img-1.png', true)).equals(await direct({ bcid: 'qrcode', text: 'x' })));
+  });
+});

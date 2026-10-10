@@ -4672,6 +4672,13 @@
       "expect": {
         "error": "Formatter \"barcode\" is disabled in the Community Edition.",
         "errorSource": "{d.v:barcode(qrcode)}"
+      },
+      "deviation": {
+        "ours": {
+          "error": "штрихкод ставится в замещающий текст картинки",
+          "errorSource": "{d.v:barcode(qrcode)}"
+        },
+        "why": "платная функция EE, реализована в 2.4.0 (§32): штрихкод ставится в замещающий текст картинки-заглушки; в обычном тексте — ошибка шаблона"
       }
     },
     {
@@ -4688,6 +4695,13 @@
       "expect": {
         "error": "Formatter \"barcode\" is disabled in the Community Edition.",
         "errorSource": "{d.v:barcode(ean13)}"
+      },
+      "deviation": {
+        "ours": {
+          "error": "штрихкод ставится в замещающий текст картинки",
+          "errorSource": "{d.v:barcode(ean13)}"
+        },
+        "why": "платная функция EE, реализована в 2.4.0 (§32): штрихкод ставится в замещающий текст картинки-заглушки; штрихкод шрифтом (legacy) не поддерживается (§32.3) — в тексте ошибка шаблона"
       }
     },
     {

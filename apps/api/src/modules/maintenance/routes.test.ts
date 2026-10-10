@@ -28,6 +28,8 @@ async function build(opts: { flag: string | null; draining?: boolean }) {
   registerMaintenance(app, deps);
   registerHealthRoutes(app, deps);
   app.get('/api/templates', async () => []);
+  app.post('/api/templates/export', async () => 'zip');
+  app.post('/api/templates/import', async () => 'imported');
   registerRenderRoutes(app, handoff);
   await app.ready();
   return { app, handoff };
@@ -52,6 +54,17 @@ describe('режим обслуживания: белый список', () => {
     expect(file.body).toBe('pdf');
     expect((await app.inject({ method: 'GET', url: '/api/templates' })).statusCode).toBe(503);
     expect((await app.inject({ method: 'GET', url: '/api/ready' })).statusCode).toBe(200);
+  });
+
+  it('выгрузка шаблонов доступна, загрузка из архива — 503', async () => {
+    const t = await build({ flag: FLAG });
+    app = t.app;
+    expect((await app.inject({ method: 'POST', url: '/api/templates/export' })).statusCode).toBe(
+      200,
+    );
+    expect((await app.inject({ method: 'POST', url: '/api/templates/import' })).statusCode).toBe(
+      503,
+    );
   });
 
   it('префикс только для GET', async () => {

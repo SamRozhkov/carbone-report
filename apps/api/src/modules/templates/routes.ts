@@ -12,6 +12,7 @@ import {
   TemplateQuery,
   UpdateTemplateBody,
 } from '@carbone-reports/shared';
+import { ExportTemplatesBody } from '@carbone-reports/shared/template-transfer';
 import { asc, eq, getTableColumns } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -34,6 +35,7 @@ import { orderParams } from '../queries/param-deps';
 import { optionsForParam } from '../queries/param-options';
 import { checkParamDefaults } from '../queries/params';
 import { createBlankDocument } from './blank';
+import { buildExport } from './transfer/export';
 import {
   categoryRefColumns,
   discardUncommittedFile,
@@ -299,6 +301,19 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       // Строка могла ещё указывать на путь старого формата templates/<id>.<ext>.
       if (!row.filePath.startsWith(`${templateDir(row.id)}/`)) await storage.remove(row.filePath);
       return reply.status(204).send();
+    },
+  );
+
+  // Выгрузка в архив (§33.2): доступна и в режиме обслуживания — ничего не меняет.
+  app.post(
+    '/api/templates/export',
+    { ...admin, schema: { body: ExportTemplatesBody } },
+    async (req, reply) => {
+      const { filename, buffer } = await buildExport(deps, req.body.ids);
+      return reply
+        .header('content-type', 'application/zip')
+        .header('content-disposition', contentDisposition(filename))
+        .send(buffer);
     },
   );
 

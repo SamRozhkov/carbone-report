@@ -5,7 +5,8 @@
   "license": "SEE LICENSE IN LICENSE.md",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./template-transfer": "./src/template-transfer.ts"
   },
   "scripts": {
     "test": "vitest run",

@@ -17,6 +17,8 @@ const EXEMPT = new Set([
   'GET /api/ready',
   'GET /api/maintenance',
   'POST /api/maintenance/retry',
+  // Выгрузка шаблонов только читает (§33.2).
+  'POST /api/templates/export',
 ]);
 
 /** Document Server доконвертирует отчёт, начатый до режима; доступ закрыт разовым токеном. */

@@ -123,3 +123,65 @@ export const TransferManifest = z
     });
   });
 export type TransferManifest = z.infer<typeof TransferManifest>;
+
+// ---- Загрузка архива (§33.2) ----
+
+export const ImportAction = z.enum(['create', 'update', 'copy', 'skip']);
+export type ImportAction = z.infer<typeof ImportAction>;
+
+/** Решение по шаблону архива; `datasourceId` обязателен для всех действий, кроме `skip`. */
+export const ImportDecision = z.strictObject({
+  index: z.number().int().min(0),
+  action: ImportAction,
+  datasourceId: z.uuid('неверный идентификатор источника').nullish(),
+});
+export type ImportDecision = z.infer<typeof ImportDecision>;
+
+/** Поле `decisions` запроса `POST /api/templates/import` (JSON): по решению на каждый шаблон архива. */
+export const ImportDecisions = z.array(ImportDecision).min(1).max(MAX_TRANSFER_TEMPLATES);
+export type ImportDecisions = z.infer<typeof ImportDecisions>;
+
+/** Строка предпросмотра: шаблон архива и что с ним будет в этой среде. */
+export interface ImportPreviewItem {
+  /** Номер шаблона в архиве, с 0 — его же передают в `decisions`. */
+  index: number;
+  name: string;
+  description: string;
+  fileExt: TemplateExt;
+  /** Шаблон этой среды с тем же именем (из нескольких — изменённый последним) или `null`. */
+  existing: { id: string; name: string } | null;
+  /** Источник из архива — для сведения (без пароля и CA). */
+  datasource: TransferDatasource;
+  /** Источник этой среды с тем же именем; `null` — нет или их несколько (нужен выбор). */
+  datasourceMatch: string | null;
+  category: string | null;
+  /** `false` — категория будет создана; без категории — `true`. */
+  categoryExists: boolean;
+  groups: string[];
+  /** Группы, которых нет в этой среде: при загрузке пропускаются. */
+  missingGroups: string[];
+  /** Ошибки проверки шаблона; такой шаблон можно только пропустить. */
+  errors: string[];
+}
+
+/** Ответ `POST /api/templates/import/preview`. */
+export interface ImportPreview {
+  appVersion: string;
+  exportedAt: string;
+  templates: ImportPreviewItem[];
+}
+
+/** Итог по шаблону архива. */
+export interface ImportResultItem {
+  index: number;
+  action: ImportAction;
+  /** Имя шаблона после загрузки (у копии — «<имя> (N)»). */
+  name: string;
+  /** id созданного или обновлённого шаблона; у `skip` — `null`. */
+  id: string | null;
+}
+
+/** Ответ `POST /api/templates/import`. */
+export interface ImportResult {
+  templates: ImportResultItem[];
+}

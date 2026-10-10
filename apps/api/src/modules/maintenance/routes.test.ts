@@ -30,6 +30,7 @@ async function build(opts: { flag: string | null; draining?: boolean }) {
   app.get('/api/templates', async () => []);
   app.post('/api/templates/export', async () => 'zip');
   app.post('/api/templates/import', async () => 'imported');
+  app.post('/api/templates/import/preview', async () => 'preview');
   registerRenderRoutes(app, handoff);
   await app.ready();
   return { app, handoff };
@@ -65,6 +66,9 @@ describe('режим обслуживания: белый список', () => {
     expect((await app.inject({ method: 'POST', url: '/api/templates/import' })).statusCode).toBe(
       503,
     );
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/templates/import/preview' })).statusCode,
+    ).toBe(503);
   });
 
   it('префикс только для GET', async () => {

@@ -12,7 +12,13 @@ import {
   TemplateQuery,
   UpdateTemplateBody,
 } from '@carbone-reports/shared';
-import { ExportTemplatesBody } from '@carbone-reports/shared/template-transfer';
+import {
+  ExportTemplatesBody,
+  ImportDecisions,
+  type ImportPreview,
+  type ImportResult,
+  MAX_TRANSFER_ARCHIVE_BYTES,
+} from '@carbone-reports/shared/template-transfer';
 import { asc, eq, getTableColumns } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -35,7 +41,9 @@ import { orderParams } from '../queries/param-deps';
 import { optionsForParam } from '../queries/param-options';
 import { checkParamDefaults } from '../queries/params';
 import { createBlankDocument } from './blank';
+import { importInvalid } from './transfer/archive';
 import { buildExport } from './transfer/export';
+import { applyImport, previewImport } from './transfer/import';
 import {
   categoryRefColumns,
   discardUncommittedFile,
@@ -88,6 +96,25 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     if (!ext.success) throw badRequest('поддерживаются файлы docx, xlsx, odt, ods, pptx');
     if (!isZip(file.data)) throw badRequest('файл повреждён или не является документом Office');
     return { fields, ext: ext.data, data: file.data };
+  }
+
+  /** Архив шаблонов из multipart (поле `file`, до 50 МБ) и текстовые поля. */
+  async function readArchiveUpload(req: FastifyRequest) {
+    const fields: Record<string, string> = {};
+    let data: Buffer | undefined;
+    try {
+      for await (const part of req.parts({ limits: { fileSize: MAX_TRANSFER_ARCHIVE_BYTES } })) {
+        if (part.type === 'file') data = await part.toBuffer();
+        else fields[part.fieldname] = String(part.value);
+      }
+    } catch (err) {
+      if ((err as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE') {
+        throw importInvalid('архив больше 50 МБ');
+      }
+      throw err;
+    }
+    if (!data) throw badRequest('файл не передан');
+    return { fields, data };
   }
 
   async function insertTemplate(
@@ -316,6 +343,30 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         .send(buffer);
     },
   );
+
+  // Загрузка из архива (§33.2); в режиме обслуживания закрыта вместе с прочими изменениями.
+  app.post('/api/templates/import/preview', admin, async (req): Promise<ImportPreview> => {
+    const { data } = await readArchiveUpload(req);
+    return previewImport(deps, data);
+  });
+
+  app.post('/api/templates/import', admin, async (req): Promise<ImportResult> => {
+    const { fields, data } = await readArchiveUpload(req);
+    let raw: unknown;
+    try {
+      raw = JSON.parse(fields.decisions ?? '');
+    } catch {
+      throw badRequest('не переданы решения по шаблонам (decisions)');
+    }
+    const decisions = ImportDecisions.safeParse(raw);
+    if (!decisions.success) {
+      const issue = decisions.error.issues[0]!;
+      throw badRequest(
+        `неверные решения по шаблонам: ${issue.path.join('.')} ${issue.message}`.trim(),
+      );
+    }
+    return applyImport(deps, data, decisions.data, currentUser(req).id, req.log);
+  });
 
   app.post(
     '/api/templates/:id/duplicate',

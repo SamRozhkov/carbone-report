@@ -30,6 +30,15 @@ location /api/ {
     # add_header в location отменяет наследование из server: HSTS передаём переменной $hsts.
     add_header X-Content-Type-Options "nosniff" always;
     add_header Strict-Transport-Security $hsts always;
+
+    # Загрузка архива шаблонов: архив до 50 МБ (§33.2) + поля multipart. Прочие настройки
+    # наследуются, а set/if (модуль rewrite) и proxy_pass — нет: повторяем.
+    location ~ ^/api/templates/import(/preview)?$ {
+        set $api_upstream ${API_UPSTREAM};
+        if ($request_uri !~ "^/api/") { return 404; }
+        proxy_pass $api_upstream;
+        client_max_body_size 51m;
+    }
 }
 
 location /onlyoffice/ {

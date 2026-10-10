@@ -101,6 +101,59 @@ const DROP_XLSX =
   `<row>${xc('{d.cars[i+1].brand}')}${xc('')}${xc('')}</row>` +
   '</sheetData>';
 
+// изображения и штрихкоды (2.4.0): картинки-заглушки с тегом в замещающем тексте (descr)
+const PNG_1X1 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const IMAGE_DATA = { photo: `data:image/png;base64,${PNG_1X1}`, code: 'INV-2026-0042' };
+
+/** Картинка «в тексте» 2,54 × 2,54 см с тегом в замещающем тексте; заглушка — word/media/p.png. */
+function placeholder(id: number, tag: string): string {
+  return (
+    '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="914400" cy="914400"/>' +
+    `<wp:docPr id="${id}" name="Picture ${id}" descr="${tag}"/>` +
+    '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>' +
+    `<pic:nvPicPr><pic:cNvPr id="${id}" name="p.png" descr="${tag}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    '<pic:blipFill><a:blip r:embed="rIdImg"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+    '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm>' +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>' +
+    '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>'
+  );
+}
+
+async function imagesDocx(): Promise<Buffer> {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const NS =
+    `xmlns:w="${W}"` +
+    ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"' +
+    ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"' +
+    ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"' +
+    ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+  const zip = new JSZip();
+  zip.file(
+    '[Content_Types].xml',
+    `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+  );
+  zip.file(
+    '_rels/.rels',
+    `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+  );
+  zip.file(
+    'word/_rels/document.xml.rels',
+    `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/p.png"/></Relationships>`,
+  );
+  zip.file('word/media/p.png', Buffer.from(PNG_1X1, 'base64'));
+  const body =
+    wp('Компания: {d.name}') +
+    placeholder(1, '{d.photo}') +
+    placeholder(2, '{d.code:barcode(qrcode)}') +
+    wp('конец');
+  zip.file(
+    'word/document.xml',
+    `${XML}<w:document ${NS}><w:body>${body}<w:sectPr/></w:body></w:document>`,
+  );
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
 const tpl = (ext: TemplateFileRef['ext'], file: Buffer): TemplateFileRef => ({
   id: `t-${ext}`,
   version: 1,
@@ -389,6 +442,32 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
       for (const text of ['Марка', 'Комментарий', 'Лада', 'Тесла', 'БМВ', 'ok: false']) {
         expect(content).toContain(text);
       }
+    },
+    CONVERT_TIMEOUT,
+  );
+
+  it(
+    'изображение из data URI и штрихкод: docx → pdf без ошибки, в PDF есть изображения',
+    async () => {
+      // сборка без конвертации: обе заглушки заменены своими файлами
+      const docx = await renderer.render(
+        tpl('docx', await imagesDocx()),
+        { name: NAME, ...IMAGE_DATA },
+        ro('docx'),
+      );
+      const zip = await JSZip.loadAsync(docx);
+      const media = Object.keys(zip.files).filter((n) => /^word\/media\/cr-img-\d+\.png$/.test(n));
+      expect(media).toHaveLength(2);
+      const xml = await zip.file('word/document.xml')!.async('string');
+      expect(xml).not.toContain('{d.');
+      // настоящий читатель: Document Server открывает документ и кладёт изображения в PDF
+      const pdf = await diagnose('изображения docx→pdf', async () =>
+        renderer.render(tpl('docx', await imagesDocx()), { name: NAME, ...IMAGE_DATA }, ro('pdf')),
+      );
+      expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+      const text = pdf.toString('latin1');
+      expect(text).toMatch(/\/Image\b/);
+      expect(text.match(/\/Subtype\s*\/Image\b/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     },
     CONVERT_TIMEOUT,
   );

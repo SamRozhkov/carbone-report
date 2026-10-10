@@ -279,6 +279,10 @@ function renderBuffer (template, extension, data, options) {
             if (err) {
               return _fail(err);
             }
+            // XLSX для OnlyOffice: текст ячеек — снова общими строками (со встроенными Document Server при
+            // конвертации теряет все ячейки-строки, кроме первой), номера строк и ячеек, убранные препроцессором,
+            // ставятся заново (после циклов и drop). Старый API render() (тесты апстрима) собирает XLSX как CE 3.8.2.
+            preprocessor.finishXlsx(_report);
             file.buildFile(_report, _guard(function (err, _result) {
               if (err) {
                 return _fail(err);

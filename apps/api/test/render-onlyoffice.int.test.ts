@@ -368,6 +368,28 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
   );
 
   it(
+    'xlsx с циклом и несколькими текстовыми ячейками → ods: все ячейки на месте',
+    async () => {
+      // До 2.2.0 сборка оставляла в листе встроенные строки (t="inlineStr"); Document Server при конвертации
+      // сохранял только первую из них.
+      const sheet =
+        '<sheetData>' +
+        `<row r="1">${xc('Марка')}${xc('Комментарий')}</row>` +
+        `<row r="2">${xc('{d.cars[i].brand}')}${xc('ok: {d.cars[i].ok}')}</row>` +
+        `<row r="3">${xc('{d.cars[i+1].brand}')}${xc('')}</row>` +
+        '</sheetData>';
+      const ods = await diagnose('xlsx-цикл→ods', async () =>
+        renderer.render(tpl('xlsx', await xlsxTemplate(sheet)), DROP_DATA, ro('ods')),
+      );
+      const content = await (await JSZip.loadAsync(ods)).file('content.xml')!.async('string');
+      for (const text of ['Марка', 'Комментарий', 'Лада', 'Тесла', 'БМВ', 'ok: false']) {
+        expect(content).toContain(text);
+      }
+    },
+    CONVERT_TIMEOUT,
+  );
+
+  it(
     'ссылка разовая: Document Server забирает файл ровно один раз',
     async () => {
       const before = puts.length;

@@ -422,9 +422,9 @@ describe('Carbone', function () {
         ]
       };
       carbone.renderXML(_xml, _data, function (err, _xmlBuilt) {
-        // как в Carbone EE 5 (эталон help/na-count): count() отключён и называется cumCount
-        assert.equal(_xmlBuilt, null);
-        assert.match(err.message, /^Formatter "cumCount" is disabled in the Community Edition\. Source: "\{d\.cars.*:cumCount\}"$/);
+        // 2.2.0: count() — это cumCount (lib/aggregate.js), сплошная нумерация в порядке вывода
+        helper.assert(err + '', 'null');
+        assert.equal(_xmlBuilt, '<xml><t_row> 1 Lumeneo </t_row><t_row> 2 Toyota </t_row><t_row> 3 Tesla motors </t_row></xml>');
         done();
       });
     });
@@ -469,9 +469,19 @@ describe('Carbone', function () {
         }
       ];
       carbone.renderXML(_xml, _data, function (err, _xmlBuilt) {
-        // как в Carbone EE 5 (эталон help/na-count): count() отключён и называется cumCount
-        assert.equal(_xmlBuilt, null);
-        assert.match(err.message, /^Formatter "cumCount" is disabled in the Community Edition\. Source: "\{d\[i\]\.cars.*:cumCount\}"$/);
+        // 2.2.0: count() — это cumCount (lib/aggregate.js): сплошная нумерация 1…N по всем уровням;
+        // аргумент начала отсчёта формата 3.8.2 (count(0)) отбрасывается, как в EE
+        helper.assert(err + '', 'null');
+        var _expectedResult =
+           '<xml>'
+          +  '<tr><td>1 mich</td><td>1 site_A</td></tr>'
+          +  '<tr><td>2 cont</td><td>2 site_A</td></tr>'
+          +  '<tr><td>3 mich</td><td>3 site_A</td></tr>'
+          +  '<tr><td>4 mich</td><td>4 site_B</td></tr>'
+          +  '<tr><td>5 uni</td><td>5 site_B</td></tr>'
+          +  '<tr><td>6 cont</td><td>6 site_B</td></tr>'
+          +'</xml>';
+        assert.equal(_xmlBuilt, _expectedResult);
         done();
       });
     });
@@ -806,9 +816,9 @@ describe('Carbone', function () {
         ]
       };
       carbone.renderXML(_xml, _data, function (err, _xmlBuilt) {
-        // как в Carbone EE 5 (эталон help/na-count): count() отключён и называется cumCount
-        assert.equal(_xmlBuilt, null);
-        assert.match(err.message, /^Formatter "cumCount" is disabled in the Community Edition\. Source: "\{d\.cars.*:cumCount\}"$/);
+        // 2.2.0: count() — это cumCount (lib/aggregate.js), сплошная нумерация в порядке вывода
+        helper.assert(err + '', 'null');
+        assert.equal(_xmlBuilt, '<xml><t_row> 1 Lumeneo </t_row><t_row> 2 Toyota </t_row><t_row> 3 Tesla motors </t_row></xml>');
         done();
       });
     });
@@ -853,9 +863,19 @@ describe('Carbone', function () {
         }
       ];
       carbone.renderXML(_xml, _data, function (err, _xmlBuilt) {
-        // как в Carbone EE 5 (эталон help/na-count): count() отключён и называется cumCount
-        assert.equal(_xmlBuilt, null);
-        assert.match(err.message, /^Formatter "cumCount" is disabled in the Community Edition\. Source: "\{d\[i\]\.cars.*:cumCount\}"$/);
+        // 2.2.0: count() — это cumCount (lib/aggregate.js): сплошная нумерация 1…N по всем уровням;
+        // аргумент начала отсчёта формата 3.8.2 (count(0)) отбрасывается, как в EE
+        helper.assert(err + '', 'null');
+        var _expectedResult =
+           '<xml>'
+          +  '<tr><td>1 mich</td><td>1 site_A</td></tr>'
+          +  '<tr><td>2 cont</td><td>2 site_A</td></tr>'
+          +  '<tr><td>3 mich</td><td>3 site_A</td></tr>'
+          +  '<tr><td>4 mich</td><td>4 site_B</td></tr>'
+          +  '<tr><td>5 uni</td><td>5 site_B</td></tr>'
+          +  '<tr><td>6 cont</td><td>6 site_B</td></tr>'
+          +'</xml>';
+        assert.equal(_xmlBuilt, _expectedResult);
         done();
       });
     });

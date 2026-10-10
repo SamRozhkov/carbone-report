@@ -805,7 +805,11 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition."
    },
-   "apiMessage": "в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+   "apiMessage": "в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+   "deviation": {
+    "ours": "Итого: 11",
+    "why": "платная функция реализована в 2.2.0"
+   }
   },
   {
    "id": "help/na-count",
@@ -841,7 +845,11 @@
    "expect": {
     "error": "Formatter \"cumCount\" is disabled in the Community Edition."
    },
-   "apiMessage": "в шаблоне используется cumCount — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+   "apiMessage": "в шаблоне используется cumCount — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+   "deviation": {
+    "ours": "1 Лада\n2 Тесла\n3 Лада\n4 БМВ",
+    "why": "платная функция реализована в 2.2.0"
+   }
   },
   {
    "id": "help/na-drop",

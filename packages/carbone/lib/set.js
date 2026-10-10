@@ -481,4 +481,7 @@ var set = {
   }
 };
 
+// разбор цепочки нужен и агрегаторам (lib/aggregate.js)
+set.splitChain = splitChain;
+
 module.exports = set;

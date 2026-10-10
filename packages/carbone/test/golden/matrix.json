@@ -602,6 +602,10 @@
    "expect": {
     "error": "Formatter \"cumCount\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[i].brand:cumCount}"
+   },
+   "deviation": {
+    "ours": "| 1 | Лада |\n| 2 | Тесла |\n| 3 | Лада |\n| 4 | БМВ |",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -643,6 +647,10 @@
    "expect": {
     "error": "Formatter \"cumCount\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[i].brand:cumCount}"
+   },
+   "deviation": {
+    "ours": "| 1 | Лада |\n| 2 | Тесла |\n| 3 | Лада |\n| 4 | БМВ |",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3511,6 +3519,10 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[].qty:aggSum}"
+   },
+   "deviation": {
+    "ours": "[11]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3552,6 +3564,10 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[].qty:aggSum:formatN(2)}"
+   },
+   "deviation": {
+    "ours": "[11.00]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3593,6 +3609,10 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[].price:aggSum:formatC()}"
+   },
+   "deviation": {
+    "ours": "[3,720.50 €]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3634,6 +3654,10 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[].qty:mul(.price):aggSum:formatN(2)}"
+   },
+   "deviation": {
+    "ours": "[10,041.50]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3675,6 +3699,10 @@
    "expect": {
     "error": "Formatter \"aggAvg\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[].qty:aggAvg}"
+   },
+   "deviation": {
+    "ours": "[2.75]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3716,6 +3744,10 @@
    "expect": {
     "error": "Formatter \"aggMin\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[].qty:aggMin}"
+   },
+   "deviation": {
+    "ours": "[1 5]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3757,6 +3789,10 @@
    "expect": {
     "error": "Formatter \"aggCount\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[].qty:aggCount}"
+   },
+   "deviation": {
+    "ours": "[4]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3798,6 +3834,10 @@
    "expect": {
     "error": "Formatter \"aggCountD\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[].brand:aggCountD}"
+   },
+   "deviation": {
+    "ours": "[3]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3839,6 +3879,10 @@
    "expect": {
     "error": "Formatter \"aggStr\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[].brand:aggStr(', ')}"
+   },
+   "deviation": {
+    "ours": "[Лада, Тесла, Лада, БМВ]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3880,6 +3924,10 @@
    "expect": {
     "error": "Formatter \"aggStrD\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[].brand:aggStrD(' | ')}"
+   },
+   "deviation": {
+    "ours": "[Тесла | Лада | БМВ]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3921,6 +3969,10 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[ok=true].qty:aggSum}"
+   },
+   "deviation": {
+    "ours": "[10]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3937,6 +3989,10 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[].qty:aggSum}"
+   },
+   "deviation": {
+    "ours": "[0]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -3971,6 +4027,10 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
     "errorSource": "{d.groups[].items[].q:aggSum}"
+   },
+   "deviation": {
+    "ours": "[13]",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -4092,6 +4152,10 @@
    "expect": {
     "error": "Formatter \"cumSum\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[i].qty:cumSum}"
+   },
+   "deviation": {
+    "ours": "| Лада | 3 |\n| Тесла | 4 |\n| Лада | 6 |\n| БМВ | 11 |",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -4133,6 +4197,10 @@
    "expect": {
     "error": "Formatter \"cumCountD\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[i].brand:cumCountD}"
+   },
+   "deviation": {
+    "ours": "| Лада | 1 |\n| Тесла | 2 |\n| Лада | 2 |\n| БМВ | 3 |",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -4174,6 +4242,10 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[].qty:aggSum}"
+   },
+   "deviation": {
+    "ours": "| Лада | 3 |\n| Тесла | 1 |\n| Лада | 2 |\n| БМВ | 5 |\n| Итого | 11 |",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -4210,6 +4282,10 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
     "errorSource": "{d.groups[i].items[].q:aggSum}"
+   },
+   "deviation": {
+    "ours": "| A | 3 |\n| B | 10 |",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -4251,6 +4327,10 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[brand].qty:aggSum(.brand)}"
+   },
+   "deviation": {
+    "ours": "| БМВ | 5 |\n| Лада | 5 |\n| Тесла | 1 |",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -4292,6 +4372,10 @@
    "expect": {
     "error": "Formatter \"aggCount\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[brand].qty:aggCount(.brand)}"
+   },
+   "deviation": {
+    "ours": "| БМВ | 1 |\n| Лада | 2 |\n| Тесла | 1 |",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -4333,6 +4417,10 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[i].qty:aggSum(.brand)}"
+   },
+   "deviation": {
+    "ours": "| Лада | 5 |\n| Тесла | 1 |\n| Лада | 5 |\n| БМВ | 5 |",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -4374,6 +4462,10 @@
    "expect": {
     "error": "Formatter \"cumCount\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[i].qty:cumCount(.brand)}"
+   },
+   "deviation": {
+    "ours": "| Лада | 1 |\n| Тесла | 1 |\n| Лада | 2 |\n| БМВ | 1 |",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -4493,6 +4585,10 @@
    "expect": {
     "error": "Formatter \"aggSum\" is disabled in the Community Edition.",
     "errorSource": "{d.groups[i].items[].q:aggSum}"
+   },
+   "deviation": {
+    "ours": "| A | 3 |\n| a1 | 1 |\n| a2 | 2 |\n| B | 10 |\n| b1 | 10 |",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -4834,6 +4930,10 @@
    "expect": {
     "error": "Formatter \"cumCount\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[i].brand:cumCount}"
+   },
+   "deviation": {
+    "ours": "1 Лада\n2 Тесла\n3 Лада\n4 БМВ",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {

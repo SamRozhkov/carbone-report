@@ -3,6 +3,7 @@ var parser = require('./parser');
 var helper = require('./helper');
 var community = require('./community');
 var set = require('./set');
+var aggregate = require('./aggregate');
 
 var builder = {
 
@@ -52,7 +53,22 @@ var builder = {
               // остались только метки :set — убираем их плейсхолдеры
               return callback(null, xmlWithoutMarkers.replace(/\uFFFF/g, ''));
             }
-            builder.buildMarkers(xmlWithoutMarkers, preprocessedMarkers, data, options, callback);
+            // метки с агрегаторами считаются предварительными проходами и переписываются (lib/aggregate.js)
+            aggregate.run(preprocessedMarkers, data, options, builder.buildXML, function (aggErr, aggMarkers, aggFormatters) {
+              if (aggErr) {
+                return callback(aggErr, null);
+              }
+              if (aggFormatters === null) {
+                return builder.buildMarkers(xmlWithoutMarkers, preprocessedMarkers, data, options, callback);
+              }
+              // внутренний __aggOut виден только этой сборке; реестр форматтеров вызывающего не меняется
+              var _formatters = options.formatters;
+              options.formatters = aggFormatters;
+              builder.buildMarkers(xmlWithoutMarkers, aggMarkers, data, options, function (err, result) {
+                options.formatters = _formatters;
+                callback(err, result);
+              });
+            });
           });
         });
       });
@@ -68,7 +84,7 @@ var builder = {
     var _xmlResult = '';
     var _builder;
     if (options.isDebugActive === true) {
-      options.debugInfo.markers = [...options.debugInfo.markers, ...preprocessedMarkers.map((marker) => '{'+marker.name.replace(/^_root\./, '')+'}' )];
+      options.debugInfo.markers = [...options.debugInfo.markers, ...preprocessedMarkers.map((marker) => '{'+(marker.source || marker.name).replace(/^_root\./, '')+'}' )];
     }
     try {
       var _dynamicDescriptor = extracter.splitMarkers(preprocessedMarkers);
@@ -96,8 +112,9 @@ var builder = {
       // запрещённый путь аргумента (эталон matrix/s1/lookup-in-loop-without-prerelease) — метка, где он встретился
       else if (e && e.forbiddenPath !== undefined && e.sourceArgument !== undefined) {
         for (var m = 0; m < preprocessedMarkers.length; m++) {
-          if (preprocessedMarkers[m].name.indexOf(e.sourceArgument) !== -1) {
-            e.message += ' Source: "{' + preprocessedMarkers[m].name.replace(/^_root\./, '') + '}"';
+          var _markerName = preprocessedMarkers[m].source || preprocessedMarkers[m].name;
+          if (_markerName.indexOf(e.sourceArgument) !== -1) {
+            e.message += ' Source: "{' + _markerName.replace(/^_root\./, '') + '}"';
             break;
           }
         }
@@ -117,8 +134,10 @@ var builder = {
     // имя экранируется: у неизвестного форматтера в имени может быть что угодно («a;process.exit…»)
     var _regex = new RegExp(':' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=\\(|:|$)');
     for (var i = 0; i < markers.length; i++) {
-      if (_regex.test(markers[i].name) === true) {
-        return '{' + markers[i].name.replace(/^_root\./, '') + '}';
+      // метка с агрегатором переписана (lib/aggregate.js) — показываем исходную
+      var _name = markers[i].source || markers[i].name;
+      if (_regex.test(_name) === true) {
+        return '{' + _name.replace(/^_root\./, '') + '}';
       }
     }
     return null;

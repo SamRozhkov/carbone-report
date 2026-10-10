@@ -864,7 +864,11 @@
    "expect": {
     "error": "Formatter \"drop\" is disabled in the Community Edition."
    },
-   "apiMessage": "в шаблоне используется drop — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+   "apiMessage": "в шаблоне используется drop — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+   "deviation": {
+    "ours": "до\nпосле",
+    "why": "платная функция реализована в 2.2.0"
+   }
   },
   {
    "id": "help/na-html",

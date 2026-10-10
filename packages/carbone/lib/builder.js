@@ -4,6 +4,7 @@ var helper = require('./helper');
 var community = require('./community');
 var set = require('./set');
 var aggregate = require('./aggregate');
+var drop = require('./drop');
 
 var builder = {
 
@@ -58,18 +59,38 @@ var builder = {
               if (aggErr) {
                 return callback(aggErr, null);
               }
+              var _markers = aggFormatters === null ? preprocessedMarkers : aggMarkers;
+              // drop/keep: проверка и номера меток до сборки, удаление элементов — после (lib/drop.js)
+              var _dropRegistry = null;
+              try {
+                _dropRegistry = drop.prepare(_markers, options.extension);
+              }
+              catch (e) {
+                return callback(e, null);
+              }
+              var _done = _dropRegistry === null ? callback : function (err, result) {
+                if (err) {
+                  return callback(err, result);
+                }
+                try {
+                  return callback(null, drop.apply(result, _dropRegistry, options.extension));
+                }
+                catch (e) {
+                  return callback(e, null);
+                }
+              };
               if (aggFormatters === null) {
-                return builder.buildMarkers(xmlWithoutMarkers, preprocessedMarkers, data, options, callback);
+                return builder.buildMarkers(xmlWithoutMarkers, _markers, data, options, _done);
               }
               // внутренний __aggOut виден только этой сборке; реестр форматтеров вызывающего не меняется
               var _formatters = options.formatters;
               options.formatters = aggFormatters;
-              builder.buildMarkers(xmlWithoutMarkers, aggMarkers, data, options, function (err, result) {
+              builder.buildMarkers(xmlWithoutMarkers, _markers, data, options, function (err, result) {
                 options.formatters = _formatters;
                 if (err instanceof Error) {
-                  err.message = aggregate.restoreNames(err.message, aggMarkers);
+                  err.message = aggregate.restoreNames(err.message, _markers);
                 }
-                callback(err, result);
+                _done(err, result);
               });
             });
           });

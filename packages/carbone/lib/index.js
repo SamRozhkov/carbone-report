@@ -298,6 +298,8 @@ carbone.addFormatters(require('../formatters/condition.js'));
 carbone.addFormatters(require('../formatters/date.js'));
 carbone.addFormatters(require('../formatters/number.js'));
 carbone.addFormatters(require('../formatters/string.js'));
+// drop/keep (2.2.0): форматтер печатает жетон, элемент удаляет builder после сборки (lib/drop.js)
+carbone.addFormatters(require('./drop').formatters);
 
 // We must include all locales like this for PKG
 require('dayjs/locale/af.js');

@@ -1,10 +1,10 @@
 /**
  * Функции, отключённые в бесплатном режиме Carbone EE 5.15.3 (эталоны test/golden).
  * Их нет в реестре форматтеров, чтобы подсказка «Do you mean» не предлагала их.
- * Агрегаторы (aggSum … cumCountD, count()) реализованы в 2.2.0 — lib/aggregate.js.
+ * Агрегаторы (aggSum … cumCountD, count()) реализованы в 2.2.0 — lib/aggregate.js, drop/keep — lib/drop.js.
  */
 const DISABLED = new Set([
-  'drop', 'keep', 'html', 'color', 'barcode', 'chart', 'formatR', 'defaultURL', 'autoOrient'
+  'html', 'color', 'barcode', 'chart', 'formatR', 'defaultURL', 'autoOrient'
 ]);
 
 /** EE сообщает count() под именем cumCount (парсер переписывает count() в cumCount). */

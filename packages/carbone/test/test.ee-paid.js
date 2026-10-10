@@ -373,3 +373,397 @@ describe('EE платные: ревью — ошибки и большие на�
     }
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// drop / keep (спецификация §31.2, справочник §2)
+
+function renderAs (extension, xml, data) {
+  return new Promise((resolve, reject) => carbone.renderXML(xml, data, { extension }, (err, res) => err ? reject(err) : resolve(res)));
+}
+
+async function renderError (extension, xml, data) {
+  try {
+    await renderAs(extension, xml, data);
+  }
+  catch (e) {
+    return e.message;
+  }
+  throw new Error('ожидалась ошибка');
+}
+
+// XML правильно вложен (без парсера: стек тегов)
+function assertWellFormed (xml) {
+  const stack = [];
+  const re = /<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<(\/?)([^\s/>!?]+)(?:[^>"']|"[^"]*"|'[^']*')*?(\/?)>/g;
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    if (m[2] === undefined || m[3] === '/') continue;
+    if (m[1] === '/') assert.strictEqual(stack.pop(), m[2], 'закрывающий </' + m[2] + '> в ' + xml);
+    else stack.push(m[2]);
+  }
+  assert.deepStrictEqual(stack, [], 'незакрытые теги в ' + xml);
+  assert.ok(!/[]/.test(xml), 'жетон drop остался в ' + xml);
+}
+
+const wp = (t) => '<w:p><w:r><w:t>' + t + '</w:t></w:r></w:p>';
+const wtc = (t) => '<w:tc>' + wp(t) + '</w:tc>';
+const wtr = (...cells) => '<w:tr>' + cells.map(wtc).join('') + '</w:tr>';
+const wtbl = (cols, ...rows) => '<w:tbl><w:tblPr/><w:tblGrid>' + '<w:gridCol w:w="1"/>'.repeat(cols) + '</w:tblGrid>' + rows.join('') + '</w:tbl>';
+const docx = (inner) => renderAs('docx', '<w:body>' + inner + '</w:body>', DROP_DATA);
+const DROP_DATA = { yes: true, no: false, empty: '', text: 'x', cars: [{ n: 'A', ok: true }, { n: 'B', ok: false }, { n: 'C', ok: true }, { n: 'D', ok: false }] };
+
+describe('EE платные: drop/keep — условие', function () {
+  const cases = [
+    // [метка, удалён ли абзац]
+    ['{d.yes:ifEQ(true):drop(p)}', true],
+    ['{d.no:ifEQ(true):drop(p)}', false],
+    ['{d.yes:drop(p)}', true],
+    ['{d.no:drop(p)}', false],
+    ['{d.text:drop(p)}', true],
+    ['{d.empty:drop(p)}', false],
+    ['{d.missing:drop(p)}', false],
+    ['{d.empty:ifEM:drop(p)}', true],
+    ['{d.yes:ifEQ(true):keep(p)}', false],
+    ['{d.no:ifEQ(true):keep(p)}', true],
+    ['{d.no:keep(p)}', true],
+    ['{d.yes:ifEQ(true):and(.no):ifEQ(true):drop(p)}', false],
+    ['{d.yes:ifEQ(true):or(.no):ifEQ(true):drop(p)}', true]
+  ];
+  for (const [marker, removed] of cases) {
+    it(marker + (removed ? ' → удалён' : ' → остался'), async function () {
+      const out = await docx(wp('до') + wp('a' + marker + 'b') + wp('после'));
+      assert.strictEqual(out, '<w:body>' + wp('до') + (removed ? '' : wp('ab')) + wp('после') + '</w:body>');
+    });
+  }
+  it('метка ничего не печатает и не оставляет жетонов', async function () {
+    const out = await docx(wp('x{d.no:drop(p)}y'));
+    assert.strictEqual(out, '<w:body>' + wp('xy') + '</w:body>');
+    assertWellFormed(out);
+  });
+  it('аргумент в кавычках и пробелы: drop(\'p\', 2)', async function () {
+    assert.strictEqual(await docx(wp('1{d.yes:drop( \'p\' , 2 )}') + wp('2') + wp('3')), '<w:body>' + wp('3') + '</w:body>');
+  });
+});
+
+describe('EE платные: drop/keep — DOCX', function () {
+  it('drop(p, 3): текущий и два следующих абзаца', async function () {
+    const out = await docx(wp('0') + wp('1{d.yes:drop(p, 3)}') + wp('2') + wp('3') + wp('4'));
+    assert.strictEqual(out, '<w:body>' + wp('0') + wp('4') + '</w:body>');
+  });
+  it('drop(p, 3) у последних абзацев — удаляется сколько есть', async function () {
+    assert.strictEqual(await docx(wp('0') + wp('1{d.yes:drop(p, 3)}') + wp('2')), '<w:body>' + wp('0') + '</w:body>');
+  });
+  it('drop(row) в цикле [i] — удаляются только строки, где условие истинно', async function () {
+    const out = await docx(wtbl(1, wtr('H'), wtr('{d.cars[i].n}{d.cars[i].ok:ifEQ(false):drop(row)}'), wtr('{d.cars[i+1].n}')));
+    assert.strictEqual(out, '<w:body>' + wtbl(1, wtr('H'), wtr('A'), wtr('C')) + '</w:body>');
+  });
+  it('keep(row) в цикле — обратное', async function () {
+    const out = await docx(wtbl(1, wtr('{d.cars[i].n}{d.cars[i].ok:keep(row)}'), wtr('{d.cars[i+1].n}')));
+    assert.strictEqual(out, '<w:body>' + wtbl(1, wtr('A'), wtr('C')) + '</w:body>');
+  });
+  it('drop(row, 2): строка и следующая', async function () {
+    const out = await docx(wtbl(1, wtr('1{d.yes:drop(row, 2)}'), wtr('2'), wtr('3')));
+    assert.strictEqual(out, '<w:body>' + wtbl(1, wtr('3')) + '</w:body>');
+  });
+  it('drop(row) ложно — строка остаётся', async function () {
+    const out = await docx(wtbl(1, wtr('1{d.no:drop(row)}'), wtr('2')));
+    assert.strictEqual(out, '<w:body>' + wtbl(1, wtr('1'), wtr('2')) + '</w:body>');
+  });
+  it('Review Focus 4: drop(row) во всех строках — таблица удаляется целиком', async function () {
+    const out = await docx(wp('до') + wtbl(1, wtr('{d.cars[i].n}{d.cars[i].n:drop(row)}'), wtr('{d.cars[i+1].n}')) + wp('после'));
+    assert.strictEqual(out, '<w:body>' + wp('до') + wp('после') + '</w:body>');
+  });
+  it('Review Focus 4: заголовок остаётся — таблица с одной строкой заголовка', async function () {
+    const out = await docx(wtbl(1, wtr('H'), wtr('{d.cars[i].n}{d.cars[i].n:drop(row)}'), wtr('{d.cars[i+1].n}')));
+    assert.strictEqual(out, '<w:body>' + wtbl(1, wtr('H')) + '</w:body>');
+  });
+  it('Review Focus 4: таблица внутри ячейки удалена — ячейка всё равно кончается абзацем', async function () {
+    const inner = wtbl(1, wtr('{d.yes:drop(row)}'));
+    const out = await docx(wtbl(1, '<w:tr><w:tc>' + wp('x') + inner + wp('') + '</w:tc></w:tr>'));
+    assert.strictEqual(out, '<w:body>' + wtbl(1, '<w:tr><w:tc>' + wp('x') + wp('') + '</w:tc></w:tr>') + '</w:body>');
+    const out2 = await docx(wtbl(1, '<w:tr><w:tc>' + inner + '<w:p/>' + '</w:tc></w:tr>'));
+    assertWellFormed(out2);
+    assert.ok(/<w:tc><w:p\/><\/w:tc>/.test(out2), out2);
+  });
+  it('drop(p) единственного абзаца ячейки — в ячейке остаётся пустой абзац', async function () {
+    const out = await docx(wtbl(1, wtr('{d.yes:drop(p)}')));
+    assert.strictEqual(out, '<w:body>' + wtbl(1, '<w:tr><w:tc><w:p/></w:tc></w:tr>') + '</w:body>');
+  });
+  it('drop(table)', async function () {
+    assert.strictEqual(await docx(wp('до') + wtbl(1, wtr('x{d.yes:drop(table)}')) + wp('после')), '<w:body>' + wp('до') + wp('после') + '</w:body>');
+    assert.strictEqual(await docx(wtbl(1, wtr('x{d.no:drop(table)}'))), '<w:body>' + wtbl(1, wtr('x')) + '</w:body>');
+  });
+  it('drop(col): ячейки столбца во всех строках и w:gridCol', async function () {
+    const out = await docx(wtbl(3, wtr('a', 'b{d.yes:drop(col)}', 'c'), wtr('{d.cars[i].n}', '{d.cars[i].ok}', 'z'), wtr('{d.cars[i+1].n}', '', '')));
+    const want = wtbl(2, wtr('a', 'c'), wtr('A', 'z'), wtr('B', 'z'), wtr('C', 'z'), wtr('D', 'z'));
+    assert.strictEqual(out, '<w:body>' + want + '</w:body>');
+  });
+  it('drop(col) двух столбцов и keep(col)', async function () {
+    const out = await docx(wtbl(3, wtr('a{d.yes:drop(col)}', 'b', 'c{d.no:keep(col)}'), wtr('1', '2', '3')));
+    assert.strictEqual(out, '<w:body>' + wtbl(1, wtr('b'), wtr('2')) + '</w:body>');
+  });
+  it('drop(col) всех столбцов — таблица удаляется', async function () {
+    assert.strictEqual(await docx(wp('до') + wtbl(1, wtr('a{d.yes:drop(col)}'), wtr('1'))), '<w:body>' + wp('до') + '</w:body>');
+  });
+  it('drop(col) в таблице с объединёнными ячейками — ошибка', async function () {
+    const merged = '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr>' + wp('ab') + '</w:tc></w:tr>';
+    const msg = await renderError('docx', '<w:body>' + wtbl(2, wtr('a{d.yes:drop(col)}', 'b'), merged) + '</w:body>', DROP_DATA);
+    assert.match(msg, /^drop\(col\) не поддерживается в таблицах с объединёнными по горизонтали ячейками\. Source: "\{d\.yes:drop\(col\)\}"$/);
+  });
+  const drawing = (inner, descr) => '<w:p><w:r><w:drawing><wp:inline><wp:docPr id="1" name="x" descr="' + descr + '"/><a:graphic><a:graphicData>' + inner + '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>' + '<w:r><w:t>текст</w:t></w:r></w:p>';
+  const pic = '<pic:pic><pic:blipFill/></pic:pic>';
+  const chart = '<c:chart r:id="rId5"/>';
+  it('drop(img): метка в замещающем тексте, удаляется w:drawing', async function () {
+    assert.strictEqual(await docx(drawing(pic, '{d.yes:drop(img)}')), '<w:body><w:p><w:r></w:r><w:r><w:t>текст</w:t></w:r></w:p></w:body>');
+    assert.strictEqual(await docx(drawing(pic, 'фото{d.no:drop(img)}')), '<w:body>' + drawing(pic, 'фото') + '</w:body>');
+  });
+  it('drop(chart)', async function () {
+    assert.strictEqual(await docx(drawing(chart, '{d.yes:drop(chart)}')), '<w:body><w:p><w:r></w:r><w:r><w:t>текст</w:t></w:r></w:p></w:body>');
+  });
+  it('drop(shape): удаляется mc:AlternateContent вместе с запасным VML', async function () {
+    const shape = '<w:p><w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing><wp:anchor><wp:docPr id="2" name="s" descr="{d.yes:drop(shape)}"/><a:graphic><a:graphicData><wps:wsp/></a:graphicData></a:graphic></wp:anchor></w:drawing></mc:Choice><mc:Fallback><w:pict><v:rect alt="{d.yes:drop(shape)}"/></w:pict></mc:Fallback></mc:AlternateContent></w:r></w:p>';
+    assert.strictEqual(await docx(shape), '<w:body><w:p><w:r></w:r></w:p></w:body>');
+  });
+  it('drop(img) у диаграммы — метка не в изображении, ошибка', async function () {
+    const msg = await renderError('docx', '<w:body>' + drawing(chart, '{d.yes:drop(img)}') + '</w:body>', DROP_DATA);
+    assert.strictEqual(msg, 'Для drop(img) метка должна стоять в замещающем тексте (названии или описании) изображения. Source: "{d.yes:drop(img)}"');
+  });
+  it('шаблон собран из DOCX: renderBuffer, текст результата', async function () {
+    const t = 'до\n{d.yes:drop(p)}удалить\n| H |\n| {d.cars[i].n}{d.cars[i].ok:ifEQ(false):drop(row)} |\n| {d.cars[i+1].n} |\n{d.no:keep(p)}тоже удалить\nпосле';
+    assert.strictEqual(await text(t, DROP_DATA), 'до\n| H |\n| A |\n| C |\nпосле');
+  });
+  it('Review Focus 4 на DOCX-файле: все строки удалены — таблицы нет, документ валиден', async function () {
+    const t = 'до\n| {d.cars[i].n}{d.cars[i].n:drop(row)} |\n| {d.cars[i+1].n} |\nпосле';
+    const out = await renderBuffer(await buildDocx(t), 'docx', DROP_DATA, RU);
+    assert.strictEqual(await docxText(out), 'до\nпосле');
+  });
+});
+
+describe('EE платные: drop/keep — ODT', function () {
+  const odt = (xml) => renderAs('odt', '<office:text>' + xml + '</office:text>', DROP_DATA);
+  const tp = (t) => '<text:p>' + t + '</text:p>';
+  const row = (...cells) => '<table:table-row>' + cells.map((c) => '<table:table-cell>' + tp(c) + '</table:table-cell>').join('') + '</table:table-row>';
+  it('text:p и drop(p, 3)', async function () {
+    assert.strictEqual(await odt(tp('1') + tp('2{d.yes:drop(p)}') + tp('3')), '<office:text>' + tp('1') + tp('3') + '</office:text>');
+    assert.strictEqual(await odt(tp('1{d.yes:drop(p, 3)}') + '<text:h>h</text:h>' + tp('2') + tp('3') + tp('4')), '<office:text><text:h>h</text:h>' + tp('4') + '</office:text>');
+    assert.strictEqual(await odt(tp('2{d.no:drop(p)}')), '<office:text>' + tp('2') + '</office:text>');
+  });
+  it('text:h и drop(h)', async function () {
+    assert.strictEqual(await odt('<text:h text:outline-level="1">Глава{d.yes:drop(h)}</text:h>' + tp('x')), '<office:text>' + tp('x') + '</office:text>');
+  });
+  it('text:list-item и drop(item) в цикле', async function () {
+    const xml = '<text:list><text:list-item>' + tp('{d.cars[i].n}{d.cars[i].ok:keep(item)}') + '</text:list-item><text:list-item>' + tp('{d.cars[i+1].n}') + '</text:list-item></text:list>';
+    assert.strictEqual(await odt(xml), '<office:text><text:list><text:list-item>' + tp('A') + '</text:list-item><text:list-item>' + tp('C') + '</text:list-item></text:list></office:text>');
+  });
+  it('table:table-row в цикле и drop(row, 2)', async function () {
+    const loop = '<table:table><table:table-column/>' + row('{d.cars[i].n}{d.cars[i].ok:ifEQ(false):drop(row)}') + row('{d.cars[i+1].n}') + '</table:table>';
+    assert.strictEqual(await odt(loop), '<office:text><table:table><table:table-column/>' + row('A') + row('C') + '</table:table></office:text>');
+    const two = '<table:table><table:table-column/>' + row('1{d.yes:drop(row, 2)}') + row('2') + row('3') + '</table:table>';
+    assert.strictEqual(await odt(two), '<office:text><table:table><table:table-column/>' + row('3') + '</table:table></office:text>');
+  });
+  it('все строки удалены — таблица удаляется', async function () {
+    const xml = tp('до') + '<table:table><table:table-column/><table:table-header-rows>' + row('{d.yes:drop(row)}') + '</table:table-header-rows>' + row('x{d.yes:drop(row)}') + '</table:table>';
+    assert.strictEqual(await odt(xml), '<office:text>' + tp('до') + '</office:text>');
+  });
+  it('drop(table)', async function () {
+    assert.strictEqual(await odt('<table:table>' + row('{d.yes:drop(table)}') + '</table:table>' + tp('x')), '<office:text>' + tp('x') + '</office:text>');
+  });
+  it('drop(col) с повторёнными столбцами', async function () {
+    const xml = '<table:table><table:table-column table:number-columns-repeated="3"/>' + row('a', 'b{d.yes:drop(col)}', 'c') + '<table:table-row><table:table-cell table:number-columns-repeated="3"/></table:table-row></table:table>';
+    assert.strictEqual(await odt(xml), '<office:text><table:table><table:table-column table:number-columns-repeated="2"/>' + row('a', 'c') + '<table:table-row><table:table-cell table:number-columns-repeated="2"/></table:table-row></table:table></office:text>');
+  });
+  it('drop(col) с объединением по горизонтали — ошибка', async function () {
+    const xml = '<office:text><table:table>' + row('a{d.yes:drop(col)}', 'b') + '<table:table-row><table:table-cell table:number-columns-spanned="2">' + tp('ab') + '</table:table-cell><table:covered-table-cell/></table:table-row></table:table></office:text>';
+    assert.match(await renderError('odt', xml, DROP_DATA), /^drop\(col\) не поддерживается в таблицах с объединёнными/);
+  });
+  it('drop(img), drop(chart), drop(shape): метка в svg:title / svg:desc', async function () {
+    const frame = (inner, title) => '<draw:frame draw:name="f"><svg:title>' + title + '</svg:title>' + inner + '</draw:frame>';
+    assert.strictEqual(await odt(tp('a' + frame('<draw:image xlink:href="p.png"/>', '{d.yes:drop(img)}') + 'b')), '<office:text>' + tp('ab') + '</office:text>');
+    assert.strictEqual(await odt(tp(frame('<draw:object xlink:href="./Object 1"/>', '{d.yes:drop(chart)}'))), '<office:text>' + tp('') + '</office:text>');
+    assert.strictEqual(await odt(tp('<draw:custom-shape><svg:desc>{d.yes:drop(shape)}</svg:desc><draw:enhanced-geometry/></draw:custom-shape>')), '<office:text>' + tp('') + '</office:text>');
+    assert.strictEqual(await odt(tp(frame('<draw:image/>', 'фото{d.no:drop(img)}'))), '<office:text>' + tp(frame('<draw:image/>', 'фото')) + '</office:text>');
+  });
+});
+
+describe('EE платные: drop/keep — XLSX', function () {
+  const c = (t) => '<c t="inlineStr"><is><t>' + t + '</t></is></c>';
+  const row = (...cells) => '<row>' + cells.map(c).join('') + '</row>';
+  const sheet = (inner, cols) => '<worksheet>' + (cols || '') + '<sheetData>' + inner + '</sheetData></worksheet>';
+  it('row в цикле и drop(row, 2)', async function () {
+    assert.strictEqual(await renderAs('xlsx', sheet(row('H') + row('{d.cars[i].n}{d.cars[i].ok:ifEQ(false):drop(row)}') + row('{d.cars[i+1].n}')), DROP_DATA), sheet(row('H') + row('A') + row('C')));
+    assert.strictEqual(await renderAs('xlsx', sheet(row('1{d.yes:drop(row, 2)}') + row('2') + row('3')), DROP_DATA), sheet(row('3')));
+  });
+  it('все строки удалены — пустой sheetData допустим', async function () {
+    assert.strictEqual(await renderAs('xlsx', sheet(row('{d.cars[i].n}{d.cars[i].n:drop(row)}') + row('{d.cars[i+1].n}')), DROP_DATA), sheet(''));
+  });
+  it('drop(col): ячейки и диапазоны <col min max>', async function () {
+    const cols = '<cols><col min="1" max="1" width="5"/><col min="2" max="2" width="9"/><col min="3" max="5" width="7"/></cols>';
+    const out = await renderAs('xlsx', sheet(row('a', 'b{d.yes:drop(col)}', 'c') + row('1', '2', '3'), cols), DROP_DATA);
+    assert.strictEqual(out, sheet(row('a', 'c') + row('1', '3'), '<cols><col min="1" max="1" width="5"/><col min="2" max="4" width="7"/></cols>'));
+  });
+});
+
+describe('EE платные: drop/keep — ODS', function () {
+  const cell = (t) => '<table:table-cell office:value-type="string"><text:p>' + t + '</text:p></table:table-cell>';
+  const row = (...cells) => '<table:table-row>' + cells.map(cell).join('') + '</table:table-row>';
+  const ods = (...sheets) => '<office:spreadsheet>' + sheets.join('') + '</office:spreadsheet>';
+  const sheet = (name, inner) => '<table:table table:name="' + name + '"><table:table-column table:number-columns-repeated="2"/>' + inner + '</table:table>';
+  it('table:table-row в цикле', async function () {
+    const out = await renderAs('ods', ods(sheet('L', row('{d.cars[i].n}{d.cars[i].ok:keep(row)}', 'x') + row('{d.cars[i+1].n}', ''))), DROP_DATA);
+    assert.strictEqual(out, ods(sheet('L', row('A', 'x') + row('C', 'x'))));
+  });
+  it('все строки листа удалены — остаётся одна пустая строка', async function () {
+    const out = await renderAs('ods', ods(sheet('L', row('{d.yes:drop(row)}', 'x'))), DROP_DATA);
+    assert.strictEqual(out, ods(sheet('L', '<table:table-row><table:table-cell/></table:table-row>')));
+  });
+  it('drop(sheet)', async function () {
+    const out = await renderAs('ods', ods(sheet('A', row('{d.yes:drop(sheet)}', '')), sheet('B', row('b', ''))), DROP_DATA);
+    assert.strictEqual(out, ods(sheet('B', row('b', ''))));
+  });
+  it('drop(sheet) всех листов — ошибка', async function () {
+    const msg = await renderError('ods', ods(sheet('A', row('{d.yes:drop(sheet)}', ''))), DROP_DATA);
+    assert.strictEqual(msg, 'drop(sheet) удалил бы все листы: хотя бы один лист должен остаться. Source: "{d.yes:drop(sheet)}"');
+  });
+  it('drop(col) с повторёнными ячейками', async function () {
+    const xml = ods('<table:table table:name="L"><table:table-column table:number-columns-repeated="3"/>' + row('a{d.yes:drop(col)}', 'b', 'c') + '<table:table-row><table:table-cell table:number-columns-repeated="3"/></table:table-row></table:table>');
+    assert.strictEqual(await renderAs('ods', xml, DROP_DATA), ods('<table:table table:name="L"><table:table-column table:number-columns-repeated="2"/>' + row('b', 'c') + '<table:table-row><table:table-cell table:number-columns-repeated="2"/></table:table-row></table:table>'));
+  });
+  it('drop(img)', async function () {
+    const xml = ods(sheet('L', '<table:table-row><table:table-cell><draw:frame><svg:title>{d.yes:drop(img)}</svg:title><draw:image/></draw:frame></table:table-cell></table:table-row>'));
+    assert.strictEqual(await renderAs('ods', xml, DROP_DATA), ods(sheet('L', '<table:table-row><table:table-cell></table:table-cell></table:table-row>')));
+  });
+});
+
+describe('EE платные: drop/keep — PPTX', function () {
+  const ap = (t) => '<a:p><a:r><a:t>' + t + '</a:t></a:r></a:p>';
+  const sp = (descr, ...paras) => '<p:sp><p:nvSpPr><p:cNvPr id="2" name="s" descr="' + descr + '"/></p:nvSpPr><p:txBody><a:bodyPr/>' + paras.join('') + '</p:txBody></p:sp>';
+  const slide = (inner) => '<p:sld><p:cSld><p:spTree>' + inner + '</p:spTree></p:cSld></p:sld>';
+  const pptx = (inner) => renderAs('pptx', slide(inner), DROP_DATA);
+  const atr = (...cells) => '<a:tr h="1">' + cells.map((t) => '<a:tc><a:txBody><a:bodyPr/>' + ap(t) + '</a:txBody></a:tc>').join('') + '</a:tr>';
+  const frame = (cols, ...rows) => '<p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tblGrid>' + '<a:gridCol w="1"/>'.repeat(cols) + '</a:tblGrid>' + rows.join('') + '</a:tbl></a:graphicData></a:graphic></p:graphicFrame>';
+  it('a:p и drop(p, 2)', async function () {
+    assert.strictEqual(await pptx(sp('', ap('1'), ap('2{d.yes:drop(p, 2)}'), ap('3'), ap('4'))), slide(sp('', ap('1'), ap('4'))));
+  });
+  it('все абзацы фигуры удалены — остаётся пустой a:p', async function () {
+    assert.strictEqual(await pptx(sp('', ap('1{d.yes:drop(p)}'))), slide(sp('', '<a:p/>')));
+  });
+  it('p:sp и drop(shape) в замещающем тексте; keep(shape)', async function () {
+    assert.strictEqual(await pptx(sp('{d.yes:drop(shape)}', ap('x')) + sp('', ap('y'))), slide(sp('', ap('y'))));
+    assert.strictEqual(await pptx(sp('{d.yes:keep(shape)}', ap('x'))), slide(sp('', ap('x'))));
+  });
+  it('p:pic и drop(img)', async function () {
+    const pic = (descr) => '<p:pic><p:nvPicPr><p:cNvPr id="3" name="p" descr="' + descr + '"/></p:nvPicPr><p:blipFill/></p:pic>';
+    assert.strictEqual(await pptx(pic('{d.yes:drop(img)}') + sp('', ap('y'))), slide(sp('', ap('y'))));
+  });
+  it('p:graphicFrame: drop(chart) и drop(table)', async function () {
+    const chart = '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="4" name="c" descr="{d.yes:drop(chart)}"/></p:nvGraphicFramePr><a:graphic><a:graphicData><c:chart r:id="rId2"/></a:graphicData></a:graphic></p:graphicFrame>';
+    assert.strictEqual(await pptx(chart + sp('', ap('y'))), slide(sp('', ap('y'))));
+    assert.strictEqual(await pptx(frame(1, atr('{d.yes:drop(table)}')) + sp('', ap('y'))), slide(sp('', ap('y'))));
+  });
+  it('a:tr в цикле, все строки удалены — удаляется p:graphicFrame', async function () {
+    assert.strictEqual(await pptx(frame(1, atr('{d.cars[i].n}{d.cars[i].ok:ifEQ(false):drop(row)}'), atr('{d.cars[i+1].n}'))), slide(frame(1, atr('A'), atr('C'))));
+    assert.strictEqual(await pptx(frame(1, atr('{d.cars[i].n}{d.cars[i].n:drop(row)}'), atr('{d.cars[i+1].n}'))), slide(''));
+  });
+  it('drop(col)', async function () {
+    assert.strictEqual(await pptx(frame(2, atr('a', 'b{d.yes:drop(col)}'), atr('1', '2'))), slide(frame(1, atr('a'), atr('1'))));
+  });
+});
+
+describe('EE платные: drop/keep — ODP', function () {
+  const page = (name, inner) => '<draw:page draw:name="' + name + '">' + inner + '</draw:page>';
+  const odp = (...pages) => '<office:presentation>' + pages.join('') + '</office:presentation>';
+  const box = (inner) => '<draw:frame><draw:text-box>' + inner + '</draw:text-box></draw:frame>';
+  it('drop(slide)', async function () {
+    const out = await renderAs('odp', odp(page('1', box('<text:p>{d.yes:drop(slide)}</text:p>')), page('2', box('<text:p>b</text:p>'))), DROP_DATA);
+    assert.strictEqual(out, odp(page('2', box('<text:p>b</text:p>'))));
+  });
+  it('drop(slide) всех слайдов — ошибка', async function () {
+    const msg = await renderError('odp', odp(page('1', box('<text:p>{d.yes:drop(slide)}</text:p>'))), DROP_DATA);
+    assert.strictEqual(msg, 'drop(slide) удалил бы все слайды презентации: хотя бы один слайд должен остаться. Source: "{d.yes:drop(slide)}"');
+  });
+  it('drop(p), drop(item), drop(shape) в текстовом блоке', async function () {
+    const out = await renderAs('odp', odp(page('1', box('<text:p>a{d.yes:drop(p)}</text:p><text:list><text:list-item><text:p>i{d.yes:drop(item)}</text:p></text:list-item></text:list><text:p>b</text:p>') + box('<text:p>{d.yes:drop(shape)}</text:p>'))), DROP_DATA);
+    assert.strictEqual(out, odp(page('1', box('<text:list></text:list><text:p>b</text:p>'))));
+  });
+  it('drop(table) — удаляется фрейм таблицы; drop(row)', async function () {
+    const tbl = (rows) => '<draw:frame><table:table>' + rows + '</table:table></draw:frame>';
+    const row = (t) => '<table:table-row><table:table-cell><text:p>' + t + '</text:p></table:table-cell></table:table-row>';
+    assert.strictEqual(await renderAs('odp', odp(page('1', tbl(row('{d.yes:drop(table)}')))), DROP_DATA), odp(page('1', '')));
+    assert.strictEqual(await renderAs('odp', odp(page('1', tbl(row('a{d.yes:drop(row)}') + row('b')))), DROP_DATA), odp(page('1', tbl(row('b')))));
+    assert.strictEqual(await renderAs('odp', odp(page('1', tbl(row('a{d.yes:drop(row)}')))), DROP_DATA), odp(page('1', '')));
+  });
+});
+
+describe('EE платные: drop/keep — ошибки шаблона (Review Focus 5)', function () {
+  const unsupported = [
+    ['xlsx', '<worksheet><sheetData><row><c><is><t>{d.yes:drop(p)}</t></is></c></row></sheetData></worksheet>', 'drop(p) не поддерживается в XLSX. Доступно: row, col.', '{d.yes:drop(p)}'],
+    ['xlsx', '<worksheet><sheetData><row><c><is><t>{d.yes:keep(img)}</t></is></c></row></sheetData></worksheet>', 'keep(img) не поддерживается в XLSX. Доступно: row, col.', '{d.yes:keep(img)}'],
+    ['ods', '<office:spreadsheet><table:table><table:table-row><table:table-cell><text:p>{d.yes:drop(p)}</text:p></table:table-cell></table:table-row></table:table></office:spreadsheet>', 'drop(p) не поддерживается в ODS. Доступно: row, col, img, sheet.', '{d.yes:drop(p)}'],
+    ['ods', '<office:spreadsheet><table:table><table:table-row><table:table-cell><text:p>{d.yes:drop(table)}</text:p></table:table-cell></table:table-row></table:table></office:spreadsheet>', 'drop(table) не поддерживается в ODS. Доступно: row, col, img, sheet.', '{d.yes:drop(table)}'],
+    ['pptx', '<p:sld><a:p><a:r><a:t>{d.yes:drop(slide)}</a:t></a:r></a:p></p:sld>', 'drop(slide) не поддерживается в PPTX. Доступно: p, row, table, img, shape, chart, col.', '{d.yes:drop(slide)}'],
+    ['docx', '<w:body><w:p><w:r><w:t>{d.yes:drop(h)}</w:t></w:r></w:p></w:body>', 'drop(h) не поддерживается в DOCX. Доступно: p, row, table, img, shape, chart, col.', '{d.yes:drop(h)}'],
+    ['docx', '<w:body><w:p><w:r><w:t>{d.yes:drop(item)}</w:t></w:r></w:p></w:body>', 'drop(item) не поддерживается в DOCX. Доступно: p, row, table, img, shape, chart, col.', '{d.yes:drop(item)}'],
+    ['odt', '<office:text><text:p>{d.yes:drop(slide)}</text:p></office:text>', 'drop(slide) не поддерживается в ODT. Доступно: p, row, table, img, shape, chart, col, item, h.', '{d.yes:drop(slide)}'],
+    ['odp', '<office:presentation><draw:page><text:p>{d.yes:drop(sheet)}</text:p></draw:page></office:presentation>', 'drop(sheet) не поддерживается в ODP. Доступно: p, row, table, img, shape, chart, col, slide, item.', '{d.yes:drop(sheet)}'],
+    ['docx', '<w:body><w:p><w:r><w:t>{d.yes:drop(div)}</w:t></w:r></w:p></w:body>', 'drop(div) не поддерживается в DOCX. Доступно: p, row, table, img, shape, chart, col.', '{d.yes:drop(div)}'],
+    ['html', '<p>{d.yes:drop(p)}</p>', 'drop(p) не поддерживается в HTML.', '{d.yes:drop(p)}']
+  ];
+  for (const [ext, xml, message, source] of unsupported) {
+    it(ext + ': ' + source, async function () {
+      assert.strictEqual(await renderError(ext, xml, DROP_DATA), message + ' Source: "' + source + '"');
+    });
+  }
+  it('ошибка не зависит от условия и данных (проверка до сборки)', async function () {
+    const xml = '<worksheet><sheetData><row><c><is><t>{d.cars[i].n:drop(p)}</t></is></c></row><row><c><is><t>{d.cars[i+1].n}</t></is></c></row></sheetData></worksheet>';
+    assert.match(await renderError('xlsx', xml, { cars: [] }), /^drop\(p\) не поддерживается в XLSX/);
+  });
+  it('неподдержанное сочетание в DOCX-файле — отклонённый промис, а не повреждённый файл', async function () {
+    assert.strictEqual(normalizeError(await rawError('{d.yes:drop(slide)}', DROP_DATA)), 'drop(slide) не поддерживается в DOCX. Доступно: p, row, table, img, shape, chart, col.');
+  });
+  const docxErrors = [
+    ['{d.yes:drop}', 'Укажите, что удалять: например drop(p) — абзац или drop(row) — строку таблицы.'],
+    ['{d.yes:drop()}', 'Укажите, что удалять: например drop(p) — абзац или drop(row) — строку таблицы.'],
+    ['{d.yes:drop(table, 2)}', 'Количество во втором аргументе drop задаётся только для p и row.'],
+    ['{d.yes:drop(p, 0)}', 'Второй аргумент drop — целое число от 1: сколько элементов удалить, считая текущий.'],
+    ['{d.yes:drop(p, x)}', 'Второй аргумент drop — целое число от 1: сколько элементов удалить, считая текущий.'],
+    ['{d.yes:drop(p, 2, 3)}', 'У drop не больше двух аргументов: элемент и количество, например drop(p, 3).'],
+    ['{d.yes:keep(p):upper}', 'keep должен быть последним форматтером метки: он ничего не печатает, а удаляет элемент документа.'],
+    ['{d.yes:drop(row)}', 'Для drop(row) метка должна стоять внутри строки таблицы.'],
+    ['{d.no:drop(table)}', 'Для drop(table) метка должна стоять внутри таблицы.'],
+    ['{d.yes:drop(col)}', 'Для drop(col) метка должна стоять в ячейке таблицы.']
+  ];
+  for (const [marker, message] of docxErrors) {
+    it(marker, async function () {
+      // Source — метка после разбора: пробелы после запятых в аргументах убраны
+      assert.strictEqual(await rawError('до\n' + marker + '\nпосле', DROP_DATA), message + ' Source: "' + marker.replace(/, /g, ',') + '"');
+    });
+  }
+  it('ошибка в метке с агрегатором показывает исходную метку', async function () {
+    assert.strictEqual(await rawError('{d.cars[].n:aggCount:ifGT(3):drop(row)}', DROP_DATA), 'Для drop(row) метка должна стоять внутри строки таблицы. Source: "{d.cars[].n:aggCount:ifGT(3):drop(row)}"');
+  });
+});
+
+describe('EE платные: drop/keep — прочее', function () {
+  it('агрегатор как условие: {d.cars[].n:aggCount:ifGT(3):drop(p)}', async function () {
+    assert.strictEqual(await text('до\n{d.cars[].n:aggCount:ifGT(3):drop(p)}много\n{d.cars[].n:aggCount:ifGT(9):drop(p)}мало', DROP_DATA), 'до\nмало');
+  });
+  it('шаблон без drop/keep с символами частного использования в данных не меняется', async function () {
+    assert.strictEqual(await renderAs('docx', '<w:p><w:r><w:t>{d.v}</w:t></w:r></w:p>', { v: '0' }), '<w:p><w:r><w:t>0</w:t></w:r></w:p>');
+  });
+  it('drop в колонтитуле (отдельный XML) — своя нумерация меток', async function () {
+    const builder = require('../lib/builder');
+    const opts = { formatters: carbone.formatters, extension: 'docx' };
+    const run = (xml) => new Promise((resolve, reject) => builder.buildXML(xml, DROP_DATA, opts, (err, res) => err ? reject(err) : resolve(res)));
+    assert.strictEqual(await run('<w:hdr>' + wp('a{d.yes:drop(p)}') + wp('b') + '</w:hdr>'), '<w:hdr>' + wp('b') + '</w:hdr>');
+    assert.strictEqual(await run('<w:ftr>' + wp('c') + wp('d{d.no:drop(p)}') + '</w:ftr>'), '<w:ftr>' + wp('c') + wp('d') + '</w:ftr>');
+  });
+  it('10 тыс. строк с drop(row) — быстро', async function () {
+    this.timeout(30000);
+    const data = { r: Array.from({ length: 10000 }, (_, i) => ({ n: i, odd: i % 2 === 1 })) };
+    const start = Date.now();
+    const out = await renderAs('docx', '<w:body>' + wtbl(1, wtr('{d.r[i].n}{d.r[i].odd:drop(row)}'), wtr('{d.r[i+1].n}')) + '</w:body>', data);
+    assert.ok(Date.now() - start < 3000, (Date.now() - start) + ' мс');
+    assert.strictEqual((out.match(/<w:tr>/g) || []).length, 5000);
+    assertWellFormed(out);
+  });
+});

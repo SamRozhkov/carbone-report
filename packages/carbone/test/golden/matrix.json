@@ -2780,6 +2780,10 @@
    "expect": {
     "error": "Formatter \"drop\" is disabled in the Community Edition.",
     "errorSource": "{d.f:ifEQ(true):drop(p)}"
+   },
+   "deviation": {
+    "ours": "до\nпосле",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -2796,6 +2800,10 @@
    "expect": {
     "error": "Formatter \"drop\" is disabled in the Community Edition.",
     "errorSource": "{d.f:ifEQ(true):drop(p)}"
+   },
+   "deviation": {
+    "ours": "до\nостаётся\nпосле",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -2812,6 +2820,10 @@
    "expect": {
     "error": "Formatter \"keep\" is disabled in the Community Edition.",
     "errorSource": "{d.f:ifEQ(true):keep(p)}"
+   },
+   "deviation": {
+    "ours": "до\nпосле",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -2853,6 +2865,10 @@
    "expect": {
     "error": "Formatter \"drop\" is disabled in the Community Edition.",
     "errorSource": "{d.cars[i].ok:ifEQ(false):drop(row)}"
+   },
+   "deviation": {
+    "ours": "| H |\n| Лада |\n| Лада |\n| БМВ |",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {
@@ -2869,6 +2885,10 @@
    "expect": {
     "error": "Formatter \"drop\" is disabled in the Community Edition.",
     "errorSource": "{d.f:ifEQ(true):drop(table)}"
+   },
+   "deviation": {
+    "ours": "до\nпосле",
+    "why": "платная функция реализована в 2.2.0"
    }
   },
   {

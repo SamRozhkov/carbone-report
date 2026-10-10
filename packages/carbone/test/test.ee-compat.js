@@ -26,8 +26,8 @@ async function error (template, data, options) {
 
 describe('EE: отключённые функции', function () {
   const cars = { cars: [{ brand: 'Лада', qty: 3 }, { brand: 'Тесла', qty: 2 }] };
-  // агрегаторы (aggSum … cumCountD, count()) реализованы в 2.2.0 — test/test.ee-paid.js
-  for (const f of ['drop', 'keep', 'html', 'color', 'barcode', 'chart', 'formatR', 'defaultURL', 'autoOrient']) {
+  // агрегаторы (aggSum … cumCountD, count()), drop и keep реализованы в 2.2.0 — test/test.ee-paid.js
+  for (const f of ['html', 'color', 'barcode', 'chart', 'formatR', 'defaultURL', 'autoOrient']) {
     it(f, async function () {
       assert.strictEqual(await error('{d.v:' + f + '()}', { v: 'x' }), 'Formatter "' + f + '" is disabled in the Community Edition.');
     });
@@ -48,8 +48,10 @@ describe('EE: отключённые функции', function () {
   });
   it('disabledName: имя для сообщения или null', function () {
     const { disabledName } = require('../lib/community');
-    assert.strictEqual(disabledName('drop'), 'drop');
-    // агрегаторы и count() (= cumCount) с 2.2.0 не отключены
+    assert.strictEqual(disabledName('html'), 'html');
+    // агрегаторы, count() (= cumCount), drop и keep с 2.2.0 не отключены
+    assert.strictEqual(disabledName('drop'), null);
+    assert.strictEqual(disabledName('keep'), null);
     assert.strictEqual(disabledName('count'), null);
     assert.strictEqual(disabledName('aggSum'), null);
     assert.strictEqual(disabledName('formatN'), null);

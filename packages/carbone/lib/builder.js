@@ -5,6 +5,7 @@ var community = require('./community');
 var set = require('./set');
 var aggregate = require('./aggregate');
 var drop = require('./drop');
+var color = require('./color');
 var media = require('./media');
 
 var builder = {
@@ -63,21 +64,26 @@ var builder = {
               var _markers = aggFormatters === null ? preprocessedMarkers : aggMarkers;
               // drop/keep: проверка и номера меток до сборки, удаление элементов — после (lib/drop.js)
               var _dropRegistry = null;
+              var _colorRegistry = null;
               try {
                 _dropRegistry = drop.prepare(_markers, options.extension);
+                // цвета :color: номера меток до сборки, свойства и стили — после (lib/color.js)
+                _colorRegistry = color.prepare(_markers, options.extension);
                 // изображения из данных: номера меток __img/imageFit, замена картинок — после сборки отчёта (lib/media.js)
                 media.prepare(_markers, options);
               }
               catch (e) {
                 return callback(e, null);
               }
-              var _done = _dropRegistry === null ? callback : function (err, result) {
+              var _done = _dropRegistry === null && _colorRegistry === null ? callback : function (err, result) {
                 if (err) {
                   return callback(err, result);
                 }
                 var _out;
                 try {
-                  _out = drop.apply(result, _dropRegistry, options.extension);
+                  // цвет — до drop: удаление элементов не должно сдвинуть разбор жетонов цвета
+                  _out = color.apply(result, _colorRegistry, options.extension);
+                  _out = drop.apply(_out, _dropRegistry, options.extension);
                 }
                 catch (e) {
                   return callback(e, null);

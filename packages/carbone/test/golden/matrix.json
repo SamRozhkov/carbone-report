@@ -4641,6 +4641,10 @@
       "expect": {
         "error": "Formatter \"color\" is disabled in the Community Edition.",
         "errorSource": "{d.c:color(p)}"
+      },
+      "deviation": {
+        "ours": "[цветной]",
+        "why": "платная функция EE, реализована в 2.4.0 (§32)"
       }
     },
     {

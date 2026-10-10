@@ -5,7 +5,6 @@ const { buildDocx, docxText, normalizeError } = require('./golden-lib');
 
 const RU = { lang: 'ru', timezone: 'Europe/Moscow' };
 
-// eslint-disable-next-line no-unused-vars
 async function text (template, data, options) {
   return docxText(await renderBuffer(await buildDocx(template), 'docx', data, options || RU));
 }
@@ -27,8 +26,8 @@ async function error (template, data, options) {
 describe('EE: отключённые функции', function () {
   const cars = { cars: [{ brand: 'Лада', qty: 3 }, { brand: 'Тесла', qty: 2 }] };
   // агрегаторы (aggSum … cumCountD, count()), drop и keep реализованы в 2.2.0 — test/test.ee-paid.js
-  // barcode реализован в 2.4.0 — test/test.ee-images.js
-  for (const f of ['html', 'color', 'chart', 'formatR', 'defaultURL', 'autoOrient']) {
+  // barcode реализован в 2.4.0 — test/test.ee-images.js, color — test/test.ee-colors.js
+  for (const f of ['html', 'chart', 'formatR', 'defaultURL', 'autoOrient']) {
     it(f, async function () {
       assert.strictEqual(await error('{d.v:' + f + '()}', { v: 'x' }), 'Formatter "' + f + '" is disabled in the Community Edition.');
     });
@@ -38,6 +37,9 @@ describe('EE: отключённые функции', function () {
   });
   it('barcode (2.4.0) — только в замещающем тексте картинки, в тексте — ошибка', async function () {
     assert.strictEqual(await rawError('{d.v:barcode(qrcode)}', { v: 'x' }), 'штрихкод ставится в замещающий текст картинки Source: "{d.v:barcode(qrcode)}"');
+  });
+  it('color (2.4.0) — не отключён: тег ничего не печатает', async function () {
+    assert.strictEqual(await text('[{d.v:color(p)}цветной]', { v: '#FF0000' }), '[цветной]');
   });
   it('сообщение несёт суффикс Source с меткой, как в EE', async function () {
     assert.ok((await rawError('{d.v:html()}', { v: 'x' })).endsWith(' Source: "{d.v:html()}"'));
@@ -60,6 +62,7 @@ describe('EE: отключённые функции', function () {
     assert.strictEqual(disabledName('aggSum'), null);
     assert.strictEqual(disabledName('formatN'), null);
     assert.strictEqual(disabledName('barcode'), null);
+    assert.strictEqual(disabledName('color'), null);
   });
   it('отключённая функция в колонтитуле тоже даёт ошибку', async function () {
     // Колонтитул: отдельный word/header1.xml. Собрать DOCX с header через buildDocx не получится —

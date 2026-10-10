@@ -898,6 +898,10 @@
    "expect": {
     "error": "Formatter \"color\" is disabled in the Community Edition."
    },
+   "deviation": {
+    "ours": "цветной",
+    "why": "платная функция EE, реализована в 2.4.0 (§32)"
+   },
    "apiMessage": "в шаблоне используется color — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
   },
   {

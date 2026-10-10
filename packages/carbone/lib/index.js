@@ -328,6 +328,8 @@ carbone.addFormatters(require('../formatters/number.js'));
 carbone.addFormatters(require('../formatters/string.js'));
 // drop/keep (2.2.0): форматтер печатает жетон, элемент удаляет builder после сборки (lib/drop.js)
 carbone.addFormatters(require('./drop').formatters);
+// :color (2.4.0): форматтер печатает жетон, свойства и стили ставит builder после сборки (lib/color.js)
+carbone.addFormatters(require('./color').formatters);
 // изображения из данных (2.4.0): imageFit — для шаблонов; служебный __img неперечисляемый, чтобы не попасть
 // в подсказку «Do you mean …» (lib/media.js)
 carbone.addFormatters({ imageFit : media.formatters.imageFit, barcode : media.formatters.barcode });

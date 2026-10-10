@@ -6,3 +6,5 @@ node_modules/
 docs/
 charts/
 packages/carbone/
+# Текст лицензии PolyForm берётся дословно, форматировать его нельзя.
+LICENSE.md

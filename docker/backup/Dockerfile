@@ -32,6 +32,7 @@ COPY docker/backup/entrypoint.sh docker/backup/backup.sh docker/backup/archive-s
 RUN chmod 755 /backup/*.sh
 COPY --from=build /out /agent
 COPY apps/api/drizzle /agent/drizzle
+COPY LICENSE.md NOTICE.md /app/
 # Версия сборки: CI передаёт build-args; без них образ — dev. В конце стадии, чтобы новый коммит не сбрасывал кэш слоёв выше.
 ARG APP_VERSION=dev
 ARG APP_COMMIT=unknown

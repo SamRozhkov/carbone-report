@@ -41,3 +41,4 @@ COPY --chmod=755 docker/nginx/15-carbone-reports.envsh /docker-entrypoint.d/15-c
 
 FROM nginx
 COPY --from=build /repo/apps/web/dist/ /usr/share/nginx/html/
+COPY LICENSE.md NOTICE.md /usr/share/doc/carbone-reports/

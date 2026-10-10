@@ -38,6 +38,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
 RUN mkdir -p /data && chown node:node /data
+COPY LICENSE.md NOTICE.md /app/
 # Версия сборки: CI передаёт build-args; без них образ — dev. В конце стадии, чтобы новый коммит не сбрасывал кэш слоёв выше.
 ARG APP_VERSION=dev
 ARG APP_COMMIT=unknown

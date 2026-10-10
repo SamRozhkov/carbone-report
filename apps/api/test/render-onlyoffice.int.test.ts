@@ -22,7 +22,9 @@ const RELS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const NAME = 'ООО Ромашка';
 const CONVERT_TIMEOUT = 120_000;
 
-async function docxTemplate(): Promise<Buffer> {
+async function docxTemplate(
+  body = '<w:p><w:r><w:t>Компания: {d.name}</w:t></w:r></w:p>',
+): Promise<Buffer> {
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
   const zip = new JSZip();
   zip.file(
@@ -36,12 +38,14 @@ async function docxTemplate(): Promise<Buffer> {
   zip.file('word/_rels/document.xml.rels', `${XML}<Relationships xmlns="${RELS}"></Relationships>`);
   zip.file(
     'word/document.xml',
-    `${XML}<w:document xmlns:w="${W}"><w:body><w:p><w:r><w:t>Компания: {d.name}</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`,
+    `${XML}<w:document xmlns:w="${W}"><w:body>${body}<w:sectPr/></w:body></w:document>`,
   );
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
-async function xlsxTemplate(): Promise<Buffer> {
+async function xlsxTemplate(
+  sheet = '<sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>{d.name}</t></is></c></row></sheetData>',
+): Promise<Buffer> {
   const M = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
   const zip = new JSZip();
   zip.file(
@@ -60,12 +64,42 @@ async function xlsxTemplate(): Promise<Buffer> {
     'xl/_rels/workbook.xml.rels',
     `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
   );
-  zip.file(
-    'xl/worksheets/sheet1.xml',
-    `${XML}<worksheet xmlns="${M}"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>{d.name}</t></is></c></row></sheetData></worksheet>`,
-  );
+  zip.file('xl/worksheets/sheet1.xml', `${XML}<worksheet xmlns="${M}">${sheet}</worksheet>`);
   return zip.generateAsync({ type: 'nodebuffer' });
 }
+
+// drop/keep (2.2.0): файл после удаления строк, абзаца и столбца открывается настоящим конвертером
+const DROP_DATA = {
+  name: NAME,
+  hide: true,
+  cars: [
+    { brand: 'Лада', ok: true },
+    { brand: 'Тесла', ok: false },
+    { brand: 'БМВ', ok: true },
+  ],
+};
+const wp = (t: string) => `<w:p><w:r><w:t>${t}</w:t></w:r></w:p>`;
+const wtr = (t: string) => `<w:tr><w:tc>${wp(t)}</w:tc></w:tr>`;
+const DROP_DOCX =
+  wp('Компания: {d.name}') +
+  wp('{d.hide:ifEQ(true):drop(p)}скрытый абзац') +
+  '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid>' +
+  wtr('{d.cars[i].brand}{d.cars[i].ok:ifEQ(false):drop(row)}') +
+  wtr('{d.cars[i+1].brand}') +
+  '</w:tbl>' +
+  // таблица, все строки которой удаляются, исчезает целиком
+  '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid>' +
+  wtr('{d.cars[i].brand}{d.cars[i].brand:drop(row)}') +
+  wtr('{d.cars[i+1].brand}') +
+  '</w:tbl>' +
+  wp('конец');
+const xc = (t: string) => `<c t="inlineStr"><is><t>${t}</t></is></c>`;
+const DROP_XLSX =
+  '<cols><col min="1" max="1" width="20"/><col min="2" max="2" width="9"/><col min="3" max="3" width="12"/></cols><sheetData>' +
+  `<row>${xc('{d.name}')}${xc('скрыть{d.hide:drop(col)}')}${xc('марка')}</row>` +
+  `<row>${xc('{d.cars[i].brand}{d.cars[i].ok:ifEQ(false):drop(row)}')}${xc('x')}${xc('{d.cars[i].brand}')}</row>` +
+  `<row>${xc('{d.cars[i+1].brand}')}${xc('')}${xc('')}</row>` +
+  '</sheetData>';
 
 const tpl = (ext: TemplateFileRef['ext'], file: Buffer): TemplateFileRef => ({
   id: `t-${ext}`,
@@ -280,6 +314,30 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
     const zip = await JSZip.loadAsync(out);
     expect(await zip.file('word/document.xml')!.async('string')).toContain(NAME);
   }, 240_000);
+
+  it(
+    'drop/keep: docx → pdf (drop(row) в цикле, drop(p), таблица без строк)',
+    async () => {
+      const out = await diagnose('drop docx→pdf', async () =>
+        renderer.render(tpl('docx', await docxTemplate(DROP_DOCX)), DROP_DATA, ro('pdf')),
+      );
+      expect(out.subarray(0, 4).toString()).toBe('%PDF');
+      expect(out.length).toBeGreaterThan(1024);
+    },
+    CONVERT_TIMEOUT,
+  );
+
+  it(
+    'drop: xlsx → pdf (drop(row) в цикле, drop(col))',
+    async () => {
+      const out = await diagnose('drop xlsx→pdf', async () =>
+        renderer.render(tpl('xlsx', await xlsxTemplate(DROP_XLSX)), DROP_DATA, ro('pdf')),
+      );
+      expect(out.subarray(0, 4).toString()).toBe('%PDF');
+      expect(out.length).toBeGreaterThan(1024);
+    },
+    CONVERT_TIMEOUT,
+  );
 
   it(
     'ссылка разовая: Document Server забирает файл ровно один раз',

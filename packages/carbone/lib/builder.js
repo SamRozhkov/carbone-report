@@ -72,12 +72,15 @@ var builder = {
                 if (err) {
                   return callback(err, result);
                 }
+                var _out;
                 try {
-                  return callback(null, drop.apply(result, _dropRegistry, options.extension));
+                  _out = drop.apply(result, _dropRegistry, options.extension);
                 }
                 catch (e) {
                   return callback(e, null);
                 }
+                // вне try: исключение в коде вызывающего не должно вызвать callback второй раз
+                return callback(null, _out);
               };
               if (aggFormatters === null) {
                 return builder.buildMarkers(xmlWithoutMarkers, _markers, data, options, _done);

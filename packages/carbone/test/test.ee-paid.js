@@ -767,3 +767,80 @@ describe('EE платные: drop/keep — прочее', function () {
     assertWellFormed(out);
   });
 });
+
+describe('EE платные: drop/keep — ревью, раунд 1', function () {
+  const c = (t) => '<c t="inlineStr"><is><t>' + t + '</t></is></c>';
+  const row = (...cells) => '<row>' + cells.map(c).join('') + '</row>';
+  it('XLSX: drop(col) единственного описанного столбца — <cols> без <col> удаляется', async function () {
+    const xml = '<worksheet><cols><col min="2" max="2" width="9"/></cols><sheetData>' + row('a', 'b{d.yes:drop(col)}') + '</sheetData></worksheet>';
+    assert.strictEqual(await renderAs('xlsx', xml, DROP_DATA), '<worksheet><sheetData>' + row('a') + '</sheetData></worksheet>');
+  });
+  it('XLSX: drop(col) остальные <col> сохраняют <cols>', async function () {
+    const xml = '<worksheet><cols><col min="1" max="1" width="5"/><col min="2" max="2" width="9"/></cols><sheetData>' + row('a', 'b{d.yes:drop(col)}') + '</sheetData></worksheet>';
+    assert.strictEqual(await renderAs('xlsx', xml, DROP_DATA), '<worksheet><cols><col min="1" max="1" width="5"/></cols><sheetData>' + row('a') + '</sheetData></worksheet>');
+  });
+  it('XLSX: drop(col) на листе с форматированной таблицей — ошибка шаблона, независимо от условия', async function () {
+    const xml = (v) => '<worksheet><sheetData>' + row('a', 'b{d.' + v + ':drop(col)}') + '</sheetData><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>';
+    const want = 'drop(col) не поддерживается на листах XLSX с форматированными таблицами («Форматировать как таблицу»): преобразуйте таблицу в обычный диапазон или скрывайте столбец иначе.';
+    assert.strictEqual(await renderError('xlsx', xml('yes'), DROP_DATA), want + ' Source: "{d.yes:drop(col)}"');
+    assert.strictEqual(await renderError('xlsx', xml('no'), DROP_DATA), want + ' Source: "{d.no:drop(col)}"');
+  });
+  it('XLSX: drop(row) на листе с форматированной таблицей допустим', async function () {
+    const xml = '<worksheet><sheetData>' + row('a{d.yes:drop(row)}') + row('b') + '</sheetData><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>';
+    assert.strictEqual(await renderAs('xlsx', xml, DROP_DATA), '<worksheet><sheetData>' + row('b') + '</sheetData><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>');
+  });
+  it('drop(col) в таблице с объединёнными ячейками — ошибка и при ложном условии', async function () {
+    const merged = '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr>' + wp('ab') + '</w:tc></w:tr>';
+    assert.match(await renderError('docx', '<w:body>' + wtbl(2, wtr('a{d.no:drop(col)}', 'b'), merged) + '</w:body>', DROP_DATA), /^drop\(col\) не поддерживается в таблицах с объединёнными/);
+  });
+  it('show/elseShow/ifEqual перед drop — ошибка шаблона', async function () {
+    assert.strictEqual(await rawError('{d.yes:ifEQ(true):show(a):drop(p)}', DROP_DATA), 'show перед drop не сочетается с ним: условие задаётся ifEQ, ifNE, ifGT, ifEM и т. п., например {d.x:ifEQ(1):drop(p)}. Source: "{d.yes:ifEQ(true):show(a):drop(p)}"');
+    assert.match(await rawError('{d.yes:elseShow(a):keep(p)}', DROP_DATA), /^elseShow перед keep/);
+    assert.match(await rawError('{d.yes:ifEqual(true, a):drop(p)}', DROP_DATA), /^ifEqual перед drop/);
+  });
+  it('жетон из данных отчёта ничего не удаляет', async function () {
+    for (const v of ['01', 'k000000000000i01']) {
+      const out = await renderAs('docx', '<w:body>' + wp('{d.v}') + wp('x{d.no:drop(p)}') + '</w:body>', { v, no: false });
+      assert.strictEqual(out, '<w:body>' + wp(v) + wp('x') + '</w:body>');
+    }
+  });
+  it('ODT: удалены все строки заголовка — table:table-header-rows удаляется', async function () {
+    const r = (t) => '<table:table-row><table:table-cell><text:p>' + t + '</text:p></table:table-cell></table:table-row>';
+    const xml = '<office:text><table:table><table:table-column/><table:table-header-rows>' + r('h{d.yes:drop(row)}') + '</table:table-header-rows>' + r('b') + '</table:table></office:text>';
+    assert.strictEqual(await renderAs('odt', xml, DROP_DATA), '<office:text><table:table><table:table-column/>' + r('b') + '</table:table></office:text>');
+  });
+  it('DOCX: колонтитул, сноска и блок sdt не остаются без абзаца', async function () {
+    const builder = require('../lib/builder');
+    const run = (xml) => new Promise((resolve, reject) => builder.buildXML(xml, DROP_DATA, { formatters: carbone.formatters, extension: 'docx' }, (err, res) => err ? reject(err) : resolve(res)));
+    assert.strictEqual(await run('<w:hdr>' + wp('{d.yes:drop(p)}') + '</w:hdr>'), '<w:hdr><w:p/></w:hdr>');
+    assert.strictEqual(await run('<w:footnotes><w:footnote w:id="1">' + wp('{d.yes:drop(p)}') + '</w:footnote></w:footnotes>'), '<w:footnotes><w:footnote w:id="1"><w:p/></w:footnote></w:footnotes>');
+    assert.strictEqual(await run('<w:body><w:sdt><w:sdtContent>' + wp('{d.yes:drop(p)}') + '</w:sdtContent></w:sdt>' + wp('x') + '</w:body>'), '<w:body><w:sdt><w:sdtContent><w:p/></w:sdtContent></w:sdt>' + wp('x') + '</w:body>');
+  });
+  it('callback вызывается один раз, даже если код вызывающего бросает исключение', function (done) {
+    const builder = require('../lib/builder');
+    let calls = 0;
+    const listeners = process.listeners('uncaughtException');
+    process.removeAllListeners('uncaughtException');
+    process.once('uncaughtException', function (e) {
+      listeners.forEach((l) => process.on('uncaughtException', l));
+      assert.strictEqual(e.message, 'ошибка вызывающего');
+      setTimeout(function () {
+        assert.strictEqual(calls, 1);
+        done();
+      }, 20);
+    });
+    builder.buildXML(wp('{d.yes:drop(p)}') + '<w:p/>', DROP_DATA, { formatters: carbone.formatters, extension: 'docx' }, function () {
+      calls++;
+      throw new Error('ошибка вызывающего');
+    });
+  });
+  it('drop(p, 2) на 40 тыс. абзацев — линейно', async function () {
+    this.timeout(30000);
+    // каждый третий удаляет себя и следующий — остаются i % 3 === 2
+    const data = { r: Array.from({ length: 40000 }, (_, i) => ({ n: i, odd: i % 3 === 0 })) };
+    const start = Date.now();
+    const out = await renderAs('docx', '<w:body>' + wp('{d.r[i].n}{d.r[i].odd:drop(p, 2)}') + wp('{d.r[i+1].n}') + '</w:body>', data);
+    assert.ok(Date.now() - start < 3000, (Date.now() - start) + ' мс');
+    assert.strictEqual((out.match(/<w:p>/g) || []).length, 13333);
+  });
+});

@@ -3,19 +3,25 @@
 //
 // Метка «{d.x:ifEM:drop(p, 3)}» ничего не печатает, а удаляет элемент документа вокруг себя. Порядок:
 //   1. prepare — до сборки: проверка аргументов и сочетания элемента с форматом; drop(p, 3) переписывается во
-//      «drop(<номер>)», номер ведёт к записи { kind, el, n, source } этой сборки;
-//   2. форматтер drop/keep печатает жетон «<номер><1|0>» (1 — условие истинно) из области частного использования;
+//      «drop(k<ключ>i<номер>)», номер ведёт к записи { kind, el, n, source } этой сборки, ключ — случайный на сборку
+//      (жетон из данных отчёта не совпадёт с ним и ничего не удалит);
+//   2. форматтер drop/keep печатает жетон «k<ключ>i<номер><1|0>» (1 — условие истинно) из области частного
+//      использования;
 //   3. apply — после сборки XML файла: по жетонам ищется ближайший охватывающий элемент нужного типа и удаляется
 //      (keep — при ложном условии); сами жетоны вырезаются. Шаблон без drop/keep не затрагивается.
 
+var crypto = require('crypto');
 var splitChain = require('./set').splitChain;
 
 // жетон: символы частного использования, отличные от жетонов агрегаторов (lib/aggregate.js: U+E000/U+E001)
 var OPEN = '\uE010';
 var CLOSE = '\uE011';
-var TOKEN_REGEX = /\uE010(\d+)([01])\uE011/g;
+var TOKEN_REGEX = /\uE010k([0-9a-f]{12})i(\d+)([01])\uE011/g;
 
 var NAMES = ['drop', 'keep'];
+
+// форматтеры, которые могут остановить цепочку до drop/keep — тогда жетон не печатается и drop молча не работает
+var STOPPING = ['show', 'elseShow', 'showBegin', 'showEnd', 'hideBegin', 'hideEnd', 'ifEqual', 'ifContain'];
 
 // элементы по форматам (справочник §2, спецификация §31.2)
 var SUPPORTED = {
@@ -110,6 +116,12 @@ function prepare (markers, extension) {
       if (j !== _chain.length - 1) {
         throw templateError(_name + ' должен быть последним форматтером метки: он ничего не печатает, а удаляет элемент документа.', _source);
       }
+      for (var k = 1; k < j; k++) {
+        var _prev = _chain[k].trim().split('(')[0].trim();
+        if (STOPPING.indexOf(_prev) !== -1) {
+          throw templateError(_prev + ' перед ' + _name + ' не сочетается с ним: условие задаётся ifEQ, ifNE, ifGT, ifEM и т. п., например {d.x:ifEQ(1):' + _name + '(p)}.', _source);
+        }
+      }
       var _inside = _open === -1 ? '' : _str.slice(_open + 1, _str.lastIndexOf(')'));
       var _args = _inside.trim() === '' ? [] : splitArgs(_inside).map(unquote);
       if (_args.length === 0 || _args[0] === '') {
@@ -134,8 +146,11 @@ function prepare (markers, extension) {
         }
         _n = parseInt(_args[1], 10);
       }
-      _registry = _registry || [];
-      _chain[j] = _name + '(' + _registry.length + ')';
+      if (_registry === null) {
+        _registry = [];
+        _registry.nonce = crypto.randomBytes(6).toString('hex');
+      }
+      _chain[j] = _name + '(k' + _registry.nonce + 'i' + _registry.length + ')';
       _registry.push({ kind : _name, el : _el, n : _n, source : _source });
       _changed = true;
     }
@@ -169,7 +184,7 @@ function isTrue (context, d) {
 
 function tokenFormatter (d, id) {
   // без номера (метка не прошла prepare) жетон не печатается
-  if (/^\d+$/.test(String(id)) === false) {
+  if (/^k[0-9a-f]{12}i\d+$/.test(String(id)) === false) {
     return '';
   }
   return OPEN + id + (isTrue(this, d) === true ? '1' : '0') + CLOSE;
@@ -217,9 +232,9 @@ function parse (xml, registry) {
   };
   var _assign = function (upTo, el) {
     while (_token !== null && _token.index < upTo) {
-      var _id = parseInt(_token[1], 10);
-      if (registry[_id] !== undefined) {
-        _tokens.push({ id : _id, cond : _token[2] === '1', pos : _token.index, len : _token[0].length, el : el || _stack[_stack.length - 1] });
+      var _id = parseInt(_token[2], 10);
+      if (_token[1] === registry.nonce && registry[_id] !== undefined) {
+        _tokens.push({ id : _id, cond : _token[3] === '1', pos : _token.index, len : _token[0].length, el : el || _stack[_stack.length - 1] });
       }
       _nextToken();
     }
@@ -252,7 +267,7 @@ function parse (xml, registry) {
       continue;
     }
     var _parent = _stack[_stack.length - 1];
-    var _node = { name : _match[2], start : _start, openEnd : _end, closeStart : _end, end : _end, parent : _parent, children : [] };
+    var _node = { name : _match[2], start : _start, openEnd : _end, closeStart : _end, end : _end, parent : _parent, children : [], index : _parent.children.length };
     _parent.children.push(_node);
     // жетон в атрибуте (замещающий текст картинки) принадлежит самому элементу
     _assign(_end, _node);
@@ -443,6 +458,7 @@ function apply (xml, registry, extension) {
   var _inserts = [];
   var _edits = [];
   var _cols = new Map(); // таблица → { indices: Set, source }
+  var _checked = new Set(); // таблицы, проверенные для drop(col)
   var _sourceOf = new Map(); // удалённый элемент → метка (для ошибок)
 
   _parsed.tokens.forEach(function (token) {
@@ -456,6 +472,10 @@ function apply (xml, registry, extension) {
       var _table = _row === null ? null : (_c.table === null ? _parsed.root : closest(_row.parent, [_c.table]));
       if (_table === null) {
         throw templateError('Для ' + _entry.kind + '(col) метка должна стоять ' + WHERE.col + '.', _entry.source);
+      }
+      if (_checked.has(_table) === false) {
+        checkColumns(xml, _fam, _table, _entry.source);
+        _checked.add(_table);
       }
       if (_remove === true) {
         var _index = columnIndex(xml, _fam, _c, _row, _cell);
@@ -481,7 +501,7 @@ function apply (xml, registry, extension) {
     if (_entry.n > 1 && _target.parent !== null) {
       var _siblings = _target.parent.children;
       var _left = _entry.n - 1;
-      for (var s = _siblings.indexOf(_target) + 1; s < _siblings.length && _left > 0; s++) {
+      for (var s = _target.index + 1; s < _siblings.length && _left > 0; s++) {
         if (_siblings[s].name === _target.name) {
           _removed.add(_siblings[s]);
           _sourceOf.set(_siblings[s], _entry.source);
@@ -576,14 +596,20 @@ function rowCells (row, c) {
 }
 
 /**
- * Удалить столбцы indices таблицы: ячейки во всех строках и описания столбцов
+ * Можно ли удалять столбцы таблицы. Проверяется у каждой метки drop(col), независимо от условия.
  */
-function removeColumns (xml, fam, table, col, removed, tagEdits) {
+function checkColumns (xml, fam, table, source) {
   var c = COL[fam];
   var _owners = c.table === null ? [] : [c.table];
   var _rows = owned(table, c.row, _owners);
+  // форматированная таблица Excel (xl/tables/*.xml) хранит заголовки и диапазон столбцов отдельно от листа —
+  // после удаления столбца Excel «восстанавливает» файл
+  if (fam === 'x' && /<(?:\w+:)?tablePart\b/.test(xml) === true) {
+    throw templateError('drop(col) не поддерживается на листах XLSX с форматированными таблицами («Форматировать как таблицу»): '
+      + 'преобразуйте таблицу в обычный диапазон или скрывайте столбец иначе.', source);
+  }
   var _mergeError = function () {
-    return templateError('drop(col) не поддерживается в таблицах с объединёнными по горизонтали ячейками.', col.source);
+    return templateError('drop(col) не поддерживается в таблицах с объединёнными по горизонтали ячейками.', source);
   };
   // объединённые ячейки по горизонтали сдвигают номера столбцов — не поддерживаются
   _rows.forEach(function (row) {
@@ -611,6 +637,15 @@ function removeColumns (xml, fam, table, col, removed, tagEdits) {
       throw _mergeError();
     }
   });
+}
+
+/**
+ * Удалить столбцы indices таблицы: ячейки во всех строках и описания столбцов
+ */
+function removeColumns (xml, fam, table, col, removed, tagEdits) {
+  var c = COL[fam];
+  var _owners = c.table === null ? [] : [c.table];
+  var _rows = owned(table, c.row, _owners);
   var _cut = function (items, repeatAttr) {
     var _index = 0;
     items.forEach(function (item) {
@@ -651,6 +686,12 @@ function removeColumns (xml, fam, table, col, removed, tagEdits) {
       }).length;
       if (_inside === _max - _min + 1) {
         removed.add(def);
+        // <cols> без <col> недопустим (Excel «восстанавливает» файл)
+        if (def.parent !== null && def.parent.name === 'cols' && def.parent.children.every(function (x) {
+          return x.name !== 'col' || removed.has(x) === true;
+        }) === true) {
+          removed.add(def.parent);
+        }
         return;
       }
       if (_before > 0 || _inside > 0) {
@@ -666,8 +707,43 @@ function removeColumns (xml, fam, table, col, removed, tagEdits) {
  * Чтобы файл оставался валидным: таблица без строк или столбцов удаляется целиком, ячейка Word кончается абзацем,
  * текст фигуры PowerPoint — хотя бы один абзац, лист ODS — хотя бы одна строка; удалить все листы или слайды нельзя.
  */
+// контейнеры блоков Word: 'p' — должен кончаться абзацем, 'any' — хотя бы один блок
+var WORD_BLOCKS = {
+  'w:tc'          : 'p',
+  'w:txbxContent' : 'p',
+  'w:hdr'         : 'p',
+  'w:ftr'         : 'p',
+  'w:footnote'    : 'p',
+  'w:endnote'     : 'p',
+  'w:comment'     : 'p',
+  'w:sdtContent'  : 'any'
+};
+
 function fixStructure (xml, fam, ext, root, removed, replaced, inserts, cols, sourceOf, isRemoved) {
   var c = COL[fam];
+  if (fam === 'odf') {
+    // группы строк и столбцов ODF (заголовок, группа) не бывают пустыми — удаляются вместе с последним элементом
+    var _groups = {
+      'table:table-header-rows'    : 'table:table-row',
+      'table:table-rows'           : 'table:table-row',
+      'table:table-row-group'      : 'table:table-row',
+      'table:table-header-columns' : 'table:table-column',
+      'table:table-columns'        : 'table:table-column',
+      'table:table-column-group'   : 'table:table-column'
+    };
+    Array.from(removed).forEach(function (el) {
+      for (var _group = el.parent; _group !== null && _groups[_group.name] !== undefined && removed.has(_group) === false; _group = _group.parent) {
+        var _empty = _group.children.every(function (child) {
+          return (child.name !== _groups[_group.name] && _groups[child.name] === undefined) || isRemoved(child) === true;
+        });
+        if (_empty === false) {
+          break;
+        }
+        removed.add(_group);
+        sourceOf.set(_group, sourceOf.get(el));
+      }
+    });
+  }
   if (c.table !== null) {
     var _tables = new Set();
     removed.forEach(function (el) {
@@ -727,15 +803,15 @@ function fixStructure (xml, fam, ext, root, removed, replaced, inserts, cols, so
     }
   });
   _containers.forEach(function (parent) {
-    if (fam === 'w' && (parent.name === 'w:tc' || parent.name === 'w:txbxContent')) {
-      // ячейка и надпись Word должны кончаться абзацем
+    if (fam === 'w' && WORD_BLOCKS[parent.name] !== undefined) {
+      // ячейка, надпись, колонтитул, сноска, примечание Word должны кончаться абзацем; блок sdt — не быть пустым
       var _last = null;
       parent.children.forEach(function (child) {
         if ((child.name === 'w:p' || child.name === 'w:tbl' || child.name === 'w:sdt') && isRemoved(child) === false) {
           _last = child;
         }
       });
-      if (_last === null || _last.name !== 'w:p') {
+      if (_last === null || (WORD_BLOCKS[parent.name] === 'p' && _last.name !== 'w:p')) {
         inserts.push({ pos : parent.closeStart, rep : '<w:p/>' });
       }
     }

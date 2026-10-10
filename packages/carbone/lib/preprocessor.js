@@ -117,6 +117,9 @@ var preprocessor = {
       _modifiedFile.data = preprocessor.removeRowCounterInWorksheet(
         preprocessor.convertToInlineString(_modifiedFile.data, _sharedStrings)
       );
+      // после сборки номера строк и ячеек восстанавливает finishXlsx (renderBuffer); свойство неперечисляемое —
+      // разобранный шаблон сериализуется как в апстриме
+      Object.defineProperty(_modifiedFile, 'rowCounterRemoved', { value : true, enumerable : false, writable : true });
     }
     return template;
   },
@@ -251,6 +254,141 @@ var preprocessor = {
     }).replace(/<(?:c|row)[^>]*(spans="\S+")[^>]*>/g, function (m, rowValue) {
       return m.replace(rowValue, '');
     });
+  },
+
+  /**
+   * [XLSX] Вернуть номера строк и ячеек (r="3", r="B3") после сборки: removeRowCounterInWorksheet убирает их, чтобы
+   * циклы могли размножать строки. Excel без r ставит строки и ячейки подряд, а OnlyOffice Document Server без r
+   * кладёт все ячейки в A1 (остаётся одна) — поэтому номера ставятся по тому же правилу «подряд»: строки 1…N,
+   * ячейки A, B, C… по позиции в строке. Результат в Excel не меняется. Строки и ячейки, где r уже есть,
+   * не трогаются.
+   * @param  {String} xml sheet
+   * @return {String}     sheet updated
+   */
+  addRowCounterInWorksheet : function (xml) {
+    if (typeof(xml) !== 'string') {
+      return xml;
+    }
+    var _start = xml.indexOf('<sheetData');
+    var _end = xml.lastIndexOf('</sheetData>');
+    if (_start === -1 || _end === -1) {
+      return xml;
+    }
+    var _row = 0;
+    var _col = 0;
+    var _data = xml.slice(_start, _end).replace(/<(row|c)\b([^>]*?)(\/?)>/g, function (tag, name, attrs, selfClosing) {
+      var _r = /\sr\s*=\s*"([^"]*)"/.exec(attrs);
+      if (name === 'row') {
+        _row = _r !== null && /^\d+$/.test(_r[1]) === true ? parseInt(_r[1], 10) : _row + 1;
+        _col = 0;
+        return _r !== null ? tag : '<row r="' + _row + '"' + attrs + selfClosing + '>';
+      }
+      _col++;
+      if (_r !== null) {
+        return tag;
+      }
+      return '<c r="' + preprocessor.columnName(_col) + _row + '"' + attrs + selfClosing + '>';
+    });
+    return xml.slice(0, _start) + _data + xml.slice(_end);
+  },
+
+  /**
+   * [XLSX] Привести собранный XLSX к виду, который читает OnlyOffice: номера строк и ячеек, общие строки
+   * @param  {Object} template  (modified)
+   */
+  finishXlsx : function (template) {
+    if (template.extension !== 'xlsx') {
+      return template;
+    }
+    for (var f = 0; f < template.files.length; f++) {
+      if (template.files[f].rowCounterRemoved === true && (template.files[f].parent === '' || template.files[f].parent === undefined)) {
+        template.files[f].data = preprocessor.addRowCounterInWorksheet(template.files[f].data);
+      }
+    }
+    return preprocessor.convertInlineStringToSharedString(template);
+  },
+
+  /**
+   * [XLSX] После сборки вернуть текст ячеек в общие строки (xl/sharedStrings.xml).
+   * convertSharedStringToInlineString переводит их во «встроенные» (t="inlineStr"), чтобы метки собирались прямо
+   * в листе. Excel такие файлы читает, а OnlyOffice Document Server 9.4 при конвертации (xlsx → pdf/ods)
+   * берёт из листа только первую встроенную строку, остальные ячейки пропадают. Поэтому для XLSX-шаблона
+   * (верхний уровень, не вложенный в DOCX файл) встроенные строки снова становятся общими.
+   * @param  {Object} template  (modified)
+   */
+  convertInlineStringToSharedString : function (template) {
+    var _sheets = template.files.filter(function (f) {
+      return f.rowCounterRemoved === true && (f.parent === '' || f.parent === undefined) && typeof f.data === 'string';
+    });
+    if (_sheets.length === 0) {
+      return template;
+    }
+    var _strings = [];
+    var _index = new Map();
+    _sheets.forEach(function (sheet) {
+      var _start = sheet.data.indexOf('<sheetData');
+      var _end = sheet.data.lastIndexOf('</sheetData>');
+      if (_start === -1 || _end === -1) {
+        return;
+      }
+      var _data = sheet.data.slice(_start, _end).replace(/<c\b([^>]*?)\st="inlineStr"([^>]*)>\s*(?:<is\s*\/>|<is>([\s\S]*?)<\/is>)\s*<\/c>/g, function (m, before, after, content) {
+        var _content = content === undefined ? '<t></t>' : content;
+        var _i = _index.get(_content);
+        if (_i === undefined) {
+          _i = _strings.length;
+          _strings.push(_content);
+          _index.set(_content, _i);
+        }
+        return '<c' + before + ' t="s"' + after + '><v>' + _i + '</v></c>';
+      });
+      sheet.data = sheet.data.slice(0, _start) + _data + sheet.data.slice(_end);
+    });
+    if (_strings.length === 0) {
+      return template;
+    }
+    // каталог книги: рядом с xl/_rels/workbook.xml.rels
+    var _rels = template.files.find(function (f) {
+      return (f.parent === '' || f.parent === undefined) && /(^|\/)_rels\/workbook\.xml\.rels$/.test(f.name) === true;
+    });
+    var _types = template.files.find(function (f) {
+      return (f.parent === '' || f.parent === undefined) && f.name === '[Content_Types].xml';
+    });
+    if (_rels === undefined || _types === undefined || typeof _rels.data !== 'string' || typeof _types.data !== 'string') {
+      return template;
+    }
+    var _dir = _rels.name.replace(/(^|\/)_rels\/workbook\.xml\.rels$/, '');
+    var _name = (_dir === '' ? '' : _dir + '/') + 'sharedStrings.xml';
+    template.files = template.files.filter(function (f) {
+      return !((f.parent === '' || f.parent === undefined) && f.name === _name);
+    });
+    template.files.push({
+      name     : _name,
+      parent   : '',
+      isMarked : false,
+      data     : '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        + '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="' + _strings.length + '" uniqueCount="' + _strings.length + '">'
+        + _strings.map(function (str) {
+          return '<si>' + str + '</si>';
+        }).join('') + '</sst>'
+    });
+    if (/relationships\/sharedStrings"/.test(_rels.data) === false) {
+      _rels.data = _rels.data.replace(/<\/Relationships>\s*$/, '<Relationship Id="rIdCarboneSharedStrings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>');
+    }
+    if (_types.data.indexOf('PartName="/' + _name + '"') === -1) {
+      _types.data = _types.data.replace(/<\/Types>\s*$/, '<Override PartName="/' + _name + '" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>');
+    }
+    return template;
+  },
+
+  /**
+   * Имя столбца Excel по номеру с 1: 1 → A, 27 → AA
+   */
+  columnName : function (index) {
+    var _name = '';
+    for (var n = index; n > 0; n = Math.floor((n - 1) / 26)) {
+      _name = String.fromCharCode(65 + (n - 1) % 26) + _name;
+    }
+    return _name;
   },
 
   /**

@@ -41,7 +41,9 @@ async function docxTemplate(): Promise<Buffer> {
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
-async function xlsxTemplate(): Promise<Buffer> {
+async function xlsxTemplate(
+  sheet = '<sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>{d.name}</t></is></c></row></sheetData>',
+): Promise<Buffer> {
   const M = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
   const zip = new JSZip();
   zip.file(
@@ -62,10 +64,19 @@ async function xlsxTemplate(): Promise<Buffer> {
   );
   zip.file(
     'xl/worksheets/sheet1.xml',
-    `${XML}<worksheet xmlns="${M}"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>{d.name}</t></is></c></row></sheetData></worksheet>`,
+    `${XML}<worksheet xmlns="${M}">${sheet}</worksheet>`,
   );
   return zip.generateAsync({ type: 'nodebuffer' });
 }
+
+const CARS_DATA = {
+  cars: [
+    { brand: 'Лада', ok: true },
+    { brand: 'Тесла', ok: false },
+    { brand: 'БМВ', ok: true },
+  ],
+};
+const xc = (t: string) => `<c t="inlineStr"><is><t>${t}</t></is></c>`;
 
 const tpl = (ext: TemplateFileRef['ext'], file: Buffer): TemplateFileRef => ({
   id: `t-${ext}`,
@@ -280,6 +291,28 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
     const zip = await JSZip.loadAsync(out);
     expect(await zip.file('word/document.xml')!.async('string')).toContain(NAME);
   }, 240_000);
+
+  it(
+    'xlsx с циклом и несколькими текстовыми ячейками → ods: все ячейки на месте',
+    async () => {
+      // До 2.1.1 сборка оставляла в листе встроенные строки (t="inlineStr"); Document Server при конвертации
+      // сохранял не все из них.
+      const sheet =
+        '<sheetData>' +
+        `<row r="1">${xc('Марка')}${xc('Комментарий')}</row>` +
+        `<row r="2">${xc('{d.cars[i].brand}')}${xc('ok: {d.cars[i].ok}')}</row>` +
+        `<row r="3">${xc('{d.cars[i+1].brand}')}${xc('')}</row>` +
+        '</sheetData>';
+      const ods = await diagnose('xlsx-цикл→ods', async () =>
+        renderer.render(tpl('xlsx', await xlsxTemplate(sheet)), CARS_DATA, ro('ods')),
+      );
+      const content = await (await JSZip.loadAsync(ods)).file('content.xml')!.async('string');
+      for (const text of ['Марка', 'Комментарий', 'Лада', 'Тесла', 'БМВ', 'ok: false']) {
+        expect(content).toContain(text);
+      }
+    },
+    CONVERT_TIMEOUT,
+  );
 
   it(
     'ссылка разовая: Document Server забирает файл ровно один раз',

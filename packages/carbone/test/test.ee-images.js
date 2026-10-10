@@ -774,6 +774,7 @@ describe('EE платные: изображения по адресу из бе�
   let active = 0;
   let maxActive = 0;
   const hung = [];
+  let stallClosed = 0;
 
   const IMG = png(3, 1, 9);
 
@@ -815,6 +816,24 @@ describe('EE платные: изображения по адресу из бе�
         // заявленная длина 11 МБ — отказ по заголовку
         res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': String(11 * 1024 * 1024) });
         return res.write(png(1, 1));
+      }
+      if (p.startsWith('/slowlong/')) {
+        return setTimeout(() => {
+          res.writeHead(200, { 'Content-Type': 'image/png' });
+          res.end(png(1, 1));
+        }, 3000);
+      }
+      if (p.startsWith('/stall/')) {
+        // заголовки есть, тело не приходит; закрытие соединения клиентом считается
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        res.write(png(1, 1).subarray(0, 8));
+        hung.push(res);
+        req.socket.once('close', () => stallClosed++);
+        return;
+      }
+      if (p.startsWith('/big/')) {
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        return res.end(bigPng(9 * 1024 * 1024, Number(p.slice(5))));
       }
       if (p === '/text') {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -960,7 +979,46 @@ describe('EE платные: изображения по адресу из бе�
   }
 
   it('скачанные данные — не картинка: ошибка шаблона, как у data URI', async function () {
-    const msg = await renderError([para(drawing('{d.img}'))], { img: base + '/text' }, allow());
-    assert.strictEqual(msg, 'данные изображения повреждены или это не PNG, JPEG, GIF Source: "{d.img}"');
+    const msg = await renderError([para(drawing('{d.img}'))], { img: base + '/text?sig=abc#frag' }, allow());
+    assert.strictEqual(msg, 'данные изображения повреждены или это не PNG, JPEG, GIF (адрес ' + base + '/text) Source: "{d.img}"');
+  });
+
+  describe('ошибка прерывает загрузку (ревью Task 3)', function () {
+    const loop = [para(drawing('{d.items[i].img}', { id: 7 })) + para(drawing('{d.items[i+1].img}', { id: 8 }))];
+
+    it('хост вне списка у поздней картинки — ошибка сразу, ранние медленные адреса не запрашиваются', async function () {
+      const items = [1, 2, 3, 4, 5, 6].map((i) => ({ img: base + '/slowlong/' + i }));
+      items.push({ img: 'http://evil.example.org/a.png' });
+      const started = Date.now();
+      const msg = await renderError(loop, { items }, allow());
+      assert.strictEqual(msg, 'хост «evil.example.org» не входит в белый список IMAGE_URL_ALLOWLIST Source: "{d.items[i].img}"');
+      assert.ok(Date.now() - started < 1000, 'ошибка без ожидания загрузок: ' + (Date.now() - started) + ' мс');
+      assert.strictEqual(Object.keys(hits).filter((k) => k.startsWith('/slowlong/')).length, 0);
+    });
+
+    it('не картинка в ответе — ошибка шаблона сразу, зависшие загрузки обрываются', async function () {
+      const before = stallClosed;
+      const items = [{ img: base + '/text?q=1' }, { img: base + '/stall/1' }, { img: base + '/stall/2' }, { img: base + '/stall/3' }];
+      const started = Date.now();
+      const msg = await renderError(loop, { items }, Object.assign(allow(), { imageUrlTimeoutMs: 5000 }));
+      assert.strictEqual(msg, 'данные изображения повреждены или это не PNG, JPEG, GIF (адрес ' + base + '/text) Source: "{d.items[i].img}"');
+      assert.ok(Date.now() - started < 2000, 'без ожидания тайм-аута: ' + (Date.now() - started) + ' мс');
+      const deadline = Date.now() + 2000;
+      while (stallClosed - before < 3 && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.strictEqual(stallClosed - before, 3, 'загрузки прерваны (AbortController)');
+    });
+
+    it('суммарный лимит 50 МБ считается по мере загрузки: ошибка до чтения всех ответов', async function () {
+      this.timeout(30000);
+      const items = [];
+      for (let i = 1; i <= 14; i++) items.push({ img: base + '/big/' + i });
+      const msg = await renderError(loop, { items }, allow());
+      assert.match(msg, /^изображения отчёта больше 50 МБ Source: "\{d\.items\[i\]\.img\}"$/);
+      const requested = Object.keys(hits).filter((k) => k.startsWith('/big/')).length;
+      // 6 × 9 МБ > 50 МБ: после шестого ответа новые загрузки не начинаются (в полёте — не больше 3)
+      assert.ok(requested <= 9, 'запрошено ' + requested + ' из 14');
+    });
   });
 });

@@ -220,25 +220,29 @@ function __img (d, k) {
 
 /**
  * Изображение по заголовку файла: тип и размер в пикселях
+ * @param  {Buffer} buffer
+ * @param  {String} source  метка (для ошибки)
+ * @param  {String} [origin] откуда данные (адрес без query-строки) — дописывается в текст ошибки
  * @return {Object} { buffer, type : 'png'|'jpeg'|'gif', width, height }
  */
-function identify (buffer, source) {
+function identify (buffer, source, origin) {
+  var _where = origin !== undefined ? ' (адрес ' + origin + ')' : '';
   if (buffer.length > MAX_IMAGE) {
-    throw templateError(MSG.tooBig, source);
+    throw templateError(MSG.tooBig + _where, source);
   }
   var _info;
   try {
     _info = imageSize(buffer);
   }
   catch (e) {
-    throw templateError(MSG.corrupt, source);
+    throw templateError(MSG.corrupt + _where, source);
   }
   if (_info.type === 'svg') {
-    throw templateError(MSG.svg, source);
+    throw templateError(MSG.svg + _where, source);
   }
   var _type = { png : 'png', jpg : 'jpeg', gif : 'gif' }[_info.type];
   if (_type === undefined || !(_info.width > 0) || !(_info.height > 0)) {
-    throw templateError(MSG.corrupt, source);
+    throw templateError(MSG.corrupt + _where, source);
   }
   return { buffer : buffer, type : _type, width : _info.width, height : _info.height };
 }
@@ -340,12 +344,11 @@ function readLimited (response, limit) {
 }
 
 /**
- * Изображение по адресу http(s) — §32.2: только хосты из белого списка (options.imageUrlAllowlist), без
- * перенаправлений, тайм-аут options.imageUrlTimeoutMs на всю загрузку, до 10 МБ. Сбой сети, код ответа не 2xx,
- * превышение размера — предупреждение в options.warnings (адрес без query-строки) и null (заглушка удаляется).
- * Адрес вне списка и не изображение в ответе — ошибка шаблона.
+ * Проверка адреса до загрузки (§32.2): загрузка включена, адрес разбирается, без учётных данных, хост в белом
+ * списке (options.imageUrlAllowlist). Иначе — ошибка шаблона.
+ * @return {URL}
  */
-function loadUrl (value, item, options) {
+function checkUrl (value, item, options) {
   var _allowlist = options.imageUrlAllowlist;
   if (Array.isArray(_allowlist) === false || _allowlist.length === 0) {
     throw templateError(MSG.urlDisabled, item.source);
@@ -363,8 +366,20 @@ function loadUrl (value, item, options) {
   if (hostAllowed(_url, _allowlist) === false) {
     throw templateError('хост «' + _url.host + '» не входит в белый список IMAGE_URL_ALLOWLIST', item.source);
   }
+  return _url;
+}
+
+/**
+ * Изображение по адресу http(s) — §32.2: адрес из checkUrl, без перенаправлений, тайм-аут
+ * options.imageUrlTimeoutMs на всю загрузку, до 10 МБ. Сбой сети, код ответа не 2xx, превышение размера —
+ * предупреждение в options.warnings (адрес без query-строки) и null (заглушка удаляется). Не изображение в
+ * ответе — ошибка шаблона с адресом. signal — общая отмена загрузок отчёта (finish): после неё предупреждений нет.
+ */
+function loadUrl (value, item, options, signal) {
+  var _url = checkUrl(value, item, options);
   var _timeout = Number.isFinite(options.imageUrlTimeoutMs) && options.imageUrlTimeoutMs > 0 ? options.imageUrlTimeoutMs : DEFAULT_TIMEOUT;
-  return fetch(_url.href, { redirect : 'manual', signal : AbortSignal.timeout(_timeout) }).then(function (response) {
+  var _signal = signal !== undefined ? AbortSignal.any([signal, AbortSignal.timeout(_timeout)]) : AbortSignal.timeout(_timeout);
+  return fetch(_url.href, { redirect : 'manual', signal : _signal }).then(function (response) {
     if (response.status < 200 || response.status > 299) {
       if (response.body !== null) {
         response.body.cancel().catch(function () {});
@@ -376,8 +391,11 @@ function loadUrl (value, item, options) {
     }
     return readLimited(response, MAX_IMAGE);
   }).then(function (buffer) {
-    return identify(buffer, item.source);
+    return identify(buffer, item.source, safeUrl(_url));
   }, function (error) {
+    if (signal !== undefined && signal.aborted === true) {
+      return null; // отчёт уже завершается ошибкой
+    }
     var _reason;
     if (error instanceof NetworkFailure) {
       _reason = error.reason;
@@ -396,63 +414,103 @@ function loadUrl (value, item, options) {
   });
 }
 
-/** Источники данных записи реестра по виду (kind); barcode добавит Task 4 */
-var LOADERS = {
+/**
+ * Вид значения изображения: пусто, data URI или адрес http(s); иное — ошибка шаблона (R3)
+ * @return {Object} { kind : 'empty'|'data'|'url', value }
+ */
+function imageValue (item) {
+  var _value = item.value;
+  if (typeof _value === 'string') {
+    _value = _value.trim();
+  }
+  if (_value === null || _value === undefined || _value === '') {
+    return { kind : 'empty', value : null };
+  }
+  if (typeof _value === 'string' && /^data:/i.test(_value) === true) {
+    return { kind : 'data', value : _value };
+  }
+  if (typeof _value === 'string' && /^https?:\/\//i.test(_value) === true) {
+    return { kind : 'url', value : _value };
+  }
+  throw templateError(MSG.notImage, item.source);
+}
+
+/**
+ * Проверки записи реестра до первой загрузки (синхронно, по порядку документа): ошибка шаблона в поздней
+ * картинке не ждёт загрузок ранних
+ */
+var CHECKS = {
   image : function (item, options) {
-    var _value = item.value;
-    if (typeof _value === 'string') {
-      _value = _value.trim();
+    var _image = imageValue(item);
+    if (_image.kind === 'url') {
+      checkUrl(_image.value, item, options);
     }
-    if (_value === null || _value === undefined || _value === '') {
-      return null;
-    }
-    if (typeof _value !== 'string') {
-      throw templateError(MSG.notImage, item.source);
-    }
-    if (/^data:/i.test(_value) === true) {
-      return decodeDataUri(_value, item.source);
-    }
-    if (/^https?:\/\//i.test(_value) === true) {
-      return loadUrl(_value, item, options);
-    }
-    throw templateError(MSG.notImage, item.source);
   }
 };
 
+/** Источники данных записи реестра по виду (kind); barcode добавит Task 4 */
+var LOADERS = {
+  image : function (item, options, signal) {
+    var _image = imageValue(item);
+    if (_image.kind === 'data') {
+      return decodeDataUri(_image.value, item.source);
+    }
+    if (_image.kind === 'url') {
+      return loadUrl(_image.value, item, options, signal);
+    }
+    return null;
+  }
+};
+
+/** Проверить запись реестра до загрузки (CHECKS по виду); вида без проверки — ничего */
+function checkImage (item, options) {
+  var _check = CHECKS[item.kind];
+  if (_check !== undefined) {
+    _check(item, options || {});
+  }
+}
+
 /**
  * Данные изображения записи реестра
- * @param  {Object} item     { value, fit, kind, source }
- * @param  {Object} options  опции рендера (imageUrlAllowlist, imageUrlTimeoutMs, warnings)
+ * @param  {Object} item      { value, fit, kind, source }
+ * @param  {Object} options   опции рендера (imageUrlAllowlist, imageUrlTimeoutMs, warnings)
+ * @param  {AbortSignal} [signal] отмена загрузки (ошибка другой картинки отчёта)
  * @return {Promise<Object|null>} { buffer, type, width, height } или null — заглушку удалить
  */
-function loadImage (item, options) {
+function loadImage (item, options, signal) {
   return Promise.resolve().then(function () {
     var _loader = LOADERS[item.kind];
     if (_loader === undefined) {
       throw templateError('неизвестный вид изображения «' + item.kind + '»', item.source);
     }
-    return _loader(item, options || {});
+    return _loader(item, options || {}, signal);
   });
 }
 
-/** fn по элементам списка, не больше limit одновременно; результаты { value } или { error } по порядку */
-function mapLimit (list, limit, fn) {
-  return new Promise(function (resolve) {
+/**
+ * fn(элемент, номер, signal) по элементам списка, не больше limit одновременно; результаты по порядку.
+ * Первая ошибка сразу отклоняет обещание: новые элементы не запускаются, идущие отменяются через signal.
+ * @return {Promise<Array>}
+ */
+function loadAll (list, limit, fn) {
+  return new Promise(function (resolve, reject) {
     var _results = new Array(list.length);
+    var _controller = new AbortController();
     var _next = 0;
     var _done = 0;
+    var _failed = false;
     if (list.length === 0) {
       return resolve(_results);
     }
     var _run = function () {
       var _i = _next++;
       Promise.resolve().then(function () {
-        return fn(list[_i], _i);
+        return fn(list[_i], _i, _controller.signal);
       }).then(function (value) {
-        _results[_i] = { value : value };
-      }, function (error) {
-        _results[_i] = { error : error };
-      }).then(function () {
+        if (_failed === true) {
+          return;
+        }
+        _results[_i] = value;
         _done++;
         if (_done === list.length) {
           return resolve(_results);
@@ -460,6 +518,13 @@ function mapLimit (list, limit, fn) {
         if (_next < list.length) {
           _run();
         }
+      }, function (error) {
+        if (_failed === true) {
+          return;
+        }
+        _failed = true;
+        _controller.abort();
+        reject(error);
       });
     };
     for (var i = 0; i < Math.min(limit, list.length); i++) {
@@ -504,22 +569,23 @@ function finish (template, options) {
         }
       });
     });
-    return mapLimit(_unique, CONCURRENCY, function (item) {
-      return loadImage(item, options);
-    }).then(function (results) {
-      var _total = 0;
-      var _images = results.map(function (result, i) {
-        if (result.error !== undefined) {
-          throw result.error;
-        }
-        if (result.value !== null) {
-          _total += result.value.buffer.length;
+    // ошибки адресов и значений — до первой загрузки, по порядку документа
+    _unique.forEach(function (item) {
+      checkImage(item, options);
+    });
+    // суммарный лимит — по мере загрузки: превышение сразу останавливает остальные
+    var _total = 0;
+    return loadAll(_unique, CONCURRENCY, function (item, i, signal) {
+      return loadImage(item, options, signal).then(function (image) {
+        if (image !== null) {
+          _total += image.buffer.length;
           if (_total > MAX_TOTAL) {
-            throw templateError(MSG.tooBigTotal, _unique[i].source);
+            throw templateError(MSG.tooBigTotal, item.source);
           }
         }
-        return result.value;
+        return image;
       });
+    }).then(function (_images) {
       write(template, _registry, _fmt, _jobs, function (id) {
         return _images[_keyOf.get(itemKey(_registry.items[id]))];
       });

@@ -34,7 +34,7 @@ const template = {
 
 const DISPOSITION = `attachment; filename="____ 2026-01-10.docx"; filename*=UTF-8''%D0%A1%D1%87%D1%91%D1%82%202026-01-10.docx`;
 const COMMUNITY =
-  'в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
+  'в шаблоне используется html — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
 
 /** Задерживает ответы на запросы, чей URL содержит `part`, до release(). */
 function holdRequests(part: string): () => void {
@@ -169,7 +169,7 @@ describe('ReportRunPage', () => {
 
   it('ошибка Community показывается как есть', async () => {
     const message =
-      'в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
+      'в шаблоне используется html — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
     mockApi([
       userMe,
       { path: '/api/templates/t1', body: template },

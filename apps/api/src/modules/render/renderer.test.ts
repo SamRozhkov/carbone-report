@@ -78,12 +78,12 @@ describe('createEmbeddedRenderer', () => {
 
   it('отключённая функция — 400 CARBONE_COMMUNITY с именем', async () => {
     const { renderer } = setup(async () => {
-      throw new TemplateRenderError('Formatter "aggSum" is disabled in the Community Edition.');
+      throw new TemplateRenderError('Formatter "html" is disabled in the Community Edition.');
     });
     await expect(renderer.render(tpl(), {}, opts('pdf'))).rejects.toMatchObject({
       code: 'CARBONE_COMMUNITY',
       status: 400,
-      message: expect.stringContaining('aggSum'),
+      message: expect.stringContaining('html'),
     });
   });
 

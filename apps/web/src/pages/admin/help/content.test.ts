@@ -14,12 +14,13 @@ const canonicalRow = (line: string) => {
 };
 
 describe('содержание справки', () => {
-  it('шесть разделов в порядке §23.2', () => {
+  it('семь разделов в порядке §23.2', () => {
     expect(HELP_SECTIONS.map((s) => [s.id, s.title])).toEqual([
       ['basics', 'Основы'],
       ['tables', 'Таблицы'],
       ['formatting', 'Форматирование'],
       ['conditions', 'Условия'],
+      ['aggregates', 'Итоги и нумерация'],
       ['totals', 'Итоги и группировка'],
       ['unavailable', 'Недоступно в бесплатной версии'],
     ]);
@@ -57,7 +58,7 @@ describe('содержание справки', () => {
     }
   });
 
-  it('недоступное — только в разделе 6, и результат — сообщение API', () => {
+  it('недоступное — только в последнем разделе, и результат — сообщение API', () => {
     for (const s of HELP_SECTIONS) {
       for (const e of s.examples) {
         expect(e.unavailable === true, e.id).toBe(s.id === 'unavailable');
@@ -73,7 +74,7 @@ describe('содержание справки', () => {
     ]);
   });
 
-  it('antiPattern — только cond-table-row и totals-set-sum, не в разделе 6', () => {
+  it('antiPattern — только cond-table-row и totals-set-sum, не в последнем разделе', () => {
     const flagged = HELP_SECTIONS.flatMap((s) => s.examples.map((e) => [s.id, e] as const)).filter(
       ([, e]) => e.antiPattern,
     );

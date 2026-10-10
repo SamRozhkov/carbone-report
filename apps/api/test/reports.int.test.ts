@@ -26,7 +26,7 @@ let carboneCommunity = false;
 let liveCarbone: CarboneRenderer | null = null;
 
 const COMMUNITY_MESSAGE =
-  'в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
+  'в шаблоне используется html — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
 
 const noConvert = async (): Promise<Buffer> => {
   throw new Error('конвертация не ожидается');
@@ -38,7 +38,7 @@ const communityCarbone = () =>
     pool: {
       run: async () => {
         throw new TemplateRenderError(
-          'Formatter "aggSum" is disabled in the Community Edition. Source: "{d.orders[].total:aggSum}"',
+          'Formatter "html" is disabled in the Community Edition. Source: "{d.orders[].note:html}"',
         );
       },
     },

@@ -8,9 +8,9 @@ describe('communityErrorMessage', () => {
   it('имя форматтера берётся из ответа Carbone', () => {
     expect(
       communityErrorMessage(
-        'Unable to generate the document. Error: Formatter "aggSum" is disabled in the Community Edition. Source: "{d.cars[].qty:aggSum}"',
+        'Unable to generate the document. Error: Formatter "html" is disabled in the Community Edition. Source: "{d.cars[].note:html}"',
       ),
-    ).toBe(msg('aggSum'));
+    ).toBe(msg('html'));
   });
 
   it('count() Carbone называет cumCount — так и пишем', () => {

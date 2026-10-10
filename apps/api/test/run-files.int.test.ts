@@ -333,7 +333,7 @@ describe('снимок запуска', () => {
   it('ошибка сборки возвращается как есть; статус запуска не меняется; повтор собирает заново', async () => {
     const runId = await newRun();
     const message =
-      'в шаблоне используется aggSum — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
+      'в шаблоне используется html — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
     failWith = new AppError('CARBONE_COMMUNITY', 400, message);
     const r = await file(userA, runId, '?format=docx');
     expect(r.statusCode).toBe(400);

@@ -2,6 +2,12 @@
 
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/). Записи рассчитаны на администратора: что изменилось и что нужно сделать при обновлении.
 
+## [2.2.0] — 2026-10-10
+
+### Добавлено
+
+- Агрегаторы Carbone в шаблонах: `aggSum`, `aggAvg`, `aggMin`, `aggMax`, `aggCount`, `aggCountD`, `aggStr`, `aggStrD` (итог по всему набору или по отобранным элементам, подытог по вложенному массиву) и `cumSum`, `cumCount`, `cumCountD` (нарастающий итог по строкам цикла), в том числе с группировкой `aggSum(.поле)`. `:count()` нумерует строки цикла 1, 2, 3… без пропусков при фильтре. Раньше такие шаблоны не формировались («недоступно в бесплатной версии Carbone»). В справке по шаблонам новый раздел «Итоги и нумерация», примеры проверены на нашей сборке.
+
 ## [2.1.0] — 2026-10-10
 
 ### Добавлено
@@ -66,6 +72,7 @@
 
 Первый выпуск: редактор шаблонов в браузере (OnlyOffice), источники данных и отчёты, вход через LDAP/Active Directory, резервное копирование с восстановлением из админки, хранение файлов на диске или в S3, запуск в Docker Compose и чарт Helm.
 
+[2.2.0]: https://github.com/SamRozhkov/carbone-report/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/SamRozhkov/carbone-report/compare/v2.0.2...v2.1.0
 [2.0.2]: https://github.com/SamRozhkov/carbone-report/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/SamRozhkov/carbone-report/compare/v2.0.0...v2.0.1

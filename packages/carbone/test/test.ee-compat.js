@@ -26,8 +26,8 @@ async function error (template, data, options) {
 describe('EE: отключённые функции', function () {
   const cars = { cars: [{ brand: 'Лада', qty: 3 }, { brand: 'Тесла', qty: 2 }] };
   // агрегаторы (aggSum … cumCountD, count()), drop и keep реализованы в 2.2.0 — test/test.ee-paid.js
-  // barcode реализован в 2.4.0 — test/test.ee-images.js, color — test/test.ee-colors.js
-  for (const f of ['html', 'chart', 'formatR', 'defaultURL', 'autoOrient']) {
+  // barcode реализован в 2.4.0 — test/test.ee-images.js, color — test/test.ee-colors.js, defaultURL — test/test.ee-links.js
+  for (const f of ['html', 'chart', 'formatR', 'autoOrient']) {
     it(f, async function () {
       assert.strictEqual(await error('{d.v:' + f + '()}', { v: 'x' }), 'Formatter "' + f + '" is disabled in the Community Edition.');
     });
@@ -37,6 +37,9 @@ describe('EE: отключённые функции', function () {
   });
   it('barcode (2.4.0) — только в замещающем тексте картинки, в тексте — ошибка', async function () {
     assert.strictEqual(await rawError('{d.v:barcode(qrcode)}', { v: 'x' }), 'штрихкод ставится в замещающий текст картинки Source: "{d.v:barcode(qrcode)}"');
+  });
+  it('defaultURL (2.4.0) — не отключён: в тексте подставляет адрес по умолчанию', async function () {
+    assert.strictEqual(await text('[{d.v:defaultURL(\'https://example.com\')}]', { v: 'x' }), '[https://example.com]');
   });
   it('color (2.4.0) — не отключён: тег ничего не печатает', async function () {
     assert.strictEqual(await text('[{d.v:color(p)}цветной]', { v: '#FF0000' }), '[цветной]');
@@ -63,6 +66,7 @@ describe('EE: отключённые функции', function () {
     assert.strictEqual(disabledName('formatN'), null);
     assert.strictEqual(disabledName('barcode'), null);
     assert.strictEqual(disabledName('color'), null);
+    assert.strictEqual(disabledName('defaultURL'), null);
   });
   it('отключённая функция в колонтитуле тоже даёт ошибку', async function () {
     // Колонтитул: отдельный word/header1.xml. Собрать DOCX с header через buildDocx не получится —

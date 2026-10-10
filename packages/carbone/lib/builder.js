@@ -7,6 +7,7 @@ var aggregate = require('./aggregate');
 var drop = require('./drop');
 var color = require('./color');
 var media = require('./media');
+var links = require('./links');
 
 var builder = {
 
@@ -75,7 +76,9 @@ var builder = {
               catch (e) {
                 return callback(e, null);
               }
-              var _done = _dropRegistry === null && _colorRegistry === null ? callback : function (err, result) {
+              // адреса динамических ссылок проверяются после сборки файла (lib/links.js)
+              var _hasLinks = links.prepare(xmlWithoutMarkers, _markers);
+              var _done = _dropRegistry === null && _colorRegistry === null && _hasLinks === false ? callback : function (err, result) {
                 if (err) {
                   return callback(err, result);
                 }
@@ -84,6 +87,7 @@ var builder = {
                   // цвет — до drop: удаление элементов не должно сдвинуть разбор жетонов цвета
                   _out = color.apply(result, _colorRegistry, options.extension);
                   _out = drop.apply(_out, _dropRegistry, options.extension);
+                  _out = links.apply(_out);
                 }
                 catch (e) {
                   return callback(e, null);

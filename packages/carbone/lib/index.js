@@ -334,6 +334,9 @@ carbone.addFormatters(require('./color').formatters);
 // в подсказку «Do you mean …» (lib/media.js)
 carbone.addFormatters({ imageFit : media.formatters.imageFit, barcode : media.formatters.barcode });
 Object.defineProperty(input.formatters, '__img', { enumerable : false, configurable : true, writable : true, value : media.formatters.__img });
+// ссылки (2.4.0): defaultURL — для шаблонов; служебный __url неперечисляемый, как __img (lib/links.js)
+carbone.addFormatters({ defaultURL : require('./links').formatters.defaultURL });
+Object.defineProperty(input.formatters, '__url', { enumerable : false, configurable : true, writable : true, value : require('./links').formatters.__url });
 
 // We must include all locales like this for PKG
 require('dayjs/locale/af.js');

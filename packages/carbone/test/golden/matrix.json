@@ -2060,6 +2060,10 @@
       "expect": {
         "error": "Formatter \"defaultURL\" is disabled in the Community Edition.",
         "errorSource": "{d.v:defaultURL('https://example.com')}"
+      },
+      "deviation": {
+        "ours": "[https://example.com]",
+        "why": "платная функция EE, реализована в 2.4.0 (§32)"
       }
     },
     {
@@ -4722,6 +4726,10 @@
       "expect": {
         "error": "Formatter \"defaultURL\" is disabled in the Community Edition.",
         "errorSource": "{d.u:defaultURL('https://carbone.io')}"
+      },
+      "deviation": {
+        "ours": "[https://carbone.io]",
+        "why": "платная функция EE, реализована в 2.4.0 (§32)"
       }
     },
     {

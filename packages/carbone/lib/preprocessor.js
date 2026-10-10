@@ -2,6 +2,7 @@ var path  = require('path');
 var helper = require('./helper');
 var parser = require('./parser');
 var media = require('./media');
+var links = require('./links');
 
 
 var preprocessor = {
@@ -24,6 +25,10 @@ var preprocessor = {
       // метки в замещающем тексте картинок — метки изображений (lib/media.js); только renderBuffer (есть реестр)
       if (options.__media !== undefined && template.files[i].isMarked === true && (template.files[i].parent === '' || template.files[i].parent === undefined)) {
         media.preprocess(template.files[i], template.extension);
+      }
+      // метки в адресах ссылок (связи hyperlink в *.rels, xlink:href у text:a/draw:a) проверяются (lib/links.js)
+      if (template.files[i].isMarked === true) {
+        links.preprocess(template.files[i]);
       }
     }
     for (var i = -1; i < template.embeddings.length; i++) {

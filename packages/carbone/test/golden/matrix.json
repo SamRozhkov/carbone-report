@@ -5888,6 +5888,112 @@
     "text": "08 марта 2026 | 8 марта 2026 г., 13:00",
     "textFrom": "results3.txt (python text_of, converted)"
    }
+  },
+  {
+   "id": "matrix/s4/string-array-null",
+   "template": "[{d.tags[i]}]\n[{d.tags[i+1]}]",
+   "data": {
+    "tags": [
+     "x",
+     null,
+     "z"
+    ]
+   },
+   "expect": {
+    "text": "[x]\n[]\n[z]"
+   },
+   "probe": "carbone-parity.ts, 2026-10-10: null/объект в массиве строк"
+  },
+  {
+   "id": "matrix/s4/string-array-null-ifempty",
+   "template": "[{d.tags[i]:ifEmpty('-')}]\n[{d.tags[i+1]}]",
+   "data": {
+    "tags": [
+     "x",
+     null,
+     "z"
+    ]
+   },
+   "expect": {
+    "text": "[x]\n[-]\n[z]"
+   },
+   "probe": "carbone-parity.ts, 2026-10-10: null/объект в массиве строк"
+  },
+  {
+   "id": "matrix/s4/string-array-object",
+   "template": "[{d.tags[i]}]\n[{d.tags[i+1]}]",
+   "data": {
+    "tags": [
+     "x",
+     {
+      "a": 1
+     },
+     "z"
+    ]
+   },
+   "expect": {
+    "text": "[x]\n[]\n[z]"
+   },
+   "probe": "carbone-parity.ts, 2026-10-10: null/объект в массиве строк"
+  },
+  {
+   "id": "matrix/s4/string-array-number-bool",
+   "template": "[{d.tags[i]}]\n[{d.tags[i+1]}]",
+   "data": {
+    "tags": [
+     1,
+     false,
+     0,
+     "z"
+    ]
+   },
+   "expect": {
+    "text": "[1]\n[false]\n[0]\n[z]"
+   },
+   "probe": "carbone-parity.ts, 2026-10-10: null/объект в массиве строк"
+  },
+  {
+   "id": "matrix/s4/string-array-empty-string",
+   "template": "[{d.tags[i]}]\n[{d.tags[i+1]}]",
+   "data": {
+    "tags": [
+     "x",
+     "",
+     "z"
+    ]
+   },
+   "expect": {
+    "text": "[x]\n[]\n[z]"
+   },
+   "probe": "carbone-parity.ts, 2026-10-10: null/объект в массиве строк"
+  },
+  {
+   "id": "matrix/s4/string-array-null-table",
+   "template": "| {d.tags[i]} |\n| {d.tags[i+1]} |",
+   "data": {
+    "tags": [
+     "x",
+     null,
+     "z"
+    ]
+   },
+   "expect": {
+    "text": "| x |\n| |\n| z |"
+   },
+   "probe": "carbone-parity.ts, 2026-10-10: null/объект в массиве строк"
+  },
+  {
+   "id": "matrix/s4/string-array-only-null",
+   "template": "[{d.tags[i]}]\n[{d.tags[i+1]}]",
+   "data": {
+    "tags": [
+     null
+    ]
+   },
+   "expect": {
+    "text": "[]"
+   },
+   "probe": "carbone-parity.ts, 2026-10-10: null/объект в массиве строк"
   }
  ]
 }

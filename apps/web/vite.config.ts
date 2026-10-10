@@ -14,9 +14,9 @@ export default defineConfig({
   plugins: [react()],
   // Версия сборки (§30.1): build-args web-образа попадают в ENV; без них — dev/unknown (в т. ч. в тестах).
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.APP_VERSION ?? 'dev'),
-    __APP_COMMIT__: JSON.stringify(process.env.APP_COMMIT ?? 'unknown'),
-    __APP_BUILD_DATE__: JSON.stringify(process.env.APP_BUILD_DATE ?? 'unknown'),
+    __APP_VERSION__: JSON.stringify(process.env.APP_VERSION || 'dev'),
+    __APP_COMMIT__: JSON.stringify(process.env.APP_COMMIT || 'unknown'),
+    __APP_BUILD_DATE__: JSON.stringify(process.env.APP_BUILD_DATE || 'unknown'),
   },
   // @gravity-ui/navigation без поля exports: main указывает на CJS-сборку, которая требует .css (Справка §10).
   resolve: { mainFields: ['module', 'jsnext:main', 'jsnext'] },

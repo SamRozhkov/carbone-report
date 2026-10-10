@@ -2,7 +2,7 @@
 // Печатает текст раздела версии из CHANGELOG.md (без заголовка).
 // Использование: node scripts/changelog-section.mjs <версия> [--file <путь>]
 // Нет раздела или он пуст — код выхода 1 и сообщение в stderr.
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const defaultFile = fileURLToPath(new URL('../CHANGELOG.md', import.meta.url));
@@ -54,6 +54,7 @@ function main(argv) {
   return 0;
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// realpath: при запуске по символической ссылке argv[1] не совпадает с путём модуля.
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   process.exitCode = main(process.argv.slice(2));
 }

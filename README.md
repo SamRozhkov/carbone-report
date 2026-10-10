@@ -2,7 +2,7 @@
 
 Генерация отчётов на базе Carbone с редактированием шаблонов в браузере (OnlyOffice) и интерфейсом на GravityUI.
 
-Состав стека: web (nginx), API, агент бэкапа, OnlyOffice Document Server, PostgreSQL, Redis, S3 (SeaweedFS). Отдельного контейнера Carbone нет: отчёты собирает сам API встроенной сборкой Carbone Community Edition 3.8.2 (`packages/carbone`, воркеры `worker_threads`). Сборка выдаёт документ в формате шаблона; PDF и перевод в ODT/ODS делает OnlyOffice, поэтому **OnlyOffice обязателен для построения отчётов**: API сначала собирает PDF, и без Document Server отчёт не сформируется. Подробности про лицензию — в разделе [«Лицензии»](#лицензии), про переход с 1.x — в [«Обновление с 1.x»](#обновление-с-1x).
+Состав стека: web (nginx), API, агент бэкапа, OnlyOffice Document Server, PostgreSQL, Redis, S3 (SeaweedFS). Отдельного контейнера Carbone нет: отчёты собирает сам API встроенной сборкой Carbone Community Edition 3.8.2 (`packages/carbone`, воркеры `worker_threads`). Сборка выдаёт документ в формате шаблона; PDF и перевод в ODT/ODS делает OnlyOffice, поэтому **OnlyOffice обязателен для построения отчётов**: API сначала собирает PDF, и без Document Server отчёт не сформируется. Подробности про лицензию — в разделе [«Лицензия»](#лицензия), про переход с 1.x — в [«Обновление с 1.x»](#обновление-с-1x).
 
 [![CI](https://github.com/SamRozhkov/carbone-report/actions/workflows/ci.yml/badge.svg)](https://github.com/SamRozhkov/carbone-report/actions/workflows/ci.yml)
 
@@ -530,9 +530,7 @@ SSL источника задаётся одним из трёх режимов:
 
 ## Лицензия
 
-Проект распространяется по [PolyForm Strict License 1.0.0](LICENSE.md). Разрешено: использовать продукт без изменений в некоммерческих целях. Не разрешено: вносить изменения, распространять продукт и использовать его в коммерческих целях — для этого нужен отдельный договор с правообладателем. Сведения о других лицензиях — в [`NOTICE.md`](NOTICE.md). Каталог `packages/carbone` под эту лицензию не подпадает: он остаётся под CCL (см. [«Лицензии»](#лицензии)).
-
-## Лицензии
+Проект распространяется по [PolyForm Strict License 1.0.0](LICENSE.md). Разрешено: использовать продукт без изменений в некоммерческих целях. Не разрешено: вносить изменения, распространять продукт и использовать его в коммерческих целях — для этого нужен отдельный договор с правообладателем. Сведения о других лицензиях — в [`NOTICE.md`](NOTICE.md). Каталог `packages/carbone` под эту лицензию не подпадает: он остаётся под CCL.
 
 Каталог `packages/carbone` — часть продукта: изменённая копия **Carbone Community Edition** 3.8.2, распространяемая по **Carbone Community License** (CCL): [`packages/carbone/LICENSE.md`](packages/carbone/LICENSE.md), оригинал — https://github.com/carboneio/carbone/blob/master/LICENSE.md. Использование этой части продукта подчиняется CCL; согласно п. 2.1(b) CCL об этом нужно уведомить пользователей продукта, поэтому условие приведено здесь. Пакет не распространяется отдельно (`"private": true`). Происхождение кода, отличия от апстрима и правило чистой реализации — в [`packages/carbone/NOTICE.md`](packages/carbone/NOTICE.md). Остальной код репозитория CCL не затрагивает.
 

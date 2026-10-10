@@ -392,9 +392,9 @@ function wordApply (xml, target, entry, hex, desires) {
   });
   var _paragraphs = entry.scope === 'p' ? [target] : owned(target, ['w:p'], _owner);
   _paragraphs.forEach(function (p) {
-    var _pPr = child(p, 'w:pPr');
-    if (_pPr !== null) {
-      want(desires, _pPr, ['w:rPr', 'w:color'], _leaf);
+    // якорь — сам абзац, как у w:shd (p/background): все правки w:pPr в одном дереве и в порядке схемы
+    if (child(p, 'w:pPr') !== null) {
+      want(desires, p, ['w:pPr', 'w:rPr', 'w:color'], _leaf);
     }
   });
 }
@@ -411,7 +411,7 @@ function pptxTarget (scope, node) {
   }
 }
 
-var P_OWNER = { p : 'a:p', cell : 'a:tc', row : 'a:tr', shape : 'p:sp' };
+var P_OWNER = { p : ['a:p'], cell : ['a:tc'], row : ['a:tr'], shape : ['p:sp', 'p:cxnSp'] };
 
 function pptxApply (xml, target, entry, hex, desires) {
   var _fill = '<a:solidFill><a:srgbClr val="' + hex + '"/></a:solidFill>';
@@ -432,7 +432,7 @@ function pptxApply (xml, target, entry, hex, desires) {
   // text, highlight: все прогоны (a:rPr создаётся) и свойства конца абзаца
   var _path = entry.type === 'highlight' ? ['a:highlight'] : [FILL];
   var _leaf = entry.type === 'highlight' ? '<a:highlight><a:srgbClr val="' + hex + '"/></a:highlight>' : _fill;
-  var _owner = [P_OWNER[entry.scope]];
+  var _owner = P_OWNER[entry.scope];
   owned(target, ['a:r', 'a:fld', 'a:br'], _owner).forEach(function (run) {
     want(desires, run, ['a:rPr'].concat([_path[0]]), _leaf);
   });

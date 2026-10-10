@@ -69,6 +69,17 @@ describe('EE платные: :color — DOCX (§32.4)', function () {
     assert.strictEqual(await ok('docx', body(wp(wr('{d.c:color(p, background)}А'), '<w:shd w:val="clear" w:fill="00FF00"/>')), C),
       body(wp(wr('А'), '<w:shd w:val="clear" w:color="auto" w:fill="FF0000"/>')));
   });
+  it('p/text + p/background на одном абзаце: w:pPr правится одним деревом — w:shd, затем w:rPr, w:sectPr последним', async function () {
+    const D = { a: '#00ff00', b: '#ff0000' };
+    const want = body(wp(wr('А', '<w:color w:val="FF0000"/>'), '<w:shd w:val="clear" w:color="auto" w:fill="00FF00"/><w:rPr><w:color w:val="FF0000"/></w:rPr><w:sectPr/>'));
+    assert.strictEqual(await ok('docx', body(wp(wr('{d.b:color(p, text)}{d.a:color(p, background)}А'), '<w:sectPr/>')), D), want);
+    assert.strictEqual(await ok('docx', body(wp(wr('{d.a:color(p, background)}{d.b:color(p, text)}А'), '<w:sectPr/>')), D), want);
+  });
+  it('p/text + p/background при пустом <w:pPr/>: оба свойства сохраняются', async function () {
+    const D = { a: '#00ff00', b: '#ff0000' };
+    assert.strictEqual(await ok('docx', body('<w:p><w:pPr/>' + wr('{d.b:color(p, text)}{d.a:color(p, background)}А') + '</w:p>'), D),
+      body(wp(wr('А', '<w:color w:val="FF0000"/>'), '<w:shd w:val="clear" w:color="auto" w:fill="00FF00"/><w:rPr><w:color w:val="FF0000"/></w:rPr>')));
+  });
   const tc = (inner, tcPr) => '<w:tc>' + (tcPr !== undefined ? '<w:tcPr>' + tcPr + '</w:tcPr>' : '') + inner + '</w:tc>';
   const tbl = (...rows) => '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="1"/><w:gridCol w:w="1"/></w:tblGrid>' + rows.map((r) => '<w:tr>' + r + '</w:tr>').join('') + '</w:tbl>';
   it('cell/background → w:tcPr/w:shd (после w:tcW, создаётся при отсутствии)', async function () {
@@ -174,6 +185,10 @@ describe('EE платные: :color — PPTX (§32.4)', function () {
     assert.strictEqual(out, sld(sp('<a:p>' + pr('А') + '</a:p>', '<p:spPr><a:prstGeom prst="rect"/><a:ln w="12700">' + fill('FF0000') + '<a:prstDash val="dash"/></a:ln></p:spPr>')));
     const out2 = await ok('pptx', sld(sp('<a:p>' + pr('{d.c:color(shape, border)}А') + '</a:p>', '<p:spPr><a:prstGeom prst="rect"/><a:effectLst/></p:spPr>')), C);
     assert.strictEqual(out2, sld(sp('<a:p>' + pr('А') + '</a:p>', '<p:spPr><a:prstGeom prst="rect"/><a:ln>' + fill('FF0000') + '</a:ln><a:effectLst/></p:spPr>')));
+  });
+  it('shape/text на соединительной линии (p:cxnSp) красит её текст', async function () {
+    const cxn = (t, rPr) => '<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="3" name="L"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr/><p:txBody><a:bodyPr/><a:p>' + pr(t, rPr) + '</a:p></p:txBody></p:cxnSp>';
+    assert.strictEqual(await ok('pptx', sld(cxn('{d.c:color(shape)}А')), C), sld(cxn('А', '<a:rPr>' + fill('FF0000') + '</a:rPr>')));
   });
   it('метка в замещающем тексте фигуры (descr) тоже относится к фигуре', async function () {
     const out = await ok('pptx', sld('<p:sp><p:nvSpPr><p:cNvPr id="2" name="S" descr="{d.c:color(shape, background)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/></p:sp>'), C);

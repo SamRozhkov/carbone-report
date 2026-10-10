@@ -32,8 +32,8 @@ describe('EE: отключённые функции', function () {
       assert.strictEqual(await error('{d.v:' + f + '()}', { v: 'x' }), 'Formatter "' + f + '" is disabled in the Community Edition.');
     });
   }
-  it('imageFit не отключён, а неизвестен', async function () {
-    assert.match(await error('{d.v:imageFit()}', { v: 'x' }), /^Formatter "imageFit" does not exist/);
+  it('imageFit (2.4.0) — только в метке изображения, в тексте — ошибка', async function () {
+    assert.match(await rawError('{d.v:imageFit()}', { v: 'x' }), /^imageFit ставится в метку изображения .* Source: "\{d\.v:imageFit\(\)\}"$/);
   });
   it('сообщение несёт суффикс Source с меткой, как в EE', async function () {
     assert.ok((await rawError('{d.v:html()}', { v: 'x' })).endsWith(' Source: "{d.v:html()}"'));

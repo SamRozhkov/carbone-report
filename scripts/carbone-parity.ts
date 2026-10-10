@@ -12,6 +12,8 @@ interface GoldenCase {
   template: string;
   raw?: string[];
   rels?: string;
+  /** дополнительные файлы архива: путь → base64 */
+  files?: Record<string, string>;
   data?: unknown;
   options?: Record<string, unknown>;
   expect?: { text?: string; error?: string };
@@ -22,7 +24,12 @@ interface GoldenFile {
   [key: string]: unknown;
 }
 interface GoldenLib {
-  buildDocx(template: string, raw?: string[], rels?: string): Promise<Buffer>;
+  buildDocx(
+    template: string,
+    raw?: string[],
+    rels?: string,
+    files?: Record<string, Buffer>,
+  ): Promise<Buffer>;
   docxText(buffer: Buffer): Promise<string>;
   normalizeError(message: string): string;
 }
@@ -46,7 +53,12 @@ async function waitReady(base: string): Promise<void> {
 }
 
 async function renderOne(base: string, c: GoldenCase): Promise<{ text?: string; error?: string }> {
-  const docx = await lib.buildDocx(c.template, c.raw, c.rels);
+  const files = c.files
+    ? Object.fromEntries(
+        Object.entries(c.files).map(([name, b64]) => [name, Buffer.from(b64, 'base64')]),
+      )
+    : undefined;
+  const docx = await lib.buildDocx(c.template, c.raw, c.rels, files);
   const form = new FormData();
   form.append('template', new Blob([new Uint8Array(docx)]), 'template.docx');
   const up = await fetch(`${base}/template`, {

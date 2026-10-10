@@ -5527,10 +5527,16 @@
         "<w:p><w:r><w:drawing><wp:inline><wp:extent cx=\"914400\" cy=\"914400\"/><wp:docPr id=\"1\" name=\"Picture 1\" descr=\"{d.img}\"/><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:nvPicPr><pic:cNvPr id=\"1\" name=\"p.png\" descr=\"{d.img}\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\"rIdImg\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"914400\" cy=\"914400\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
       ],
       "rels": "<Relationship Id=\"rIdImg\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/p.png\"/>",
+      "files": {
+        "word/media/p.png": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+      },
       "expect": {
         "text": ""
       },
-      "skip": "needs word/media/p.png (media) — add media support to the golden format or drop"
+      "deviation": {
+        "ours": "",
+        "why": "EE без лицензии оставляет картинку-заглушку; мы заменяем её изображением из data URI (спецификация §32.1). Текст документа в обоих случаях пуст."
+      }
     },
     {
       "id": "matrix/tests2/dynamic-hyperlink",

@@ -5,6 +5,7 @@ var community = require('./community');
 var set = require('./set');
 var aggregate = require('./aggregate');
 var drop = require('./drop');
+var media = require('./media');
 
 var builder = {
 
@@ -64,6 +65,8 @@ var builder = {
               var _dropRegistry = null;
               try {
                 _dropRegistry = drop.prepare(_markers, options.extension);
+                // изображения из данных: номера меток __img/imageFit, замена картинок — после сборки отчёта (lib/media.js)
+                media.prepare(_markers, options);
               }
               catch (e) {
                 return callback(e, null);

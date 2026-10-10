@@ -1,6 +1,7 @@
 var path  = require('path');
 var helper = require('./helper');
 var parser = require('./parser');
+var media = require('./media');
 
 
 var preprocessor = {
@@ -20,6 +21,10 @@ var preprocessor = {
     }
     for (let i = 0, len = template.files.length; i < len; i++) {
       template.files[i].data = preprocessor.preParseXML(template.files[i].data, options);
+      // метки в замещающем тексте картинок — метки изображений (lib/media.js); только renderBuffer (есть реестр)
+      if (options.__media !== undefined && template.files[i].isMarked === true && (template.files[i].parent === '' || template.files[i].parent === undefined)) {
+        media.preprocess(template.files[i], template.extension);
+      }
     }
     for (var i = -1; i < template.embeddings.length; i++) {
       var _mainOrEmbeddedTemplate = template.filename;

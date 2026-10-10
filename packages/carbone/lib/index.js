@@ -9,6 +9,7 @@ var builder = require('./builder');
 var input = require('./input');
 var translator = require('./translator');
 var preprocessor = require('./preprocessor');
+var media = require('./media');
 var dayjs = require('dayjs');
 var locales = require('../formatters/_locale');
 
@@ -155,6 +156,7 @@ var carbone = {
   },
 
   renderBuffer : renderBuffer,
+  renderBufferWithWarnings : renderBufferWithWarnings,
 
   /**
    * Определить расширение шаблона по пути
@@ -229,7 +231,8 @@ var ZIP_EXTENSIONS = ['docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp'];
  * @param {Buffer} template содержимое файла шаблона
  * @param {String} extension расширение шаблона: docx, xlsx, odt, ods, pptx, xml, html…
  * @param {*} data данные отчёта (d.)
- * @param {Object} [options] lang, timezone, complement, translations, currencySource, currencyTarget, currencyRates
+ * @param {Object} [options] lang, timezone, complement, translations, currencySource, currencyTarget, currencyRates,
+ *                           imageUrlAllowlist, imageUrlTimeoutMs, warnings (массив, куда дописываются предупреждения)
  * @returns {Promise<Buffer>}
  */
 function renderBuffer (template, extension, data, options) {
@@ -266,6 +269,8 @@ function renderBuffer (template, extension, data, options) {
     }
     input.parseOptions(_userOptions, _fail, _guard(function (_options) {
       _options.extension = extension;
+      // реестр изображений из данных этого рендера (lib/media.js)
+      _options.__media = media.createRegistry();
       file.openTemplateBuffer(template, extension, _guard(function (err, _template) {
         if (err) {
           return _fail(err);
@@ -282,17 +287,36 @@ function renderBuffer (template, extension, data, options) {
             // XLSX для OnlyOffice: текст ячеек — снова общими строками (со встроенными Document Server при
             // конвертации теряет все ячейки-строки, кроме первой), номера строк и ячеек, убранные препроцессором,
             // ставятся заново (после циклов и drop). Старый API render() (тесты апстрима) собирает XLSX как CE 3.8.2.
-            preprocessor.finishXlsx(_report);
-            file.buildFile(_report, _guard(function (err, _result) {
-              if (err) {
-                return _fail(err);
-              }
-              resolve(Buffer.isBuffer(_result) ? _result : Buffer.from(_result, 'utf8'));
-            }));
+            // изображения из данных: media-файлы, связи и типы — после сборки всех файлов, до finishXlsx
+            media.finish(_report, _options).then(_guard(function () {
+              preprocessor.finishXlsx(_report);
+              file.buildFile(_report, _guard(function (err, _result) {
+                if (err) {
+                  return _fail(err);
+                }
+                resolve(Buffer.isBuffer(_result) ? _result : Buffer.from(_result, 'utf8'));
+              }));
+            }), _fail);
           }));
         }));
       }));
     }));
+  });
+}
+
+/**
+ * renderBuffer с предупреждениями рендера (например, сбой загрузки изображения по адресу — заглушка удалена)
+ * @param {Buffer} template
+ * @param {String} extension
+ * @param {*} data
+ * @param {Object} [options] как у renderBuffer (warnings задаётся здесь)
+ * @returns {Promise<{ buffer: Buffer, warnings: string[] }>}
+ */
+function renderBufferWithWarnings (template, extension, data, options) {
+  var _warnings = [];
+  var _options = Object.assign({}, options, { warnings : _warnings });
+  return renderBuffer(template, extension, data, _options).then(function (buffer) {
+    return { buffer : buffer, warnings : _warnings };
   });
 }
 
@@ -304,6 +328,10 @@ carbone.addFormatters(require('../formatters/number.js'));
 carbone.addFormatters(require('../formatters/string.js'));
 // drop/keep (2.2.0): форматтер печатает жетон, элемент удаляет builder после сборки (lib/drop.js)
 carbone.addFormatters(require('./drop').formatters);
+// изображения из данных (2.4.0): imageFit — для шаблонов; служебный __img неперечисляемый, чтобы не попасть
+// в подсказку «Do you mean …» (lib/media.js)
+carbone.addFormatters({ imageFit : media.formatters.imageFit });
+Object.defineProperty(input.formatters, '__img', { enumerable : false, configurable : true, writable : true, value : media.formatters.__img });
 
 // We must include all locales like this for PKG
 require('dayjs/locale/af.js');

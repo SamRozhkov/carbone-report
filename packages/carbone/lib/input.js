@@ -39,6 +39,13 @@ function parseOptions (userDefinedOptions, callbackFn, callback) {
       formatters        : formatters,
       existingVariables : variables,
       isDebugActive     : userDefinedOptions.isDebugActive || false,     // show info about the template
+      // изображения из данных (lib/media.js, §32.2): хосты для загрузки по адресу (пусто — выключена), тайм-аут,
+      // предупреждения рендера (дописываются в переданный массив)
+      imageUrlAllowlist : Array.isArray(userDefinedOptions.imageUrlAllowlist) ? userDefinedOptions.imageUrlAllowlist.filter(function (host) {
+        return typeof host === 'string' && host !== '';
+      }) : [],
+      imageUrlTimeoutMs : Number.isFinite(userDefinedOptions.imageUrlTimeoutMs) && userDefinedOptions.imageUrlTimeoutMs > 0 ? userDefinedOptions.imageUrlTimeoutMs : 5000,
+      warnings          : Array.isArray(userDefinedOptions.warnings) ? userDefinedOptions.warnings : [],
       debugInfo         : { markers : [] } // filled and returned after POST /render if isDebugActive === true
     };
     var _currency           = _options.currency;

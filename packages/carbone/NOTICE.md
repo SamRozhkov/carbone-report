@@ -37,6 +37,10 @@
   агрегаторы `aggSum` … `cumCountD` и `:count()` — `lib/aggregate.js`, `drop`/`keep` — `lib/drop.js`
   (спецификация carbone-reports §31). `drop` удаляет элементы после сборки XML, поэтому `cum*`, `count()` и итоги
   по `[]` учитывают и строки, удалённые `drop(row)`.
+- 2.4.0: изображения из данных (спецификация §32.1) — `lib/media.js`, общий разбор XML — `lib/xmltree.js`.
+  Метка в замещающем тексте картинки-заглушки (DOCX) заменяет картинку изображением из data URI (PNG, JPEG, GIF);
+  размеры по заголовку файла — библиотека `image-size` 2.0.4 (MIT, https://github.com/image-size/image-size).
+  Добавлена `renderBufferWithWarnings(...)` → `{ buffer, warnings }`.
 
 ## Правило чистой реализации
 

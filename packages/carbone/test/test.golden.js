@@ -7,8 +7,14 @@ const { buildDocx, docxText, normalizeError } = require('./golden-lib');
 
 const GAPS = new Set(require('./golden/known-gaps.json').ids);
 
+// files — дополнительные файлы архива в base64 (например, word/media/p.png)
+function decodeFiles (files) {
+  if (!files) return undefined;
+  return Object.fromEntries(Object.entries(files).map(([name, b64]) => [name, Buffer.from(b64, 'base64')]));
+}
+
 async function run (c) {
-  const tpl = await buildDocx(c.template, c.raw, c.rels);
+  const tpl = await buildDocx(c.template, c.raw, c.rels, decodeFiles(c.files));
   try {
     const out = await renderBuffer(tpl, 'docx', c.data, c.options);
     return { text: await docxText(out) };

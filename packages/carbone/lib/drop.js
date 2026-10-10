@@ -12,6 +12,14 @@
 
 var crypto = require('crypto');
 var splitChain = require('./set').splitChain;
+var xmltree = require('./xmltree');
+
+var closest = xmltree.closest;
+var hasDescendant = xmltree.hasDescendant;
+var startTag = xmltree.startTag;
+var attr = xmltree.attr;
+var setAttr = xmltree.setAttr;
+var family = xmltree.family;
 
 // жетон: символы частного использования, отличные от жетонов агрегаторов (lib/aggregate.js: U+E000/U+E001)
 var OPEN = '\uE010';
@@ -227,87 +235,19 @@ function keep (d, id) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Разбор XML в дерево элементов (позиции в строке) — один проход
-
-var TAG_REGEX = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<![^>]*>|<(\/?)([^\s/>!?]+)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/g;
+// Разбор XML — lib/xmltree.js
 
 /**
- * @return {Object} { root, tokens } — tokens: жетоны с элементом, внутри которого (или в теге которого) они стоят
+ * @return {Object} { root, tokens } — tokens: жетоны drop/keep этой сборки { id, cond, pos, len, el }
  */
 function parse (xml, registry) {
-  var _root = { name : '', start : 0, openEnd : 0, closeStart : xml.length, end : xml.length, parent : null, children : [] };
-  var _stack = [_root];
-  var _tokens = [];
-  TOKEN_REGEX.lastIndex = 0;
-  var _token = TOKEN_REGEX.exec(xml);
-  var _nextToken = function () {
-    _token = TOKEN_REGEX.exec(xml);
-  };
-  var _assign = function (upTo, el) {
-    while (_token !== null && _token.index < upTo) {
-      var _id = parseInt(_token[2], 10);
-      if (_token[1] === registry.nonce && registry[_id] !== undefined) {
-        _tokens.push({ id : _id, cond : _token[3] === '1', pos : _token.index, len : _token[0].length, el : el || _stack[_stack.length - 1] });
-      }
-      _nextToken();
+  return xmltree.parse(xml, TOKEN_REGEX, function (match) {
+    var _id = parseInt(match[2], 10);
+    if (match[1] !== registry.nonce || registry[_id] === undefined) {
+      return null;
     }
-  };
-  TAG_REGEX.lastIndex = 0;
-  var _match;
-  while ((_match = TAG_REGEX.exec(xml)) !== null) {
-    var _start = _match.index;
-    var _end = _start + _match[0].length;
-    _assign(_start, null);
-    if (_match[2] === undefined) {
-      // комментарий, CDATA, объявление
-      _assign(_end, null);
-      continue;
-    }
-    if (_match[1] === '/') {
-      var _el = _stack.pop();
-      // несбалансированный XML — поднимаемся до одноимённого открытого элемента
-      while (_el !== _root && _el.name !== _match[2] && _stack.length > 1) {
-        _el.closeStart = _start;
-        _el.end = _start;
-        _el = _stack.pop();
-      }
-      if (_el === _root) {
-        _stack.push(_root);
-        continue;
-      }
-      _el.closeStart = _start;
-      _el.end = _end;
-      continue;
-    }
-    var _parent = _stack[_stack.length - 1];
-    var _node = { name : _match[2], start : _start, openEnd : _end, closeStart : _end, end : _end, parent : _parent, children : [], index : _parent.children.length };
-    _parent.children.push(_node);
-    // жетон в атрибуте (замещающий текст картинки) принадлежит самому элементу
-    _assign(_end, _node);
-    if (_match[4] !== '/') {
-      _stack.push(_node);
-    }
-  }
-  _assign(Infinity, null);
-  return { root : _root, tokens : _tokens };
-}
-
-function closest (el, names, check) {
-  for (var _el = el; _el !== null; _el = _el.parent) {
-    if (names.indexOf(_el.name) !== -1 && (check === undefined || check(_el) === true)) {
-      return _el;
-    }
-  }
-  return null;
-}
-
-function hasDescendant (el, names) {
-  for (var i = 0; i < el.children.length; i++) {
-    if (names.indexOf(el.children[i].name) !== -1 || hasDescendant(el.children[i], names) === true) {
-      return true;
-    }
-  }
-  return false;
+    return { id : _id, cond : match[3] === '1' };
+  });
 }
 
 /** Потомки с именем name, ближайший предок-«владелец» (ownerNames) которых — owner */
@@ -327,38 +267,6 @@ function owned (owner, name, ownerNames) {
   };
   _walk(owner);
   return _res;
-}
-
-function startTag (xml, el) {
-  return xml.slice(el.start, el.openEnd);
-}
-
-function attr (xml, el, name) {
-  var _match = new RegExp('\\s' + name.replace(/[.:-]/g, '\\$&') + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\')').exec(startTag(xml, el));
-  if (_match === null) {
-    return null;
-  }
-  return _match[1] !== undefined ? _match[1] : _match[2];
-}
-
-function setAttr (tag, name, value) {
-  return tag.replace(new RegExp('(\\s' + name.replace(/[.:-]/g, '\\$&') + '\\s*=\\s*)(?:"[^"]*"|\'[^\']*\')'), '$1"' + value + '"');
-}
-
-// ---------------------------------------------------------------------------------------------------------------
-// Правила по форматам
-
-function family (ext) {
-  if (ext === 'docx') {
-    return 'w';
-  }
-  if (ext === 'pptx') {
-    return 'p';
-  }
-  if (ext === 'xlsx') {
-    return 'x';
-  }
-  return 'odf';
 }
 
 /**
@@ -548,28 +456,7 @@ function apply (xml, registry, extension) {
   _inserts.forEach(function (insert) {
     _edits.push({ start : insert.pos, end : insert.pos, rep : insert.rep });
   });
-  // по началу; вставка раньше элемента с тем же началом; внешний элемент раньше вложенного
-  _edits.sort(function (a, b) {
-    if (a.start !== b.start) {
-      return a.start - b.start;
-    }
-    if ((a.start === a.end) !== (b.start === b.end)) {
-      return a.start === a.end ? -1 : 1;
-    }
-    return b.end - a.end;
-  });
-  var _out = '';
-  var _cursor = 0;
-  for (var i = 0; i < _edits.length; i++) {
-    var _edit = _edits[i];
-    if (_edit.start < _cursor) {
-      // правка внутри уже удалённого элемента
-      continue;
-    }
-    _out += xml.slice(_cursor, _edit.start) + _edit.rep;
-    _cursor = Math.max(_cursor, _edit.end);
-  }
-  return _out + xml.slice(_cursor);
+  return xmltree.applyEdits(xml, _edits);
 }
 
 function repeatOf (xml, el, name) {

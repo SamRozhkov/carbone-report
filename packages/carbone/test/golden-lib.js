@@ -70,17 +70,27 @@ function zipBuffer (files) {
   });
 }
 
+// типы файлов-вложений шаблона (Default в [Content_Types].xml)
+const MEDIA_TYPES = { png: 'image/png', jpeg: 'image/jpeg', jpg: 'image/jpeg', gif: 'image/gif' };
+
 /**
  * Собрать DOCX из шаблона в нотации справки.
  * Строка на `|` — строка таблицы (соседние строки — одна таблица), `<<RAW>>` — следующий элемент raw как есть,
- * иначе абзац.
+ * иначе абзац. files — дополнительные файлы архива (например, `word/media/p.png`); для их расширений
+ * png/jpeg/jpg/gif в `[Content_Types].xml` добавляется `Default`.
  */
-function buildDocx (template, raw, rels) {
+function buildDocx (template, raw, rels, files) {
+  const extra = Object.entries(files || {}).map(([name, data]) => ({ name, data }));
+  const defaults = [...new Set(extra.map((f) => (/\.([a-z]+)$/i.exec(f.name) || [])[1]).filter((e) => e !== undefined).map((e) => e.toLowerCase()))]
+    .filter((e) => MEDIA_TYPES[e] !== undefined)
+    .map((e) => '<Default Extension="' + e + '" ContentType="' + MEDIA_TYPES[e] + '"/>')
+    .join('');
   return zipBuffer([
-    { name: '[Content_Types].xml', data: XML + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>' },
+    { name: '[Content_Types].xml', data: XML + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' + defaults + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>' },
     { name: '_rels/.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
     { name: 'word/_rels/document.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '">' + (rels || '') + '</Relationships>' },
-    { name: 'word/document.xml', data: XML + '<w:document ' + NS + '><w:body>' + body(template, raw || []) + '<w:p/><w:sectPr/></w:body></w:document>' }
+    { name: 'word/document.xml', data: XML + '<w:document ' + NS + '><w:body>' + body(template, raw || []) + '<w:p/><w:sectPr/></w:body></w:document>' },
+    ...extra
   ]);
 }
 
@@ -99,7 +109,8 @@ function paraText (p) {
   return s;
 }
 
-function readEntry (buffer, name) {
+/** Файл архива: строка utf8, с binary === true — Buffer */
+function readEntry (buffer, name, binary) {
   return new Promise((resolve, reject) => {
     yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zip) => {
       if (err) return reject(err);
@@ -108,10 +119,30 @@ function readEntry (buffer, name) {
         zip.openReadStream(entry, (err, stream) => {
           if (err) return reject(err);
           const parts = [];
-          stream.on('data', (c) => parts.push(c)).on('error', reject).on('end', () => resolve(Buffer.concat(parts).toString('utf8')));
+          stream.on('data', (c) => parts.push(c)).on('error', reject).on('end', () => {
+            const data = Buffer.concat(parts);
+            resolve(binary === true ? data : data.toString('utf8'));
+          });
         });
       });
       zip.on('end', () => reject(new Error('в архиве нет ' + name)));
+      zip.readEntry();
+    });
+  });
+}
+
+/** Имена файлов архива по порядку */
+function entryNames (buffer) {
+  return new Promise((resolve, reject) => {
+    yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zip) => {
+      if (err) return reject(err);
+      const names = [];
+      zip.on('entry', (entry) => {
+        names.push(entry.fileName);
+        zip.readEntry();
+      });
+      zip.on('end', () => resolve(names));
+      zip.on('error', reject);
       zip.readEntry();
     });
   });
@@ -143,4 +174,4 @@ function normalizeError (message) {
     .replace(/ Source: [\s\S]*$/, '');
 }
 
-module.exports = { buildDocx, docxText, normalizeError };
+module.exports = { buildDocx, docxText, normalizeError, readEntry, entryNames };

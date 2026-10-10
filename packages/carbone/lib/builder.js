@@ -66,6 +66,9 @@ var builder = {
               options.formatters = aggFormatters;
               builder.buildMarkers(xmlWithoutMarkers, aggMarkers, data, options, function (err, result) {
                 options.formatters = _formatters;
+                if (err instanceof Error) {
+                  err.message = aggregate.restoreNames(err.message, aggMarkers);
+                }
                 callback(err, result);
               });
             });

@@ -303,3 +303,73 @@ describe('EE платные: прочее', function () {
     assert.strictEqual(out, '<office:text><text:p>3</text:p><table:table-row><table:table-cell><text:p>1</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell><text:p>3</text:p></table:table-cell></table:table-row></office:text>');
   });
 });
+
+// ревью 2.2.0, раунд 1
+function renderXml (xml, data) {
+  return new Promise((resolve, reject) => carbone.renderXML(xml, data, {}, (err, res) => err ? reject(err) : resolve(res)));
+}
+
+describe('EE платные: циклы по ключу ([brand], [q]) — cum* и count() по видимым строкам', function () {
+  const cars = { cars: [{ brand: 'A', q: 1 }, { brand: 'B', q: 2 }, { brand: 'A', q: 3 }, { brand: 'B', q: 4 }, { brand: 'C', q: 5 }] };
+  const t = (marker) => '| {d.cars[brand].brand} | {d.cars[brand]' + marker + '} |\n| {d.cars[brand+1].brand} | |';
+  it('count() — 1…N без пропусков', async function () {
+    assert.deepStrictEqual(column(await text(t('.q:count()'), cars)), ['1', '2', '3']);
+  });
+  it('aggSum(.brand) — по всем элементам группы, :cumSum — по видимым строкам', async function () {
+    assert.deepStrictEqual(column(await text(t('.q:aggSum(.brand)'), cars)), ['4', '6', '5']);
+    assert.deepStrictEqual(column(await text(t('.q:aggSum(.brand):cumSum'), cars)), ['4', '10', '15']);
+  });
+  it('cumSum в цикле [q]: повтор ключа не считается', async function () {
+    const s = '| {d.cars[q].q} | {d.cars[q].q:cumSum} |\n| {d.cars[q+1].q} | |';
+    assert.strictEqual(await text(s, { cars: [{ q: 5 }, { q: 1 }, { q: 3 }, { q: 3 }] }), '| 1 | 1 |\n| 3 | 4 |\n| 5 | 9 |');
+  });
+  it('вложенный цикл под [brand]: cumSum по выведенным строкам', async function () {
+    const data = { cars: [{ brand: 'A', items: [{ q: 1 }, { q: 2 }] }, { brand: 'A', items: [{ q: 100 }] }, { brand: 'B', items: [{ q: 10 }] }] };
+    const s = '| {d.cars[brand].items[i].q} | {d.cars[brand].items[i].q:cumSum} |\n| {d.cars[brand].items[i+1].q} | |\n| {d.cars[brand+1].brand} | |';
+    assert.strictEqual(await text(s, data), '| 1 | 1 |\n| 2 | 3 |\n| 10 | 13 |');
+  });
+});
+
+describe('EE платные: ревью — ошибки и большие наборы', function () {
+  it('условный вывод (show/elseShow) до агрегатора — ошибка с подсказкой фильтра', async function () {
+    assert.strictEqual(normalizeError(await rawError('{d.x[].v:ifGT(1):show(5):aggSum}', { x: [{ v: 1 }, { v: 2 }] })),
+      'Форматтер show перед агрегатором aggSum не поддерживается: отберите элементы фильтром в скобках, например {d.cars[qty>1].qty:aggSum}.');
+    const m = await rawError('| {d.x[i].v:ifEQ(1):show(10):elseShow(0):cumSum} |\n| {d.x[i+1].v} |', { x: [{ v: 1 }] });
+    assert.ok(m.endsWith(' Source: "{d.x[i].v:ifEQ(1):show(10):elseShow(0):cumSum}"'), m);
+  });
+  it('условие без show до агрегатора допустимо', async function () {
+    assert.strictEqual(await text('{d.x[].v:ifGT(1):aggSum}', { x: [{ v: 1 }, { v: 2 }] }), '3');
+  });
+  it('метка в цикле без [i+1]: в ошибке исходная метка, без служебных имён', async function () {
+    const m = await rawError('{d.cars[i].qty:cumSum:formatN(2)}', { cars: [{ qty: 1 }] });
+    assert.ok(m.indexOf('{d.cars[i].qty:cumSum:formatN(2)}') !== -1 && m.indexOf('__agg') === -1, m);
+    const g = await rawError('{d[i].c[].q:aggSum}', [{ c: [{ q: 1 }] }]);
+    assert.ok(g.indexOf('{d[i].c[].q:aggSum}') !== -1 && g.indexOf('__agg') === -1, g);
+  });
+  it('строки из пробелов и шестнадцатеричные — не числа; экспонента — число', async function () {
+    assert.strictEqual(await text('{d.x[].v:aggSum} {d.x[].v:aggMin}', { x: [{ v: '1e3' }, { v: '0x10' }, { v: ' ' }, { v: ' 2 ' }, { v: 'Infinity' }] }), '1002 2');
+  });
+  it('200 тыс. значений: aggMin/aggMax без переполнения стека', async function () {
+    this.timeout(20000);
+    const data = { r: Array.from({ length: 200000 }, (_, i) => ({ q: i })) };
+    assert.strictEqual(await renderXml('<x>{d.r[].q:aggMin}|{d.r[].q:aggMax}</x>', data), '<x>0|199999</x>');
+  });
+  describe('50 тыс. строк — линейное время (каждая метка заметно быстрее 1,5 с)', function () {
+    const rows = { r: Array.from({ length: 50000 }, (_, i) => ({ brand: 'b' + i, q: i })) };
+    const cases = [
+      '<x>{d.r[].brand:aggStrD}</x>',
+      '<x>{d.r[].brand:aggCountD}</x>',
+      '<x><t>{d.r[i].brand:cumCountD}</t><t>{d.r[i+1].brand}</t></x>',
+      '<x><t>{d.r[i].q:aggSum}</t><t>{d.r[i+1].q}</t></x>'
+    ];
+    for (const xml of cases) {
+      it(xml, async function () {
+        this.timeout(30000);
+        const start = Date.now();
+        await renderXml(xml, rows);
+        const ms = Date.now() - start;
+        assert.ok(ms < 1500, xml + ': ' + ms + ' мс');
+      });
+    }
+  });
+});

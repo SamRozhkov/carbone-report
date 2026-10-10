@@ -14,6 +14,9 @@
 
 var set = require('./set');
 
+// форматтеры, которые могут остановить цепочку (show/elseShow, ifEqual/ifContain с сообщением, блоки show/hide)
+var STOPPING = ['show', 'elseShow', 'showBegin', 'showEnd', 'hideBegin', 'hideEnd', 'ifEqual', 'ifContain'];
+
 var AGG = ['aggSum', 'aggAvg', 'aggMin', 'aggMax', 'aggCount', 'aggCountD', 'aggStr', 'aggStrD'];
 var CUM = ['cumSum', 'cumCount', 'cumCountD'];
 
@@ -128,20 +131,22 @@ function templateError (message, source) {
  * Синтетический XML прохода: метка и закрывающие «[…+1]» для каждого цикла пути (изнутри наружу)
  * @param  {String} path    путь без _root., все скобки — циклы
  * @param  {String} chain   форматтеры через «:» (с ведущим «:») или ''
+ * @param  {Boolean} visibleRows  true — циклы как в документе (видимые строки), иначе каждый элемент
  */
-function syntheticXml (path, chain) {
+function syntheticXml (path, chain, visibleRows) {
   var _esc = function (str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   };
   var _p = function (marker) {
     return '<w:p><w:r><w:t>{' + _esc(marker) + '}</w:t></w:r></w:p>';
   };
-  // цикл без «i» ([brand]) сворачивает строки с одинаковым ключом; в проходе нужен каждый элемент — добавляем «i»
+  // цикл без «i» ([brand]) сворачивает строки с одинаковым ключом; в проходе элементов нужен каждый элемент —
+  // добавляем «i»; проход видимых строк оставляет цикл как в документе
   var _path = '';
   var _from = 0;
   parseBrackets(path).forEach(function (bracket) {
     var _inside = path.slice(bracket.start + 1, bracket.end);
-    if (bracket.iter.indexOf('i') === -1) {
+    if (visibleRows !== true && bracket.iter.indexOf('i') === -1) {
       _inside = bracket.iter.concat(['i'], bracket.filters).join(',');
     }
     _path += path.slice(_from, bracket.start) + '[' + _inside + ']';
@@ -193,6 +198,15 @@ function prepare (name, id) {
     }
   }
   var _pre = _chain.slice(1, _first);
+  // условный вывод до агрегатора останавливает цепочку (stopPropagation) — элемент выпал бы из набора молча
+  for (var c = 0; c < _pre.length; c++) {
+    var _preName = parseFormatter(_pre[c]).name;
+    if (STOPPING.indexOf(_preName) !== -1) {
+      throw templateError('Форматтер ' + _preName + ' перед агрегатором ' + parseFormatter(_chain[_first]).name
+        + ' не поддерживается: отберите элементы фильтром в скобках, например {d.cars[qty>1].qty:'
+        + parseFormatter(_chain[_first]).name + '}.', _source);
+    }
+  }
   var _post = _chain.slice(_last + 1);
   var _aggs = _chain.slice(_first, _last + 1).map(function (str) {
     var _f = parseFormatter(str);
@@ -282,8 +296,14 @@ function loopKey (parentsIndex, count) {
   return _defined.slice(_defined.length - count).join(',');
 }
 
+// десятичная запись числа в строке (без шестнадцатеричных и пробельных строк: Number(' ') === 0, Number('0x10') === 16)
+var DECIMAL_REGEX = /^\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*$/;
+
 function isNumeric (value) {
   if (value === null || value === undefined || value === '' || value instanceof Object) {
+    return false;
+  }
+  if (typeof value === 'string' && DECIMAL_REGEX.test(value) === false) {
     return false;
   }
   return Number.isFinite(Number(value));
@@ -297,74 +317,91 @@ function isPlainValue (value) {
 }
 
 /**
- * Итог набора значений (агрегаторы agg*)
+ * Итог набора значений (агрегаторы agg*). Линейно по числу значений: различные — через Set/Map,
+ * минимум и максимум — циклом (Math.min.apply падает на ~120 тыс. значений).
  */
 function aggregate (agg, values) {
-  var _nums = [];
-  var _distinct = [];
+  var _sum = 0;
+  var _count = 0;
+  var _min = Infinity;
+  var _max = -Infinity;
+  var _distinct = new Set();
   var _strs = [];
   for (var i = 0; i < values.length; i++) {
     var _v = values[i];
     if (isNumeric(_v) === true) {
-      _nums.push(Number(_v));
-    }
-    if (isPlainValue(_v) === true && _distinct.indexOf(_v) === -1) {
-      _distinct.push(_v);
+      var _n = Number(_v);
+      _sum += _n;
+      _count++;
+      if (_n < _min) {
+        _min = _n;
+      }
+      if (_n > _max) {
+        _max = _n;
+      }
     }
     if (isPlainValue(_v) === true) {
+      _distinct.add(_v);
       _strs.push(_v);
     }
-  }
-  var _sum = 0;
-  for (var n = 0; n < _nums.length; n++) {
-    _sum += _nums[n];
   }
   switch (agg.name) {
     case 'aggSum':
       return _sum;
     case 'aggAvg':
-      return _nums.length > 0 ? _sum / _nums.length : '';
+      return _count > 0 ? _sum / _count : '';
     case 'aggMin':
-      return _nums.length > 0 ? Math.min.apply(null, _nums) : '';
+      return _count > 0 ? _min : '';
     case 'aggMax':
-      return _nums.length > 0 ? Math.max.apply(null, _nums) : '';
+      return _count > 0 ? _max : '';
     case 'aggCount':
       return values.length;
     case 'aggCountD':
-      return _distinct.length;
+      return _distinct.size;
     case 'aggStr':
       return _strs.map(String).join(agg.sep);
-    case 'aggStrD':
+    case 'aggStrD': {
       // порядок — по последнему вхождению значения, как в примере документации
       // (Lexus, Faraday, Venturi, Faraday, Aptera, Venturi → Lexus, Faraday, Aptera, Venturi)
+      var _lastIndex = new Map();
+      for (var j = 0; j < _strs.length; j++) {
+        _lastIndex.set(_strs[j], j);
+      }
       return _strs.filter(function (v, index) {
-        return _strs.lastIndexOf(v) === index;
+        return _lastIndex.get(v) === index;
       }).map(String).join(agg.sep);
+    }
     default:
       return '';
   }
 }
 
 /**
- * Один шаг цепочки агрегаторов над строками вывода (в порядке вывода)
- * @param  {Object} agg
- * @param  {Array}  rows  [{ values: [значения набора строки] | value, parts: [ключи partition-by по шагам] }]
- * @param  {Number} step  номер агрегатора в цепочке
+ * Один шаг цепочки агрегаторов над строками (в порядке вывода)
+ * @param  {Object}   agg
+ * @param  {Array}    rows      [{ parts: [ключи partition-by по шагам], … }]
+ * @param  {Number}   step      номер агрегатора в цепочке
+ * @param  {Function} valuesOf  значения набора строки
  */
 function applyStep (agg, rows, step, valuesOf) {
   var _groups = new Map();
   var _groupOf = function (row) {
     var _key = row.parts[step];
-    if (_groups.has(_key) === false) {
-      _groups.set(_key, { values : [], sum : 0, count : 0, distinct : [] });
+    var _group = _groups.get(_key);
+    if (_group === undefined) {
+      _group = { values : [], sum : 0, count : 0, distinct : new Set() };
+      _groups.set(_key, _group);
     }
-    return _groups.get(_key);
+    return _group;
   };
   var _results = [];
   if (agg.cumulative === false) {
     for (var i = 0; i < rows.length; i++) {
       var _g = _groupOf(rows[i]);
-      _g.values = _g.values.concat(valuesOf(rows[i]));
+      var _rowValues = valuesOf(rows[i]);
+      for (var k = 0; k < _rowValues.length; k++) {
+        _g.values.push(_rowValues[k]);
+      }
     }
     for (var j = 0; j < rows.length; j++) {
       var _group = _groupOf(rows[j]);
@@ -384,8 +421,8 @@ function applyStep (agg, rows, step, valuesOf) {
       if (isNumeric(_value) === true) {
         _state.sum += Number(_value);
       }
-      if (isPlainValue(_value) === true && _state.distinct.indexOf(_value) === -1) {
-        _state.distinct.push(_value);
+      if (isPlainValue(_value) === true) {
+        _state.distinct.add(_value);
       }
     }
     if (agg.name === 'cumSum') {
@@ -395,7 +432,7 @@ function applyStep (agg, rows, step, valuesOf) {
       _results.push(_state.count);
     }
     else {
-      _results.push(_state.distinct.length);
+      _results.push(_state.distinct.size);
     }
   }
   return _results;
@@ -424,7 +461,7 @@ function withFormatter (base, name, fn) {
  * Синтетическая сборка: собирает записи формата __agg и возвращает их в порядке вывода
  * (записи, чьи строки не вывелись — фильтр цикла, — отбрасываются)
  */
-function collect (path, chain, partitions, data, options, buildXML, callback) {
+function collect (path, chain, partitions, visibleRows, data, options, buildXML, callback) {
   var _records = [];
   var _formatters = withFormatter(options.formatters, '__aggCollect', function (value) {
     var _parts = Array.prototype.slice.call(arguments, 1);
@@ -436,7 +473,7 @@ function collect (path, chain, partitions, data, options, buildXML, callback) {
     return ':' + f;
   }).join('') + ':__aggCollect' + _args;
   var _options = Object.assign({}, options, { formatters : _formatters, isDebugActive : false });
-  buildXML(syntheticXml(path, _chain), data, _options, function (err, xml) {
+  buildXML(syntheticXml(path, _chain, visibleRows), data, _options, function (err, xml) {
     if (err) {
       return callback(err);
     }
@@ -478,51 +515,85 @@ function compute (job, data, options, buildXML, callback) {
     }
     return _parts;
   };
-  var _finish = function (rows, valuesOf) {
-    var _values = rows;
-    for (var s = 0; s < _aggs.length; s++) {
-      var _res;
-      if (s === 0 && job.grouped === true) {
-        // «[]»: итог набора своей строки (элемента внешнего цикла или единственной строки вне цикла)
-        _res = rows.map(function (row) {
-          return aggregate(_aggs[0], row.values);
-        });
+  /**
+   * Расчёт цепочки: allRows — все элементы (для agg* первого шага), visibleRows — строки вывода в порядке вывода
+   * (для cum* и следующих шагов). Внутренняя ошибка расчёта — ошибка шаблона, а не падение процесса.
+   */
+  var _finish = function (allRows, visibleRows, valuesOf) {
+    var _byKey = new Map();
+    try {
+      for (var s = 0; s < _aggs.length; s++) {
+        var _rows = (s === 0 && job.grouped === false && _aggs[0].cumulative === false) ? allRows : visibleRows;
+        var _res;
+        if (s === 0 && job.grouped === true) {
+          // «[]»: итог набора своей строки (элемента внешнего цикла или единственной строки вне цикла)
+          _res = _rows.map(function (row) {
+            return aggregate(_aggs[0], row.values);
+          });
+        }
+        else {
+          _res = applyStep(_aggs[s], _rows, s, s === 0 ? valuesOf : function (row) {
+            return [row.result];
+          });
+        }
+        for (var r = 0; r < _rows.length; r++) {
+          _rows[r].result = _res[r];
+        }
       }
-      else {
-        _res = applyStep(_aggs[s], rows, s, s === 0 ? valuesOf : function (row) {
-          return [row.result];
-        });
-      }
-      for (var r = 0; r < rows.length; r++) {
-        rows[r].result = _res[r];
+      for (var k = 0; k < visibleRows.length; k++) {
+        _byKey.set(visibleRows[k].key, visibleRows[k].result);
       }
     }
-    var _byKey = new Map();
-    for (var k = 0; k < _values.length; k++) {
-      _byKey.set(_values[k].key, _values[k].result);
+    catch (e) {
+      return callback(new Error('Не удалось посчитать агрегатор: ' + (e && e.message ? e.message : String(e)) + '.'));
     }
     callback(null, _byKey);
   };
   if (job.grouped === false) {
     var _all = _partArgs(0);
-    return collect(job.itemPath, job.pre, _all.args, data, options, buildXML, function (err, records) {
+    return collect(job.itemPath, job.pre, _all.args, false, data, options, buildXML, function (err, records) {
       if (err) {
         return callback(err);
       }
       var _rows = records.map(function (rec) {
         return { key : loopKey(rec.parentsIndex, job.outerLoops), value : rec.value, parts : _partsOf(rec, _all.map) };
       });
-      _finish(_rows, function (row) {
+      var _valuesOf = function (row) {
         return [row.value];
+      };
+      // цикл без «i» ([brand], [q]) выводит одну строку на ключ: cum*, count() и следующие шаги — только по видимым строкам
+      var _distinctLoop = parseBrackets(job.itemPath).some(function (bracket) {
+        return bracket.iter.indexOf('i') === -1;
+      });
+      if (_distinctLoop === false) {
+        return _finish(_rows, _rows, _valuesOf);
+      }
+      collect(job.itemPath, [], [], true, data, options, buildXML, function (err2, visible) {
+        if (err2) {
+          return callback(err2);
+        }
+        var _byKey = new Map();
+        for (var i = 0; i < _rows.length; i++) {
+          _byKey.set(_rows[i].key, _rows[i]);
+        }
+        var _visibleRows = [];
+        for (var v = 0; v < visible.length; v++) {
+          var _row = _byKey.get(loopKey(visible[v].parentsIndex, job.outerLoops));
+          if (_row !== undefined) {
+            _visibleRows.push(_row);
+          }
+        }
+        _finish(_rows, _visibleRows, _valuesOf);
       });
     });
   }
-  collect(job.itemPath, job.pre, [], data, options, buildXML, function (err, items) {
+  collect(job.itemPath, job.pre, [], false, data, options, buildXML, function (err, items) {
     if (err) {
       return callback(err);
     }
     var _rest = _partArgs(1);
-    collect(job.rowPath, [], _rest.args, data, options, buildXML, function (err2, records) {
+    // строки вывода — циклы как в документе: при [brand] видна одна строка на ключ
+    collect(job.rowPath, [], _rest.args, true, data, options, buildXML, function (err2, records) {
       if (err2) {
         return callback(err2);
       }
@@ -538,7 +609,7 @@ function compute (job, data, options, buildXML, callback) {
         var _key = loopKey(rec.parentsIndex, job.outerLoops);
         return { key : _key, values : _byOuter.get(_key) || [], parts : _partsOf(rec, _rest.map) };
       });
-      _finish(_rows, function (row) {
+      _finish(_rows, _rows, function (row) {
         return row.values;
       });
     });
@@ -548,6 +619,22 @@ function compute (job, data, options, buildXML, callback) {
 var aggregateModule = {
 
   isAggregator : isAggregator,
+
+  /**
+   * Вернуть в тексте ошибки исходные метки вместо переписанных (служебный __aggOut пользователю не показывается)
+   * @param  {String} message
+   * @param  {Array}  markers  метки после run (у переписанных есть source)
+   * @return {String}
+   */
+  restoreNames : function (message, markers) {
+    var _message = String(message);
+    for (var i = 0; i < markers.length; i++) {
+      if (markers[i].source !== undefined) {
+        _message = _message.split(markers[i].name.replace(/^_root\./, '')).join(markers[i].source.replace(/^_root\./, ''));
+      }
+    }
+    return _message;
+  },
 
   /**
    * Посчитать метки с агрегаторами и переписать их
@@ -602,6 +689,10 @@ var aggregateModule = {
       compute(_jobs[index], data, options, buildXML, function (err, byKey) {
         if (err) {
           // ошибка синтетической сборки — с подписью исходной метки, без служебных форматтеров
+          if (!(err instanceof Error)) {
+            err = new Error(String(err));
+          }
+          err.message = String(err.message).replace(/:__aggCollect(\([^)]*\))?/g, '');
           err.message = String(err.message).replace(/ Source: "[\s\S]*"$/, '') + ' Source: "' + _jobs[index].source + '"';
           return callback(err, null, null);
         }

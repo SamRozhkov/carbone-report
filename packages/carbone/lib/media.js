@@ -10,24 +10,21 @@
 //   3. форматтер __img кладёт значение в реестр options.__media.items и печатает жетон «m<ключ>i<n>» из области
 //      частного использования (ключ — случайный на рендер: жетон из данных отчёта не совпадёт с ним);
 //   4. finish — после сборки всех файлов (renderBuffer): жетоны группируются по картинке-контейнеру, данные
-//      загружаются (loadImage), в контейнере меняются ссылка на файл и размеры, добавляются media-файл, связь и тип
-//      в [Content_Types].xml; пустое значение удаляет контейнер. Без жетонов документ не меняется.
+//      загружаются (loadImage), в контейнере меняются ссылка на файл и размеры, добавляются media-файл и связь
+//      (OOXML: .rels и [Content_Types].xml; OpenDocument: META-INF/manifest.xml); пустое значение удаляет
+//      контейнер. Без жетонов документ не меняется.
 //
-// Форматы: правила разметки — таблица FORMATS по семействам (xmltree.family), источники данных — LOADERS по виду
-// записи реестра (kind).
+// Форматы (DOCX, PPTX, XLSX, ODT, ODS, ODP): правила разметки — lib/media-formats.js, по семействам
+// (xmltree.family); источники данных — LOADERS по виду записи реестра (kind).
 
 var crypto = require('crypto');
-var path = require('path');
 var imageSize = require('image-size').imageSize;
 var splitChain = require('./set').splitChain;
 var xmltree = require('./xmltree');
+var formats = require('./media-formats');
 
-var closest = xmltree.closest;
-var descendants = xmltree.descendants;
-var startTag = xmltree.startTag;
-var attr = xmltree.attr;
-var setAttr = xmltree.setAttr;
-var putAttr = xmltree.putAttr;
+var formatOf = formats.formatOf;
+var TYPES = formats.TYPES;
 
 // жетон: символы частного использования, отличные от агрегаторов (U+E000/U+E001) и drop/keep (U+E010/U+E011)
 var OPEN = '';
@@ -42,18 +39,7 @@ var CONCURRENCY = 4; // одновременных загрузок на отч�
 var FITS = ['fillWidth', 'contain', 'fill'];
 var DEFAULT_FIT = 'fillWidth';
 
-// тип изображения (по заголовку файла) → расширение и MIME
-var TYPES = {
-  png  : { ext : 'png', mime : 'image/png' },
-  jpeg : { ext : 'jpeg', mime : 'image/jpeg' },
-  gif  : { ext : 'gif', mime : 'image/gif' }
-};
 var DATA_MIMES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
-
-var EMU_PER_PX = 9525; // 96 dpi
-var EMU_PER_PT = 12700;
-var IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
-var RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
 // метки, которые не становятся метками изображения: удаление элемента и условные блоки
 var NOT_IMAGE_MARKER = /:\s*(?:__img|drop|keep|showBegin|showEnd|hideBegin|hideEnd)\b/;
@@ -90,208 +76,6 @@ function unquote (arg) {
 /** Реестр рендера: создаётся в renderBuffer, общий для всех файлов документа */
 function createRegistry () {
   return { nonce : crypto.randomBytes(6).toString('hex'), items : [], sources : [] };
-}
-
-// ---------------------------------------------------------------------------------------------------------------
-// Правила форматов
-
-/** Картинка Word: w:drawing, у которого a:graphicData содержит pic:pic напрямую (не группа, не фигура с картинкой) */
-function isWordPicture (drawing) {
-  return drawing.children.some(function (frame) {
-    return (frame.name === 'wp:inline' || frame.name === 'wp:anchor') && frame.children.some(function (graphic) {
-      return graphic.name === 'a:graphic' && graphic.children.some(function (data) {
-        return data.name === 'a:graphicData' && data.children.some(function (pic) {
-          return pic.name === 'pic:pic';
-        });
-      });
-    });
-  });
-}
-
-function isAlternateWithPicture (el) {
-  return el.children.some(function (choice) {
-    return choice.name === 'mc:Choice' && choice.children.some(function (d) {
-      return d.name === 'w:drawing' && isWordPicture(d);
-    });
-  });
-}
-
-/**
- * Контейнер картинки Word вокруг элемента: w:drawing с картинкой (или охватывающий mc:AlternateContent вместе с
- * запасным VML), либо старая картинка VML w:pict с v:imagedata; иначе null
- */
-function wordContainer (el) {
-  var _drawing = closest(el, ['w:drawing'], isWordPicture);
-  if (_drawing !== null) {
-    var _choice = _drawing.parent;
-    if (_choice !== null && _choice.name === 'mc:Choice' && _choice.parent !== null && _choice.parent.name === 'mc:AlternateContent') {
-      return _choice.parent;
-    }
-    return _drawing;
-  }
-  var _alternate = closest(el, ['mc:AlternateContent'], isAlternateWithPicture);
-  if (_alternate !== null) {
-    return _alternate;
-  }
-  return closest(el, ['w:pict'], function (x) {
-    return descendants(x, ['v:imagedata']).length > 0;
-  });
-}
-
-// единицы размеров VML (style="width:72pt;height:36pt") в EMU
-var VML_UNITS = { pt : EMU_PER_PT, in : 914400, cm : 360000, mm : 36000, px : EMU_PER_PX };
-
-function vmlSize (style, name) {
-  var _match = new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*([\\d.]+)\\s*(pt|in|cm|mm|px)?\\s*(?:;|$)').exec(style || '');
-  if (_match === null) {
-    return null;
-  }
-  var _value = parseFloat(_match[1]) * VML_UNITS[_match[2] || 'px'];
-  return _value > 0 ? _value : null;
-}
-
-function setVmlSize (style, name, emu) {
-  var _pt = String(Math.round(emu / EMU_PER_PT * 100) / 100) + 'pt';
-  var _regex = new RegExp('((?:^|;)\\s*' + name + '\\s*:\\s*)[\\d.]+\\s*(?:pt|in|cm|mm|px)?');
-  return _regex.test(style) === true ? style.replace(_regex, '$1' + _pt) : style;
-}
-
-/**
- * Правки картинки Word под изображение: рамка — первый wp:extent (или размер VML), размеры по imageFit,
- * ссылки a:blip r:embed / v:imagedata r:id — на новую связь
- * @return {Array} [{ el, tag : function (startTag) → startTag }]
- */
-function wordPlace (xml, container, image, relId, fit) {
-  var _extents = descendants(container, ['wp:extent']);
-  var _xfrmExts = descendants(container, ['a:ext']).filter(function (x) {
-    return x.parent !== null && x.parent.name === 'a:xfrm';
-  });
-  var _vmlShapes = descendants(container, ['v:imagedata']).map(function (x) {
-    return x.parent;
-  }).filter(function (x) {
-    return x !== null && attr(xml, x, 'style') !== null;
-  });
-  var _frame = null;
-  if (_extents.length > 0) {
-    var _cx = parseInt(attr(xml, _extents[0], 'cx'), 10);
-    var _cy = parseInt(attr(xml, _extents[0], 'cy'), 10);
-    if (_cx > 0 && _cy > 0) {
-      _frame = { cx : _cx, cy : _cy };
-    }
-  }
-  if (_frame === null && _vmlShapes.length > 0) {
-    var _style = attr(xml, _vmlShapes[0], 'style');
-    var _w = vmlSize(_style, 'width');
-    var _h = vmlSize(_style, 'height');
-    if (_w !== null && _h !== null) {
-      _frame = { cx : _w, cy : _h };
-    }
-  }
-  var _size = fitSize(_frame, image, fit);
-  var _edits = [];
-  var _setSize = function (tag) {
-    return setAttr(setAttr(tag, 'cx', String(_size.cx)), 'cy', String(_size.cy));
-  };
-  _extents.concat(_xfrmExts).forEach(function (el) {
-    _edits.push({ el : el, tag : _setSize });
-  });
-  descendants(container, ['a:blip']).forEach(function (el) {
-    _edits.push({ el : el, tag : function (tag) {
-      return putAttr(tag, 'r:embed', relId);
-    } });
-  });
-  descendants(container, ['v:imagedata']).forEach(function (el) {
-    _edits.push({ el : el, tag : function (tag) {
-      return putAttr(tag, 'r:id', relId);
-    } });
-  });
-  _vmlShapes.forEach(function (el) {
-    _edits.push({ el : el, tag : function (tag) {
-      var _style = /\sstyle\s*=\s*"([^"]*)"/.exec(tag);
-      if (_style === null) {
-        return tag;
-      }
-      return setAttr(tag, 'style', setVmlSize(setVmlSize(_style[1], 'width', _size.cx), 'height', _size.cy));
-    } });
-  });
-  return _edits;
-}
-
-/** Позиции замещающего текста (значения атрибутов) у элементов картинок; attrs — { элемент: [атрибуты] } */
-function attrAltRanges (attrs, container) {
-  return function (xml, root) {
-    var _ranges = [];
-    var _walk = function (el) {
-      for (var i = 0; i < el.children.length; i++) {
-        var _child = el.children[i];
-        var _names = attrs[_child.name];
-        if (_names !== undefined && startTag(xml, _child).indexOf('{') !== -1 && container(_child) !== null) {
-          _names.forEach(function (name) {
-            var _range = xmltree.attrRange(xml, _child, name);
-            if (_range !== null && xml.slice(_range.start, _range.end).indexOf('{') !== -1) {
-              _ranges.push(_range);
-            }
-          });
-        }
-        _walk(_child);
-      }
-    };
-    _walk(root);
-    return _ranges;
-  };
-}
-
-/**
- * Правила форматов по семействам (xmltree.family). Каждое:
- *   altHint              — быстрая проверка файла до разбора: есть ли метка в замещающем тексте;
- *   altRanges(xml, root) → [{ start, end }] — где метка становится меткой изображения (решение R2);
- *   container(el)        → контейнер картинки вокруг элемента с жетоном или null;
- *   place(xml, container, image, relId, fit) → правки открывающих тегов внутри контейнера;
- *   mediaDir             — папка media-файлов в архиве.
- * Связи и [Content_Types].xml — общие для OOXML (relsPath). ODF (manifest.xml) добавит Task 2.
- */
-var WORD_ALT = {
-  'wp:docPr'    : ['descr', 'title'],
-  'pic:cNvPr'   : ['descr', 'title'],
-  'v:shape'     : ['alt', 'o:title'],
-  'v:rect'      : ['alt', 'o:title'],
-  'v:imagedata' : ['o:title']
-};
-
-var FORMATS = {
-  w : {
-    altHint   : /\s(?:descr|title|alt|o:title)\s*=\s*(?:"[^"]*\{|'[^']*\{)/,
-    altRanges : attrAltRanges(WORD_ALT, wordContainer),
-    container : wordContainer,
-    place     : wordPlace,
-    mediaDir  : 'word/media/'
-  }
-};
-
-// поддержанные расширения шаблона → семейство FORMATS
-var FORMAT_OF = {
-  docx : 'w'
-};
-
-function formatOf (extension) {
-  var _fam = FORMAT_OF[typeof extension === 'string' ? extension.toLowerCase() : ''];
-  return _fam === undefined ? null : FORMATS[_fam];
-}
-
-/** Размер изображения в EMU по рамке заглушки и режиму imageFit */
-function fitSize (frame, image, fit) {
-  if (frame === null) {
-    // рамки нет — исходный размер при 96 dpi
-    return { cx : image.width * EMU_PER_PX, cy : image.height * EMU_PER_PX };
-  }
-  if (fit === 'fill') {
-    return { cx : Math.round(frame.cx), cy : Math.round(frame.cy) };
-  }
-  var _scale = frame.cx / image.width;
-  if (fit === 'contain') {
-    _scale = Math.min(_scale, frame.cy / image.height);
-  }
-  return { cx : Math.round(image.width * _scale), cy : Math.round(image.height * _scale) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -573,15 +357,6 @@ function itemKey (item) {
 // ---------------------------------------------------------------------------------------------------------------
 // 4. finish
 
-/** Путь файла связей части OOXML: word/document.xml → word/_rels/document.xml.rels */
-function relsPath (name) {
-  return path.posix.join(path.posix.dirname(name), '_rels', path.posix.basename(name) + '.rels');
-}
-
-function escapeAttr (value) {
-  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-}
-
 /**
  * Заменить картинки-заглушки изображениями после сборки всех файлов (renderBuffer, между walkFiles и finishXlsx)
  * @param  {Object} template  собранный шаблон { files, extension }
@@ -636,7 +411,7 @@ function finish (template, options) {
 
 /**
  * Жетоны этого рендера по файлам верхнего уровня
- * @return {Array} [{ file, tokens, containers : Map(контейнер → номер первой записи) }]
+ * @return {Array} [{ file, root, tokens, containers : Map(контейнер → номер первой записи) }]
  */
 function collect (template, registry, fmt) {
   var _jobs = [];
@@ -661,18 +436,18 @@ function collect (template, registry, fmt) {
         _containers.set(_container, token.id);
       }
     });
-    _jobs.push({ file : file, tokens : _parsed.tokens, containers : _containers });
+    _jobs.push({ file : file, root : _parsed.root, tokens : _parsed.tokens, containers : _containers });
   });
   return _jobs;
 }
 
-/** Правки документа, связи, media-файлы и типы содержимого */
+/** Правки документа, связи, media-файлы и их регистрация в пакете (правила формата — lib/media-formats.js) */
 function write (template, registry, fmt, jobs, imageOf) {
   var _names = new Set(template.files.map(function (f) {
     return f.name;
   }));
   var _mediaOf = new Map(); // изображение → путь media-файла
-  var _types = new Set();
+  var _media = []; // новые файлы [{ name, type }]
   var _counter = 0;
   var _mediaPath = function (image) {
     if (_mediaOf.has(image) === false) {
@@ -682,8 +457,8 @@ function write (template, registry, fmt, jobs, imageOf) {
       } while (_names.has(_name) === true);
       _names.add(_name);
       _mediaOf.set(image, _name);
-      _types.add(image.type);
-      template.files.push({ name : _name, data : image.buffer, isMarked : false, parent : '' });
+      _media.push({ name : _name, type : image.type });
+      formats.addFile(template, { name : _name, data : image.buffer, isMarked : false, parent : '' });
     }
     return _mediaOf.get(image);
   };
@@ -695,111 +470,56 @@ function write (template, registry, fmt, jobs, imageOf) {
 
   jobs.forEach(function (job) {
     var _xml = job.file.data;
-    var _rels = null;
+    var _links = null;
     var _edits = job.tokens.map(function (token) {
       return { start : token.pos, end : token.pos + token.len, rep : '' };
     });
+    // правки открывающих тегов по элементам: несколько правил одного тега применяются по очереди
+    var _tags = new Map();
+    var _tag = function (el, fn) {
+      if (_tags.has(el) === false) {
+        _tags.set(el, []);
+      }
+      _tags.get(el).push(fn);
+    };
+    var _kept = new Set();
     job.containers.forEach(function (id, container) {
-      var _item = registry.items[id];
       var _image = imageOf(id);
       if (_image === null) {
         _edits.push({ start : container.start, end : container.end, rep : '' });
         return;
       }
-      if (_rels === null) {
-        _rels = relations(template, job.file.name);
+      _kept.add(container);
+      if (_links === null) {
+        _links = fmt.links(template, job.file.name);
       }
-      var _target = path.posix.relative(path.posix.dirname(job.file.name), _mediaPath(_image));
-      var _relId = _rels.idFor(_target);
-      fmt.place(_xml, container, _image, _relId, _item.fit).forEach(function (edit) {
-        _edits.push({ start : edit.el.start, end : edit.el.openEnd, rep : edit.tag(_stripTokens(startTag(_xml, edit.el))) });
+      fmt.place(_xml, container, _image, _links.ref(_mediaPath(_image)), registry.items[id].fit).forEach(function (edit) {
+        if (edit.remove === true) {
+          _edits.push({ start : edit.el.start, end : edit.el.end, rep : '' });
+        }
+        else {
+          _tag(edit.el, edit.tag);
+        }
       });
     });
-    job.file.data = xmltree.applyEdits(_xml, _edits);
-    if (_rels !== null) {
-      _rels.save();
-    }
-  });
-  if (_types.size > 0) {
-    addContentTypes(template, _types);
-  }
-}
-
-/**
- * Связи части: существующий .rels или новый; idFor(target) — Id связи-изображения (новой или уже добавленной)
- */
-function relations (template, partName) {
-  var _name = relsPath(partName);
-  var _file = template.files.find(function (f) {
-    return f.name === _name && (f.parent === '' || f.parent === undefined);
-  });
-  if (_file === undefined) {
-    _file = { name : _name, data : '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="' + RELS_NS + '"></Relationships>', isMarked : false, parent : '' };
-    template.files.push(_file);
-  }
-  if (Buffer.isBuffer(_file.data) === true) {
-    _file.data = _file.data.toString('utf8');
-  }
-  var _ids = new Set();
-  _file.data.replace(/\sId\s*=\s*"([^"]*)"/g, function (all, id) {
-    _ids.add(id);
-    return all;
-  });
-  var _added = new Map();
-  var _counter = 0;
-  return {
-    idFor : function (target) {
-      if (_added.has(target) === false) {
-        var _id;
-        do {
-          _id = 'rIdCrImg' + (++_counter);
-        } while (_ids.has(_id) === true);
-        _ids.add(_id);
-        _added.set(target, _id);
-      }
-      return _added.get(target);
-    },
-    save : function () {
-      if (_added.size === 0) {
-        return;
-      }
-      var _xml = '';
-      _added.forEach(function (id, target) {
-        _xml += '<Relationship Id="' + id + '" Type="' + IMAGE_REL + '" Target="' + escapeAttr(target) + '"/>';
+    if (fmt.idTags !== null && _kept.size > 0) {
+      formats.uniqueIds(_xml, job.root, fmt.idTags, _kept).forEach(function (edit) {
+        _tag(edit.el, edit.tag);
       });
-      var _close = _file.data.lastIndexOf('</Relationships>');
-      if (_close !== -1) {
-        _file.data = _file.data.slice(0, _close) + _xml + _file.data.slice(_close);
-      }
-      else {
-        // пустой <Relationships …/>
-        _file.data = _file.data.replace(/<Relationships([^>]*)\/>/, '<Relationships$1>' + _xml + '</Relationships>');
-      }
     }
-  };
-}
-
-/** Default Extension для типов новых media-файлов в [Content_Types].xml (если их ещё нет) */
-function addContentTypes (template, types) {
-  var _file = template.files.find(function (f) {
-    return f.name === '[Content_Types].xml' && (f.parent === '' || f.parent === undefined);
-  });
-  if (_file === undefined) {
-    return;
-  }
-  if (Buffer.isBuffer(_file.data) === true) {
-    _file.data = _file.data.toString('utf8');
-  }
-  var _xml = '';
-  types.forEach(function (type) {
-    var _ext = TYPES[type].ext;
-    if (new RegExp('<Default\\s[^>]*Extension\\s*=\\s*"' + _ext + '"', 'i').test(_file.data) === false) {
-      _xml += '<Default Extension="' + _ext + '" ContentType="' + TYPES[type].mime + '"/>';
+    _tags.forEach(function (fns, el) {
+      var _rep = fns.reduce(function (tag, fn) {
+        return fn(tag);
+      }, _stripTokens(xmltree.startTag(_xml, el)));
+      _edits.push({ start : el.start, end : el.openEnd, rep : _rep });
+    });
+    job.file.data = xmltree.applyEdits(_xml, _edits);
+    if (_links !== null) {
+      _links.save();
     }
   });
-  var _close = _file.data.lastIndexOf('</Types>');
-  if (_xml !== '' && _close !== -1) {
-    _file.data = _file.data.slice(0, _close) + _xml + _file.data.slice(_close);
+  if (_media.length > 0) {
+    fmt.register(template, _media);
   }
 }
 

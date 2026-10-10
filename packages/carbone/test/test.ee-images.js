@@ -362,3 +362,401 @@ describe('EE платные: изображения из данных — DOCX (
     assert.strictEqual(embeds(await readEntry(res.buffer, 'word/document.xml')).length, 1);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// PPTX, XLSX, OpenDocument (Task 2 плана 2.4.0): минимальные архивы собираются здесь
+
+const yazl = require('yazl');
+
+const A_NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+const OFFICE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
+
+/** zip из { имя: данные } по порядку; mimetype (ODF) — без сжатия */
+function zip (files) {
+  return new Promise((resolve, reject) => {
+    const z = new yazl.ZipFile();
+    const parts = [];
+    z.outputStream.on('data', (c) => parts.push(c)).on('error', reject).on('end', () => resolve(Buffer.concat(parts)));
+    for (const [name, data] of Object.entries(files)) z.addBuffer(Buffer.from(data), name, { compress: name !== 'mimetype' });
+    z.end();
+  });
+}
+
+const rels = (list) => XML_HEAD + '<Relationships xmlns="' + RELS_NS + '">' + list.map(([id, type, t]) => '<Relationship Id="' + id + '" Type="' + (type.startsWith('http') ? type : OFFICE_REL + type) + '" Target="' + t + '"/>').join('') + '</Relationships>';
+const types = (overrides) => XML_HEAD + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/>'
+  + Object.entries(overrides).map(([p, t]) => '<Override PartName="' + p + '" ContentType="' + t + '"/>').join('') + '</Types>';
+
+/** Картинка слайда PPTX; рамка cx×cy EMU в точке x,y */
+function pptxPic (descr, opts) {
+  const o = Object.assign({ id: 2, cx: 2000000, cy: 2000000, x: 100, y: 200, title: null, blip: '' }, opts);
+  return '<p:pic><p:nvPicPr><p:cNvPr id="' + o.id + '" name="Picture ' + o.id + '" descr="' + descr + '"' + (o.title !== null ? ' title="' + o.title + '"' : '') + '/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>'
+    + '<p:blipFill><a:blip r:embed="rIdImg"' + (o.blip ? '>' + o.blip + '</a:blip>' : '/>') + '<a:stretch><a:fillRect/></a:stretch></p:blipFill>'
+    + '<p:spPr><a:xfrm><a:off x="' + o.x + '" y="' + o.y + '"/><a:ext cx="' + o.cx + '" cy="' + o.cy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>';
+}
+
+const pptxText = (text, id) => '<p:sp><p:nvSpPr><p:cNvPr id="' + id + '" name="T' + id + '"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:p><a:r><a:t>' + text + '</a:t></a:r></a:p></p:txBody></p:sp>';
+
+function buildPptx (shapes) {
+  const P = 'application/vnd.openxmlformats-officedocument.presentationml.';
+  return zip({
+    '[Content_Types].xml': types({ '/ppt/presentation.xml': P + 'presentation.main+xml', '/ppt/slides/slide1.xml': P + 'slide+xml' }),
+    '_rels/.rels': rels([['rId1', 'officeDocument', 'ppt/presentation.xml']]),
+    'ppt/presentation.xml': XML_HEAD + '<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" ' + A_NS + '><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst><p:sldSz cx="9144000" cy="6858000"/></p:presentation>',
+    'ppt/_rels/presentation.xml.rels': rels([['rId1', 'slide', 'slides/slide1.xml']]),
+    'ppt/slides/slide1.xml': XML_HEAD + '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" ' + A_NS + '><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>' + shapes.join('') + '</p:spTree></p:cSld></p:sld>',
+    'ppt/slides/_rels/slide1.xml.rels': rels([['rIdImg', 'image', '../media/p.png']]),
+    'ppt/media/p.png': png(1, 1)
+  });
+}
+
+/** Картинка листа XLSX в привязке anchor (oneCellAnchor | twoCellAnchor | absoluteAnchor) */
+function xlsxPic (descr, opts) {
+  const o = Object.assign({ id: 2, cx: 2000000, cy: 2000000, anchor: 'oneCellAnchor' }, opts);
+  const from = '<xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>';
+  const place = {
+    oneCellAnchor: from + '<xdr:ext cx="' + o.cx + '" cy="' + o.cy + '"/>',
+    twoCellAnchor: from + '<xdr:to><xdr:col>4</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>9</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>',
+    absoluteAnchor: '<xdr:pos x="0" y="0"/><xdr:ext cx="' + o.cx + '" cy="' + o.cy + '"/>'
+  }[o.anchor];
+  return '<xdr:' + o.anchor + '>' + place
+    + '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="' + o.id + '" name="Picture ' + o.id + '" descr="' + descr + '"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>'
+    + '<xdr:blipFill><a:blip r:embed="rIdImg"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>'
+    + '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + o.cx + '" cy="' + o.cy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>'
+    + '<xdr:clientData/></xdr:' + o.anchor + '>';
+}
+
+function buildXlsx (anchors) {
+  const S = 'application/vnd.openxmlformats-officedocument.spreadsheetml.';
+  const MAIN = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  return zip({
+    '[Content_Types].xml': types({
+      '/xl/workbook.xml': S + 'sheet.main+xml', '/xl/worksheets/sheet1.xml': S + 'worksheet+xml',
+      '/xl/sharedStrings.xml': S + 'sharedStrings+xml', '/xl/drawings/drawing1.xml': 'application/vnd.openxmlformats-officedocument.drawing+xml'
+    }),
+    '_rels/.rels': rels([['rId1', 'officeDocument', 'xl/workbook.xml']]),
+    'xl/workbook.xml': XML_HEAD + '<workbook ' + MAIN + '><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels': rels([['rId1', 'worksheet', 'worksheets/sheet1.xml'], ['rId2', 'sharedStrings', 'sharedStrings.xml']]),
+    'xl/sharedStrings.xml': XML_HEAD + '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1" uniqueCount="1"><si><t>{d.title}</t></si></sst>',
+    'xl/worksheets/sheet1.xml': XML_HEAD + '<worksheet ' + MAIN + '><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData><drawing r:id="rId1"/></worksheet>',
+    'xl/worksheets/_rels/sheet1.xml.rels': rels([['rId1', 'drawing', '../drawings/drawing1.xml']]),
+    'xl/drawings/drawing1.xml': XML_HEAD + '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" ' + A_NS + '>' + anchors.join('') + '</xdr:wsDr>',
+    'xl/drawings/_rels/drawing1.xml.rels': rels([['rIdImg', 'image', '../media/p.png']]),
+    'xl/media/p.png': png(1, 1)
+  });
+}
+
+const ODF_MIME = { odt: 'text', ods: 'spreadsheet', odp: 'presentation' };
+const ODF_NS = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
+  + ' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"'
+  + ' xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink"'
+  + ' xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0"';
+
+/** Рамка ODF с картинкой; title/desc — содержимое svg:title / svg:desc (null — нет элемента) */
+function odfFrame (opts) {
+  const o = Object.assign({ name: 'Image1', w: '4cm', h: '4cm', title: null, desc: null, attrs: ' text:anchor-type="as-char"' }, opts);
+  return '<draw:frame draw:name="' + o.name + '"' + o.attrs + ' svg:width="' + o.w + '" svg:height="' + o.h + '" draw:z-index="0">'
+    + '<draw:image xlink:href="Pictures/p.png" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad" draw:mime-type="image/png"/>'
+    + (o.title !== null ? '<svg:title>' + o.title + '</svg:title>' : '') + (o.desc !== null ? '<svg:desc>' + o.desc + '</svg:desc>' : '')
+    + '</draw:frame>';
+}
+
+/** ODT/ODS/ODP: body — содержимое office:text / office:spreadsheet / office:presentation */
+function buildOdf (ext, body) {
+  const kind = ODF_MIME[ext];
+  const mime = 'application/vnd.oasis.opendocument.' + kind;
+  return zip({
+    mimetype: mime,
+    'META-INF/manifest.xml': XML_HEAD + '<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">'
+      + '<manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="' + mime + '"/>'
+      + '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>'
+      + '<manifest:file-entry manifest:full-path="Pictures/p.png" manifest:media-type="image/png"/></manifest:manifest>',
+    'content.xml': XML_HEAD + '<office:document-content ' + ODF_NS + ' office:version="1.3"><office:body><office:' + kind + '>' + body + '</office:' + kind + '></office:body></office:document-content>',
+    'Pictures/p.png': png(1, 1)
+  });
+}
+
+const odsBody = (shapes, cell) => '<table:table table:name="S"><table:shapes>' + shapes + '</table:shapes><table:table-column/><table:table-row><table:table-cell office:value-type="string"><text:p>' + (cell || '') + '</text:p></table:table-cell></table:table-row></table:table>';
+const odpBody = (frames) => '<draw:page draw:name="p1">' + frames + '</draw:page>';
+
+async function renderAny (tpl, ext, data, options) {
+  const out = await renderBuffer(tpl, ext, data, Object.assign({}, RU, options));
+  const names = await entryNames(out);
+  return { out, names, read: (name, binary) => readEntry(out, name, binary) };
+}
+
+/** атрибуты всех элементов name (по порядку) */
+const tags = (xml, name) => [...xml.matchAll(new RegExp('<' + name + '(?=[\\s/>])[^>]*>', 'g'))].map((m) => m[0]);
+const attrOf = (tag, name) => (new RegExp('\\s' + name + '="([^"]*)"').exec(tag) || [])[1];
+const relTarget = (relsXml, id) => target(relsXml, id);
+const ids = (xml, name) => tags(xml, name).map((t) => attrOf(t, 'id'));
+
+describe('EE платные: изображения из данных — PPTX (§32.1)', function () {
+  it('p:pic: файл ppt/media, связь слайда ../media, r:embed, a:xfrm/a:ext по fillWidth, метка убрана из descr/title', async function () {
+    const img = png(200, 100);
+    const r = await renderAny(await buildPptx([pptxPic('{d.img}', { title: '{d.img}' })]), 'pptx', { img: uri('png', img) });
+    const slide = await r.read('ppt/slides/slide1.xml');
+    const slideRels = await r.read('ppt/slides/_rels/slide1.xml.rels');
+    const blip = tags(slide, 'a:blip');
+    assert.strictEqual(blip.length, 1);
+    const id = attrOf(blip[0], 'r:embed');
+    assert.notStrictEqual(id, 'rIdImg');
+    const t = relTarget(slideRels, id);
+    assert.match(t, /^\.\.\/media\/cr-img-\d+\.png$/);
+    assert.ok(Buffer.from(await r.read('ppt/' + t.slice(3), true)).equals(img));
+    assert.ok(tags(slide, 'p:cNvPr')[1].includes('descr="" title=""'), slide);
+    assert.deepStrictEqual(tags(slide, 'a:ext'), ['<a:ext cx="2000000" cy="1000000"/>']);
+    assert.ok(slide.includes('<a:off x="100" y="200"/>'));
+    assert.ok(slideRels.includes('Id="rIdImg"'));
+    assert.ok(!/[\uE020\uE021]/.test(slide), 'жетон остался в слайде');
+    assertWellFormed(slide);
+    assertWellFormed(slideRels);
+  });
+
+  it('imageFit(contain) и JPEG: Default Extension="jpeg"', async function () {
+    const r = await renderAny(await buildPptx([pptxPic('{d.img:imageFit(contain)}')]), 'pptx', { img: uri('jpeg', jpeg(100, 200)) });
+    const slide = await r.read('ppt/slides/slide1.xml');
+    assert.deepStrictEqual(tags(slide, 'a:ext'), ['<a:ext cx="1000000" cy="2000000"/>']);
+    assert.ok((await r.read('[Content_Types].xml')).includes('<Default Extension="jpeg" ContentType="image/jpeg"/>'));
+    assert.ok(r.names.some((n) => /^ppt\/media\/cr-img-\d+\.jpeg$/.test(n)));
+  });
+
+  it('SVG-версия заглушки (asvg:svgBlip в a:extLst) удаляется, иначе Office показал бы её', async function () {
+    const svgExt = '<a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="rIdSvg"/></a:ext></a:extLst>';
+    const r = await renderAny(await buildPptx([pptxPic('{d.img}', { blip: svgExt })]), 'pptx', { img: uri('png', png(2, 1)) });
+    const slide = await r.read('ppt/slides/slide1.xml');
+    assert.ok(!slide.includes('svgBlip'), slide);
+    assert.match(slide, /<a:blip r:embed="rIdCrImg1"><a:extLst><\/a:extLst><\/a:blip>/);
+  });
+
+  it('пустое значение — p:pic удаляется, связи и media не добавляются', async function () {
+    const r = await renderAny(await buildPptx([pptxPic('{d.img}'), pptxText('после', 3)]), 'pptx', { img: null });
+    const slide = await r.read('ppt/slides/slide1.xml');
+    assert.ok(!slide.includes('<p:pic>'), slide);
+    assert.ok(slide.includes('<a:t>после</a:t>'));
+    assert.ok(!(await r.read('ppt/slides/_rels/slide1.xml.rels')).includes('cr-img'));
+    assert.ok(!r.names.some((n) => n.includes('cr-img')));
+  });
+
+  it('цикл с абсолютно позиционированной картинкой (§32.1: не поддерживается) — без падения, позиции не меняются, id уникальны', async function () {
+    const items = [png(10, 10, 1), png(20, 10, 2), png(10, 20, 3)];
+    const tpl = await buildPptx([pptxPic('{d.items[i].img}', { id: 2 }), pptxPic('{d.items[i+1].img}', { id: 3 })]);
+    const r = await renderAny(tpl, 'pptx', { items: items.map((b) => ({ img: uri('png', b) })) });
+    const slide = await r.read('ppt/slides/slide1.xml');
+    const embeds = tags(slide, 'a:blip').map((t) => attrOf(t, 'r:embed'));
+    assert.strictEqual(embeds.length, 3);
+    assert.strictEqual(new Set(embeds).size, 3);
+    assert.deepStrictEqual(tags(slide, 'a:off'), Array(3).fill('<a:off x="100" y="200"/>'));
+    const all = ids(slide, 'p:cNvPr');
+    assert.strictEqual(new Set(all).size, all.length, all.join(','));
+    assertWellFormed(slide);
+  });
+});
+
+describe('EE платные: изображения из данных — XLSX (§32.1)', function () {
+  it('oneCellAnchor: xl/media, связь рисунка ../media, xdr:ext и a:ext по fillWidth', async function () {
+    const img = png(200, 100);
+    const r = await renderAny(await buildXlsx([xlsxPic('{d.img}')]), 'xlsx', { img: uri('png', img), title: 'Отчёт' });
+    const drawingXml = await r.read('xl/drawings/drawing1.xml');
+    const drawingRels = await r.read('xl/drawings/_rels/drawing1.xml.rels');
+    const id = attrOf(tags(drawingXml, 'a:blip')[0], 'r:embed');
+    const t = relTarget(drawingRels, id);
+    assert.match(t, /^\.\.\/media\/cr-img-\d+\.png$/);
+    assert.ok(Buffer.from(await r.read('xl/' + t.slice(3), true)).equals(img));
+    assert.deepStrictEqual(tags(drawingXml, 'xdr:ext'), ['<xdr:ext cx="2000000" cy="1000000"/>']);
+    assert.deepStrictEqual(tags(drawingXml, 'a:ext'), ['<a:ext cx="2000000" cy="1000000"/>']);
+    assert.ok(tags(drawingXml, 'xdr:cNvPr')[0].includes('descr=""'));
+    assert.ok(!/[\uE020\uE021]/.test(drawingXml), 'жетон остался в рисунке');
+    assertWellFormed(drawingXml);
+  });
+
+  it('absoluteAnchor: размер по imageFit(contain)', async function () {
+    const r = await renderAny(await buildXlsx([xlsxPic('{d.img:imageFit(contain)}', { anchor: 'absoluteAnchor' })]), 'xlsx', { img: uri('png', png(100, 200)) });
+    const drawingXml = await r.read('xl/drawings/drawing1.xml');
+    assert.deepStrictEqual(tags(drawingXml, 'xdr:ext'), ['<xdr:ext cx="1000000" cy="2000000"/>']);
+  });
+
+  it('twoCellAnchor: размер задают ячейки from/to — не меняется, меняется только картинка', async function () {
+    const r = await renderAny(await buildXlsx([xlsxPic('{d.img}', { anchor: 'twoCellAnchor' })]), 'xlsx', { img: uri('png', png(200, 100)) });
+    const drawingXml = await r.read('xl/drawings/drawing1.xml');
+    assert.deepStrictEqual(tags(drawingXml, 'a:ext'), ['<a:ext cx="2000000" cy="2000000"/>']);
+    assert.ok(drawingXml.includes('<xdr:to><xdr:col>4</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>9</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>'));
+    assert.notStrictEqual(attrOf(tags(drawingXml, 'a:blip')[0], 'r:embed'), 'rIdImg');
+  });
+
+  it('media и связи переживают finishXlsx (общие строки собираются заново)', async function () {
+    const r = await renderAny(await buildXlsx([xlsxPic('{d.img}')]), 'xlsx', { img: uri('png', png(2, 1)), title: 'Отчёт' });
+    const sheet = await r.read('xl/worksheets/sheet1.xml');
+    assert.match(sheet, /<c r="A1"\s+t="s"><v>0<\/v><\/c>/);
+    assert.ok((await r.read('xl/sharedStrings.xml')).includes('<si><t>Отчёт</t></si>'));
+    const ct = await r.read('[Content_Types].xml');
+    assert.ok(ct.includes('PartName="/xl/sharedStrings.xml"'));
+    assertWellFormed(ct);
+    const id = attrOf(tags(await r.read('xl/drawings/drawing1.xml'), 'a:blip')[0], 'r:embed');
+    const t = relTarget(await r.read('xl/drawings/_rels/drawing1.xml.rels'), id);
+    assert.ok(r.names.includes('xl/' + t.slice(3)));
+  });
+
+  it('пустое значение — привязка с картинкой удаляется целиком', async function () {
+    const r = await renderAny(await buildXlsx([xlsxPic('{d.img}'), xlsxPic('статика', { id: 3, anchor: 'twoCellAnchor' })]), 'xlsx', { img: '' });
+    const drawingXml = await r.read('xl/drawings/drawing1.xml');
+    assert.ok(!drawingXml.includes('oneCellAnchor'), drawingXml);
+    assert.strictEqual(tags(drawingXml, 'xdr:pic').length, 1);
+    assert.ok(!r.names.some((n) => n.includes('cr-img')));
+  });
+
+  it('цикл с картинкой (§32.1: не поддерживается) — без падения, id уникальны', async function () {
+    const items = [png(10, 10, 1), png(20, 10, 2), png(10, 20, 3)];
+    const tpl = await buildXlsx([xlsxPic('{d.items[i].img}', { id: 2 }), xlsxPic('{d.items[i+1].img}', { id: 3 })]);
+    const r = await renderAny(tpl, 'xlsx', { items: items.map((b) => ({ img: uri('png', b) })) });
+    const drawingXml = await r.read('xl/drawings/drawing1.xml');
+    assert.strictEqual(tags(drawingXml, 'a:blip').length, 3);
+    const all = ids(drawingXml, 'xdr:cNvPr');
+    assert.strictEqual(all.length, 3);
+    assert.strictEqual(new Set(all).size, 3, all.join(','));
+    assertWellFormed(drawingXml);
+  });
+});
+
+describe('EE платные: изображения из данных — ODT, ODS, ODP (§32.1)', function () {
+  it('ODT: метка в svg:desc — Pictures/cr-img-1.png, xlink:href, manifest, svg:width/height в см', async function () {
+    const img = png(200, 100);
+    const body = '<text:p>' + odfFrame({ title: 'Логотип', desc: '{d.img}' }) + '</text:p>';
+    const r = await renderAny(await buildOdf('odt', body), 'odt', { img: uri('png', img) });
+    const content = await r.read('content.xml');
+    const image = tags(content, 'draw:image')[0];
+    assert.strictEqual(attrOf(image, 'xlink:href'), 'Pictures/cr-img-1.png');
+    assert.strictEqual(attrOf(image, 'draw:mime-type'), 'image/png');
+    assert.ok(Buffer.from(await r.read('Pictures/cr-img-1.png', true)).equals(img));
+    const frame = tags(content, 'draw:frame')[0];
+    assert.strictEqual(attrOf(frame, 'svg:width'), '4cm');
+    assert.strictEqual(attrOf(frame, 'svg:height'), '2cm');
+    assert.ok(content.includes('<svg:title>Логотип</svg:title><svg:desc></svg:desc>'), content);
+    const manifest = await r.read('META-INF/manifest.xml');
+    assert.ok(manifest.includes('<manifest:file-entry manifest:full-path="Pictures/cr-img-1.png" manifest:media-type="image/png"/>'), manifest);
+    assertWellFormed(manifest);
+    assertWellFormed(content);
+    assert.ok(!/[\uE020\uE021]/.test(content), 'жетон остался в content.xml');
+    assert.strictEqual(r.names[0], 'mimetype');
+  });
+
+  it('ODT: JPEG — расширение, draw:mime-type и media-type в manifest', async function () {
+    const r = await renderAny(await buildOdf('odt', '<text:p>' + odfFrame({ title: '{d.img}' }) + '</text:p>'), 'odt', { img: uri('jpeg', jpeg(200, 100)) });
+    const content = await r.read('content.xml');
+    assert.strictEqual(attrOf(tags(content, 'draw:image')[0], 'xlink:href'), 'Pictures/cr-img-1.jpeg');
+    assert.strictEqual(attrOf(tags(content, 'draw:image')[0], 'draw:mime-type'), 'image/jpeg');
+    assert.ok((await r.read('META-INF/manifest.xml')).includes('manifest:full-path="Pictures/cr-img-1.jpeg" manifest:media-type="image/jpeg"'));
+  });
+
+  const units = [
+    ['ods', 'mm', '40mm', '40mm', ':imageFit(fill)', 100, 200, '40mm', '40mm'],
+    ['odp', 'in', '2in', '2in', ':imageFit(contain)', 100, 200, '1in', '2in'],
+    ['odt', 'pt', '144pt', '144pt', '', 200, 100, '144pt', '72pt'],
+    ['odp', 'cm (дробные)', '5.08cm', '3cm', '', 300, 100, '5.08cm', '1.6933cm']
+  ];
+  for (const [ext, unit, w, h, fit, iw, ih, ww, wh] of units) {
+    it(ext.toUpperCase() + ': размер в единицах рамки (' + unit + ')' + (fit ? ', ' + fit : ''), async function () {
+      const frame = odfFrame({ w, h, title: '{d.img' + fit + '}', attrs: ext === 'odt' ? ' text:anchor-type="as-char"' : ' svg:x="1cm" svg:y="1cm"' });
+      const body = ext === 'ods' ? odsBody(frame) : ext === 'odp' ? odpBody(frame) : '<text:p>' + frame + '</text:p>';
+      const r = await renderAny(await buildOdf(ext, body), ext, { img: uri('png', png(iw, ih)) });
+      const content = await r.read('content.xml');
+      const f = tags(content, 'draw:frame')[0];
+      assert.deepStrictEqual([attrOf(f, 'svg:width'), attrOf(f, 'svg:height')], [ww, wh]);
+      assert.strictEqual(attrOf(tags(content, 'draw:image')[0], 'xlink:href'), 'Pictures/cr-img-1.png');
+      assert.ok(r.names.includes('Pictures/cr-img-1.png'));
+    });
+  }
+
+  for (const ext of ['odt', 'ods', 'odp']) {
+    it(ext.toUpperCase() + ': пустое значение — draw:frame удаляется, manifest не меняется', async function () {
+      const frame = odfFrame({ title: '{d.img}' });
+      const body = ext === 'ods' ? odsBody(frame, 'ячейка') : ext === 'odp' ? odpBody(frame) : '<text:p>до' + frame + 'после</text:p>';
+      const r = await renderAny(await buildOdf(ext, body), ext, { img: null });
+      const content = await r.read('content.xml');
+      assert.ok(!content.includes('draw:frame'), content);
+      assert.ok(!(await r.read('META-INF/manifest.xml')).includes('cr-img'));
+      assert.ok(!r.names.some((n) => n.includes('cr-img')));
+      if (ext === 'odt') assert.ok(content.includes('<text:p>допосле</text:p>'));
+    });
+  }
+
+  it('метка в svg:title обычной рамки-надписи (не картинки) печатается как раньше', async function () {
+    const box = '<draw:frame draw:name="b" svg:width="4cm" svg:height="1cm"><draw:text-box><text:p>x</text:p></draw:text-box><svg:title>{d.t}</svg:title></draw:frame>';
+    const r = await renderAny(await buildOdf('odt', '<text:p>' + box + '</text:p>'), 'odt', { t: 'Название' });
+    assert.ok((await r.read('content.xml')).includes('<svg:title>Название</svg:title>'));
+  });
+
+  it('ODT: 3 изображения в цикле абзацев (привязка «как символ») — 3 файла, 3 ссылки', async function () {
+    const items = [png(10, 10, 1), png(20, 10, 2), png(10, 20, 3)];
+    const body = '<text:p>{d.items[i].n} ' + odfFrame({ title: '{d.items[i].img}' }) + '</text:p><text:p>{d.items[i+1].n}</text:p>';
+    const r = await renderAny(await buildOdf('odt', body), 'odt', { items: items.map((b, i) => ({ n: i + 1, img: uri('png', b) })) });
+    const content = await r.read('content.xml');
+    const hrefs = tags(content, 'draw:image').map((t) => attrOf(t, 'xlink:href'));
+    assert.strictEqual(hrefs.length, 3);
+    assert.strictEqual(new Set(hrefs).size, 3);
+    for (let i = 0; i < 3; i++) {
+      assert.ok(Buffer.from(await r.read(hrefs[i], true)).equals(items[i]), 'абзац ' + (i + 1));
+    }
+    assert.deepStrictEqual(tags(content, 'draw:frame').map((t) => attrOf(t, 'svg:height')), ['4cm', '2cm', '8cm']);
+    const manifest = await r.read('META-INF/manifest.xml');
+    assert.strictEqual(manifest.split('cr-img-').length - 1, 3);
+    assertWellFormed(content);
+  });
+
+  it('ODP: цикл с абсолютно позиционированной картинкой (§32.1: не поддерживается) — без падения, позиции не меняются', async function () {
+    const items = [png(10, 10, 1), png(20, 10, 2), png(10, 20, 3)];
+    const frames = odfFrame({ title: '{d.items[i].img}', attrs: ' svg:x="1cm" svg:y="2cm"' }) + odfFrame({ name: 'Image2', title: '{d.items[i+1].img}', attrs: ' svg:x="1cm" svg:y="2cm"' });
+    const r = await renderAny(await buildOdf('odp', odpBody(frames)), 'odp', { items: items.map((b) => ({ img: uri('png', b) })) });
+    const content = await r.read('content.xml');
+    const frameTags = tags(content, 'draw:frame');
+    assert.strictEqual(frameTags.length, 3);
+    assert.deepStrictEqual(frameTags.map((t) => attrOf(t, 'svg:x') + ' ' + attrOf(t, 'svg:y')), Array(3).fill('1cm 2cm'));
+    assert.strictEqual(new Set(tags(content, 'draw:image').map((t) => attrOf(t, 'xlink:href'))).size, 3);
+    assertWellFormed(content);
+  });
+});
+
+describe('EE платные: изображения из данных — циклы и служебное (Task 2)', function () {
+  it('DOCX: 3 изображения в цикле абзацев — 3 файла, 3 связи, wp:docPr id уникальны', async function () {
+    const items = [png(10, 10, 1), png(20, 10, 2), png(10, 20, 3)];
+    const r = await render([para(drawing('{d.items[i].img}', { id: 7 })) + para(drawing('{d.items[i+1].img}', { id: 8 }))], { items: items.map((b) => ({ img: uri('png', b) })) });
+    const list = embeds(r.doc);
+    assert.strictEqual(list.length, 3);
+    assert.strictEqual(new Set(list).size, 3);
+    assert.strictEqual(r.names.filter((n) => n.includes('cr-img')).length, 3);
+    for (let i = 0; i < 3; i++) {
+      assert.ok(Buffer.from(await readEntry(r.out, 'word/' + target(r.rels, list[i]), true)).equals(items[i]));
+    }
+    assert.deepStrictEqual(ids(r.doc, 'wp:docPr'), ['7', '8', '9']);
+  });
+
+  it('DOCX: цикл в строке таблицы (Review Focus 1) — повторённые wp:docPr получают новые id выше максимума', async function () {
+    const cell = (inner) => '<w:tc><w:p><w:r>' + inner + '</w:r></w:p></w:tc>';
+    const tbl = '<w:tbl><w:tr>' + cell(drawing('{d.items[i].img}', { id: 4 })) + '</w:tr><w:tr>' + cell(drawing('{d.items[i+1].img}', { id: 4 })) + '</w:tr></w:tbl>';
+    const r = await render([para(drawing('статика', { id: 9 })) + tbl], { items: [1, 2, 3, 4].map((i) => ({ img: uri('png', png(i, 1)) })) });
+    assert.deepStrictEqual(ids(r.doc, 'wp:docPr'), ['9', '4', '10', '11', '12']);
+  });
+
+  it('Id связей в одинарных кавычках учитываются: новый Id не совпадает с существующим', async function () {
+    const extra = '<Relationship Id=\'rIdCrImg1\' Type=\'' + IMAGE_REL + '\' Target=\'media/p.png\'/>';
+    const tpl = await buildDocx('<<RAW>>', [para(drawing('{d.img}'))], PIC_REL + extra, { 'word/media/p.png': png(1, 1) });
+    const out = await renderBuffer(tpl, 'docx', { img: uri('png', png(2, 1)) }, RU);
+    const id = embeds(await readEntry(out, 'word/document.xml'))[0];
+    assert.notStrictEqual(id, 'rIdCrImg1');
+    assert.match(target(await readEntry(out, 'word/_rels/document.xml.rels'), id), /^media\/cr-img-1\.png$/);
+  });
+
+  it('DOCX с вложенной книгой (word/embeddings/*.xlsx): новые файлы верхнего уровня не ломают сборку архива', async function () {
+    const inner = await zip({ '[Content_Types].xml': types({}), 'xl/workbook.xml': XML_HEAD + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"/>' });
+    const tpl = await buildDocx('<<RAW>>', [para(drawing('{d.img}'))], PIC_REL, { 'word/media/p.png': png(1, 1), 'word/embeddings/book.xlsx': inner });
+    const img = png(2, 1);
+    const out = await renderBuffer(tpl, 'docx', { img: uri('png', img) }, RU);
+    const names = await entryNames(out);
+    assert.ok(names.includes('word/embeddings/book.xlsx'), names.join(','));
+    assert.ok(names.includes('word/media/cr-img-1.png'), names.join(','));
+    assert.ok(Buffer.from(await readEntry(out, 'word/media/cr-img-1.png', true)).equals(img));
+    const book = await readEntry(out, 'word/embeddings/book.xlsx', true);
+    assert.ok((await entryNames(book)).includes('xl/workbook.xml'));
+  });
+});

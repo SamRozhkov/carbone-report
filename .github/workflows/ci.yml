@@ -37,6 +37,11 @@ jobs:
       - run: pnpm lint
       - run: pnpm exec prettier --check .
       - run: pnpm test
+      - run: pnpm test:scripts
+      # Выпуск без записи в CHANGELOG не публикуется: образы и чарт ждут это задание.
+      - name: Раздел CHANGELOG
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/changelog-section.mjs "${GITHUB_REF_NAME#v}" > /dev/null
 
   integration:
     name: Интеграционные тесты
@@ -273,3 +278,23 @@ jobs:
           printf '%s' "$TOKEN" | helm registry login ghcr.io -u "$ACTOR" --password-stdin
           helm package charts/carbone-reports --version "$v" --app-version "$v" -d /tmp/chart
           helm push "/tmp/chart/carbone-reports-$v.tgz" oci://ghcr.io/samrozhkov/charts
+
+  release:
+    name: Выпуск на GitHub
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [chart-publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Описание выпуска — раздел версии из CHANGELOG.md.
+      - name: Создание выпуска
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/changelog-section.mjs "${GITHUB_REF_NAME#v}" > /tmp/release-notes.md
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file /tmp/release-notes.md --verify-tag

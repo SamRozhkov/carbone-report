@@ -6,6 +6,8 @@
 
 [![CI](https://github.com/SamRozhkov/carbone-report/actions/workflows/ci.yml/badge.svg)](https://github.com/SamRozhkov/carbone-report/actions/workflows/ci.yml)
 
+Изменения по выпускам — в [`CHANGELOG.md`](CHANGELOG.md); по тегу `vX.Y.Z` CI публикует его раздел как выпуск на GitHub.
+
 Спецификация: `docs/superpowers/specs/2026-10-02-carbone-reports-design.md`.
 
 ## Разработка API

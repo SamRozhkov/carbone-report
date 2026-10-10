@@ -721,7 +721,23 @@ function ignoreMarkersOfSeparatorRows (descriptor, oddZones) {
   // 2. «новый цикл» без своей [i+1], целиком в строке-разделителе
   for (_objName in descriptor) {
     var _obj = descriptor[_objName];
-    if (_obj === undefined || _obj.type !== 'array' || _obj.iterators.length > 0 || _obj.firstMarker === undefined) {
+    if (_obj === undefined || _obj.type !== 'array' || _obj.firstMarker === undefined) {
+      continue;
+    }
+    // «новый цикл», открытый меткой [i] в строке-разделителе и закрытый [i+1] дальше (например, второй таблицей по тому
+    // же массиву), поглощает всё между ними: в 3.8.2 документ выходил пустым, в EE — с повторами. Понятная ошибка вместо этого.
+    if (_obj.iterators.length > 0) {
+      // position.start уже расширена до границ повторяемого xml, поэтому смотрим на первую метку объекта
+      var _firstPos = Infinity;
+      for (var f = 0; f < _obj.xmlParts.length; f++) {
+        if (_obj.xmlParts[f].array === undefined && _obj.xmlParts[f].pos < _firstPos) {
+          _firstPos = _obj.xmlParts[f].pos;
+        }
+      }
+      if (/\$$/.test(_objName) === true && _firstPos !== Infinity && _isInOddZone(_firstPos) === true) {
+        throw new Error('The marker ' + _obj.firstMarker + ' is in the [i+1] row of array "' + _obj.name + '". '
+          + 'Use only [i+1] markers in the [i+1] row or leave its cells empty.');
+      }
       continue;
     }
     var _subtree = {};

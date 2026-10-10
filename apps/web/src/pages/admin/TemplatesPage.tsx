@@ -1,7 +1,7 @@
 import type { TemplateSummary } from '@carbone-reports/shared';
-import { ArrowDownToLine, Copy, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
+import { ArrowDownToLine, ArrowUpToLine, Copy, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
 import type { TableColumnConfig } from '@gravity-ui/uikit';
-import { Button, Icon, Label, Loader, Table, Text, useToaster } from '@gravity-ui/uikit';
+import { Button, Checkbox, Icon, Label, Loader, Table, Text, useToaster } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -12,6 +12,8 @@ import { ErrorAlert } from '../../components/ErrorAlert';
 import { PageHeader } from '../../components/PageHeader';
 import { formatDateTime } from '../../lib/format';
 import { CreateTemplateDialog } from './CreateTemplateDialog';
+import { ExportTemplatesButton } from './ExportTemplatesButton';
+import { ImportDialog } from './ImportDialog';
 
 export function TemplatesPage() {
   const navigate = useNavigate();
@@ -19,6 +21,8 @@ export function TemplatesPage() {
   const { add } = useToaster();
   const list = useQuery({ queryKey: ['templates'], queryFn: api.templates.list });
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState<TemplateSummary | null>(null);
   const [lastDeleted, setLastDeleted] = useState<TemplateSummary | null>(null);
 
@@ -54,7 +58,37 @@ export function TemplatesPage() {
     onError: fail,
   });
 
+  const all = list.data ?? [];
+  // Выбор переживает обновление списка: исчезнувшие (удалённые) шаблоны отбрасываются.
+  const chosen = all.filter((t) => selected.has(t.id)).map((t) => t.id);
+  const toggle = (id: string, on: boolean) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (on) n.add(id);
+      else n.delete(id);
+      return n;
+    });
+
   const columns: TableColumnConfig<TemplateSummary>[] = [
+    {
+      id: 'select',
+      width: 40,
+      name: () => (
+        <Checkbox
+          controlProps={{ 'aria-label': 'Выбрать все шаблоны' }}
+          checked={all.length > 0 && chosen.length === all.length}
+          indeterminate={chosen.length > 0 && chosen.length < all.length}
+          onUpdate={(on) => setSelected(on ? new Set(all.map((t) => t.id)) : new Set())}
+        />
+      ),
+      template: (t) => (
+        <Checkbox
+          controlProps={{ 'aria-label': `Выбрать «${t.name}»` }}
+          checked={selected.has(t.id)}
+          onUpdate={(on) => toggle(t.id, on)}
+        />
+      ),
+    },
     {
       id: 'name',
       name: 'Название',
@@ -132,10 +166,19 @@ export function TemplatesPage() {
       <PageHeader
         title="Шаблоны"
         actions={
-          <Button view="action" onClick={() => setCreateOpen(true)}>
-            <Icon data={Plus} />
-            Создать шаблон
-          </Button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <ExportTemplatesButton ids={chosen}>
+              {chosen.length > 0 ? `Выгрузить (${chosen.length})` : 'Выгрузить'}
+            </ExportTemplatesButton>
+            <Button view="outlined" onClick={() => setImportOpen(true)}>
+              <Icon data={ArrowUpToLine} />
+              Загрузить из архива
+            </Button>
+            <Button view="action" onClick={() => setCreateOpen(true)}>
+              <Icon data={Plus} />
+              Создать шаблон
+            </Button>
+          </div>
         }
       />
       <ErrorAlert error={list.error} />
@@ -151,6 +194,7 @@ export function TemplatesPage() {
         />
       )}
       {createOpen && <CreateTemplateDialog open onClose={() => setCreateOpen(false)} />}
+      {importOpen && <ImportDialog open onClose={() => setImportOpen(false)} />}
       <ConfirmDialog
         open={!!deleting}
         title="Удалить шаблон?"

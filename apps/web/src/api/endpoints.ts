@@ -32,8 +32,9 @@ import type {
   UserDto,
   RecoveryBody,
 } from '@carbone-reports/shared';
+import type { ImportPreview, ImportResult } from '@carbone-reports/shared/template-transfer';
 import type { Config } from '@onlyoffice/doceditor-types';
-import { apiBlob, apiJson } from './client';
+import { apiBlob, apiFile, apiJson } from './client';
 import type { SessionUser } from './session';
 
 export type TestResult = { ok: true } | { ok: false; message: string };
@@ -107,6 +108,12 @@ export const api = {
     update: (id: string, body: UpdateTemplateBody) =>
       apiJson<TemplateAdminDetails>(`/api/templates/${id}`, patch(body)),
     remove: (id: string) => apiJson<void>(`/api/templates/${id}`, del),
+    /** Выгрузка в архив .crt.zip (§33.2); имя файла — из Content-Disposition. */
+    export: (ids: string[]) => apiFile('/api/templates/export', post({ ids })),
+    importPreview: (form: FormData) =>
+      apiJson<ImportPreview>('/api/templates/import/preview', { method: 'POST', body: form }),
+    importApply: (form: FormData) =>
+      apiJson<ImportResult>('/api/templates/import', { method: 'POST', body: form }),
     duplicate: (id: string) => apiJson<TemplateSummary>(`/api/templates/${id}/duplicate`, post()),
     saveQueries: (id: string, queries: TemplateQuery[]) =>
       apiJson<TemplateAdminDetails>(`/api/templates/${id}/queries`, put(queries)),

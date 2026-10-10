@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { api, templateDownloadUrl } from '../../../api/endpoints';
 import { ErrorAlert } from '../../../components/ErrorAlert';
+import { ExportTemplatesButton } from '../ExportTemplatesButton';
 import { DataTab } from './DataTab';
 import { DocumentTab } from './DocumentTab';
 import { templateKey, usePreviewData, useTestParams } from './editorState';
@@ -74,7 +75,8 @@ export function TemplateEditorPage() {
         </Text>
         <Label size="s">{t.fileExt.toUpperCase()}</Label>
         <Text color="secondary">версия {t.version}</Text>
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <ExportTemplatesButton ids={[t.id]} />
           <Button view="outlined" href={templateDownloadUrl(t.id)}>
             <Icon data={ArrowDownToLine} />
             Скачать файл

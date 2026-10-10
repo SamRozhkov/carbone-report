@@ -5,7 +5,8 @@ import {
   QueryMode,
   SslMode,
   TemplateExt,
-  TemplateParam,
+  refineTemplateParam,
+  TemplateParamFields,
   TemplateQuery,
 } from './index';
 
@@ -28,7 +29,10 @@ export const transferFilePath = (index: number, ext: TemplateExt) =>
   `templates/${index + 1}/template.${ext}`;
 
 export const ExportTemplatesBody = z.object({
-  ids: z.array(z.uuid('неверный идентификатор')).min(1).max(MAX_TRANSFER_TEMPLATES),
+  ids: z
+    .array(z.uuid('неверный идентификатор').transform((id) => id.toLowerCase()))
+    .min(1)
+    .max(MAX_TRANSFER_TEMPLATES),
 });
 export type ExportTemplatesBody = z.infer<typeof ExportTemplatesBody>;
 
@@ -55,7 +59,9 @@ export const TransferQuery = z.strictObject({
 export type TransferQuery = z.infer<typeof TransferQuery>;
 
 /** Параметр шаблона: все поля `template_params` без id/templateId — схема TemplateParam + порядок. */
-export const TransferParam = TemplateParam.and(z.object({ sortOrder: SortOrder }));
+export const TransferParam = TemplateParamFields.extend({ sortOrder: SortOrder })
+  .strict()
+  .superRefine(refineTemplateParam);
 export type TransferParam = z.infer<typeof TransferParam>;
 
 const uniqueBy = <T>(items: T[], pick: (t: T) => string): string | null => {
@@ -68,6 +74,7 @@ const uniqueBy = <T>(items: T[], pick: (t: T) => string): string | null => {
   return null;
 };
 
+/** Путь файла закреплён только в TransferManifest: разбирать архив нужно им, не одним TransferTemplate. */
 export const TransferTemplate = z
   .strictObject({
     name: z.string().trim().min(1, 'укажите название').max(255),
@@ -113,6 +120,15 @@ export const TransferManifest = z
     templates: z.array(TransferTemplate).min(1).max(MAX_TRANSFER_TEMPLATES),
   })
   .superRefine((m, ctx) => {
+    const dupName = m.templates.findIndex(
+      (t, i) => m.templates.findIndex((o) => o.name.toLowerCase() === t.name.toLowerCase()) !== i,
+    );
+    if (dupName >= 0)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['templates', dupName, 'name'],
+        message: `название "${m.templates[dupName]!.name}" повторяется в архиве`,
+      });
     m.templates.forEach((t, i) => {
       if (t.file !== transferFilePath(i, t.fileExt))
         ctx.addIssue({

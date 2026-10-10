@@ -90,7 +90,7 @@ describe('TransferManifest', () => {
 
   it('второй шаблон обязан лежать в templates/2/', () => {
     expect(TransferManifest.safeParse(manifest([tpl(), tpl()])).success).toBe(false);
-    const second = tpl({ file: transferFilePath(1, 'docx') });
+    const second = tpl({ name: 'Акт', file: transferFilePath(1, 'docx') });
     expect(TransferManifest.safeParse(manifest([tpl(), second])).success).toBe(true);
   });
 
@@ -116,7 +116,24 @@ describe('TransferManifest', () => {
   });
 });
 
+describe('TransferManifest: строгость и названия', () => {
+  it('неизвестное поле внутри параметра отвергается', () => {
+    const p = { ...tpl().params[0]!, extra: 1 };
+    expect(TransferManifest.safeParse(manifest([tpl({ params: [p] })])).success).toBe(false);
+  });
+
+  it('одинаковые названия (без учёта регистра) в одном архиве отвергаются', () => {
+    const second = tpl({ name: 'СЧЁТ', file: transferFilePath(1, 'docx') });
+    expect(TransferManifest.safeParse(manifest([tpl(), second])).success).toBe(false);
+  });
+});
+
 describe('ExportTemplatesBody', () => {
+  it('идентификаторы в верхнем регистре приводятся к нижнему', () => {
+    const id = '3F2B8C1E-0D4A-4B7E-9C55-2A1F6E8D7B90';
+    expect(ExportTemplatesBody.parse({ ids: [id] }).ids).toEqual([id.toLowerCase()]);
+  });
+
   const id = '3f2b8c1e-0d4a-4b7e-9c55-2a1f6e8d7b90';
   it('1–200 идентификаторов uuid', () => {
     expect(ExportTemplatesBody.safeParse({ ids: [id] }).success).toBe(true);

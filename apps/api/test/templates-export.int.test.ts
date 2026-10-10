@@ -77,6 +77,7 @@ describe('POST /api/templates/export', () => {
     const r = await exportIds(admin, [id, id]);
     expect(r.statusCode).toBe(200);
     expect(r.headers['content-type']).toBe('application/zip');
+    expect(r.headers['cache-control']).toBe('no-store');
     expect(String(r.headers['content-disposition'])).toContain(
       `filename*=UTF-8''${encodeURIComponent('Счёт_№1_2.crt.zip')}`,
     );

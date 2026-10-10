@@ -339,6 +339,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       const { filename, buffer } = await buildExport(deps, req.body.ids);
       return reply
         .header('content-type', 'application/zip')
+        .header('cache-control', 'no-store')
         .header('content-disposition', contentDisposition(filename))
         .send(buffer);
     },

@@ -49,7 +49,7 @@ export type ParamValue = z.infer<typeof ParamValue>;
 
 export const MAX_PARAM_OPTIONS = 1000;
 
-const TemplateParamFields = z.object({
+export const TemplateParamFields = z.object({
   name: z
     .string()
     .regex(IDENT_RE, 'имя: латиница, цифры и _')
@@ -64,7 +64,10 @@ const TemplateParamFields = z.object({
   multiple: z.boolean().default(false),
 });
 
-export const TemplateParam = TemplateParamFields.superRefine((p, ctx) => {
+export const refineTemplateParam = (
+  p: z.infer<typeof TemplateParamFields>,
+  ctx: z.RefinementCtx,
+): void => {
   const issue = (path: string, message: string) =>
     ctx.addIssue({ code: 'custom', path: [path], message });
   if (p.type === 'select' && !(p.options && p.options.length > 0))
@@ -79,7 +82,8 @@ export const TemplateParam = TemplateParamFields.superRefine((p, ctx) => {
     if (p.multiple) issue('multiple', 'множественный выбор допустим только у типа «SQL-список»');
     if (Array.isArray(p.defaultValue)) issue('defaultValue', 'недопустимое значение');
   }
-});
+};
+export const TemplateParam = TemplateParamFields.superRefine(refineTemplateParam);
 export type TemplateParam = z.infer<typeof TemplateParam>;
 
 /** Параметр в карточке шаблона: + имена параметров, на которые ссылается его SQL (у пользователя sql = null). */

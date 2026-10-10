@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
   MAX_TRANSFER_ARCHIVE_BYTES,
-  MAX_TRANSFER_UNPACKED_BYTES,
   TRANSFER_FILE_EXT,
   TRANSFER_FORMAT,
   TRANSFER_FORMAT_VERSION,
@@ -50,7 +49,9 @@ export function exportFileName(name: string): string {
     .replace(/^[._]+|[._]+$/g, '')
     .slice(0, 100)
     .replace(/[._]+$/g, '');
-  return `${safe || 'template'}${TRANSFER_FILE_EXT}`;
+  // Зарезервированные имена Windows (CON, NUL, COM1…) получают префикс.
+  const base = /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(safe) ? `_${safe}` : safe;
+  return `${base || 'template'}${TRANSFER_FILE_EXT}`;
 }
 
 /** Дата в часовом поясе приложения, YYYY-MM-DD. */
@@ -86,7 +87,9 @@ export async function buildArchive(
     })),
   };
   zip.file(TRANSFER_MANIFEST_FILE, JSON.stringify(manifest, null, 2));
-  manifest.templates.forEach((t, i) => zip.file(t.file, items[i]!.data, { createFolders: false }));
+  manifest.templates.forEach((t, i) =>
+    zip.file(t.file, items[i]!.data, { createFolders: false, compression: 'STORE' }),
+  );
   return zip.generateAsync({
     type: 'nodebuffer',
     compression: 'DEFLATE',
@@ -94,14 +97,39 @@ export async function buildArchive(
   });
 }
 
+/** Не более двух выгрузок одновременно на процесс: остальные ждут своей очереди (в памяти — до 50 МБ файлов и архив). */
+export const MAX_CONCURRENT_EXPORTS = 2;
+let activeExports = 0;
+const exportQueue: Array<() => void> = [];
+
+export async function withExportSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (activeExports >= MAX_CONCURRENT_EXPORTS) {
+    await new Promise<void>((resolve) => exportQueue.push(resolve));
+  } else {
+    activeExports++;
+  }
+  try {
+    return await fn();
+  } finally {
+    // Слот передаётся следующему в очереди без освобождения.
+    const next = exportQueue.shift();
+    if (next) next();
+    else activeExports--;
+  }
+}
+
 /** Выгрузка шаблонов в архив (§33.1). Пароли, CA, идентификаторы, даты, авторы и история запусков не выгружаются. */
-export async function buildExport(
+export function buildExport(
   deps: ExportDeps,
   ids: string[],
   now: Date = new Date(),
 ): Promise<ExportResult> {
+  return withExportSlot(() => runExport(deps, ids, now));
+}
+
+async function runExport(deps: ExportDeps, ids: string[], now: Date): Promise<ExportResult> {
   const { db } = deps;
-  const uniqueIds = [...new Set(ids)];
+  const uniqueIds = [...new Set(ids.map((id) => id.toLowerCase()))];
   const rows = await db
     .select({ row: templates, ds: datasources, category: categories.name })
     .from(templates)
@@ -133,14 +161,26 @@ export async function buildExport(
       .orderBy(asc(templateParams.sortOrder)),
   ]);
 
+  // Архив с одинаковыми названиями не загрузится (§33.2): сообщаем сразу.
+  const seenNames = new Set<string>();
+  for (const { row } of byId.values()) {
+    const k = row.name.toLowerCase();
+    if (seenNames.has(k))
+      throw badRequest(`название "${row.name}" повторяется среди выбранных шаблонов`);
+    seenNames.add(k);
+  }
+
   const items: ArchiveItem[] = [];
   let total = 0;
   for (const id of uniqueIds) {
     const { row, ds, category } = byId.get(id)!;
     const data = await templateFileRef(deps as AppDeps, row).read();
     total += data.length;
-    if (total > MAX_TRANSFER_UNPACKED_BYTES) {
-      throw badRequest('файлы выбранных шаблонов больше 200 МБ — выгрузите их частями');
+    // Файлы кладутся без сжатия: если они одни не помещаются в архив, дальше не читаем.
+    if (total > MAX_TRANSFER_ARCHIVE_BYTES) {
+      throw badRequest(
+        'файлы выбранных шаблонов не поместятся в архив 50 МБ — выгрузите их частями',
+      );
     }
     items.push({
       data,

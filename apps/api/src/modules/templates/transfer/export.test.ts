@@ -9,7 +9,14 @@ import { registerErrorHandler } from '../../../lib/errors';
 import { makeGuards } from '../../auth/guards';
 import { SESSION_COOKIE, signSession } from '../../auth/session';
 import { registerTemplateRoutes } from '../routes';
-import { buildArchive, exportFileName, localDate, type ArchiveItem } from './export';
+import {
+  buildArchive,
+  exportFileName,
+  localDate,
+  MAX_CONCURRENT_EXPORTS,
+  withExportSlot,
+  type ArchiveItem,
+} from './export';
 
 const meta = (name: string): ArchiveItem['meta'] => ({
   name,
@@ -45,11 +52,60 @@ describe('exportFileName', () => {
   });
 });
 
+describe('exportFileName: зарезервированные имена', () => {
+  it('CON, nul.txt, COM1 получают префикс', () => {
+    expect(exportFileName('CON')).toBe('_CON.crt.zip');
+    expect(exportFileName('nul')).toBe('_nul.crt.zip');
+    expect(exportFileName('Console')).toBe('Console.crt.zip');
+  });
+});
+
+describe('withExportSlot', () => {
+  it('одновременно выполняется не больше MAX_CONCURRENT_EXPORTS, остальные ждут', async () => {
+    let active = 0;
+    let peak = 0;
+    const gates: Array<() => void> = [];
+    const task = () =>
+      withExportSlot(async () => {
+        active++;
+        peak = Math.max(peak, active);
+        await new Promise<void>((r) => gates.push(r));
+        active--;
+      });
+    const all = Promise.all([task(), task(), task(), task()]);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(active).toBe(MAX_CONCURRENT_EXPORTS);
+    while (gates.length) {
+      gates.shift()!();
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    await all;
+    expect(peak).toBe(MAX_CONCURRENT_EXPORTS);
+    expect(active).toBe(0);
+  });
+
+  it('слот освобождается и после ошибки', async () => {
+    await expect(withExportSlot(async () => Promise.reject(new Error('x')))).rejects.toThrow('x');
+    await expect(withExportSlot(async () => 1)).resolves.toBe(1);
+  });
+});
+
 describe('localDate', () => {
   it('дата в часовом поясе приложения', () => {
     const now = new Date('2026-10-10T22:30:00Z');
     expect(localDate(now, 'UTC')).toBe('2026-10-10');
     expect(localDate(now, 'Europe/Moscow')).toBe('2026-10-11');
+  });
+});
+
+describe('buildArchive: сжатие', () => {
+  it('файлы шаблонов хранятся без сжатия, манифест сжимается', async () => {
+    const data = Buffer.alloc(1_000_000, 0x41);
+    const buf = await buildArchive([{ meta: meta('T'), data }], {
+      appVersion: 'dev',
+      now: new Date(),
+    });
+    expect(buf.length).toBeGreaterThan(data.length);
   });
 });
 

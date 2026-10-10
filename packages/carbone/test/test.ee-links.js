@@ -145,6 +145,12 @@ describe('EE платные: ссылки — DOCX (§32.5)', function () {
     // статическая часть недопустима — # даже с допустимым значением
     assert.strictEqual(await link('alert(1)', 'javascript:{d.url}'), '#');
   });
+  it('сущности статической части раскрываются один раз: &#38;amp; — это текст «&amp;», а не «&»', async function () {
+    const r = await docx('https://site.ru/?t=&#38;amp;q={d.q}', { q: '1' });
+    assert.strictEqual(targetOf(r.rels), 'https://site.ru/?t=&amp;amp;q=1');
+    const h = await docx('https://site.ru/?t=&#x26;lt;&amp;q={d.q}', { q: '1' });
+    assert.strictEqual(unesc(targetOf(h.rels)), 'https://site.ru/?t=&lt;&q=1');
+  });
   it('R4: несколько меток, :defaultURL заменяет адрес целиком', async function () {
     const r = await docx('https://{d.host}/{d.path}?q={d.q}', { host: 'example.com', path: 'a b', q: '1' });
     assert.strictEqual(unesc(targetOf(r.rels)), 'https://example.com/a%20b?q=1');

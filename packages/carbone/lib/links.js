@@ -164,19 +164,18 @@ function isValidUrl (value) {
 // ---------------------------------------------------------------------------------------------------------------
 // 1. preprocess
 
+var XML_ENTITIES = { lt : '<', gt : '>', quot : '"', apos : '\'', amp : '&' };
+
+/** Сущности XML раскрываются за один проход: «&#38;amp;» даёт «&amp;», а не «&» */
 function unescapeXml (str) {
-  return str
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, '\'')
-    .replace(/&#x([0-9a-f]+);/gi, function (all, hex) {
-      return String.fromCodePoint(parseInt(hex, 16));
-    })
-    .replace(/&#(\d+);/g, function (all, dec) {
-      return String.fromCodePoint(Number(dec));
-    })
-    .replace(/&amp;/g, '&');
+  return str.replace(/&(?:(lt|gt|quot|apos|amp)|#x([0-9a-f]+)|#(\d+));/gi, function (all, name, hex, dec) {
+    if (name !== undefined) {
+      var _char = XML_ENTITIES[name];
+      return _char === undefined ? all : _char;
+    }
+    var _code = hex !== undefined ? parseInt(hex, 16) : Number(dec);
+    return _code > 0x10FFFF ? all : String.fromCodePoint(_code);
+  });
 }
 
 function escapeXml (str) {

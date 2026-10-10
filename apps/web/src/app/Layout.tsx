@@ -2,6 +2,7 @@ import {
   Archive,
   ArrowRightFromSquare,
   ArrowRightToSquare,
+  CircleInfo,
   CircleQuestion,
   ClockArrowRotateLeft,
   Database,
@@ -22,6 +23,8 @@ import { useContext, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { api } from '../api/endpoints';
 import { meKey, useMe } from '../api/session';
+import { AboutDialog } from './AboutDialog';
+import { webBuild } from './buildInfo';
 import { ThemeContext } from './theme';
 
 /** Черновики превью и параметры тестового прогона не должны достаться следующему пользователю. */
@@ -46,6 +49,7 @@ export function Layout() {
   const toaster = useToaster();
   const { theme, setTheme } = useContext(ThemeContext);
   const [compact, setCompact] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const item = (
     id: string,
@@ -100,62 +104,72 @@ export function Layout() {
   };
 
   return (
-    <AsideHeader
-      logo={{
-        text: 'Carbone Reports',
-        icon: FileText,
-        onClick: (e) => {
-          e.preventDefault();
-          navigate('/reports');
-        },
-      }}
-      compact={compact}
-      onChangeCompact={setCompact}
-      menuItems={menuItems}
-      menuOverflow="scroll"
-      headerDecoration
-      renderFooter={({ compact: isCompact }) => (
-        <>
-          <FooterItem
-            id="theme"
-            title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
-            icon={theme === 'dark' ? Sun : Moon}
-            compact={isCompact}
-            onItemClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          />
-          <FooterItem id="me" title={me?.login ?? ''} icon={Person} compact={isCompact} />
-          <FooterItem
-            id="logout"
-            title="Выйти"
-            icon={ArrowRightFromSquare}
-            compact={isCompact}
-            onItemClick={() =>
-              void signOut(api.logout, {
-                title: 'Не удалось завершить сессию на сервере',
-                content: 'Закройте браузер, если компьютер общий.',
-              })
-            }
-          />
-          <FooterItem
-            id="logout-all"
-            title="Выйти везде"
-            icon={ArrowRightToSquare}
-            compact={isCompact}
-            onItemClick={() =>
-              void signOut(api.logoutAll, {
-                title: 'Не удалось завершить сессии на других устройствах',
-                content:
-                  'Попробуйте ещё раз после входа или попросите администратора завершить сессии.',
-              })
-            }
-          />
-        </>
-      )}
-      renderContent={() => (
-        <main className="cr-content">
-          <Outlet />
-        </main>
-      )}
-    />
+    <>
+      <AsideHeader
+        logo={{
+          text: 'Carbone Reports',
+          icon: FileText,
+          onClick: (e) => {
+            e.preventDefault();
+            navigate('/reports');
+          },
+        }}
+        compact={compact}
+        onChangeCompact={setCompact}
+        menuItems={menuItems}
+        menuOverflow="scroll"
+        headerDecoration
+        renderFooter={({ compact: isCompact }) => (
+          <>
+            <FooterItem
+              id="about"
+              title={`Версия ${webBuild.version}`}
+              icon={CircleInfo}
+              compact={isCompact}
+              onItemClick={() => setAboutOpen(true)}
+            />
+            <FooterItem
+              id="theme"
+              title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+              icon={theme === 'dark' ? Sun : Moon}
+              compact={isCompact}
+              onItemClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            />
+            <FooterItem id="me" title={me?.login ?? ''} icon={Person} compact={isCompact} />
+            <FooterItem
+              id="logout"
+              title="Выйти"
+              icon={ArrowRightFromSquare}
+              compact={isCompact}
+              onItemClick={() =>
+                void signOut(api.logout, {
+                  title: 'Не удалось завершить сессию на сервере',
+                  content: 'Закройте браузер, если компьютер общий.',
+                })
+              }
+            />
+            <FooterItem
+              id="logout-all"
+              title="Выйти везде"
+              icon={ArrowRightToSquare}
+              compact={isCompact}
+              onItemClick={() =>
+                void signOut(api.logoutAll, {
+                  title: 'Не удалось завершить сессии на других устройствах',
+                  content:
+                    'Попробуйте ещё раз после входа или попросите администратора завершить сессии.',
+                })
+              }
+            />
+          </>
+        )}
+        renderContent={() => (
+          <main className="cr-content">
+            <Outlet />
+          </main>
+        )}
+      />
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+    </>
   );
 }

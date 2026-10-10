@@ -43,7 +43,14 @@ const put = (json: unknown) => ({ method: 'PUT', json });
 const patch = (json: unknown) => ({ method: 'PATCH', json });
 const del = { method: 'DELETE' };
 
+export interface VersionDto {
+  version: string;
+  commit: string;
+  builtAt: string;
+}
+
 export const api = {
+  version: () => apiJson<VersionDto>('/api/version'),
   me: () => apiJson<SessionUser>('/api/auth/me'),
   login: (body: LoginBody) => apiJson<SessionUser>('/api/auth/login', post(body)),
   logout: () => apiJson<void>('/api/auth/logout', post()),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ExportTemplatesBody,
+  ImportDecisions,
   TransferManifest,
   transferFilePath,
   type TransferTemplate,
@@ -142,5 +143,23 @@ describe('ExportTemplatesBody', () => {
     const many = (n: number) => Array.from({ length: n }, () => id);
     expect(ExportTemplatesBody.safeParse({ ids: many(200) }).success).toBe(true);
     expect(ExportTemplatesBody.safeParse({ ids: many(201) }).success).toBe(false);
+  });
+});
+
+describe('ImportDecisions', () => {
+  const ID = '3F2B8C1E-0D4A-4B7E-9C55-2A1F6E8D7B90';
+  it('targetId обязателен для update и запрещён для прочих действий', () => {
+    const ok = ImportDecisions.parse([
+      { index: 0, action: 'update', datasourceId: ID, targetId: ID },
+      { index: 1, action: 'create', datasourceId: ID },
+      { index: 2, action: 'skip', targetId: null },
+    ]);
+    expect(ok[0]!.targetId).toBe(ID.toLowerCase());
+    expect(
+      ImportDecisions.safeParse([{ index: 0, action: 'update', datasourceId: ID }]).success,
+    ).toBe(false);
+    for (const action of ['create', 'copy', 'skip'])
+      expect(ImportDecisions.safeParse([{ index: 0, action, targetId: ID }]).success).toBe(false);
+    expect(ImportDecisions.safeParse([{ index: 0, action: 'skip', extra: 1 }]).success).toBe(false);
   });
 });

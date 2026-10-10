@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   ImportAction,
   ImportDecision,
+  ImportExisting,
   ImportPreview,
   ImportPreviewItem,
   ImportResult,
@@ -10,7 +11,7 @@ import type {
   TransferTemplate,
 } from '@carbone-reports/shared/template-transfer';
 import type { TemplateParam } from '@carbone-reports/shared';
-import { desc, eq, inArray, sql } from 'drizzle-orm';
+import { asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   categories,
   datasources,
@@ -61,8 +62,8 @@ export function paramErrors(params: TransferParam[]): string[] {
 
 /** Что уже есть в этой среде — для сопоставления по именам. */
 export interface ImportLookup {
-  /** Шаблоны по точному имени; первый — изменённый последним. */
-  templatesByName: Map<string, { id: string; name: string }[]>;
+  /** Шаблоны по точному имени; изменённые последними — первыми. */
+  templatesByName: Map<string, ImportExisting[]>;
   /** id источников по точному имени. */
   datasourcesByName: Map<string, string[]>;
   /** id групп по имени в нижнем регистре (имена групп уникальны без учёта регистра). */
@@ -81,7 +82,7 @@ export function planImport(manifest: TransferManifest, lookup: ImportLookup): Im
       name: t.name,
       description: t.description,
       fileExt: t.fileExt,
-      existing: sameName[0] ?? null,
+      existing: sameName,
       datasource: t.datasource,
       // Несколько источников с одним именем — неоднозначно: пусть выберет администратор.
       datasourceMatch: ds.length === 1 ? ds[0]! : null,
@@ -112,9 +113,13 @@ export interface ResolvedDecision {
   targetId: string | null;
 }
 
+export const changedSincePreview = (name: string) =>
+  conflict(`шаблон «${name}» изменился после предпросмотра — повторите предпросмотр`);
+
 /**
  * Проверка решений администратора по плану: ровно одно решение на шаблон архива, источник
- * для всех, кроме `skip`; `create` — только при свободном имени, `update` — при совпадении.
+ * для всех, кроме `skip`; `create` — только при свободном имени, `update` — только шаблона
+ * из `existing` (иначе 409: после предпросмотра его удалили или переименовали).
  * `takenNames` — имена всех шаблонов среды; дополняется именами создаваемых.
  */
 export function resolveDecisions(
@@ -156,10 +161,11 @@ export function resolveDecisions(
     } else if (d.action === 'copy') {
       name = copyName(item.name, taken);
     } else {
-      if (!item.existing) throw badRequest(`${who}: в этой среде его нет — обновлять нечего`);
-      if (updated.has(item.existing.id)) throw badRequest(`${who} обновляется дважды`);
-      updated.add(item.existing.id);
-      targetId = item.existing.id;
+      if (!d.targetId) throw badRequest(`${who}: укажите обновляемый шаблон`);
+      if (!item.existing.some((e) => e.id === d.targetId)) throw changedSincePreview(item.name);
+      if (updated.has(d.targetId)) throw badRequest(`${who} обновляется дважды`);
+      updated.add(d.targetId);
+      targetId = d.targetId;
     }
     taken.add(name);
     return { index: item.index, action: d.action, name, datasourceId: d.datasourceId, targetId };
@@ -174,7 +180,7 @@ async function loadLookup(deps: ImportDeps, manifest: TransferManifest): Promise
   const categoryNames = lower(ts.flatMap((t) => (t.category === null ? [] : [t.category])));
   const [tpl, ds, gs, cs] = await Promise.all([
     db
-      .select({ id: templates.id, name: templates.name })
+      .select({ id: templates.id, name: templates.name, updatedAt: templates.updatedAt })
       .from(templates)
       .where(inArray(templates.name, [...new Set(ts.map((t) => t.name))]))
       .orderBy(desc(templates.updatedAt), templates.id),
@@ -195,8 +201,11 @@ async function loadLookup(deps: ImportDeps, manifest: TransferManifest): Promise
           .where(inArray(sql`lower(${categories.name})`, categoryNames))
       : [],
   ]);
-  const templatesByName = new Map<string, { id: string; name: string }[]>();
-  for (const r of tpl) templatesByName.set(r.name, [...(templatesByName.get(r.name) ?? []), r]);
+  const templatesByName = new Map<string, ImportExisting[]>();
+  for (const r of tpl) {
+    const e = { id: r.id, name: r.name, updatedAt: r.updatedAt.toISOString() };
+    templatesByName.set(r.name, [...(templatesByName.get(r.name) ?? []), e]);
+  }
   const datasourcesByName = new Map<string, string[]>();
   for (const r of ds)
     datasourcesByName.set(r.name, [...(datasourcesByName.get(r.name) ?? []), r.id]);
@@ -218,9 +227,17 @@ export async function previewImport(deps: ImportDeps, zip: Buffer): Promise<Impo
   };
 }
 
-const isUniqueViolation = (err: unknown) => {
+/** Загрузки архивов выполняются по одной: имена создаваемых шаблонов проверяются под этой блокировкой. */
+export const IMPORT_LOCK_KEY = 726100004;
+
+/**
+ * Гонки с параллельными изменениями: уникальность (категория создана одновременно), внешний ключ
+ * (источник, группа или категория удалены после проверки), взаимоблокировка.
+ */
+const isConcurrentChange = (err: unknown) => {
   const e = err as { code?: string; cause?: { code?: string } };
-  return e.code === '23505' || e.cause?.code === '23505';
+  const code = e.cause?.code ?? e.code;
+  return code === '23505' || code === '23503' || code === '40P01';
 };
 
 /**
@@ -246,12 +263,15 @@ export async function applyImport(
       : [],
     db.select({ name: templates.name }).from(templates),
   ]);
-  const resolved = resolveDecisions(plan, decisions, {
-    datasourceIds: new Set(dsRows.map((r) => r.id)),
+  const datasourceIds = new Set(dsRows.map((r) => r.id));
+  // Ранняя проверка — до записи файлов; окончательная — в транзакции под блокировкой загрузок.
+  let resolved = resolveDecisions(plan, decisions, {
+    datasourceIds,
     takenNames: new Set(nameRows.map((r) => r.name)),
   });
-  const work = resolved.filter((r) => r.action !== 'skip');
-  if (!work.length) return { templates: resolved.map((r) => ({ ...result(r), id: null })) };
+  if (resolved.every((r) => r.action === 'skip')) {
+    return { templates: resolved.map((r) => ({ ...result(r), id: null })) };
+  }
 
   const created: string[] = [];
   const updatedFiles: { id: string; path: string }[] = [];
@@ -259,6 +279,33 @@ export async function applyImport(
   const ids = new Map<number, string>();
   try {
     await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${IMPORT_LOCK_KEY})`);
+      // Обновляемые — под блокировкой строк (одним запросом, по порядку id — без взаимоблокировок
+      // между загрузками и с callback OnlyOffice): шаблон на месте и имя то же, что в архиве.
+      const targetIds = resolved.flatMap((r) => (r.targetId ? [r.targetId] : []));
+      const locked = new Map(
+        (targetIds.length
+          ? await tx
+              .select()
+              .from(templates)
+              .where(inArray(templates.id, targetIds))
+              .orderBy(asc(templates.id))
+              .for('update')
+          : []
+        ).map((row) => [row.id, row]),
+      );
+      for (const r of resolved) {
+        if (r.targetId && locked.get(r.targetId)?.name !== r.name)
+          throw changedSincePreview(r.name);
+      }
+      // Имена — заново: между ранней проверкой и блокировкой могла пройти другая загрузка.
+      const names = await tx.select({ name: templates.name }).from(templates);
+      resolved = resolveDecisions(plan, decisions, {
+        datasourceIds,
+        takenNames: new Set(names.map((r) => r.name)),
+      });
+      const work = resolved.filter((r) => r.action !== 'skip');
+
       // Категории — по имени без учёта регистра; недостающие создаются один раз.
       const categoryIds = new Map(lookup.categoriesByLower);
       for (const r of work) {
@@ -284,13 +331,7 @@ export async function applyImport(
         };
         let id: string;
         if (r.targetId) {
-          // Блокировка строки: замена не должна пересекаться с callback OnlyOffice.
-          const [cur] = await tx
-            .select()
-            .from(templates)
-            .where(eq(templates.id, r.targetId))
-            .for('update');
-          if (!cur) throw conflict(`шаблон «${r.name}» удалён во время загрузки — повторите`);
+          const cur = locked.get(r.targetId)!;
           id = cur.id;
           const path = templateFilePath(id, t.fileExt, cur.version + 1);
           updatedFiles.push({ id, path });
@@ -342,10 +383,22 @@ export async function applyImport(
       }
     });
   } catch (err) {
-    // Откат: созданные шаблоны в БД не попали — их каталоги убираем целиком; новые версии
-    // обновлённых — только если строка на них не ссылается (коммит мог пройти при обрыве связи).
+    // Откат. Коммит мог пройти, несмотря на ошибку (обрыв связи): каталоги созданных убираем,
+    // только если строки нет; новые версии обновлённых — если строка на них не ссылается.
+    let orphans: string[] = [];
+    try {
+      const kept = created.length
+        ? await db
+            .select({ id: templates.id })
+            .from(templates)
+            .where(inArray(templates.id, created))
+        : [];
+      orphans = created.filter((id) => !kept.some((k) => k.id === id));
+    } catch (e) {
+      log?.warn({ err: e, ids: created }, 'не удалось проверить шаблоны — файлы оставлены');
+    }
     await Promise.all([
-      ...created.map((id) =>
+      ...orphans.map((id) =>
         storage
           .remove(templateDir(id))
           .catch((e) => log?.warn({ err: e, id }, 'файлы несохранённого шаблона не удалены')),
@@ -356,8 +409,10 @@ export async function applyImport(
         ),
       ),
     ]);
-    if (isUniqueViolation(err)) {
-      throw conflict('данные изменились во время загрузки (совпадение имён) — повторите загрузку');
+    if (isConcurrentChange(err)) {
+      throw conflict(
+        'данные изменились во время загрузки (источник, группа или категория) — повторите предпросмотр',
+      );
     }
     throw err;
   }

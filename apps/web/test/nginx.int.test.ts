@@ -23,7 +23,8 @@ const started: StartedTestContainer[] = [];
 let certs: string;
 
 /** Заглушка API и OnlyOffice: nginx отвечает своим именем на любой путь. */
-const STUB_CONF = `server {
+const STUB_CONF = `client_max_body_size 100m;
+server {
   listen 3000; location ~ /proto$ { return 200 "$http_x_forwarded_proto"; }
   location / { return 200 "api-stub $request_uri"; }
 }
@@ -129,6 +130,18 @@ describe('образ web: nginx', () => {
     expect(conf.output).toContain(`resolver ${ns} valid=10s ipv6=off;`);
     // Переменные nginx не тронуты envsubst.
     expect(conf.output).toContain('proxy_set_header Host $http_host;');
+
+    // Архив шаблонов — до 51 МБ только на маршрутах загрузки; прочие /api — 25 МБ (§33.2).
+    const post = (path: string, mb: number) =>
+      fetch(url(c, 80, path), { method: 'POST', body: new Uint8Array(mb * 1024 * 1024) });
+    for (const path of ['/api/templates/import', '/api/templates/import/preview']) {
+      const r = await post(path, 30);
+      expect(await r.text()).toBe(`api-stub ${path}`);
+    }
+    const other = await post('/api/templates/upload', 30);
+    expect(other.status).toBe(413);
+    expect((await other.json()).error.code).toBe('PAYLOAD_TOO_LARGE');
+    expect((await post('/api/templates/import', 52)).status).toBe(413);
   });
 
   it('tls (compose, по умолчанию): 80 → 301 на https, 443 с сертификатами, адреса api/onlyoffice по умолчанию', async () => {

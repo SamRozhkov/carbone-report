@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { crc32, deflateRawSync } from 'node:zlib';
+import { crc32, createDeflateRaw, deflateRawSync } from 'node:zlib';
 import cookie from '@fastify/cookie';
 import multipartPlugin from '@fastify/multipart';
 import type {
@@ -8,6 +8,7 @@ import type {
   TransferManifest,
   TransferParam,
 } from '@carbone-reports/shared/template-transfer';
+import JSZip from 'jszip';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createFastify, type App, type AppDeps } from '../../../app';
 import { users } from '../../../db/schema';
@@ -66,12 +67,20 @@ function manifestFor(data: Buffer[], over: Partial<TransferManifest> = {}): Tran
 }
 
 interface RawEntry {
-  name: string;
+  name: string | Buffer;
   data: Buffer;
   /** Заявленный в заголовке размер (по умолчанию — фактический). */
   size?: number;
   store?: boolean;
   flags?: number;
+  /** Подмены полей центрального каталога. */
+  method?: number;
+  crc?: number;
+  csize?: number;
+  /** Ссылка на чужой локальный заголовок (перекрывающиеся записи): свой не пишется. */
+  offset?: number;
+  /** Готовые сжатые данные вместо deflate(data). */
+  packed?: Buffer;
 }
 
 /** Минимальный zip без проверок — чтобы подделывать заголовки, пути и повторы имён. */
@@ -80,15 +89,17 @@ function rawZip(entries: RawEntry[]): Buffer {
   const centrals: Buffer[] = [];
   let offset = 0;
   for (const e of entries) {
-    const name = Buffer.from(e.name, 'utf8');
-    const packed = e.store ? e.data : deflateRawSync(e.data);
+    const name = typeof e.name === 'string' ? Buffer.from(e.name, 'utf8') : e.name;
+    const method = e.method ?? (e.store ? 0 : 8);
+    const packed = e.packed ?? (e.store ? e.data : deflateRawSync(e.data));
     const size = e.size ?? e.data.length;
+    const crc = e.crc ?? crc32(e.data);
     const lh = Buffer.alloc(30);
     lh.writeUInt32LE(0x04034b50, 0);
     lh.writeUInt16LE(20, 4);
     lh.writeUInt16LE(e.flags ?? 0x800, 6);
-    lh.writeUInt16LE(e.store ? 0 : 8, 8);
-    lh.writeUInt32LE(crc32(e.data), 14);
+    lh.writeUInt16LE(method, 8);
+    lh.writeUInt32LE(crc, 14);
     lh.writeUInt32LE(packed.length, 18);
     lh.writeUInt32LE(size, 22);
     lh.writeUInt16LE(name.length, 26);
@@ -97,15 +108,17 @@ function rawZip(entries: RawEntry[]): Buffer {
     ch.writeUInt16LE(20, 4);
     ch.writeUInt16LE(20, 6);
     ch.writeUInt16LE(e.flags ?? 0x800, 8);
-    ch.writeUInt16LE(e.store ? 0 : 8, 10);
-    ch.writeUInt32LE(crc32(e.data), 16);
-    ch.writeUInt32LE(packed.length, 20);
+    ch.writeUInt16LE(method, 10);
+    ch.writeUInt32LE(crc, 16);
+    ch.writeUInt32LE(e.csize ?? packed.length, 20);
     ch.writeUInt32LE(size, 24);
     ch.writeUInt16LE(name.length, 28);
-    ch.writeUInt32LE(offset, 42);
-    locals.push(lh, name, packed);
+    ch.writeUInt32LE(e.offset ?? offset, 42);
     centrals.push(ch, name);
-    offset += 30 + name.length + packed.length;
+    if (e.offset === undefined) {
+      locals.push(lh, name, packed);
+      offset += 30 + name.length + packed.length;
+    }
   }
   const cd = Buffer.concat(centrals);
   const end = Buffer.alloc(22);
@@ -288,6 +301,145 @@ describe('readTransferArchive', () => {
   });
 });
 
+/** Сжатые нули заданного объёма потоком — без буфера на весь объём; crc32 — по частям. */
+async function zeros(total: number): Promise<{ packed: Buffer; crc: number }> {
+  const chunk = Buffer.alloc(1 << 20);
+  const d = createDeflateRaw();
+  const out: Buffer[] = [];
+  d.on('data', (b: Buffer) => out.push(b));
+  const done = new Promise((resolve) => d.on('end', resolve));
+  let crc = 0;
+  for (let left = total; left > 0; left -= chunk.length) {
+    const part = left >= chunk.length ? chunk : chunk.subarray(0, left);
+    crc = crc32(part, crc);
+    d.write(part);
+  }
+  d.end();
+  await done;
+  return { packed: Buffer.concat(out), crc };
+}
+
+describe('readTransferArchive: регрессия по фаззингу', () => {
+  const m1 = manifestFor([DOC]);
+  const mj = Buffer.from(JSON.stringify(m1));
+  const file = m1.templates[0]!.file;
+
+  it('JSZip streamFiles (дескрипторы данных, нули в локальных размерах) читается', async () => {
+    const z = new JSZip();
+    z.file('manifest.json', mj);
+    z.file(file, DOC);
+    const buf = await z.generateAsync({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+      streamFiles: true,
+    });
+    expect((await readTransferArchive(buf)).files).toEqual([DOC]);
+  });
+
+  it.each([false, true])(
+    'ровно лимит распакованного объёма — можно, на байт меньше — нет (store=%s)',
+    async (store) => {
+      const zip = rawZip([
+        { name: 'manifest.json', data: mj, store },
+        { name: file, data: DOC, store },
+      ]);
+      const limits = { archiveBytes: 1 << 30, entries: 10, unpackedBytes: mj.length + DOC.length };
+      expect((await readTransferArchive(zip, limits)).files).toHaveLength(1);
+      await invalid(
+        readTransferArchive(zip, { ...limits, unpackedBytes: limits.unpackedBytes - 1 }),
+      );
+    },
+  );
+
+  it('бомба: 201 МБ нулей при заявленных 100 байтах — отказ по лимиту 200 МБ', async () => {
+    const { packed, crc } = await zeros(201 * 1024 * 1024);
+    const zip = rawZip([
+      { name: 'manifest.json', data: mj },
+      { name: file, data: Buffer.alloc(0), packed, crc, size: 100 },
+    ]);
+    expect(zip.length).toBeLessThan(1024 * 1024);
+    expect(await invalid(readTransferArchive(zip))).toBe('распакованный архив больше 200 МБ');
+  });
+
+  it('перекрывающиеся записи: безвредно — каждый файл сверяется по sha256, объём суммируется', async () => {
+    const m3 = manifestFor([DOC, DOC, DOC]);
+    const zip = rawZip([
+      { name: m3.templates[0]!.file, data: DOC },
+      manifestEntry(m3),
+      { name: m3.templates[1]!.file, data: DOC, offset: 0 },
+      { name: m3.templates[2]!.file, data: DOC, offset: 0 },
+    ]);
+    expect((await readTransferArchive(zip)).files).toEqual([DOC, DOC, DOC]);
+    await invalid(
+      readTransferArchive(zip, {
+        archiveBytes: 1 << 30,
+        entries: 10,
+        unpackedBytes: 3 * DOC.length,
+      }),
+    );
+  });
+
+  const bad: [string, () => Buffer][] = [
+    [
+      'имя не в UTF-8',
+      () =>
+        rawZip([
+          manifestEntry(m1),
+          { name: file, data: DOC },
+          { name: Buffer.from([0x74, 0x80, 0x81]), data: DOC },
+        ]),
+    ],
+    ['NUL в имени', () => rawZip([{ name: 'manifest.json\0', data: mj }])],
+    ['метод сжатия 12', () => rawZip([{ name: 'manifest.json', data: mj, method: 12 }])],
+    ['неверный CRC', () => rawZip([{ name: 'manifest.json', data: mj, crc: 1 }])],
+    [
+      'огромный сжатый размер',
+      () => rawZip([{ name: 'manifest.json', data: mj, csize: 0xfffffff0 }]),
+    ],
+    [
+      'мусор вместо deflate',
+      () => rawZip([{ name: 'manifest.json', data: mj, packed: Buffer.alloc(64, 0xff) }]),
+    ],
+    [
+      'обрезанный deflate',
+      () =>
+        rawZip([{ name: 'manifest.json', data: mj, packed: deflateRawSync(mj).subarray(0, 10) }]),
+    ],
+    ['пустой архив', () => rawZip([])],
+    ['2 байта', () => Buffer.from('PK')],
+    ['пустой буфер', () => Buffer.alloc(0)],
+    [
+      'мусор перед архивом',
+      () =>
+        Buffer.concat([Buffer.alloc(100), rawZip([manifestEntry(m1), { name: file, data: DOC }])]),
+    ],
+  ];
+  it.each(bad)('%s — IMPORT_INVALID', async (_, make) => {
+    await invalid(readTransferArchive(make()));
+  });
+
+  it('случайные порчи заголовков: только IMPORT_INVALID или успех (детерминированно)', async () => {
+    const good = rawZip([manifestEntry(m1), { name: file, data: DOC }]);
+    let seed = 12345;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let i = 0; i < 2000; i++) {
+      const b = Buffer.from(good);
+      for (let k = 0, n = 1 + Math.floor(rnd() * 4); k < n; k++) {
+        const pos =
+          rnd() < 0.6
+            ? b.length - 1 - Math.floor(rnd() * Math.min(300, b.length))
+            : Math.floor(rnd() * b.length);
+        b[pos] = Math.floor(rnd() * 256);
+      }
+      const err = await readTransferArchive(b).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      if (err !== null) expect((err as AppError).code).toBe('IMPORT_INVALID');
+    }
+  });
+});
+
 // ---- План и решения ----
 
 const param = (p: Partial<TransferParam> & { name: string }): TransferParam =>
@@ -335,8 +487,8 @@ describe('planImport', () => {
           [
             'T1',
             [
-              { id: 'e1', name: 'T1' },
-              { id: 'e0', name: 'T1' },
+              { id: 'e1', name: 'T1', updatedAt: '2026-10-10T10:00:00.000Z' },
+              { id: 'e0', name: 'T1', updatedAt: '2026-10-09T10:00:00.000Z' },
             ],
           ],
         ]),
@@ -347,14 +499,14 @@ describe('planImport', () => {
     expect(plan[0]).toMatchObject({
       index: 0,
       name: 'T1',
-      existing: { id: 'e1', name: 'T1' },
       datasourceMatch: 'ds1',
       category: 'Финансы',
       categoryExists: false,
       missingGroups: ['Склад'],
       errors: [],
     });
-    expect(plan[1]).toMatchObject({ existing: null, categoryExists: true, missingGroups: [] });
+    expect(plan[0]!.existing.map((e) => e.id)).toEqual(['e1', 'e0']); // все кандидаты, новые первыми
+    expect(plan[1]).toMatchObject({ existing: [], categoryExists: true, missingGroups: [] });
     expect(plan[0]!.datasource).toEqual(m.templates[0]!.datasource);
   });
 
@@ -380,7 +532,10 @@ describe('copyName', () => {
 describe('resolveDecisions', () => {
   const DS = '3f2b8c1e-0d4a-4b7e-9c55-2a1f6e8d7b90';
   const item = (index: number, name: string, over: Partial<ImportPreviewItem> = {}) =>
-    ({ index, name, existing: null, errors: [], ...over }) as ImportPreviewItem;
+    ({ index, name, existing: [], errors: [], ...over }) as ImportPreviewItem;
+  const ex = (...ids: string[]) => ({
+    existing: ids.map((id) => ({ id, name: 'Есть', updatedAt: '2026-10-10T10:00:00.000Z' })),
+  });
   const ctx = (taken: string[] = []) => ({
     datasourceIds: new Set([DS]),
     takenNames: new Set(taken),
@@ -389,17 +544,19 @@ describe('resolveDecisions', () => {
     index: number,
     action: ImportDecision['action'],
     datasourceId: string | null = DS,
+    targetId: string | null = null,
   ) => ({
     index,
     action,
     datasourceId,
+    targetId,
   });
-  const fails = (fn: () => unknown, re: RegExp, code = 'BAD_REQUEST') => {
+  const fails = (fn: () => unknown, re: RegExp, code = 'BAD_REQUEST', status = 400) => {
     try {
       fn();
     } catch (e) {
       expect((e as AppError).code).toBe(code);
-      expect((e as AppError).status).toBe(400);
+      expect((e as AppError).status).toBe(status);
       expect((e as AppError).message).toMatch(re);
       return;
     }
@@ -409,14 +566,14 @@ describe('resolveDecisions', () => {
   it('create, update, copy с «(2)»/«(3)», skip', () => {
     const plan = [
       item(0, 'Новый'),
-      item(1, 'Есть', { existing: { id: 'e1', name: 'Есть' } }),
-      item(2, 'Есть', { existing: { id: 'e1', name: 'Есть' } }),
-      item(3, 'Есть', { existing: { id: 'e1', name: 'Есть' } }),
+      item(1, 'Есть', ex('e0', 'e1')),
+      item(2, 'Есть', ex('e0', 'e1')),
+      item(3, 'Есть', ex('e0', 'e1')),
       item(4, 'Любой'),
     ];
     const r = resolveDecisions(
       plan,
-      [d(0, 'create'), d(1, 'update'), d(2, 'copy'), d(3, 'copy'), d(4, 'skip', null)],
+      [d(0, 'create'), d(1, 'update', DS, 'e1'), d(2, 'copy'), d(3, 'copy'), d(4, 'skip', null)],
       ctx(['Есть']),
     );
     expect(r.map((x) => [x.action, x.name, x.targetId])).toEqual([
@@ -453,14 +610,30 @@ describe('resolveDecisions', () => {
     );
   });
 
-  it('update без совпадения, дважды один шаблон, нет решения, повтор, чужой номер', () => {
-    fails(() => resolveDecisions([item(0, 'A')], [d(0, 'update')], ctx()), /обновлять нечего/);
-    const ex = { existing: { id: 'e1', name: 'A' } };
+  it('update: targetId обязателен и должен быть среди кандидатов предпросмотра, иначе 409', () => {
+    fails(() => resolveDecisions([item(0, 'A', ex('e1'))], [d(0, 'update')], ctx()), /укажите/);
+    const changed = /изменился после предпросмотра — повторите предпросмотр/;
+    // Совпадения больше нет (удалён или переименован) или выбран не тот шаблон.
+    fails(
+      () => resolveDecisions([item(0, 'A')], [d(0, 'update', DS, 'e1')], ctx()),
+      changed,
+      'CONFLICT',
+      409,
+    );
+    fails(
+      () => resolveDecisions([item(0, 'A', ex('e2'))], [d(0, 'update', DS, 'e1')], ctx()),
+      changed,
+      'CONFLICT',
+      409,
+    );
+  });
+
+  it('дважды один шаблон, нет решения, повтор, чужой номер', () => {
     fails(
       () =>
         resolveDecisions(
-          [item(0, 'A', ex), item(1, 'A', ex)],
-          [d(0, 'update'), d(1, 'update')],
+          [item(0, 'A', ex('e1')), item(1, 'B', ex('e1'))],
+          [d(0, 'update', DS, 'e1'), d(1, 'update', DS, 'e1')],
           ctx(),
         ),
       /дважды/,

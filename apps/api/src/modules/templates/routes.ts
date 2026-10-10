@@ -104,12 +104,14 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     let data: Buffer | undefined;
     try {
       for await (const part of req.parts({ limits: { fileSize: MAX_TRANSFER_ARCHIVE_BYTES } })) {
-        if (part.type === 'file') data = await part.toBuffer();
-        else fields[part.fieldname] = String(part.value);
+        if (part.type === 'file') {
+          if (part.fieldname !== 'file') throw badRequest('архив передаётся в поле file');
+          data = await part.toBuffer();
+        } else fields[part.fieldname] = String(part.value);
       }
     } catch (err) {
       if ((err as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE') {
-        throw importInvalid('архив больше 50 МБ');
+        throw importInvalid(`архив больше ${MAX_TRANSFER_ARCHIVE_BYTES / 1024 / 1024} МБ`);
       }
       throw err;
     }

@@ -145,17 +145,43 @@ export type TransferManifest = z.infer<typeof TransferManifest>;
 export const ImportAction = z.enum(['create', 'update', 'copy', 'skip']);
 export type ImportAction = z.infer<typeof ImportAction>;
 
-/** Решение по шаблону архива; `datasourceId` обязателен для всех действий, кроме `skip`. */
-export const ImportDecision = z.strictObject({
-  index: z.number().int().min(0),
-  action: ImportAction,
-  datasourceId: z.uuid('неверный идентификатор источника').nullish(),
-});
+/**
+ * Решение по шаблону архива; `datasourceId` обязателен для всех действий, кроме `skip`;
+ * `targetId` — обновляемый шаблон из `existing` предпросмотра: обязателен для `update`, иначе запрещён.
+ */
+export const ImportDecision = z
+  .strictObject({
+    index: z.number().int().min(0),
+    action: ImportAction,
+    datasourceId: z.uuid('неверный идентификатор источника').nullish(),
+    targetId: z
+      .uuid('неверный идентификатор шаблона')
+      .transform((id) => id.toLowerCase())
+      .nullish(),
+  })
+  .superRefine((d, ctx) => {
+    if (d.action === 'update' && !d.targetId)
+      ctx.addIssue({ code: 'custom', path: ['targetId'], message: 'укажите обновляемый шаблон' });
+    if (d.action !== 'update' && d.targetId)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['targetId'],
+        message: 'обновляемый шаблон указывается только для «обновить»',
+      });
+  });
 export type ImportDecision = z.infer<typeof ImportDecision>;
 
 /** Поле `decisions` запроса `POST /api/templates/import` (JSON): по решению на каждый шаблон архива. */
 export const ImportDecisions = z.array(ImportDecision).min(1).max(MAX_TRANSFER_TEMPLATES);
 export type ImportDecisions = z.infer<typeof ImportDecisions>;
+
+/** Шаблон этой среды, совпавший по имени. */
+export interface ImportExisting {
+  id: string;
+  name: string;
+  /** ISO-8601. */
+  updatedAt: string;
+}
 
 /** Строка предпросмотра: шаблон архива и что с ним будет в этой среде. */
 export interface ImportPreviewItem {
@@ -164,8 +190,11 @@ export interface ImportPreviewItem {
   name: string;
   description: string;
   fileExt: TemplateExt;
-  /** Шаблон этой среды с тем же именем (из нескольких — изменённый последним) или `null`. */
-  existing: { id: string; name: string } | null;
+  /**
+   * Шаблоны этой среды с тем же именем (точное совпадение), изменённые последними — первыми;
+   * пусто — совпадения нет. Для `update` один из них передаётся в `targetId`.
+   */
+  existing: ImportExisting[];
   /** Источник из архива — для сведения (без пароля и CA). */
   datasource: TransferDatasource;
   /** Источник этой среды с тем же именем; `null` — нет или их несколько (нужен выбор). */

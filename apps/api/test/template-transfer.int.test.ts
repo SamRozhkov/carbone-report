@@ -193,7 +193,7 @@ describe('перенос шаблонов между средами', () => {
     expect(p.templates[0]).toMatchObject({
       index: 0,
       name,
-      existing: null,
+      existing: [],
       datasourceMatch: dsB,
       categoryExists: false,
       missingGroups: ['Только в A'],
@@ -232,7 +232,9 @@ describe('перенос шаблонов между средами', () => {
     const dup = await apply(b, adminB, zip, [{ index: 0, action: 'create', datasourceId: dsB }]);
     expect(dup.statusCode).toBe(400);
     const p = (await preview(b, adminB, zip)).json() as ImportPreview;
-    expect(p.templates[0]!.existing).toEqual({ id: importedId, name });
+    expect(p.templates[0]!.existing).toEqual([
+      { id: importedId, name, updatedAt: expect.any(String) },
+    ]);
     expect(p.templates[0]!.categoryExists).toBe(true);
     for (const n of [2, 3]) {
       const r = await apply(b, adminB, zip, [{ index: 0, action: 'copy', datasourceId: dsB }]);
@@ -266,7 +268,9 @@ describe('перенос шаблонов между средами', () => {
       .set({ description: 'местное', public: false, lastSaveError: 'x' })
       .where(eq(templates.id, importedId));
 
-    const r = await apply(b, adminB, zip, [{ index: 0, action: 'update', datasourceId: dsB }]);
+    const r = await apply(b, adminB, zip, [
+      { index: 0, action: 'update', datasourceId: dsB, targetId: importedId },
+    ]);
     expect(r.statusCode).toBe(200);
     expect((r.json() as ImportResult).templates[0]).toEqual({
       index: 0,
@@ -334,7 +338,7 @@ describe('перенос шаблонов между средами', () => {
 
       const r = await apply(b, adminB, multi, [
         { index: 0, action: 'create', datasourceId: dsB },
-        { index: 1, action: 'update', datasourceId: dsB },
+        { index: 1, action: 'update', datasourceId: dsB, targetId: importedId },
         { index: 2, action: 'create', datasourceId: dsB },
       ]);
       expect(r.statusCode).toBe(500);
@@ -367,5 +371,91 @@ describe('перенос шаблонов между средами', () => {
     }
     expect(await dbTemplateIds(b)).toEqual(beforeIds);
     expect(await storedTemplateIds(b)).toEqual(beforeIds);
+  });
+
+  it('несколько шаблонов с тем же именем: все кандидаты, обновляется выбранный', async () => {
+    const n = `Двойник ${randomUUID().slice(0, 4)}`;
+    const z = await exportZip(a, adminA, [await richTemplate(n)]);
+    const ids: string[] = [];
+    for (const when of ['2026-01-01T00:00:00Z', '2026-02-01T00:00:00Z']) {
+      const id = await createTemplate(b, adminB, dsB);
+      await b.deps.db
+        .update(templates)
+        .set({ name: n, updatedAt: new Date(when) })
+        .where(eq(templates.id, id));
+      ids.push(id);
+    }
+    const [older, newer] = ids as [string, string];
+    const p = (await preview(b, adminB, z)).json() as ImportPreview;
+    expect(p.templates[0]!.existing.map((e) => e.id)).toEqual([newer, older]);
+    // Новый — изменён после предпросмотра: обновится всё равно выбранный старый.
+    await b.deps.db.update(templates).set({ updatedAt: new Date() }).where(eq(templates.id, older));
+    const r = await apply(b, adminB, z, [
+      { index: 0, action: 'update', datasourceId: dsB, targetId: older },
+    ]);
+    expect(r.statusCode).toBe(200);
+    expect((r.json() as ImportResult).templates[0]!.id).toBe(older);
+    const rows = await b.deps.db.select().from(templates).where(eq(templates.name, n));
+    expect(Object.fromEntries(rows.map((x) => [x.id, x.version]))).toEqual({
+      [older]: 2,
+      [newer]: 1,
+    });
+
+    // Переименован или удалён после предпросмотра — 409, без изменений.
+    await b.deps.db
+      .update(templates)
+      .set({ name: `${n}!` })
+      .where(eq(templates.id, newer));
+    const renamed = await apply(b, adminB, z, [
+      { index: 0, action: 'update', datasourceId: dsB, targetId: newer },
+    ]);
+    expect(renamed.statusCode).toBe(409);
+    expect(renamed.json().error.message).toMatch(/изменился после предпросмотра/);
+    const del = await b.app.inject({
+      method: 'DELETE',
+      url: `/api/templates/${newer}`,
+      headers: { cookie: adminB },
+    });
+    expect(del.statusCode).toBe(204);
+    const deleted = await apply(b, adminB, z, [
+      { index: 0, action: 'update', datasourceId: dsB, targetId: newer },
+    ]);
+    expect(deleted.statusCode).toBe(409);
+    // update без targetId — 400.
+    const noTarget = await apply(b, adminB, z, [{ index: 0, action: 'update', datasourceId: dsB }]);
+    expect(noTarget.statusCode).toBe(400);
+  });
+
+  it('параллельные загрузки одного имени: создаётся один шаблон, вторая — 400', async () => {
+    const n = `Гонка ${randomUUID().slice(0, 4)}`;
+    const z = await exportZip(a, adminA, [await richTemplate(n)]);
+    const rs = await Promise.all(
+      [1, 2].map(() => apply(b, adminB, z, [{ index: 0, action: 'create', datasourceId: dsB }])),
+    );
+    expect(rs.map((r) => r.statusCode).sort()).toEqual([200, 400]);
+    expect(await b.deps.db.select().from(templates).where(eq(templates.name, n))).toHaveLength(1);
+    expect(await storedTemplateIds(b)).toEqual(await dbTemplateIds(b));
+  });
+
+  it('удалённые одновременно группа/категория/источник (нарушение внешнего ключа) — 409, откат', async () => {
+    const n = `Ключ ${randomUUID().slice(0, 4)}`;
+    const z = await exportZip(a, adminA, [await richTemplate(n)]);
+    await b.deps.db.execute(sql`
+      create function fk_boom() returns trigger language plpgsql as $$
+      begin raise exception 'fk' using errcode = '23503'; end $$`);
+    await b.deps.db.execute(
+      sql`create trigger fk_boom before insert on template_queries for each row execute function fk_boom()`,
+    );
+    try {
+      const before = await dbTemplateIds(b);
+      const r = await apply(b, adminB, z, [{ index: 0, action: 'create', datasourceId: dsB }]);
+      expect(r.statusCode).toBe(409);
+      expect(r.json().error.code).toBe('CONFLICT');
+      expect(await dbTemplateIds(b)).toEqual(before);
+      expect(await storedTemplateIds(b)).toEqual(before);
+    } finally {
+      await b.deps.db.execute(sql`drop trigger fk_boom on template_queries`);
+      await b.deps.db.execute(sql`drop function fk_boom()`);
+    }
   });
 });

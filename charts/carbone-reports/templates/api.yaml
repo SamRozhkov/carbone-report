@@ -31,8 +31,8 @@ spec:
         {{- end }}
     spec:
       {{- include "cr.podDefaults" . | nindent 6 }}
-      # При остановке API ждёт незавершённые запросы до max(renderTimeoutMs, reportTimeoutMs) + 5 с; здесь — тот же срок в секундах (вверх) плюс 30 с на закрытие.
-      terminationGracePeriodSeconds: {{ add (div (add (max .Values.config.renderTimeoutMs .Values.config.reportTimeoutMs) 999) 1000) 30 }}
+      # Пауза preStop, затем API ждёт незавершённые запросы до max(renderTimeoutMs, reportTimeoutMs) + 5 с; здесь — пауза, тот же срок в секундах (вверх) и 30 с на закрытие.
+      terminationGracePeriodSeconds: {{ add (int .Values.api.preStopSleepSeconds) (div (add (max .Values.config.renderTimeoutMs .Values.config.reportTimeoutMs) 999) 1000) 30 }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -73,6 +73,13 @@ spec:
             {{- with .Values.api.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+          {{- if gt (int .Values.api.preStopSleepSeconds) 0 }}
+          # Пока Service и ingress убирают под из списка (асинхронно), он ещё принимает запросы; SIGTERM — после паузы.
+          lifecycle:
+            preStop:
+              exec:
+                command: ['sleep', {{ .Values.api.preStopSleepSeconds | int | toString | quote }}]
+          {{- end }}
           # /api/health не трогает базу и доступен в режиме обслуживания: восстановление не делает поды NotReady.
           # /api/ready тоже доступен в режиме обслуживания, но при остановке отвечает 503: под снимается с балансировки, пока доделываются отчёты.
           startupProbe:

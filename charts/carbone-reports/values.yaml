@@ -107,6 +107,8 @@ api:
   # В кластере только с IPv6: http://[$(POD_IP)]:3000. $(POD_IP) подставляет Kubernetes.
   # Внешний Document Server (onlyoffice.enabled: false) должен достигать IP подов API, не только Service.
   selfUrl: ''
+  # Пауза перед SIGTERM: балансировщики успевают убрать под, новые запросы не получают отказ соединения. 0 — без паузы.
+  preStopSleepSeconds: 5
   resources:
     requests: { cpu: 500m, memory: 512Mi }
     limits: { memory: 2Gi }

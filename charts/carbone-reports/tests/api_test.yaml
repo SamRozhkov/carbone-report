@@ -125,19 +125,33 @@ tests:
     template: api.yaml
     documentIndex: 0
     asserts:
-      - equal: { path: spec.template.spec.terminationGracePeriodSeconds, value: 150 }
+      - equal: { path: spec.template.spec.terminationGracePeriodSeconds, value: 155 }
   - it: terminationGracePeriodSeconds округляет срок вверх
     template: api.yaml
     documentIndex: 0
     set: { config.renderTimeoutMs: 30500, config.reportTimeoutMs: 30500 }
     asserts:
-      - equal: { path: spec.template.spec.terminationGracePeriodSeconds, value: 61 }
+      - equal: { path: spec.template.spec.terminationGracePeriodSeconds, value: 66 }
+  - it: preStop — пауза из api.preStopSleepSeconds, 0 — без preStop
+    template: api.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: 'spec.template.spec.containers[0].lifecycle.preStop.exec.command'
+          value: ['sleep', '5']
+  - it: без паузы preStop нет, срок остановки без неё
+    template: api.yaml
+    documentIndex: 0
+    set: { api.preStopSleepSeconds: 0 }
+    asserts:
+      - notExists: { path: 'spec.template.spec.containers[0].lifecycle' }
+      - equal: { path: spec.template.spec.terminationGracePeriodSeconds, value: 150 }
   - it: terminationGracePeriodSeconds берёт больший из сроков рендера и отчёта
     template: api.yaml
     documentIndex: 0
     set: { config.reportTimeoutMs: 200000 }
     asserts:
-      - equal: { path: spec.template.spec.terminationGracePeriodSeconds, value: 230 }
+      - equal: { path: spec.template.spec.terminationGracePeriodSeconds, value: 235 }
   - it: startup/liveness — /api/health, readiness — /api/ready, startupProbe с запасом на миграции
     template: api.yaml
     documentIndex: 0

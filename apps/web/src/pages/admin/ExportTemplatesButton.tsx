@@ -1,4 +1,4 @@
-import { ArrowUpFromLine } from '@gravity-ui/icons';
+import { ArrowDownToSquare } from '@gravity-ui/icons';
 import { Button, Icon, useToaster } from '@gravity-ui/uikit';
 import { useMutation } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -40,7 +40,7 @@ export function ExportTemplatesButton({
       loading={exp.isPending}
       onClick={() => exp.mutate()}
     >
-      <Icon data={ArrowUpFromLine} />
+      <Icon data={ArrowDownToSquare} />
       {children}
     </Button>
   );

@@ -242,8 +242,10 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
             />
             {!t.datasourceMatch && (
               <Text variant="caption-2" color="secondary">
-                В архиве: «{t.datasource.name}» ({t.datasource.host}) — в этой среде не найден
-                однозначно
+                В архиве: «{t.datasource.name}» ({t.datasource.host}) —{' '}
+                {(datasources.data ?? []).filter((d) => d.name === t.datasource.name).length > 1
+                  ? 'найдено несколько источников с этим именем — выберите'
+                  : 'в этой среде не найден'}
               </Text>
             )}
           </div>

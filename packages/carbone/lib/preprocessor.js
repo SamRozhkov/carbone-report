@@ -259,7 +259,7 @@ var preprocessor = {
   /**
    * [XLSX] Вернуть номера строк и ячеек (r="3", r="B3") после сборки: removeRowCounterInWorksheet убирает их, чтобы
    * циклы могли размножать строки. Excel без r ставит строки и ячейки подряд, а OnlyOffice Document Server без r
-   * кладёт все ячейки в A1 (остаётся одна) — поэтому номера ставятся по тому же правилу «подряд»: строки 1…N,
+   * оставляет только первую ячейку каждой строки — поэтому номера ставятся по тому же правилу «подряд»: строки 1…N,
    * ячейки A, B, C… по позиции в строке. Результат в Excel не меняется. Строки и ячейки, где r уже есть,
    * не трогаются.
    * @param  {String} xml sheet
@@ -323,15 +323,28 @@ var preprocessor = {
     if (_sheets.length === 0) {
       return template;
     }
+    // каталог книги: рядом с xl/_rels/workbook.xml.rels; без него листы не трогаем (иначе ссылки t="s" повисли бы)
+    var _relsIndex = template.files.findIndex(function (f) {
+      return (f.parent === '' || f.parent === undefined) && /(^|\/)_rels\/workbook\.xml\.rels$/.test(f.name) === true;
+    });
+    var _types = template.files.find(function (f) {
+      return (f.parent === '' || f.parent === undefined) && f.name === '[Content_Types].xml';
+    });
+    if (_relsIndex === -1 || _types === undefined || typeof template.files[_relsIndex].data !== 'string' || typeof _types.data !== 'string') {
+      return template;
+    }
+    var _rels = template.files[_relsIndex];
     var _strings = [];
     var _index = new Map();
+    var _count = 0;
     _sheets.forEach(function (sheet) {
       var _start = sheet.data.indexOf('<sheetData');
       var _end = sheet.data.lastIndexOf('</sheetData>');
       if (_start === -1 || _end === -1) {
         return;
       }
-      var _data = sheet.data.slice(_start, _end).replace(/<c\b([^>]*?)\st="inlineStr"([^>]*)>\s*(?:<is\s*\/>|<is>([\s\S]*?)<\/is>)\s*<\/c>/g, function (m, before, after, content) {
+      // всё, что стоит в ячейке после </is> (например extLst), остаётся на месте
+      var _data = sheet.data.slice(_start, _end).replace(/<c\b([^>]*?)\st="inlineStr"([^>]*)>\s*(?:<is\s*\/>|<is>((?:(?!<\/is>)[\s\S])*)<\/is>)((?:(?!<\/c>)[\s\S])*)<\/c>/g, function (m, before, after, content, rest) {
         var _content = content === undefined ? '<t></t>' : content;
         var _i = _index.get(_content);
         if (_i === undefined) {
@@ -339,21 +352,12 @@ var preprocessor = {
           _strings.push(_content);
           _index.set(_content, _i);
         }
-        return '<c' + before + ' t="s"' + after + '><v>' + _i + '</v></c>';
+        _count++;
+        return '<c' + before + ' t="s"' + after + '><v>' + _i + '</v>' + rest.replace(/^\s+/, '') + '</c>';
       });
       sheet.data = sheet.data.slice(0, _start) + _data + sheet.data.slice(_end);
     });
     if (_strings.length === 0) {
-      return template;
-    }
-    // каталог книги: рядом с xl/_rels/workbook.xml.rels
-    var _rels = template.files.find(function (f) {
-      return (f.parent === '' || f.parent === undefined) && /(^|\/)_rels\/workbook\.xml\.rels$/.test(f.name) === true;
-    });
-    var _types = template.files.find(function (f) {
-      return (f.parent === '' || f.parent === undefined) && f.name === '[Content_Types].xml';
-    });
-    if (_rels === undefined || _types === undefined || typeof _rels.data !== 'string' || typeof _types.data !== 'string') {
       return template;
     }
     var _dir = _rels.name.replace(/(^|\/)_rels\/workbook\.xml\.rels$/, '');
@@ -361,12 +365,14 @@ var preprocessor = {
     template.files = template.files.filter(function (f) {
       return !((f.parent === '' || f.parent === undefined) && f.name === _name);
     });
-    template.files.push({
+    // вставка рядом со связями книги, а не в конец: после файлов вложенных архивов (xl/embeddings/*.xlsx, *.ods)
+    // файл верхнего уровня zipFiles принял бы за отдельный архив с пустым именем
+    template.files.splice(template.files.indexOf(_rels) + 1, 0, {
       name     : _name,
       parent   : '',
       isMarked : false,
       data     : '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
-        + '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="' + _strings.length + '" uniqueCount="' + _strings.length + '">'
+        + '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="' + _count + '" uniqueCount="' + _strings.length + '">'
         + _strings.map(function (str) {
           return '<si>' + str + '</si>';
         }).join('') + '</sst>'

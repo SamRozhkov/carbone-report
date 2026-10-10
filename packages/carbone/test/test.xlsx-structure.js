@@ -36,7 +36,7 @@ describe('XLSX: общие строки и номера строк и ячеек
     });
   });
   // строки — массивы значений ячеек; общие строки, как в файле Excel (sharedStrings.xml)
-  async function xlsx (rows, cols) {
+  async function xlsx (rows, cols, extra) {
     const strings = [];
     const cell = (v, r, c) => {
       const ref = String.fromCharCode(65 + c) + r;
@@ -50,7 +50,8 @@ describe('XLSX: общие строки и номера строк и ячеек
       'xl/workbook.xml': XML + '<workbook xmlns="' + M + '" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Лист1" sheetId="1" r:id="rId1"/></sheets></workbook>',
       'xl/_rels/workbook.xml.rels': XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>',
       'xl/sharedStrings.xml': XML + '<sst xmlns="' + M + '">' + strings.map((s) => '<si><t>' + s + '</t></si>').join('') + '</sst>',
-      'xl/worksheets/sheet1.xml': XML + '<worksheet xmlns="' + M + '">' + (cols || '') + '<sheetData>' + sheet + '</sheetData></worksheet>'
+      'xl/worksheets/sheet1.xml': XML + '<worksheet xmlns="' + M + '">' + (cols || '') + '<sheetData>' + sheet + '</sheetData></worksheet>',
+      ...(extra || {})
     });
   }
   // [[ref, текст]] по строкам; проверка: строки 1…N подряд, ячейки A, B, C… с номером своей строки
@@ -91,7 +92,41 @@ describe('XLSX: общие строки и номера строк и ячеек
     const out = await render([['H1', 'H2'], ['{d.cars[i].n}', 'x'], ['{d.cars[i+1].n}', '']], CARS);
     assert.deepStrictEqual(out.grid, [['H1', 'H2'], ['Лада', 'x'], ['Тесла', 'x'], ['БМВ', 'x']]);
     assert.strictEqual((out.sst.match(/<si>/g) || []).length, 6);
-    assert.match(out.sst, /count="6" uniqueCount="6"/);
+    assert.match(out.sst, /count="8" uniqueCount="6"/);
+  });
+  it('XLSX со вложенной книгой (xl/embeddings): рендер проходит, внешний и вложенный файлы целы', async function () {
+    const inner = await xlsx([['вложенная', '{d.cars[0].n}']]);
+    const out = await renderBuffer(await xlsx([['H1', 'H2'], ['{d.cars[i].n}', 'x'], ['{d.cars[i+1].n}', '']], null, { 'xl/embeddings/Microsoft_Excel_Worksheet.xlsx': inner }), 'xlsx', CARS, RU);
+    const sheet = await entry(out, 'xl/worksheets/sheet1.xml');
+    const sst = await entry(out, 'xl/sharedStrings.xml');
+    assert.deepStrictEqual(grid(sheet, sst), [['H1', 'H2'], ['Лада', 'x'], ['Тесла', 'x'], ['БМВ', 'x']]);
+    const embedded = await new Promise((resolve, reject) => {
+      yauzl.fromBuffer(out, { lazyEntries: true }, (err, z) => {
+        if (err) return reject(err);
+        const names = [];
+        z.on('entry', (e) => { names.push(e.fileName); z.readEntry(); }).on('end', () => resolve(names));
+        z.readEntry();
+      });
+    });
+    assert.ok(embedded.includes('xl/embeddings/Microsoft_Excel_Worksheet.xlsx'), embedded.join());
+    assert.strictEqual(embedded.filter((n) => n === 'xl/sharedStrings.xml').length, 1);
+    assert.strictEqual(embedded.includes(''), false);
+  });
+  it('встроенная строка с содержимым после </is> (extLst): соседние ячейки не сливаются', async function () {
+    const sheet = '<row><c t="inlineStr"><is><t>X</t></is><extLst><ext uri="u"/></extLst></c><c t="inlineStr"><is><t>Y</t></is></c></row>';
+    const z = await zip({
+      '[Content_Types].xml': XML + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+      '_rels/.rels': XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+      'xl/workbook.xml': XML + '<workbook xmlns="' + M + '" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Лист1" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      'xl/_rels/workbook.xml.rels': XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+      'xl/worksheets/sheet1.xml': XML + '<worksheet xmlns="' + M + '"><sheetData>' + sheet + '</sheetData></worksheet>'
+    });
+    const out = await renderBuffer(z, 'xlsx', CARS, RU);
+    const sst = await entry(out, 'xl/sharedStrings.xml');
+    const xml = await entry(out, 'xl/worksheets/sheet1.xml');
+    assert.strictEqual((sst.match(/<si>/g) || []).length, 2, sst);
+    assert.match(sst, /<si><t>X<\/t><\/si><si><t>Y<\/t><\/si>/);
+    assert.match(xml, /<c r="A1" t="s"><v>0<\/v><extLst><ext uri="u"\/><\/extLst><\/c><c r="B1" t="s"><v>1<\/v><\/c>/);
   });
   it('addRowCounterInWorksheet: пустые и самозакрытые ячейки, столбцы после Z, существующие r не трогаются', function () {
     const { addRowCounterInWorksheet, columnName } = require('../lib/preprocessor');

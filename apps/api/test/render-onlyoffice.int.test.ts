@@ -62,10 +62,7 @@ async function xlsxTemplate(
     'xl/_rels/workbook.xml.rels',
     `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
   );
-  zip.file(
-    'xl/worksheets/sheet1.xml',
-    `${XML}<worksheet xmlns="${M}">${sheet}</worksheet>`,
-  );
+  zip.file('xl/worksheets/sheet1.xml', `${XML}<worksheet xmlns="${M}">${sheet}</worksheet>`);
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 

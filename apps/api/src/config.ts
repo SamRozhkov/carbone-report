@@ -3,6 +3,9 @@ import os from 'node:os';
 import { z } from 'zod';
 import { hasHost, withPassword } from './lib/url-password';
 
+/** Хост белого списка изображений: имя или IPv4, либо [IPv6], с необязательным портом. */
+const HOST = /^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:.]+\])(?::\d{1,5})?$/;
+
 const Env = z
   .object({
     DATABASE_URL: z.string({ error: 'DATABASE_URL обязателен' }).min(1, 'DATABASE_URL обязателен'),
@@ -74,6 +77,29 @@ const Env = z
     QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
     QUERY_MAX_ROWS: z.coerce.number().int().positive().default(100000),
     RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
+    // Изображения из данных по адресу (§32.2): хосты через запятую (порт — часть хоста, если указан);
+    // пусто — загрузка выключена.
+    IMAGE_URL_ALLOWLIST: z
+      .string()
+      .transform((v) =>
+        v
+          .split(',')
+          .map((h) => h.trim().toLowerCase())
+          .filter((h) => h !== ''),
+      )
+      .refine(
+        (hosts) => hosts.every((h) => HOST.test(h)),
+        'хосты через запятую без схемы и пути, например cdn.example.org или cdn.example.org:8443',
+      )
+      .default([]),
+    IMAGE_URL_TIMEOUT_MS: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.coerce
+        .number({ error: 'целое положительное, мс' })
+        .int('целое положительное, мс')
+        .positive('целое положительное, мс')
+        .default(5000),
+    ),
     REPORT_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
     REPORT_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
     TZ: z.string().default('Europe/Moscow'),
@@ -215,6 +241,10 @@ export interface Config {
   queryTimeoutMs: number;
   queryMaxRows: number;
   renderTimeoutMs: number;
+  /** Хосты для загрузки изображений по адресу (§32.2); пусто — выключена. */
+  imageUrlAllowlist: string[];
+  /** Тайм-аут загрузки одного изображения по адресу, мс. */
+  imageUrlTimeoutMs: number;
   /** Общий срок генерации и предпросмотра: проверка параметров, SQL и Carbone вместе. */
   reportTimeoutMs: number;
   reportRetentionDays: number;
@@ -314,6 +344,8 @@ export function loadConfig(
     queryTimeoutMs: e.QUERY_TIMEOUT_MS,
     queryMaxRows: e.QUERY_MAX_ROWS,
     renderTimeoutMs: e.RENDER_TIMEOUT_MS,
+    imageUrlAllowlist: e.IMAGE_URL_ALLOWLIST,
+    imageUrlTimeoutMs: e.IMAGE_URL_TIMEOUT_MS,
     reportTimeoutMs: e.REPORT_TIMEOUT_MS,
     reportRetentionDays: e.REPORT_RETENTION_DAYS,
     tz: e.TZ,

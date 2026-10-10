@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TemplateFileRef } from '../../deps';
 import { createRenderHandoff } from './handoff';
-import { RenderCrashError, RenderTimeoutError, TemplateRenderError } from './pool';
+import {
+  RenderCrashError,
+  RenderTimeoutError,
+  TemplateRenderError,
+  type RenderJob,
+  type RenderResult,
+} from './pool';
 import { createEmbeddedRenderer } from './renderer';
 
 const secret = new TextEncoder().encode('k'.repeat(32));
@@ -18,8 +24,8 @@ const opts = (convertTo: string, timeoutMs = 5000) =>
   ({ convertTo, lang: 'ru', timezone: 'Europe/Moscow', timeoutMs }) as never;
 
 function setup(
-  run: (job: { template: Buffer }) => Promise<Buffer>,
-  log?: { info(o: object, m: string): void },
+  run: (job: RenderJob) => Promise<Buffer | RenderResult>,
+  log?: { info?(o: object, m: string): void; warn?(o: object, m: string): void },
 ) {
   const handoff = createRenderHandoff(secret);
   const convert = vi.fn(async (r: { url: string }) => {
@@ -29,11 +35,19 @@ function setup(
     return Buffer.concat([Buffer.from('PDF:'), got.file]);
   });
   const renderer = createEmbeddedRenderer({
-    pool: { run },
+    pool: {
+      run: async (job, deadlineAt) => {
+        void deadlineAt;
+        const r = await run(job);
+        return Buffer.isBuffer(r) ? { out: r, warnings: [] } : r;
+      },
+    },
     handoff,
     convert,
     selfUrl: 'http://10.0.0.5:3000',
-    log,
+    imageUrlAllowlist: ['cdn.example.org'],
+    imageUrlTimeoutMs: 300,
+    log: { info: log?.info ?? (() => {}), warn: log?.warn ?? (() => {}) },
   });
   return { renderer, convert, handoff };
 }
@@ -98,6 +112,33 @@ describe('createEmbeddedRenderer', () => {
     });
   });
 
+  it('ошибка метки (текст с Source) — 400 CARBONE_TEMPLATE «ошибка шаблона: …» (R1)', async () => {
+    const message =
+      'хост «evil.example.org» не входит в белый список IMAGE_URL_ALLOWLIST Source: "{d.img}"';
+    const { renderer } = setup(async () => {
+      throw new TemplateRenderError(message);
+    });
+    for (const format of ['docx', 'pdf']) {
+      await expect(renderer.render(tpl(), {}, opts(format))).rejects.toMatchObject({
+        code: 'CARBONE_TEMPLATE',
+        status: 400,
+        message: `ошибка шаблона: ${message}`,
+      });
+    }
+  });
+
+  it('отключённая функция с Source — по-прежнему CARBONE_COMMUNITY (проверяется первой)', async () => {
+    const { renderer } = setup(async () => {
+      throw new TemplateRenderError(
+        'Formatter "html" is disabled in the Community Edition. Source: "{d.x:html}"',
+      );
+    });
+    await expect(renderer.render(tpl(), {}, opts('docx'))).rejects.toMatchObject({
+      code: 'CARBONE_COMMUNITY',
+      status: 400,
+    });
+  });
+
   it('срок — 504 TIMEOUT; упавший поток — 502 «сервис генерации недоступен»', async () => {
     const t = setup(async () => {
       throw new RenderTimeoutError();
@@ -141,6 +182,43 @@ describe('createEmbeddedRenderer', () => {
       { templateId: 't1', version: 1, carboneError: 'Formatter "x" does not exist' },
       'ошибка шаблона Carbone',
     );
+  });
+});
+
+describe('createEmbeddedRenderer: изображения по адресу (§32.2)', () => {
+  it('в задание потока идут lang, timezone и настройки загрузки изображений', async () => {
+    const run = vi.fn(async (job: RenderJob) => {
+      void job;
+      return Buffer.from('OUT');
+    });
+    const { renderer } = setup(run);
+    await renderer.render(tpl(), { a: 1 }, opts('docx'));
+    expect(run.mock.calls[0]![0]).toMatchObject({
+      ext: 'docx',
+      data: { a: 1 },
+      options: {
+        lang: 'ru',
+        timezone: 'Europe/Moscow',
+        imageUrlAllowlist: ['cdn.example.org'],
+        imageUrlTimeoutMs: 300,
+      },
+    });
+  });
+
+  it('предупреждения рендера — log.warn с templateId, отчёт отдаётся', async () => {
+    const warn = vi.fn();
+    const warnings = ['изображение не загружено: http://cdn.example.org/a.png — код ответа 404'];
+    const { renderer } = setup(async () => ({ out: Buffer.from('OUT'), warnings }), { warn });
+    expect((await renderer.render(tpl(), {}, opts('docx'))).toString()).toBe('OUT');
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith({ templateId: 't1', warnings }, 'изображение не загружено');
+  });
+
+  it('без предупреждений log.warn не вызывается', async () => {
+    const warn = vi.fn();
+    const { renderer } = setup(async () => Buffer.from('OUT'), { warn });
+    await renderer.render(tpl(), {}, opts('pdf'));
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 

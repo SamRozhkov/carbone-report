@@ -22,6 +22,8 @@ let dsId: string;
 let tplId: string;
 let carboneFails = false;
 let carboneCommunity = false;
+/** Поток встроенного рендерера отвечает ошибкой метки с Source (R1 плана 2.4.0). */
+let carboneTemplate = false;
 /** Встроенный рендерер с поддельным пулом для отдельного теста (читает файл шаблона из хранилища сам). */
 let liveCarbone: CarboneRenderer | null = null;
 
@@ -32,26 +34,34 @@ const noConvert = async (): Promise<Buffer> => {
   throw new Error('конвертация не ожидается');
 };
 
-/** Встроенный рендерер, поток которого отвечает ошибкой Community (как в матрице). */
-const communityCarbone = () =>
+/** Встроенный рендерер, поток которого отвечает ошибкой Carbone (как в матрице). */
+const failingCarbone = (message: string) =>
   createEmbeddedRenderer({
     pool: {
       run: async () => {
-        throw new TemplateRenderError(
-          'Formatter "html" is disabled in the Community Edition. Source: "{d.orders[].note:html}"',
-        );
+        throw new TemplateRenderError(message);
       },
     },
     handoff: t.deps.renderFiles,
     convert: noConvert,
     selfUrl: 'http://api:3000',
+    imageUrlAllowlist: [],
+    imageUrlTimeoutMs: 5000,
   });
+const communityCarbone = () =>
+  failingCarbone(
+    'Formatter "html" is disabled in the Community Edition. Source: "{d.orders[].note:html}"',
+  );
+const TEMPLATE_CARBONE_ERROR =
+  'загрузка изображений по адресу выключена (IMAGE_URL_ALLOWLIST) Source: "{d.logo}"';
+const TEMPLATE_MESSAGE = `ошибка шаблона: ${TEMPLATE_CARBONE_ERROR}`;
 
 // Поддельный Carbone возвращает JSON того, что ему передали.
 const carbone: CarboneRenderer = {
   async render(tpl, data, opts) {
     if (carboneFails) throw new AppError('CARBONE_ERROR', 502, 'ошибка генерации: boom');
     if (carboneCommunity) return communityCarbone().render(tpl, data, opts);
+    if (carboneTemplate) return failingCarbone(TEMPLATE_CARBONE_ERROR).render(tpl, data, opts);
     if (liveCarbone) return liveCarbone.render(tpl, data, opts);
     return Buffer.from(
       JSON.stringify({
@@ -208,6 +218,27 @@ describe('генерация', () => {
     expect(runs.json().items[0]).toMatchObject({
       status: 'error',
       error: COMMUNITY_MESSAGE,
+      fileAvailable: false,
+    });
+  });
+
+  it('ошибка метки (Source) → 400 CARBONE_TEMPLATE и запись со status=error (R1)', async () => {
+    carboneTemplate = true;
+    const r = await render(userA, tplId, { params: { from: '2026-01-01' }, format: 'pdf' }).finally(
+      () => {
+        carboneTemplate = false;
+      },
+    );
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error).toEqual({ code: 'CARBONE_TEMPLATE', message: TEMPLATE_MESSAGE });
+    const runs = await t.app.inject({
+      method: 'GET',
+      url: '/api/runs?status=error',
+      headers: { cookie: userA },
+    });
+    expect(runs.json().items[0]).toMatchObject({
+      status: 'error',
+      error: TEMPLATE_MESSAGE,
       fileAvailable: false,
     });
   });
@@ -477,14 +508,34 @@ describe('инструменты админа', () => {
   });
 });
 
+describe('preview: ошибка метки', () => {
+  it('preview: ошибка метки (Source) → 400 CARBONE_TEMPLATE с текстом (R1)', async () => {
+    carboneTemplate = true;
+    const r = await t.app
+      .inject({
+        method: 'POST',
+        url: `/api/templates/${tplId}/preview`,
+        headers: { cookie: admin },
+        payload: { params: { from: '2026-01-01' }, mode: 'pdf' },
+      })
+      .finally(() => {
+        carboneTemplate = false;
+      });
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error).toEqual({ code: 'CARBONE_TEMPLATE', message: TEMPLATE_MESSAGE });
+  });
+});
+
 describe('сбой хранилища при чтении шаблона', () => {
   it('preview: не CARBONE_ERROR 502, а 500 INTERNAL с записью в журнал', async () => {
-    const run = vi.fn(async () => Buffer.from('OUT'));
+    const run = vi.fn(async () => ({ out: Buffer.from('OUT'), warnings: [] }));
     liveCarbone = createEmbeddedRenderer({
       pool: { run },
       handoff: t.deps.renderFiles,
       convert: noConvert,
       selfUrl: 'http://api:3000',
+      imageUrlAllowlist: [],
+      imageUrlTimeoutMs: 5000,
     });
     const cause = Object.assign(new Error('S3: socket hang up'), { name: 'TimeoutError' });
     const read = vi.spyOn(t.deps.storage, 'read').mockRejectedValue(cause);

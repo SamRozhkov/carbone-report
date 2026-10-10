@@ -41,7 +41,9 @@
   общий разбор XML — `lib/xmltree.js`. Метка в замещающем тексте картинки-заглушки (DOCX, PPTX, XLSX, ODT, ODS, ODP)
   заменяет картинку изображением из data URI (PNG, JPEG, GIF); повторённые циклом картинки получают уникальные id;
   размеры по заголовку файла — библиотека `image-size` 2.0.4 (MIT, https://github.com/image-size/image-size).
-  Добавлена `renderBufferWithWarnings(...)` → `{ buffer, warnings }`.
+  Добавлена `renderBufferWithWarnings(...)` → `{ buffer, warnings }`. Адрес `http(s)://` загружается встроенным
+  `fetch` Node (§32.2): только хосты из `imageUrlAllowlist`, без перенаправлений, тайм-аут `imageUrlTimeoutMs`,
+  до 4 загрузок одновременно; сбой сети — заглушка удаляется, предупреждение (адрес без query-строки) — в `warnings`.
 
 ## Правило чистой реализации
 

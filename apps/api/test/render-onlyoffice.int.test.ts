@@ -220,12 +220,16 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
       handoff,
       convert,
       selfUrl: `http://host.testcontainers.internal:${port}`,
+      imageUrlAllowlist: [],
+      imageUrlTimeoutMs: 5000,
     });
     deadLink = createEmbeddedRenderer({
       pool,
       handoff,
       convert,
       selfUrl: 'http://host.testcontainers.internal:1',
+      imageUrlAllowlist: [],
+      imageUrlTimeoutMs: 5000,
     });
 
     // Прогрев: холодный конвертер первое время отвечает -1/-2 или не отвечает.

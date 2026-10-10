@@ -10,9 +10,10 @@
 //   3. форматтер __img кладёт значение в реестр options.__media.items и печатает жетон «m<ключ>i<n>» из области
 //      частного использования (ключ — случайный на рендер: жетон из данных отчёта не совпадёт с ним);
 //   4. finish — после сборки всех файлов (renderBuffer): жетоны группируются по картинке-контейнеру, данные
-//      загружаются (loadImage), в контейнере меняются ссылка на файл и размеры, добавляются media-файл и связь
-//      (OOXML: .rels и [Content_Types].xml; OpenDocument: META-INF/manifest.xml); пустое значение удаляет
-//      контейнер. Без жетонов документ не меняется.
+//      загружаются (loadImage: data URI или адрес http(s) из белого списка, не больше 4 загрузок одновременно),
+//      в контейнере меняются ссылка на файл и размеры, добавляются media-файл и связь (OOXML: .rels и
+//      [Content_Types].xml; OpenDocument: META-INF/manifest.xml); пустое значение удаляет контейнер. Без жетонов
+//      документ не меняется.
 //
 // Форматы (DOCX, PPTX, XLSX, ODT, ODS, ODP): правила разметки — lib/media-formats.js, по семействам
 // (xmltree.family); источники данных — LOADERS по виду записи реестра (kind).
@@ -35,6 +36,7 @@ var MB = 1024 * 1024;
 var MAX_IMAGE = 10 * MB; // одно изображение после декодирования
 var MAX_TOTAL = 50 * MB; // все изображения отчёта
 var CONCURRENCY = 4; // одновременных загрузок на отчёт (§32.2)
+var DEFAULT_TIMEOUT = 5000; // мс на загрузку одного изображения по адресу (IMAGE_URL_TIMEOUT_MS)
 
 var FITS = ['fillWidth', 'contain', 'fill'];
 var DEFAULT_FIT = 'fillWidth';
@@ -52,6 +54,8 @@ var MSG = {
   tooBig      : 'изображение больше 10 МБ',
   tooBigTotal : 'изображения отчёта больше 50 МБ',
   urlDisabled : 'загрузка изображений по адресу выключена (IMAGE_URL_ALLOWLIST)',
+  badUrl      : 'неверный адрес изображения',
+  urlAuth     : 'адрес изображения с именем пользователя или паролем не поддерживается',
   fitOutside  : 'imageFit ставится в метку изображения — в замещающий текст (название или описание) картинки',
   outside     : 'метка изображения должна стоять в замещающем тексте (названии или описании) картинки'
 };
@@ -269,13 +273,127 @@ function decodeDataUri (value, source) {
   return identify(Buffer.from(_base64, 'base64'), source);
 }
 
-/** Изображение по адресу http(s) — §32.2 (загрузка — Task 3 плана 2.4.0) */
-function loadUrl (url, item, options) {
+var DEFAULT_PORTS = { 'http:' : '80', 'https:' : '443' };
+
+/**
+ * Хост адреса в белом списке: точное совпадение имени без учёта регистра, без масок; порт — часть хоста, только если
+ * указан в списке («example.org» — только порт по умолчанию; «example.org:8443» — только он)
+ * @param  {URL}      url
+ * @param  {String[]} allowlist
+ * @return {Boolean}
+ */
+function hostAllowed (url, allowlist) {
+  var _port = url.port !== '' ? url.port : DEFAULT_PORTS[url.protocol];
+  var _variants = [url.hostname + ':' + _port];
+  if (url.port === '') {
+    _variants.push(url.hostname);
+  }
+  return (allowlist || []).some(function (entry) {
+    if (typeof entry !== 'string') {
+      return false;
+    }
+    var _entry = entry.trim().toLowerCase();
+    return _entry !== '' && _variants.indexOf(_entry) !== -1;
+  });
+}
+
+/** Адрес для журнала: без учётных данных, query-строки и фрагмента */
+function safeUrl (url) {
+  return url.protocol + '//' + url.host + url.pathname;
+}
+
+/** Ошибка загрузки по сети: заглушка удаляется, отчёт строится (§32.1) */
+function NetworkFailure (reason) {
+  this.reason = reason;
+}
+
+/**
+ * Тело ответа потоком с подсчётом байт: чтение обрывается, как только превышен лимит (тело целиком не копится)
+ * @return {Promise<Buffer>}
+ */
+function readLimited (response, limit) {
+  var _length = Number(response.headers.get('content-length'));
+  if (Number.isFinite(_length) && _length > limit) {
+    return response.body.cancel().catch(function () {}).then(function () {
+      throw new NetworkFailure(MSG.tooBig);
+    });
+  }
+  var _reader = response.body.getReader();
+  var _chunks = [];
+  var _size = 0;
+  var _next = function () {
+    return _reader.read().then(function (part) {
+      if (part.done === true) {
+        return Buffer.concat(_chunks, _size);
+      }
+      _size += part.value.length;
+      if (_size > limit) {
+        return _reader.cancel().catch(function () {}).then(function () {
+          throw new NetworkFailure(MSG.tooBig);
+        });
+      }
+      _chunks.push(Buffer.from(part.value.buffer, part.value.byteOffset, part.value.length));
+      return _next();
+    });
+  };
+  return _next();
+}
+
+/**
+ * Изображение по адресу http(s) — §32.2: только хосты из белого списка (options.imageUrlAllowlist), без
+ * перенаправлений, тайм-аут options.imageUrlTimeoutMs на всю загрузку, до 10 МБ. Сбой сети, код ответа не 2xx,
+ * превышение размера — предупреждение в options.warnings (адрес без query-строки) и null (заглушка удаляется).
+ * Адрес вне списка и не изображение в ответе — ошибка шаблона.
+ */
+function loadUrl (value, item, options) {
   var _allowlist = options.imageUrlAllowlist;
   if (Array.isArray(_allowlist) === false || _allowlist.length === 0) {
     throw templateError(MSG.urlDisabled, item.source);
   }
-  throw templateError('загрузка изображений по адресу пока не поддерживается', item.source);
+  var _url;
+  try {
+    _url = new URL(value);
+  }
+  catch (e) {
+    throw templateError(MSG.badUrl, item.source);
+  }
+  if (_url.username !== '' || _url.password !== '') {
+    throw templateError(MSG.urlAuth, item.source);
+  }
+  if (hostAllowed(_url, _allowlist) === false) {
+    throw templateError('хост «' + _url.host + '» не входит в белый список IMAGE_URL_ALLOWLIST', item.source);
+  }
+  var _timeout = Number.isFinite(options.imageUrlTimeoutMs) && options.imageUrlTimeoutMs > 0 ? options.imageUrlTimeoutMs : DEFAULT_TIMEOUT;
+  return fetch(_url.href, { redirect : 'manual', signal : AbortSignal.timeout(_timeout) }).then(function (response) {
+    if (response.status < 200 || response.status > 299) {
+      if (response.body !== null) {
+        response.body.cancel().catch(function () {});
+      }
+      throw new NetworkFailure('код ответа ' + response.status);
+    }
+    if (response.body === null) {
+      return Buffer.alloc(0);
+    }
+    return readLimited(response, MAX_IMAGE);
+  }).then(function (buffer) {
+    return identify(buffer, item.source);
+  }, function (error) {
+    var _reason;
+    if (error instanceof NetworkFailure) {
+      _reason = error.reason;
+    }
+    else if (error !== null && typeof error === 'object' && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      _reason = 'тайм-аут ' + _timeout + ' мс';
+    }
+    else {
+      var _cause = error !== null && typeof error === 'object' && error.cause !== undefined && error.cause !== null ? error.cause : error;
+      _reason = 'ошибка сети' + (_cause !== null && typeof _cause === 'object' && typeof _cause.code === 'string' ? ' ' + _cause.code : '');
+    }
+    if (Array.isArray(options.warnings) === true) {
+      options.warnings.push('изображение не загружено: ' + safeUrl(_url) + ' — ' + _reason + ' Метка: ' + item.source);
+    }
+    return null;
+  });
 }
 
 /** Источники данных записи реестра по виду (kind); barcode добавит Task 4 */
@@ -529,6 +647,7 @@ module.exports = {
   prepare,
   finish,
   loadImage,
+  hostAllowed,
   formatters : { imageFit, __img },
   TOKEN_REGEX
 };

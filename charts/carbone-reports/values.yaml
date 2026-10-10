@@ -62,6 +62,12 @@ config:
   # в пределах 256–2048 МБ; без лимита памяти — 1024. При значении вручную держите
   # renderWorkers × renderWorkerMemoryMb + ~400 МБ в пределах api.resources.limits.memory.
   renderWorkerMemoryMb: ""
+  # Изображения из данных по адресу http(s): хосты через запятую, точное имя, порт — только
+  # если указан ("cdn.example.org,img.example.org:8443"). Пусто — загрузка по адресу выключена.
+  # Доверие задаёт только этот список: адреса с частными IP отдельно не запрещаются.
+  imageUrlAllowlist: ""
+  # Тайм-аут загрузки одного изображения по адресу, мс.
+  imageUrlTimeoutMs: 5000
   # Прокси перед API: Ingress и nginx образа web (1–5). Без Ingress (web через LoadBalancer/NodePort)
   # поставьте 1, иначе клиент подделает X-Forwarded-For и обойдёт лимит входа по IP.
   trustedProxyHops: 2

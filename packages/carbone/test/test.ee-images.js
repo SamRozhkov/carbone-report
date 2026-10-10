@@ -760,3 +760,207 @@ describe('EE платные: изображения из данных — цик
     assert.ok((await entryNames(book)).includes('xl/workbook.xml'));
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// Загрузка по адресу (§32.2, Task 3 плана 2.4.0): локальный http-сервер на 127.0.0.1
+
+const http = require('http');
+
+describe('EE платные: изображения по адресу из белого списка (§32.2)', function () {
+  let server;
+  let host;
+  let base;
+  const hits = {};
+  let active = 0;
+  let maxActive = 0;
+  const hung = [];
+
+  const IMG = png(3, 1, 9);
+
+  before(async function () {
+    server = http.createServer((req, res) => {
+      const url = new URL(req.url, 'http://x');
+      hits[url.pathname] = (hits[url.pathname] || 0) + 1;
+      const p = url.pathname;
+      if (p === '/ok.png') {
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        return res.end(IMG);
+      }
+      if (p === '/redirect') {
+        res.writeHead(302, { Location: '/ok.png' });
+        return res.end();
+      }
+      if (p === '/missing') {
+        res.writeHead(404);
+        return res.end('нет');
+      }
+      if (p === '/hang') {
+        hung.push(res);
+        return; // не отвечает
+      }
+      if (p === '/endless') {
+        // тело без длины и без конца: загрузка должна оборвать чтение после 10 МБ
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        res.write(png(1, 1));
+        const block = Buffer.alloc(256 * 1024);
+        const pump = () => {
+          while (!res.destroyed && res.write(block)) {
+            // пишем, пока буфер не полон
+          }
+          if (!res.destroyed) res.once('drain', pump);
+        };
+        return pump();
+      }
+      if (p === '/declared') {
+        // заявленная длина 11 МБ — отказ по заголовку
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': String(11 * 1024 * 1024) });
+        return res.write(png(1, 1));
+      }
+      if (p === '/text') {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        return res.end('hello');
+      }
+      if (p.startsWith('/slow/')) {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        return setTimeout(() => {
+          active--;
+          res.writeHead(200, { 'Content-Type': 'image/png' });
+          res.end(png(Number(p.slice(6)), 1));
+        }, 50);
+      }
+      res.writeHead(500);
+      res.end();
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    host = '127.0.0.1:' + server.address().port;
+    base = 'http://' + host;
+  });
+
+  after(function () {
+    hung.forEach((res) => res.destroy());
+    server.closeAllConnections();
+    server.close();
+  });
+
+  const allow = () => ({ imageUrlAllowlist: [host] });
+
+  async function renderWarn (raws, data, options) {
+    const res = await renderBufferWithWarnings(await template(raws), 'docx', data, Object.assign({}, RU, options));
+    return { warnings: res.warnings, doc: await readEntry(res.buffer, 'word/document.xml'), names: await entryNames(res.buffer), out: res.buffer };
+  }
+
+  it('200 PNG из белого списка — картинка заменена', async function () {
+    const r = await renderWarn([para(drawing('{d.img}'))], { img: base + '/ok.png?token=секрет' }, allow());
+    assert.deepStrictEqual(r.warnings, []);
+    const ids = embeds(r.doc);
+    assert.strictEqual(ids.length, 1);
+    const rels = await readEntry(r.out, 'word/_rels/document.xml.rels');
+    assert.ok(Buffer.from(await readEntry(r.out, 'word/' + target(rels, ids[0]), true)).equals(IMG));
+    assert.deepStrictEqual(sizes(r.doc), ['wp:extent 2000000×666667', 'a:ext 2000000×666667']);
+  });
+
+  it('пустой белый список — ошибка «загрузка изображений по адресу выключена»', async function () {
+    const msg = await renderError([para(drawing('{d.img}'))], { img: base + '/ok.png' }, { imageUrlAllowlist: [] });
+    assert.strictEqual(msg, 'загрузка изображений по адресу выключена (IMAGE_URL_ALLOWLIST) Source: "{d.img}"');
+  });
+
+  it('хост вне белого списка — ошибка шаблона, запроса нет', async function () {
+    const before = hits['/ok.png'] || 0;
+    const msg = await renderError([para(drawing('{d.img}'))], { img: base + '/ok.png' }, { imageUrlAllowlist: ['example.org', '127.0.0.2:' + server.address().port] });
+    assert.strictEqual(msg, 'хост «' + host + '» не входит в белый список IMAGE_URL_ALLOWLIST Source: "{d.img}"');
+    assert.strictEqual(hits['/ok.png'] || 0, before);
+  });
+
+  it('127.0.0.1 в списке без порта не разрешает 127.0.0.1:<порт>', async function () {
+    const msg = await renderError([para(drawing('{d.img}'))], { img: base + '/ok.png' }, { imageUrlAllowlist: ['127.0.0.1'] });
+    assert.strictEqual(msg, 'хост «' + host + '» не входит в белый список IMAGE_URL_ALLOWLIST Source: "{d.img}"');
+  });
+
+  it('регистр имени хоста и пробелы в списке не мешают', async function () {
+    const r = await renderWarn([para(drawing('{d.img}'))], { img: 'HTTP://127.0.0.1:' + server.address().port + '/ok.png' }, { imageUrlAllowlist: [' ' + host + ' '] });
+    assert.deepStrictEqual(r.warnings, []);
+    assert.strictEqual(embeds(r.doc).length, 1);
+  });
+
+  it('сравнение хоста: точное имя, порт — только если указан; порт по умолчанию равен хосту без порта', function () {
+    const { hostAllowed } = require('../lib/media');
+    assert.strictEqual(hostAllowed(new URL('https://Example.org/a.png'), ['example.org']), true);
+    assert.strictEqual(hostAllowed(new URL('https://example.org:443/a.png'), ['example.org']), true);
+    assert.strictEqual(hostAllowed(new URL('https://example.org/a.png'), ['example.org:443']), true);
+    assert.strictEqual(hostAllowed(new URL('http://example.org/a.png'), ['example.org:443']), false);
+    assert.strictEqual(hostAllowed(new URL('https://example.org:8443/a.png'), ['example.org']), false);
+    assert.strictEqual(hostAllowed(new URL('https://cdn.example.org/a.png'), ['example.org']), false);
+    assert.strictEqual(hostAllowed(new URL('https://example.org.evil.com/a.png'), ['example.org']), false);
+    assert.strictEqual(hostAllowed(new URL('http://[::1]:8080/a.png'), ['[::1]:8080']), true);
+  });
+
+  const failures = [
+    ['302 (перенаправления не выполняются)', '/redirect?sig=abc', 'код ответа 302'],
+    ['404', '/missing?sig=abc', 'код ответа 404'],
+    ['тайм-аут', '/hang?sig=abc', 'тайм-аут 200 мс'],
+    ['тело больше 10 МБ (чтение обрывается)', '/endless?sig=abc', 'изображение больше 10 МБ'],
+    ['заявленная длина больше 10 МБ', '/declared?sig=abc', 'изображение больше 10 МБ']
+  ];
+  for (const [name, path, reason] of failures) {
+    it(name + ' — заглушка удалена, предупреждение с адресом без query-строки', async function () {
+      this.timeout(10000);
+      const okBefore = hits['/ok.png'] || 0;
+      const started = Date.now();
+      const r = await renderWarn([para('<w:t>до</w:t>') + para(drawing('{d.img}'))], { img: base + path + '#frag' }, Object.assign(allow(), { imageUrlTimeoutMs: 200 }));
+      assert.ok(Date.now() - started < 5000);
+      assert.ok(!r.doc.includes('<w:drawing>'), r.doc);
+      assert.ok(r.doc.includes('до'));
+      assert.ok(!r.names.some((n) => n.includes('cr-img')));
+      const url = base + path.replace(/\?.*$/, '');
+      assert.deepStrictEqual(r.warnings, ['изображение не загружено: ' + url + ' — ' + reason + ' Метка: {d.img}']);
+      assert.ok(!r.warnings[0].includes('sig') && !r.warnings[0].includes('frag'));
+      assert.strictEqual(hits['/ok.png'] || 0, okBefore, 'перенаправление не выполняется');
+    });
+  }
+
+  it('сетевая ошибка (порт закрыт) — заглушка удалена, предупреждение', async function () {
+    const closed = http.createServer();
+    await new Promise((resolve) => closed.listen(0, '127.0.0.1', resolve));
+    const port = closed.address().port;
+    await new Promise((resolve) => closed.close(resolve));
+    const r = await renderWarn([para(drawing('{d.img}'))], { img: 'http://127.0.0.1:' + port + '/a.png?x=1' }, { imageUrlAllowlist: ['127.0.0.1:' + port] });
+    assert.ok(!r.doc.includes('<w:drawing>'));
+    assert.strictEqual(r.warnings.length, 1);
+    assert.match(r.warnings[0], new RegExp('^изображение не загружено: http://127\\.0\\.0\\.1:' + port + '/a\\.png — ошибка сети'));
+    assert.ok(!r.warnings[0].includes('x=1'));
+  });
+
+  it('адрес с именем пользователя и паролем — ошибка шаблона без учётных данных в тексте', async function () {
+    const msg = await renderError([para(drawing('{d.img}'))], { img: 'http://user:secret@' + host + '/ok.png' }, allow());
+    assert.strictEqual(msg, 'адрес изображения с именем пользователя или паролем не поддерживается Source: "{d.img}"');
+  });
+
+  it('10 изображений в цикле — не больше 4 запросов одновременно; одинаковые адреса загружаются один раз', async function () {
+    active = 0;
+    maxActive = 0;
+    const items = [];
+    for (let i = 1; i <= 10; i++) items.push({ img: base + '/slow/' + i });
+    items.push({ img: base + '/slow/1' }, { img: base + '/slow/2' });
+    const before = hits['/slow/1'] || 0;
+    const r = await renderWarn([para(drawing('{d.items[i].img}', { id: 7 })) + para(drawing('{d.items[i+1].img}', { id: 8 }))], { items }, allow());
+    assert.deepStrictEqual(r.warnings, []);
+    assert.strictEqual(embeds(r.doc).length, 12);
+    assert.strictEqual(r.names.filter((n) => n.includes('cr-img')).length, 10);
+    assert.ok(maxActive <= 4, 'одновременно: ' + maxActive);
+    assert.ok(maxActive >= 2, 'загрузки идут параллельно: ' + maxActive);
+    assert.strictEqual((hits['/slow/1'] || 0) - before, 1);
+  });
+
+  for (const value of ['ftp://' + '127.0.0.1/a.png', 'file:///etc/hosts']) {
+    it(value.split(':')[0] + ':// — ошибка шаблона', async function () {
+      const msg = await renderError([para(drawing('{d.img}'))], { img: value }, { imageUrlAllowlist: ['127.0.0.1'] });
+      assert.strictEqual(msg, 'значение не изображение (ожидается data URI или адрес http(s)) Source: "{d.img}"');
+    });
+  }
+
+  it('скачанные данные — не картинка: ошибка шаблона, как у data URI', async function () {
+    const msg = await renderError([para(drawing('{d.img}'))], { img: base + '/text' }, allow());
+    assert.strictEqual(msg, 'данные изображения повреждены или это не PNG, JPEG, GIF Source: "{d.img}"');
+  });
+});

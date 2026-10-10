@@ -17,8 +17,12 @@ export function createEmbeddedRenderer(opts: {
   handoff: RenderHandoff;
   convert: Converter;
   selfUrl: string;
-  /** Журнал ошибок шаблона (только текст Carbone, без данных отчёта). */
-  log?: { info(o: object, m: string): void };
+  /** Хосты для загрузки изображений по адресу (§32.2); пусто — выключена. */
+  imageUrlAllowlist: string[];
+  /** Тайм-аут загрузки одного изображения по адресу, мс. */
+  imageUrlTimeoutMs: number;
+  /** Журнал ошибок шаблона и предупреждений рендера (только текст Carbone, без данных отчёта). */
+  log?: { info(o: object, m: string): void; warn(o: object, m: string): void };
 }): CarboneRenderer & { active(): number; idle(): Promise<void> } {
   let active = 0;
   let waiters: Array<() => void> = [];
@@ -35,10 +39,28 @@ export function createEmbeddedRenderer(opts: {
     const template = await tpl.read(); // ошибка чтения — как есть (ENOENT обрабатывают вызывающие)
     let out: Buffer;
     try {
-      out = await opts.pool.run(
-        { template, ext: tpl.ext, data, options: { lang: ro.lang, timezone: ro.timezone } },
+      const result = await opts.pool.run(
+        {
+          template,
+          ext: tpl.ext,
+          data,
+          options: {
+            lang: ro.lang,
+            timezone: ro.timezone,
+            imageUrlAllowlist: opts.imageUrlAllowlist,
+            imageUrlTimeoutMs: opts.imageUrlTimeoutMs,
+          },
+        },
         deadlineAt,
       );
+      out = result.out;
+      // Сбой загрузки изображения по адресу: картинка убрана, отчёт строится; адрес — без query-строки.
+      if (result.warnings.length > 0) {
+        opts.log?.warn(
+          { templateId: tpl.id, warnings: result.warnings },
+          'изображение не загружено',
+        );
+      }
     } catch (e) {
       if (e instanceof RenderTimeoutError) throw timeout();
       if (e instanceof TemplateRenderError) {
@@ -48,6 +70,10 @@ export function createEmbeddedRenderer(opts: {
         );
         const community = communityErrorMessage(e.message);
         if (community) throw new AppError('CARBONE_COMMUNITY', 400, community);
+        // Ошибка метки (builder, drop, изображения…): Carbone дописывает « Source: "{метка}"» — R1.
+        if (e.message.includes(' Source: "')) {
+          throw new AppError('CARBONE_TEMPLATE', 400, `ошибка шаблона: ${e.message}`);
+        }
         throw new AppError('CARBONE_ERROR', 502, `ошибка генерации: ${e.message}`);
       }
       throw new AppError('CARBONE_ERROR', 502, 'сервис генерации недоступен', undefined, e);

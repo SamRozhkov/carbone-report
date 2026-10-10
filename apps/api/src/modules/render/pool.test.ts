@@ -17,9 +17,27 @@ afterEach(async () => {
 });
 
 describe('RenderPool', () => {
+  it('передаёт потоку опции задания и возвращает предупреждения рендера', async () => {
+    pool = new RenderPool({ size: 1, workerUrl });
+    const options = {
+      lang: 'ru',
+      timezone: 'Europe/Moscow',
+      imageUrlAllowlist: ['cdn.example.org'],
+      imageUrlTimeoutMs: 200,
+    };
+    const r = await pool.run({ ...job('options'), options }, soon(5000));
+    expect(JSON.parse(r.out.toString())).toEqual(options);
+    expect(r.warnings).toEqual([]);
+    const w = await pool.run(job('warn'), soon(5000));
+    expect(w.out.toString()).toBe('tpl!');
+    expect(w.warnings).toEqual([
+      'изображение не загружено: http://cdn.example.org/a.png — код ответа 404',
+    ]);
+  });
+
   it('возвращает результат потока', async () => {
     pool = new RenderPool({ size: 1, workerUrl });
-    expect((await pool.run(job('echo'), soon(5000))).toString()).toBe('tpl!');
+    expect((await pool.run(job('echo'), soon(5000))).out.toString()).toBe('tpl!');
   });
 
   it('ошибка шаблона — TemplateRenderError с текстом Carbone', async () => {
@@ -31,7 +49,7 @@ describe('RenderPool', () => {
   it('срок истёк в потоке — RenderTimeoutError, поток пересоздан, следующий отчёт строится', async () => {
     pool = new RenderPool({ size: 1, workerUrl });
     await expect(pool.run(job('hang'), soon(200))).rejects.toThrow(RenderTimeoutError);
-    expect((await pool.run(job('echo'), soon(5000))).toString()).toBe('tpl!');
+    expect((await pool.run(job('echo'), soon(5000))).out.toString()).toBe('tpl!');
   });
 
   it('упавший поток — RenderCrashError, пул продолжает работать', async () => {
@@ -39,15 +57,15 @@ describe('RenderPool', () => {
     pool = new RenderPool({ size: 1, workerUrl, onCrash: (e) => crashes.push(e) });
     await expect(pool.run(job('crash'), soon(5000))).rejects.toThrow(RenderCrashError);
     expect(crashes).toHaveLength(1);
-    expect((await pool.run(job('echo'), soon(5000))).toString()).toBe('tpl!');
+    expect((await pool.run(job('echo'), soon(5000))).out.toString()).toBe('tpl!');
   });
 
   it('задач больше, чем потоков: лишние ждут в очереди', async () => {
     pool = new RenderPool({ size: 1, workerUrl });
     const a = pool.run(job('slow', 150), soon(5000));
     const b = pool.run(job('echo'), soon(5000));
-    expect((await a).toString()).toBe('tpl!');
-    expect((await b).toString()).toBe('tpl!');
+    expect((await a).out.toString()).toBe('tpl!');
+    expect((await b).out.toString()).toBe('tpl!');
   });
 
   it('срок истёк в очереди — RenderTimeoutError без запуска, занятый поток не трогается', async () => {
@@ -56,7 +74,7 @@ describe('RenderPool', () => {
     const t0 = Date.now();
     await expect(pool.run(job('echo'), soon(100))).rejects.toThrow(RenderTimeoutError);
     expect(Date.now() - t0).toBeLessThan(350);
-    expect((await slow).toString()).toBe('tpl!');
+    expect((await slow).out.toString()).toBe('tpl!');
   });
 
   it('срок уже истёк — отказ сразу', async () => {
@@ -115,7 +133,7 @@ describe('RenderPool', () => {
     await pool.run(job('echo'), soon(5000)); // поток точно готов
     await expect(pool.run(job('crash'), soon(5000))).rejects.toThrow(RenderCrashError);
     const t0 = Date.now();
-    expect((await pool.run(job('echo'), soon(5000))).toString()).toBe('tpl!');
+    expect((await pool.run(job('echo'), soon(5000))).out.toString()).toBe('tpl!');
     expect(Date.now() - t0).toBeLessThan(800);
     await expect(pool.run(job('crash'), soon(5000))).rejects.toThrow(RenderCrashError);
     const t1 = Date.now();
@@ -131,7 +149,7 @@ describe('RenderPool', () => {
     await expect(pool.run({ ...job('echo'), data: undefined }, soon(5000))).rejects.toThrow(
       TemplateRenderError,
     );
-    expect((await pool.run(job('echo'), soon(5000))).toString()).toBe('tpl!');
+    expect((await pool.run(job('echo'), soon(5000))).out.toString()).toBe('tpl!');
   });
 
   it('шаблон вызывающего не отсоединяется (100 КБ)', async () => {
@@ -152,7 +170,7 @@ describe('RenderPool', () => {
     await expect(pool.run(job('oom'), soon(15_000))).rejects.toThrow(RenderCrashError);
     expect(crashes).toHaveLength(1);
     expect(crashes[0]).toMatchObject({ code: 'ERR_WORKER_OUT_OF_MEMORY' });
-    expect((await pool.run(job('echo'), soon(5000))).toString()).toBe('tpl!');
+    expect((await pool.run(job('echo'), soon(5000))).out.toString()).toBe('tpl!');
   }, 20_000);
 
   it('поток не прислал ready за readyTimeoutMs — onCrash(beforeReady) и пересоздание', async () => {

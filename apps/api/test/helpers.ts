@@ -61,6 +61,8 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     queryTimeoutMs: 2000,
     queryMaxRows: 1000,
     renderTimeoutMs: 5000,
+    imageUrlAllowlist: [],
+    imageUrlTimeoutMs: 5000,
     reportTimeoutMs: 20000,
     reportRetentionDays: 30,
     tz: 'Europe/Moscow',

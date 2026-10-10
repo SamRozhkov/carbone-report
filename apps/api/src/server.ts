@@ -53,9 +53,14 @@ const redis = createRedis(config.redisUrl, {
 // аварии потоков и ошибки шаблонов до этого пишем в консоль, потом — в журнал приложения (appLog).
 const consoleLog = {
   error: (o: object, m: string) => console.error(m, o),
+  warn: (o: object, m: string) => console.warn(m, o),
   info: (o: object, m: string) => console.info(m, o),
 };
-let appLog: { error(o: object, m: string): void; info(o: object, m: string): void } = consoleLog;
+let appLog: {
+  error(o: object, m: string): void;
+  warn(o: object, m: string): void;
+  info(o: object, m: string): void;
+} = consoleLog;
 const worker = renderWorkerUrl();
 const renderPool = new RenderPool({
   size: config.renderWorkers,
@@ -78,7 +83,9 @@ const carbone = createEmbeddedRenderer({
     secret: config.onlyofficeJwtSecret,
   }),
   selfUrl: config.apiSelfUrl,
-  log: { info: (o, m) => appLog.info(o, m) },
+  imageUrlAllowlist: config.imageUrlAllowlist,
+  imageUrlTimeoutMs: config.imageUrlTimeoutMs,
+  log: { info: (o, m) => appLog.info(o, m), warn: (o, m) => appLog.warn(o, m) },
 });
 // Остановка: /api/ready отвечает 503, пока доделываются незавершённые запросы и отчёты.
 let draining = false;

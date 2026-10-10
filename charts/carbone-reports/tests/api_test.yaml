@@ -107,6 +107,17 @@ tests:
     set: { config.renderWorkerMemoryMb: 768 }
     asserts:
       - equal: { path: data.RENDER_WORKER_MEMORY_MB, value: '768' }
+  - it: изображения по адресу — по умолчанию выключены, тайм-аут 5000
+    template: configmap-api.yaml
+    asserts:
+      - equal: { path: data.IMAGE_URL_ALLOWLIST, value: '' }
+      - equal: { path: data.IMAGE_URL_TIMEOUT_MS, value: '5000' }
+  - it: config.imageUrlAllowlist и imageUrlTimeoutMs — в ConfigMap
+    template: configmap-api.yaml
+    set: { config.imageUrlAllowlist: 'cdn.example.org,img.example.org:8443', config.imageUrlTimeoutMs: 3000 }
+    asserts:
+      - equal: { path: data.IMAGE_URL_ALLOWLIST, value: 'cdn.example.org,img.example.org:8443' }
+      - equal: { path: data.IMAGE_URL_TIMEOUT_MS, value: '3000' }
   - it: безопасность api — restricted
     template: api.yaml
     documentIndex: 0

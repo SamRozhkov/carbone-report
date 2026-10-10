@@ -1,10 +1,26 @@
 import { Worker, type ResourceLimits } from 'node:worker_threads';
 
+/** Опции рендера Carbone для потока. */
+export interface RenderOptions {
+  lang: string;
+  timezone: string;
+  /** Хосты для загрузки изображений по адресу (§32.2); пусто или нет — загрузка выключена. */
+  imageUrlAllowlist?: string[];
+  /** Тайм-аут загрузки одного изображения, мс. */
+  imageUrlTimeoutMs?: number;
+}
+
 export interface RenderJob {
   template: Buffer;
   ext: string;
   data: unknown;
-  options: { lang: string; timezone: string };
+  options: RenderOptions;
+}
+
+/** Готовый отчёт и предупреждения рендера (например, изображение по адресу не загрузилось). */
+export interface RenderResult {
+  out: Buffer;
+  warnings: string[];
 }
 
 export interface RenderPoolOptions {
@@ -33,7 +49,7 @@ export class TemplateRenderError extends Error {}
 
 type Reply =
   | { ready: true }
-  | { id: number; ok: true; out: Uint8Array }
+  | { id: number; ok: true; out: Uint8Array; warnings?: string[] }
   | { id: number; ok: false; message: string };
 
 interface Task {
@@ -42,7 +58,7 @@ interface Task {
   /** JSON данных, сериализованный до постановки в очередь. */
   data: string;
   deadlineAt: number;
-  resolve(out: Buffer): void;
+  resolve(result: RenderResult): void;
   reject(err: Error): void;
   timer?: NodeJS.Timeout;
 }
@@ -83,8 +99,8 @@ export class RenderPool {
     }
   }
 
-  run(job: RenderJob, deadlineAt: number): Promise<Buffer> {
-    return new Promise<Buffer>((resolve, reject) => {
+  run(job: RenderJob, deadlineAt: number): Promise<RenderResult> {
+    return new Promise<RenderResult>((resolve, reject) => {
       if (this.closed) return reject(new RenderCrashError('пул рендера остановлен'));
       const wait = deadlineAt - Date.now();
       if (wait <= 0) return reject(new RenderTimeoutError());
@@ -194,7 +210,11 @@ export class RenderPool {
     if (!task || task.id !== m.id) return;
     clearTimeout(task.timer);
     slot.task = null;
-    if (m.ok) task.resolve(Buffer.from(m.out.buffer, m.out.byteOffset, m.out.byteLength));
+    if (m.ok)
+      task.resolve({
+        out: Buffer.from(m.out.buffer, m.out.byteOffset, m.out.byteLength),
+        warnings: Array.isArray(m.warnings) ? m.warnings : [],
+      });
     else task.reject(new TemplateRenderError(m.message));
     this.dispatch();
   }

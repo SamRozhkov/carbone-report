@@ -341,3 +341,36 @@ describe('loadConfig: агент бэкапа', () => {
     ).toThrow('BACKUP_AGENT_URL: нужен URL, например http://backup-agent:8080');
   });
 });
+
+describe('loadConfig: изображения по адресу (§32.2)', () => {
+  it('по умолчанию загрузка выключена (пустой список), тайм-аут 5000 мс', () => {
+    const c = loadConfig(base);
+    expect(c.imageUrlAllowlist).toEqual([]);
+    expect(c.imageUrlTimeoutMs).toBe(5000);
+    expect(loadConfig({ ...base, IMAGE_URL_ALLOWLIST: '' }).imageUrlAllowlist).toEqual([]);
+    expect(loadConfig({ ...base, IMAGE_URL_ALLOWLIST: ' , ' }).imageUrlAllowlist).toEqual([]);
+  });
+  it('список хостов через запятую: пробелы и пустые элементы убираются, регистр — нижний', () => {
+    const c = loadConfig({
+      ...base,
+      IMAGE_URL_ALLOWLIST: ' cdn.example.org , Img.Example.org:8443,,[::1]:8080 ',
+    });
+    expect(c.imageUrlAllowlist).toEqual(['cdn.example.org', 'img.example.org:8443', '[::1]:8080']);
+  });
+  it('схема, путь или маска в списке — понятная ошибка', () => {
+    for (const v of ['https://cdn.example.org', 'cdn.example.org/img', '*.example.org', 'a b']) {
+      expect(() => loadConfig({ ...base, IMAGE_URL_ALLOWLIST: v })).toThrow(
+        'IMAGE_URL_ALLOWLIST: хосты через запятую без схемы и пути',
+      );
+    }
+  });
+  it('IMAGE_URL_TIMEOUT_MS: явное значение, пустое — по умолчанию, целое положительное', () => {
+    expect(loadConfig({ ...base, IMAGE_URL_TIMEOUT_MS: '200' }).imageUrlTimeoutMs).toBe(200);
+    expect(loadConfig({ ...base, IMAGE_URL_TIMEOUT_MS: '' }).imageUrlTimeoutMs).toBe(5000);
+    for (const v of ['0', '-1', '1.5', 'abc']) {
+      expect(() => loadConfig({ ...base, IMAGE_URL_TIMEOUT_MS: v })).toThrow(
+        'IMAGE_URL_TIMEOUT_MS',
+      );
+    }
+  });
+});

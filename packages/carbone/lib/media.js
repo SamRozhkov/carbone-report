@@ -3,8 +3,9 @@
 //
 // Картинка-заглушка шаблона с меткой в замещающем тексте («{d.img}» в описании) заменяется изображением из данных.
 // Порядок:
-//   1. preprocess — до сборки: меткам в замещающем тексте картинки дописывается последний форматтер «:__img»
-//      (решение R2); тот же текст в обычном абзаце не меняется;
+//   1. preprocess — до сборки: метке, которая занимает весь замещающий текст картинки (или с barcode/imageFit),
+//      дописывается последний форматтер «:__img» (решение R2); смешанный текст («Фото {d.name}») и тот же текст в
+//      обычном абзаце не меняются; обычный текст (не data: и не http(s)://) __img печатает как в 2.3.0;
 //   2. prepare — в buildXML перед сборкой: «__img» → «__img(<k>)», «imageFit(x)» → «imageFit(x, <k>)», где k ведёт
 //      к метке (для ошибок) в реестре рендера options.__media.sources;
 //   3. форматтер __img кладёт значение в реестр options.__media.items и печатает жетон «m<ключ>i<n>» из области
@@ -98,8 +99,13 @@ function oneOf (list, upper) {
   };
 }
 
-// метки, которые не становятся метками изображения: удаление элемента и условные блоки
-var NOT_IMAGE_MARKER = /:\s*(?:__img|drop|keep|showBegin|showEnd|hideBegin|hideEnd)\b/;
+// метки, которые не становятся метками изображения: удаление элемента, условные блоки, цвет, set
+var NOT_IMAGE_MARKER = /:\s*(?:__img|drop|keep|showBegin|showEnd|hideBegin|hideEnd|color|set)\b/;
+// метка изображения и в смешанном замещающем тексте: штрихкод и imageFit
+var IMAGE_FORMATTER = /:\s*(?:barcode|imageFit)\b/;
+// замещающий текст — одна метка (пробелы вокруг не в счёт)
+var SOLE_MARKER = /^\s*\{[^{}]*\}\s*$/;
+var MAX_PIXELS = 100000000; // ширина × высота изображения: 100 млн пикселей
 
 var MSG = {
   notImage    : 'значение не изображение (ожидается data URI или адрес http(s))',
@@ -116,6 +122,7 @@ var MSG = {
   barcodeType    : 'barcode: укажите тип штрихкода, например barcode(qrcode)',
   barcodeValue   : 'значение штрихкода должно быть строкой или числом',
   barcodeTooBig  : 'штрихкод больше 16 млн пикселей (уменьшите scale, width или height)',
+  tooManyPixels  : 'изображение больше 100 млн пикселей (ширина × высота)',
   outside     : 'метка изображения должна стоять в замещающем тексте (названии или описании) картинки'
 };
 
@@ -168,9 +175,14 @@ function preprocess (file, extension) {
   }));
 }
 
+/**
+ * Метка становится меткой изображения, только если она — весь замещающий текст (без учёта пробелов) или в ней
+ * barcode/imageFit; в смешанном тексте («Фото {d.name}») печатается как в 2.3.0
+ */
 function markImageMarkers (text) {
+  var _sole = SOLE_MARKER.test(text);
   return text.replace(/\{(\s*[dc](?=[\s.[:}])[^{}]*)\}/g, function (all, inner) {
-    if (NOT_IMAGE_MARKER.test(inner) === true) {
+    if (NOT_IMAGE_MARKER.test(inner) === true || (_sole === false && IMAGE_FORMATTER.test(inner) === false)) {
       return all;
     }
     return '{' + inner.replace(/\s+$/, '') + ':__img}';
@@ -388,6 +400,10 @@ function __img (d, k) {
     _item.barcode = { type : this.__mediaBarcode.type, options : this.__mediaBarcode.options };
   }
   this.__mediaBarcode = null;
+  // обычный текст (не data: и не http(s)://) печатается в замещающем тексте, картинка остаётся — как в 2.3.0
+  if (_item.kind === 'image' && plainText(d) === true) {
+    return d;
+  }
   _registry.items.push(_item);
   return OPEN + 'm' + _registry.nonce + 'i' + (_registry.items.length - 1) + CLOSE;
 }
@@ -420,6 +436,9 @@ function identify (buffer, source, origin) {
   var _type = { png : 'png', jpg : 'jpeg', gif : 'gif' }[_info.type];
   if (_type === undefined || !(_info.width > 0) || !(_info.height > 0)) {
     throw templateError(MSG.corrupt + _where, source);
+  }
+  if (_info.width * _info.height > MAX_PIXELS) {
+    throw templateError(MSG.tooManyPixels + _where, source);
   }
   return { buffer : buffer, type : _type, width : _info.width, height : _info.height };
 }
@@ -591,8 +610,21 @@ function loadUrl (value, item, options, signal) {
   });
 }
 
+/** Значение метки изображения — обычный текст: не пусто, не data URI и не адрес http(s) */
+function plainText (value) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  if (typeof value !== 'string') {
+    return true;
+  }
+  var _value = value.trim();
+  return _value !== '' && /^data:/i.test(_value) === false && /^https?:\/\//i.test(_value) === false;
+}
+
 /**
- * Вид значения изображения: пусто, data URI или адрес http(s); иное — ошибка шаблона (R3)
+ * Вид значения изображения: пусто, data URI или адрес http(s); обычный текст сюда не попадает (__img печатает
+ * его как есть), иное — ошибка шаблона
  * @return {Object} { kind : 'empty'|'data'|'url', value }
  */
 function imageValue (item) {

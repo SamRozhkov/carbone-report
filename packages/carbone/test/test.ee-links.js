@@ -145,6 +145,13 @@ describe('EE платные: ссылки — DOCX (§32.5)', function () {
     // статическая часть недопустима — # даже с допустимым значением
     assert.strictEqual(await link('alert(1)', 'javascript:{d.url}'), '#');
   });
+  it('метка в самом начале адреса — как есть (схема и хост из данных), метки после статики кодируются (итоговое ревью I2)', async function () {
+    const r = await docx('{d.base}/items/{d.id}', { base: 'https://example.com', id: 'a b' });
+    assert.strictEqual(unesc(targetOf(r.rels)), 'https://example.com/items/a%20b');
+    // адрес всё равно проверяется целиком
+    assert.strictEqual(unesc(targetOf((await docx('{d.base}/items/{d.id}', { base: 'javascript:alert(1)//', id: '1' })).rels)), '#');
+    assert.strictEqual(unesc(targetOf((await docx('{d.base}/items/{d.id}', { base: 'http://localhost', id: '1' })).rels)), '#');
+  });
   it('сущности статической части раскрываются один раз: &#38;amp; — это текст «&amp;», а не «&»', async function () {
     const r = await docx('https://site.ru/?t=&#38;amp;q={d.q}', { q: '1' });
     assert.strictEqual(targetOf(r.rels), 'https://site.ru/?t=&amp;amp;q=1');

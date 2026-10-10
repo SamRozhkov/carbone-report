@@ -140,7 +140,9 @@ function attrRange (xml, el, name) {
 
 /** Заменить значение существующего атрибута в открывающем теге (value уже экранирован для XML) */
 function setAttr (tag, name, value) {
-  return tag.replace(new RegExp('(\\s' + name.replace(/[.:-]/g, '\\$&') + '\\s*=\\s*)(?:"[^"]*"|\'[^\']*\')'), '$1"' + value + '"');
+  return tag.replace(new RegExp('(\\s' + name.replace(/[.:-]/g, '\\$&') + '\\s*=\\s*)(?:"[^"]*"|\'[^\']*\')'), function (all, head) {
+    return head + '"' + value + '"';
+  });
 }
 
 /** Заменить значение атрибута или дописать атрибут в конец открывающего тега */
@@ -148,7 +150,9 @@ function putAttr (tag, name, value) {
   if (attrRegex(name).test(tag) === true) {
     return setAttr(tag, name, value);
   }
-  return tag.replace(/\s*(\/?)>$/, ' ' + name + '="' + value + '"$1>');
+  return tag.replace(/\s*(\/?)>$/, function (all, slash) {
+    return ' ' + name + '="' + value + '"' + slash + '>';
+  });
 }
 
 /**

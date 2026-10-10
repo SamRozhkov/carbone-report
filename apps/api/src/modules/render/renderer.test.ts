@@ -214,6 +214,28 @@ describe('createEmbeddedRenderer: изображения по адресу (§32
     expect(warn).toHaveBeenCalledWith({ templateId: 't1', warnings }, 'изображение не загружено');
   });
 
+  it('в журнал — не больше 20 предупреждений и «и ещё N»', async () => {
+    const warn = vi.fn();
+    const warnings = Array.from(
+      { length: 25 },
+      (_, i) => `изображение не загружено: http://cdn.example.org/${i}.png`,
+    );
+    const { renderer } = setup(async () => ({ out: Buffer.from('OUT'), warnings }), { warn });
+    await renderer.render(tpl(), {}, opts('docx'));
+    expect(warn).toHaveBeenCalledWith(
+      { templateId: 't1', warnings: [...warnings.slice(0, 20), 'и ещё 5'] },
+      'изображение не загружено',
+    );
+  });
+
+  it('ровно 20 предупреждений — все, без «и ещё»', async () => {
+    const warn = vi.fn();
+    const warnings = Array.from({ length: 20 }, (_, i) => `w${i}`);
+    const { renderer } = setup(async () => ({ out: Buffer.from('OUT'), warnings }), { warn });
+    await renderer.render(tpl(), {}, opts('docx'));
+    expect(warn).toHaveBeenCalledWith({ templateId: 't1', warnings }, 'изображение не загружено');
+  });
+
   it('без предупреждений log.warn не вызывается', async () => {
     const warn = vi.fn();
     const { renderer } = setup(async () => Buffer.from('OUT'), { warn });

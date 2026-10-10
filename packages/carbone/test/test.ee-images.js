@@ -1,5 +1,5 @@
 // Изображения из данных (2.4.0, спецификация §32.1): картинка-заглушка DOCX с меткой в замещающем тексте
-// заменяется изображением из data URI. Эталона EE нет: ожидания — по §32.1 и решениям R2/R3 плана 2.4.0.
+// заменяется изображением из data URI. Эталона EE нет: ожидания — по §32.1 и решениям R2/R3 плана 2.4.0 (R3 изменено итоговым ревью).
 const assert = require('assert');
 const crypto = require('crypto');
 const zlib = require('zlib');
@@ -217,8 +217,6 @@ describe('EE платные: изображения из данных — DOCX (
       ['SVG', 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>').toString('base64'), 'SVG не поддерживается (изображения: PNG, JPEG, GIF)'],
       ['SVG под видом PNG', 'data:image/png;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>').toString('base64'), 'SVG не поддерживается (изображения: PNG, JPEG, GIF)'],
       ['не картинка внутри', 'data:image/png;base64,' + Buffer.from('hello world').toString('base64'), 'данные изображения повреждены или это не PNG, JPEG, GIF'],
-      ['просто текст (R3)', 'просто текст', 'значение не изображение (ожидается data URI или адрес http(s))'],
-      ['число (R3)', 42, 'значение не изображение (ожидается data URI или адрес http(s))'],
       ['адрес при пустом белом списке', 'https://example.org/a.png', 'загрузка изображений по адресу выключена (IMAGE_URL_ALLOWLIST)']
     ];
     for (const [name, value, message] of cases) {
@@ -280,7 +278,7 @@ describe('EE платные: изображения из данных — DOCX (
 
   it('Review Focus 2: " и < в соседнем статическом alt и в тексте вокруг метки не ломают XML', async function () {
     const r = await render([
-      para(drawing('Логотип &quot;ООО&quot; &lt;1&gt; &amp; {d.img}', { title: 'a &quot;b&quot;' })) + para(drawing('Статика &quot;x&quot; &lt;y&gt;', { id: 2 }))
+      para(drawing('Логотип &quot;ООО&quot; &lt;1&gt; &amp; {d.img:imageFit(fillWidth)}', { title: 'a &quot;b&quot;' })) + para(drawing('Статика &quot;x&quot; &lt;y&gt;', { id: 2 }))
     ], { img: uri('png', png(2, 1)) });
     assertWellFormed(r.doc);
     assert.ok(r.doc.includes('descr="Логотип &quot;ООО&quot; &lt;1&gt; &amp; " title="a &quot;b&quot;"/>'), r.doc);
@@ -297,6 +295,55 @@ describe('EE платные: изображения из данных — DOCX (
     const rels = await readEntry(out, 'word/_rels/document.xml.rels');
     assert.strictEqual(crypto.createHash('sha256').update(doc).digest('hex'), '0cb83d851a479657539b774f13a88ad62b82fbab6b43734f66507f279bfab296');
     assert.strictEqual(crypto.createHash('sha256').update(rels).digest('hex'), '162a52856a437e64998d40544d4cfa256bfd21b1b776e4330c7ea1619c181815');
+  });
+
+  describe('замещающий текст как в 2.3.0 (итоговое ревью I1)', function () {
+    it('смешанный текст «Фото {d.name}» со значением — текст печатается, картинка остаётся', async function () {
+      const r = await render([para(drawing('Фото {d.name}'))], { name: 'Иван' });
+      assert.ok(r.doc.includes('descr="Фото Иван"'), r.doc);
+      assert.deepStrictEqual(embeds(r.doc), ['rIdImg']);
+      assert.ok(!r.names.some((n) => n.includes('cr-img')));
+    });
+    it('смешанный текст с null — картинка не удаляется', async function () {
+      const r = await render([para(drawing('Фото {d.name}'))], { name: null });
+      assert.ok(r.doc.includes('<w:drawing'), r.doc);
+      assert.ok(r.doc.includes('descr="Фото "'), r.doc);
+      assert.deepStrictEqual(embeds(r.doc), ['rIdImg']);
+    });
+    it('смешанный текст с data URI — тоже просто текст (метка изображения — только весь замещающий текст)', async function () {
+      const value = uri('png', png(2, 1));
+      const r = await render([para(drawing('Фото {d.img}'))], { img: value });
+      assert.ok(r.doc.includes('descr="Фото ' + value + '"'), r.doc);
+      assert.deepStrictEqual(embeds(r.doc), ['rIdImg']);
+    });
+    it('одна метка (пробелы вокруг не в счёт) с обычным текстом — текст в замещающем тексте, картинка остаётся, без ошибки', async function () {
+      for (const [descr, value, printed] of [['{d.img}', 'просто текст', 'просто текст'], [' {d.img} ', 'Иван', ' Иван '], ['{d.img}', 42, '42'], ['{d.img}', 'ftp://127.0.0.1/a.png', 'ftp://127.0.0.1/a.png']]) {
+        const r = await render([para(drawing(descr))], { img: value });
+        assert.ok(r.doc.includes('descr="' + printed + '"'), r.doc);
+        assert.deepStrictEqual(embeds(r.doc), ['rIdImg']);
+        assert.ok(!r.names.some((n) => n.includes('cr-img')));
+      }
+    });
+    it('одна метка со сломанным data: — ошибка шаблона', async function () {
+      const msg = await renderError([para(drawing('{d.img}'))], { img: 'data:image/png;base64,@@@' });
+      assert.strictEqual(msg, 'неверный data URI изображения (ожидается data:image/png;base64,…) Source: "{d.img}"');
+    });
+    it('одна метка в пробелах с data URI — картинка заменяется', async function () {
+      const r = await render([para(drawing('  {d.img}  '))], { img: uri('png', png(2, 1)) });
+      assert.deepStrictEqual(embeds(r.doc).map((id) => id === 'rIdImg'), [false]);
+    });
+    it('две метки в замещающем тексте — обе печатаются как текст', async function () {
+      const r = await render([para(drawing('{d.a}{d.b}'))], { a: 'x', b: null });
+      assert.ok(r.doc.includes('descr="x"'), r.doc);
+      assert.deepStrictEqual(embeds(r.doc), ['rIdImg']);
+    });
+  });
+
+  it('изображение больше 100 млн пикселей — ошибка шаблона (итоговое ревью M1)', async function () {
+    const msg = await renderError([para(drawing('{d.img}'))], { img: uri('gif', gif(10001, 10000)) });
+    assert.strictEqual(msg, 'изображение больше 100 млн пикселей (ширина × высота) Source: "{d.img}"');
+    const r = await render([para(drawing('{d.img}'))], { img: uri('gif', gif(10000, 10000)) });
+    assert.deepStrictEqual(embeds(r.doc).map((id) => id === 'rIdImg'), [false]);
   });
 
   it('метка {d.img} в обычном абзаце печатает строку как раньше', async function () {
@@ -681,6 +728,16 @@ describe('EE платные: изображения из данных — ODT, O
     });
   }
 
+  it(':color(shape, background) в svg:title рамки с картинкой — не метка изображения (итоговое ревью M4)', async function () {
+    const frame = odfFrame({ title: '{d.c:color(shape, background)}', attrs: ' draw:style-name="gr1" text:anchor-type="as-char"' });
+    const r = await renderAny(await buildOdf('odt', '<text:p>' + frame + '</text:p>'), 'odt', { c: '#FF0000' });
+    const content = await r.read('content.xml');
+    assertWellFormed(content);
+    assert.strictEqual(attrOf(tags(content, 'draw:image')[0], 'xlink:href'), 'Pictures/p.png');
+    assert.ok(content.includes('draw:fill-color="#ff0000"'), content);
+    assert.ok(!r.names.some((n) => n.includes('cr-img')));
+  });
+
   it('метка в svg:title обычной рамки-надписи (не картинки) печатается как раньше', async function () {
     const box = '<draw:frame draw:name="b" svg:width="4cm" svg:height="1cm"><draw:text-box><text:p>x</text:p></draw:text-box><svg:title>{d.t}</svg:title></draw:frame>';
     const r = await renderAny(await buildOdf('odt', '<text:p>' + box + '</text:p>'), 'odt', { t: 'Название' });
@@ -718,6 +775,12 @@ describe('EE платные: изображения из данных — ODT, O
 });
 
 describe('EE платные: изображения из данных — циклы и служебное (Task 2)', function () {
+  it('xmltree.setAttr/putAttr: $&, $` и $\' в значении не раскрываются (итоговое ревью M3)', function () {
+    const xmltree = require('../lib/xmltree');
+    assert.strictEqual(xmltree.setAttr('<a b="1" c="2">', 'b', 'x$&y$`z$\'$1'), '<a b="x$&y$`z$\'$1" c="2">');
+    assert.strictEqual(xmltree.putAttr('<a c="2"/>', 'b', '$&$1'), '<a c="2" b="$&$1"/>');
+    assert.strictEqual(xmltree.putAttr('<a b="1">', 'b', '$&'), '<a b="$&">');
+  });
   it('DOCX: 3 изображения в цикле абзацев — 3 файла, 3 связи, wp:docPr id уникальны', async function () {
     const items = [png(10, 10, 1), png(20, 10, 2), png(10, 20, 3)];
     const r = await render([para(drawing('{d.items[i].img}', { id: 7 })) + para(drawing('{d.items[i+1].img}', { id: 8 }))], { items: items.map((b) => ({ img: uri('png', b) })) });
@@ -972,9 +1035,10 @@ describe('EE платные: изображения по адресу из бе�
   });
 
   for (const value of ['ftp://' + '127.0.0.1/a.png', 'file:///etc/hosts']) {
-    it(value.split(':')[0] + ':// — ошибка шаблона', async function () {
-      const msg = await renderError([para(drawing('{d.img}'))], { img: value }, { imageUrlAllowlist: ['127.0.0.1'] });
-      assert.strictEqual(msg, 'значение не изображение (ожидается data URI или адрес http(s)) Source: "{d.img}"');
+    it(value.split(':')[0] + ':// — не загружается: печатается как замещающий текст, картинка остаётся', async function () {
+      const r = await render([para(drawing('{d.img}'))], { img: value }, { imageUrlAllowlist: ['127.0.0.1'] });
+      assert.ok(r.doc.includes('descr="' + value + '"'), r.doc);
+      assert.deepStrictEqual(embeds(r.doc), ['rIdImg']);
     });
   }
 

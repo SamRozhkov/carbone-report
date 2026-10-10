@@ -8,6 +8,18 @@ import { RenderTimeoutError, TemplateRenderError, type RenderPool } from './pool
 
 const timeout = () => new AppError('TIMEOUT', 504, 'превышено время ожидания');
 
+/** Сколько предупреждений рендера попадает в журнал; остальные — одной строкой «и ещё N». */
+const MAX_LOGGED_WARNINGS = 20;
+
+/** Первые MAX_LOGGED_WARNINGS предупреждений и «и ещё N», если их больше. */
+function capWarnings(warnings: string[]): string[] {
+  if (warnings.length <= MAX_LOGGED_WARNINGS) return warnings;
+  return [
+    ...warnings.slice(0, MAX_LOGGED_WARNINGS),
+    `и ещё ${warnings.length - MAX_LOGGED_WARNINGS}`,
+  ];
+}
+
 /**
  * Рендер встроенной сборкой Carbone: поток пула собирает отчёт в формате шаблона;
  * другой формат делает Document Server, забирая файл у этой реплики по разовой ссылке.
@@ -55,9 +67,10 @@ export function createEmbeddedRenderer(opts: {
       );
       out = result.out;
       // Сбой загрузки изображения по адресу: картинка убрана, отчёт строится; адрес — без query-строки.
+      // В журнал — не больше 20 предупреждений (цикл с тысячей мёртвых адресов не раздувает строку).
       if (result.warnings.length > 0) {
         opts.log?.warn(
-          { templateId: tpl.id, warnings: result.warnings },
+          { templateId: tpl.id, warnings: capWarnings(result.warnings) },
           'изображение не загружено',
         );
       }

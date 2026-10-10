@@ -11,7 +11,7 @@ import type {
   TransferTemplate,
 } from '@carbone-reports/shared/template-transfer';
 import type { TemplateParam } from '@carbone-reports/shared';
-import { asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { asc, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import {
   categories,
   datasources,
@@ -111,7 +111,15 @@ export interface ResolvedDecision {
   datasourceId: string | null;
   /** Обновляемый шаблон (`update`). */
   targetId: string | null;
+  /** `updatedAt` обновляемого шаблона, как его видел администратор в предпросмотре. */
+  targetUpdatedAt: string | null;
 }
+
+/**
+ * Время изменения шаблона текстом с микросекундами (точность timestamptz): Date в JS хранит только
+ * миллисекунды, и два изменения в одну миллисекунду были бы неразличимы.
+ */
+export const updatedAtText = sql<string>`to_char(${templates.updatedAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
 export const changedSincePreview = (name: string) =>
   conflict(`шаблон «${name}» изменился после предпросмотра — повторите предпросмотр`);
@@ -146,29 +154,43 @@ export function resolveDecisions(
         name: item.name,
         datasourceId: null,
         targetId: null,
+        targetUpdatedAt: null,
       };
     }
     if (item.errors.length) throw importInvalid(`${who}: ${item.errors[0]}`);
     if (!d.datasourceId) throw badRequest(`${who}: выберите источник данных`);
     if (!ctx.datasourceIds.has(d.datasourceId))
-      throw badRequest(`${who}: источник данных не найден`);
+      throw conflict(`${who}: источник данных не найден — повторите предпросмотр`);
     let name = item.name;
     let targetId: string | null = null;
     if (d.action === 'create') {
       if (taken.has(name)) {
-        throw badRequest(`${who} уже есть — выберите «обновить», «копия» или «пропустить»`);
+        // Предпросмотр предлагает «создать» только при свободном имени: шаблон появился после него.
+        throw conflict(
+          `${who} уже есть — повторите предпросмотр и выберите «обновить», «копия» или «пропустить»`,
+        );
       }
     } else if (d.action === 'copy') {
       name = copyName(item.name, taken);
     } else {
       if (!d.targetId) throw badRequest(`${who}: укажите обновляемый шаблон`);
-      if (!item.existing.some((e) => e.id === d.targetId)) throw changedSincePreview(item.name);
+      if (!d.targetUpdatedAt) throw badRequest(`${who}: укажите время изменения из предпросмотра`);
+      const target = item.existing.find((e) => e.id === d.targetId);
+      // Удалён, переименован или изменён (файл, запросы, параметры, доступ) после предпросмотра.
+      if (target?.updatedAt !== d.targetUpdatedAt) throw changedSincePreview(item.name);
       if (updated.has(d.targetId)) throw badRequest(`${who} обновляется дважды`);
       updated.add(d.targetId);
       targetId = d.targetId;
     }
     taken.add(name);
-    return { index: item.index, action: d.action, name, datasourceId: d.datasourceId, targetId };
+    return {
+      index: item.index,
+      action: d.action,
+      name,
+      datasourceId: d.datasourceId,
+      targetId,
+      targetUpdatedAt: targetId ? d.targetUpdatedAt! : null,
+    };
   });
 }
 
@@ -180,7 +202,7 @@ async function loadLookup(deps: ImportDeps, manifest: TransferManifest): Promise
   const categoryNames = lower(ts.flatMap((t) => (t.category === null ? [] : [t.category])));
   const [tpl, ds, gs, cs] = await Promise.all([
     db
-      .select({ id: templates.id, name: templates.name, updatedAt: templates.updatedAt })
+      .select({ id: templates.id, name: templates.name, updatedAt: updatedAtText })
       .from(templates)
       .where(inArray(templates.name, [...new Set(ts.map((t) => t.name))]))
       .orderBy(desc(templates.updatedAt), templates.id),
@@ -203,7 +225,7 @@ async function loadLookup(deps: ImportDeps, manifest: TransferManifest): Promise
   ]);
   const templatesByName = new Map<string, ImportExisting[]>();
   for (const r of tpl) {
-    const e = { id: r.id, name: r.name, updatedAt: r.updatedAt.toISOString() };
+    const e = { id: r.id, name: r.name, updatedAt: r.updatedAt };
     templatesByName.set(r.name, [...(templatesByName.get(r.name) ?? []), e]);
   }
   const datasourcesByName = new Map<string, string[]>();
@@ -281,12 +303,13 @@ export async function applyImport(
     await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${IMPORT_LOCK_KEY})`);
       // Обновляемые — под блокировкой строк (одним запросом, по порядку id — без взаимоблокировок
-      // между загрузками и с callback OnlyOffice): шаблон на месте и имя то же, что в архиве.
+      // между загрузками и с callback OnlyOffice): шаблон на месте, имя то же, что в архиве, и не
+      // менялся с предпросмотра (updated_at с точностью до микросекунды).
       const targetIds = resolved.flatMap((r) => (r.targetId ? [r.targetId] : []));
       const locked = new Map(
         (targetIds.length
           ? await tx
-              .select()
+              .select({ ...getTableColumns(templates), updatedAtText })
               .from(templates)
               .where(inArray(templates.id, targetIds))
               .orderBy(asc(templates.id))
@@ -295,7 +318,9 @@ export async function applyImport(
         ).map((row) => [row.id, row]),
       );
       for (const r of resolved) {
-        if (r.targetId && locked.get(r.targetId)?.name !== r.name)
+        if (!r.targetId) continue;
+        const cur = locked.get(r.targetId);
+        if (cur?.name !== r.name || cur.updatedAtText !== r.targetUpdatedAt)
           throw changedSincePreview(r.name);
       }
       // Имена — заново: между ранней проверкой и блокировкой могла пройти другая загрузка.

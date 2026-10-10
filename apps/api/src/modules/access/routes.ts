@@ -27,7 +27,7 @@ import {
 import type { AppDeps } from '../../deps';
 import { isForeignKeyViolation, isUniqueViolation } from '../../lib/db-errors';
 import { badRequest, conflict, notFound } from '../../lib/errors';
-import type { Guards } from '../auth/guards';
+import { currentUser, type Guards } from '../auth/guards';
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
@@ -318,7 +318,13 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
           await assertAllExist(tx, groups, groupIds, 'неизвестная группа');
           await tx
             .update(templates)
-            .set({ public: isPublic, categoryId })
+            // Изменение доступа — тоже изменение шаблона: загрузка из архива сверяет updated_at (§33.2).
+            .set({
+              public: isPublic,
+              categoryId,
+              updatedAt: new Date(),
+              updatedBy: currentUser(req).id,
+            })
             .where(eq(templates.id, req.params.id));
           await tx.delete(templateGroups).where(eq(templateGroups.templateId, req.params.id));
           if (groupIds.length > 0) {

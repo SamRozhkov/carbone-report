@@ -4,6 +4,7 @@ import { crc32, inflateRaw } from 'node:zlib';
 import {
   MAX_TRANSFER_ARCHIVE_BYTES,
   MAX_TRANSFER_ENTRIES,
+  MAX_TRANSFER_MANIFEST_BYTES,
   MAX_TRANSFER_UNPACKED_BYTES,
   TRANSFER_FORMAT,
   TRANSFER_FORMAT_VERSION,
@@ -21,6 +22,8 @@ export interface ArchiveLimits {
   archiveBytes: number;
   unpackedBytes: number;
   entries: number;
+  /** manifest.json отдельно; по умолчанию MAX_TRANSFER_MANIFEST_BYTES. */
+  manifestBytes?: number;
 }
 
 export const DEFAULT_LIMITS: ArchiveLimits = {
@@ -118,9 +121,8 @@ async function extract(
   buf: Buffer,
   e: ZipEntry,
   budget: number,
-  limits: ArchiveLimits,
+  tooBig: () => AppError,
 ): Promise<Buffer> {
-  const tooBig = () => importInvalid(`распакованный архив больше ${mb(limits.unpackedBytes)}`);
   if (e.flags & 0x1) throw importInvalid(`зашифрованные архивы не поддерживаются: ${e.name}`);
   const off = e.localOffset;
   if (off + 30 > buf.length || buf.readUInt32LE(off) !== SIG_LOCAL) {
@@ -217,15 +219,28 @@ async function readChecked(buf: Buffer, limits: ArchiveLimits): Promise<Transfer
   }
 
   let used = 0;
+  const totalTooBig = () => importInvalid(`распакованный архив больше ${mb(limits.unpackedBytes)}`);
   const take = async (e: ZipEntry) => {
-    const data = await extract(buf, e, limits.unpackedBytes - used, limits);
+    const data = await extract(buf, e, limits.unpackedBytes - used, totalTooBig);
     used += data.length;
     return data;
   };
 
   const manifestEntry = byName.get(TRANSFER_MANIFEST_FILE);
   if (!manifestEntry) throw importInvalid(`в архиве нет ${TRANSFER_MANIFEST_FILE}`);
-  const manifest = parseManifest(await take(manifestEntry));
+  // Свой лимит манифеста: JSON.parse и проверка схемы на сотнях МБ надолго заняли бы процесс.
+  const manifestCap = limits.manifestBytes ?? MAX_TRANSFER_MANIFEST_BYTES;
+  const manifestRaw = await extract(
+    buf,
+    manifestEntry,
+    Math.min(manifestCap, limits.unpackedBytes),
+    () =>
+      manifestCap < limits.unpackedBytes
+        ? importInvalid(`${TRANSFER_MANIFEST_FILE} больше ${mb(manifestCap)}`)
+        : totalTooBig(),
+  );
+  used += manifestRaw.length;
+  const manifest = parseManifest(manifestRaw);
 
   const expected = new Set([TRANSFER_MANIFEST_FILE, ...manifest.templates.map((t) => t.file)]);
   const dirs = new Set(['templates/', ...manifest.templates.map((_, i) => `templates/${i + 1}/`)]);

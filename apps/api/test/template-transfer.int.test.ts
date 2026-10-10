@@ -98,6 +98,12 @@ const apply = (t: TestApp, cookie: string, zip: Buffer, decisions: ImportDecisio
   });
 };
 
+/** `existing[].updatedAt` шаблона `id` из предпросмотра — как его передаёт окно загрузки. */
+async function stamp(zip: Buffer, id: string, index = 0): Promise<string> {
+  const p = (await preview(b, adminB, zip)).json() as ImportPreview;
+  return p.templates[index]!.existing.find((e) => e.id === id)!.updatedAt;
+}
+
 async function manifestOf(zip: Buffer): Promise<Record<string, unknown>> {
   const z = await JSZip.loadAsync(zip);
   const m = JSON.parse(await z.file('manifest.json')!.async('string'));
@@ -228,12 +234,12 @@ describe('перенос шаблонов между средами', () => {
     expect(m2).toEqual(m1);
   });
 
-  it('create при существующем имени — 400; copy — «(2)», затем «(3)»; skip', async () => {
+  it('create при существующем имени — 409; copy — «(2)», затем «(3)»; skip', async () => {
     const dup = await apply(b, adminB, zip, [{ index: 0, action: 'create', datasourceId: dsB }]);
-    expect(dup.statusCode).toBe(400);
+    expect(dup.statusCode).toBe(409);
     const p = (await preview(b, adminB, zip)).json() as ImportPreview;
     expect(p.templates[0]!.existing).toEqual([
-      { id: importedId, name, updatedAt: expect.any(String) },
+      { id: importedId, name, updatedAt: expect.stringMatching(/^\d{4}-.+T.+\.\d{6}Z$/) },
     ]);
     expect(p.templates[0]!.categoryExists).toBe(true);
     for (const n of [2, 3]) {
@@ -269,7 +275,13 @@ describe('перенос шаблонов между средами', () => {
       .where(eq(templates.id, importedId));
 
     const r = await apply(b, adminB, zip, [
-      { index: 0, action: 'update', datasourceId: dsB, targetId: importedId },
+      {
+        index: 0,
+        action: 'update',
+        datasourceId: dsB,
+        targetId: importedId,
+        targetUpdatedAt: await stamp(zip, importedId),
+      },
     ]);
     expect(r.statusCode).toBe(200);
     expect((r.json() as ImportResult).templates[0]).toEqual({
@@ -338,7 +350,13 @@ describe('перенос шаблонов между средами', () => {
 
       const r = await apply(b, adminB, multi, [
         { index: 0, action: 'create', datasourceId: dsB },
-        { index: 1, action: 'update', datasourceId: dsB, targetId: importedId },
+        {
+          index: 1,
+          action: 'update',
+          datasourceId: dsB,
+          targetId: importedId,
+          targetUpdatedAt: await stamp(multi, importedId, 1),
+        },
         { index: 2, action: 'create', datasourceId: dsB },
       ]);
       expect(r.statusCode).toBe(500);
@@ -388,10 +406,17 @@ describe('перенос шаблонов между средами', () => {
     const [older, newer] = ids as [string, string];
     const p = (await preview(b, adminB, z)).json() as ImportPreview;
     expect(p.templates[0]!.existing.map((e) => e.id)).toEqual([newer, older]);
-    // Новый — изменён после предпросмотра: обновится всё равно выбранный старый.
-    await b.deps.db.update(templates).set({ updatedAt: new Date() }).where(eq(templates.id, older));
+    const at = (id: string) => p.templates[0]!.existing.find((e) => e.id === id)!.updatedAt;
+    // Не выбранный (новый) изменён после предпросмотра: обновляется выбранный старый.
+    await b.deps.db.update(templates).set({ updatedAt: new Date() }).where(eq(templates.id, newer));
     const r = await apply(b, adminB, z, [
-      { index: 0, action: 'update', datasourceId: dsB, targetId: older },
+      {
+        index: 0,
+        action: 'update',
+        datasourceId: dsB,
+        targetId: older,
+        targetUpdatedAt: at(older),
+      },
     ]);
     expect(r.statusCode).toBe(200);
     expect((r.json() as ImportResult).templates[0]!.id).toBe(older);
@@ -402,12 +427,13 @@ describe('перенос шаблонов между средами', () => {
     });
 
     // Переименован или удалён после предпросмотра — 409, без изменений.
+    const newerAt = await stamp(z, newer);
     await b.deps.db
       .update(templates)
       .set({ name: `${n}!` })
       .where(eq(templates.id, newer));
     const renamed = await apply(b, adminB, z, [
-      { index: 0, action: 'update', datasourceId: dsB, targetId: newer },
+      { index: 0, action: 'update', datasourceId: dsB, targetId: newer, targetUpdatedAt: newerAt },
     ]);
     expect(renamed.statusCode).toBe(409);
     expect(renamed.json().error.message).toMatch(/изменился после предпросмотра/);
@@ -418,7 +444,7 @@ describe('перенос шаблонов между средами', () => {
     });
     expect(del.statusCode).toBe(204);
     const deleted = await apply(b, adminB, z, [
-      { index: 0, action: 'update', datasourceId: dsB, targetId: newer },
+      { index: 0, action: 'update', datasourceId: dsB, targetId: newer, targetUpdatedAt: newerAt },
     ]);
     expect(deleted.statusCode).toBe(409);
     // update без targetId — 400.
@@ -426,13 +452,13 @@ describe('перенос шаблонов между средами', () => {
     expect(noTarget.statusCode).toBe(400);
   });
 
-  it('параллельные загрузки одного имени: создаётся один шаблон, вторая — 400', async () => {
+  it('параллельные загрузки одного имени: создаётся один шаблон, вторая — 409', async () => {
     const n = `Гонка ${randomUUID().slice(0, 4)}`;
     const z = await exportZip(a, adminA, [await richTemplate(n)]);
     const rs = await Promise.all(
       [1, 2].map(() => apply(b, adminB, z, [{ index: 0, action: 'create', datasourceId: dsB }])),
     );
-    expect(rs.map((r) => r.statusCode).sort()).toEqual([200, 400]);
+    expect(rs.map((r) => r.statusCode).sort()).toEqual([200, 409]);
     expect(await b.deps.db.select().from(templates).where(eq(templates.name, n))).toHaveLength(1);
     expect(await storedTemplateIds(b)).toEqual(await dbTemplateIds(b));
   });
@@ -457,5 +483,66 @@ describe('перенос шаблонов между средами', () => {
       await b.deps.db.execute(sql`drop trigger fk_boom on template_queries`);
       await b.deps.db.execute(sql`drop function fk_boom()`);
     }
+  });
+
+  it.each([
+    ['запросы', 'queries'],
+    ['параметры', 'params'],
+    ['доступ', 'access'],
+    ['файл (как сохранение OnlyOffice)', 'file'],
+  ])('шаблон изменён после предпросмотра (%s) — 409, без изменений', async (_, what) => {
+    const n = `Правка ${randomUUID().slice(0, 4)}`;
+    const z = await exportZip(a, adminA, [await richTemplate(n)]);
+    const created = await apply(b, adminB, z, [{ index: 0, action: 'create', datasourceId: dsB }]);
+    const id = (created.json() as ImportResult).templates[0]!.id!;
+    const at = await stamp(z, id);
+    const put = (url: string, payload: unknown) =>
+      b.app.inject({ method: 'PUT', url, headers: { cookie: adminB }, payload: payload as object });
+    if (what === 'queries') {
+      expect((await put(`/api/templates/${id}/queries`, [])).statusCode).toBe(200);
+    } else if (what === 'params') {
+      expect((await put(`/api/templates/${id}/params`, [])).statusCode).toBe(200);
+    } else if (what === 'access') {
+      const r = await put(`/api/templates/${id}/access`, {
+        public: false,
+        categoryId: null,
+        groupIds: [],
+      });
+      expect(r.statusCode).toBe(200);
+    } else {
+      const zipFile = await JSZip.loadAsync(z);
+      const data = Buffer.from(
+        await zipFile.file('templates/1/template.docx')!.async('uint8array'),
+      );
+      const body = multipart({}, { name: 'x.docx', data });
+      const r = await b.app.inject({
+        method: 'PUT',
+        url: `/api/templates/${id}/file`,
+        headers: { cookie: adminB, ...body.headers },
+        payload: body.payload,
+      });
+      expect(r.statusCode).toBe(200);
+    }
+    const [before] = await b.deps.db.select().from(templates).where(eq(templates.id, id));
+    const r = await apply(b, adminB, z, [
+      { index: 0, action: 'update', datasourceId: dsB, targetId: id, targetUpdatedAt: at },
+    ]);
+    expect(r.statusCode).toBe(409);
+    expect(r.json().error.message).toBe(
+      `шаблон «${n}» изменился после предпросмотра — повторите предпросмотр`,
+    );
+    const [after] = await b.deps.db.select().from(templates).where(eq(templates.id, id));
+    expect(after).toEqual(before);
+    // С новым предпросмотром — проходит.
+    const ok = await apply(b, adminB, z, [
+      {
+        index: 0,
+        action: 'update',
+        datasourceId: dsB,
+        targetId: id,
+        targetUpdatedAt: await stamp(z, id),
+      },
+    ]);
+    expect(ok.statusCode).toBe(200);
   });
 });

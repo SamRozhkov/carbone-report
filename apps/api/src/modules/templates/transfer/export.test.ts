@@ -112,6 +112,19 @@ describe('buildArchive: сжатие', () => {
 describe('buildArchive', () => {
   const now = new Date('2026-10-10T09:00:00.000Z');
 
+  it('архив, который не загрузится, не выгружается: 400 с именем шаблона', async () => {
+    const long = 'Д'.repeat(300);
+    const err = await buildArchive([{ meta: meta(long), data: Buffer.from('PK') }], {
+      appVersion: 'dev',
+      now,
+    }).then(
+      () => null,
+      (e: unknown) => e as { status: number; message: string },
+    );
+    expect(err?.status).toBe(400);
+    expect(err?.message).toMatch(new RegExp(`^шаблон «${long}» нельзя выгрузить \\(name\\)`));
+  });
+
   it('manifest.json и файлы templates/<n>/template.<ext> с sha256', async () => {
     const a = Buffer.from('PK-a');
     const b = Buffer.from('PK-bb');

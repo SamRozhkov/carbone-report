@@ -146,7 +146,13 @@ describe('ImportDialog', () => {
     await within(dialog).findByText('обновлён');
     const form = calls.find((c) => c.path === '/api/templates/import')!.body as FormData;
     expect(JSON.parse(form.get('decisions') as string)).toEqual([
-      { index: 0, action: 'update', datasourceId: DS1, targetId: T2 },
+      {
+        index: 0,
+        action: 'update',
+        datasourceId: DS1,
+        targetId: T2,
+        targetUpdatedAt: '2026-10-01T10:00:00Z',
+      },
     ]);
   });
 
@@ -209,6 +215,109 @@ describe('ImportDialog', () => {
     await waitFor(() => expect(calls.filter((c) => c.path.endsWith('/preview'))).toHaveLength(2));
   });
 
+  it('409 → повторный предпросмотр сохраняет выбор по строкам; недопустимый — сброс с пометкой', async () => {
+    const A = item({
+      index: 0,
+      name: 'Акт',
+      existing: [
+        { id: T1, name: 'Акт', updatedAt: '2026-10-09T10:00:00.000001Z' },
+        { id: T2, name: 'Акт', updatedAt: '2026-10-01T10:00:00.000001Z' },
+      ],
+    });
+    const B = item({
+      index: 1,
+      name: 'Счёт',
+      existing: [{ id: T1, name: 'Счёт', updatedAt: '2026-10-09T10:00:00.000001Z' }],
+    });
+    const C = item({ index: 2, name: 'Накладная', datasourceMatch: null });
+    let previews = 0;
+    const { calls } = mockApi([
+      ...base,
+      {
+        method: 'POST',
+        path: '/api/templates/import/preview',
+        handler: () => {
+          previews++;
+          if (previews === 1) return { body: preview([A, B, C]) };
+          // Во второй раз: у «Акта» старая цель изменена, у «Счёта» совпадения больше нет.
+          return {
+            body: preview([
+              {
+                ...A,
+                existing: [
+                  A.existing[0],
+                  { id: T2, name: 'Акт', updatedAt: '2026-10-10T12:00:00.000001Z' },
+                ],
+              },
+              { ...B, existing: [] },
+              C,
+            ]),
+          };
+        },
+      },
+      {
+        method: 'POST',
+        path: '/api/templates/import',
+        handler: () =>
+          calls.filter((c) => c.path === '/api/templates/import').length === 1
+            ? { status: 409, body: { error: { code: 'CONFLICT', message: 'данные изменились' } } }
+            : { body: { templates: [] } },
+      },
+    ]);
+    const dialog = await openDialog();
+    await within(dialog).findByText('Акт');
+    // «Акт»: обновить старый T2; «Счёт»: копия; «Накладная»: выбран источник «Продажи».
+    await userEvent.click(
+      within(dialog).getByRole('combobox', { name: /Какой шаблон обновить: Акт/ }),
+    );
+    await userEvent.click((await screen.findAllByRole('option'))[1]!);
+    await userEvent.click(within(dialog).getByRole('combobox', { name: /Действие: Счёт/ }));
+    await userEvent.click(await screen.findByRole('option', { name: 'копия' }));
+    await userEvent.click(
+      within(dialog).getByRole('combobox', { name: /Источник данных: Накладная/ }),
+    );
+    await userEvent.click(await screen.findByRole('option', { name: 'Продажи' }));
+    const apply = within(dialog).getByRole('button', { name: 'Загрузить' });
+    await waitFor(() => expect(apply).toBeEnabled());
+    await userEvent.click(apply);
+    await userEvent.click(
+      await within(dialog).findByRole('button', { name: 'Повторить предпросмотр' }),
+    );
+    await waitFor(() => expect(previews).toBe(2));
+    // «Акт»: цель сохранена, но строка помечена — шаблон изменён.
+    expect(
+      await within(dialog).findByText(/Шаблон изменён после прошлого предпросмотра/),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByRole('combobox', { name: /Действие: Акт/ })).toHaveTextContent(
+      'обновить',
+    );
+    // «Счёт»: «копия» больше недоступна — «создать» и пометка.
+    expect(within(dialog).getByRole('combobox', { name: /Действие: Счёт/ })).toHaveTextContent(
+      'создать',
+    );
+    expect(within(dialog).getByText(/«копия» больше недоступно/)).toBeInTheDocument();
+    // «Накладная»: выбранный источник сохранён.
+    expect(
+      within(dialog).getByRole('combobox', { name: /Источник данных: Накладная/ }),
+    ).toHaveTextContent('Продажи');
+    await userEvent.click(apply);
+    await waitFor(() =>
+      expect(calls.filter((c) => c.path === '/api/templates/import')).toHaveLength(2),
+    );
+    const form = calls.filter((c) => c.path === '/api/templates/import')[1]!.body as FormData;
+    expect(JSON.parse(form.get('decisions') as string)).toEqual([
+      {
+        index: 0,
+        action: 'update',
+        datasourceId: DS1,
+        targetId: T2,
+        targetUpdatedAt: '2026-10-10T12:00:00.000001Z',
+      },
+      { index: 1, action: 'create', datasourceId: DS1 },
+      { index: 2, action: 'create', datasourceId: DS2 },
+    ]);
+  });
+
   it('файл больше 50 МБ → сообщение без запроса', async () => {
     const { calls } = mockApi(base);
     const big = new File(['x'], 'big.crt.zip');
@@ -260,6 +369,20 @@ describe('Выгрузка шаблонов', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Выгрузить (1)' }));
     await waitFor(() => expect(click).toHaveBeenCalled());
     expect(calls.find((c) => c.path === '/api/templates/export')!.body).toEqual({ ids: [T2] });
+  });
+
+  it('больше 200 шаблонов — предупреждение без запроса', async () => {
+    const many = Array.from({ length: 201 }, (_, i) => ({
+      ...list[0]!,
+      id: `${String(i).padStart(8, '0')}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
+      name: `Шаблон ${i}`,
+    }));
+    const { calls } = mockApi([adminMe, { path: '/api/templates', body: many }]);
+    renderRoute('/admin/templates');
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Выбрать все шаблоны' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Выгрузить (201)' }));
+    expect(await screen.findByText(/не больше 200 шаблонов, выбрано 201/)).toBeInTheDocument();
+    expect(calls.some((c) => c.path === '/api/templates/export')).toBe(false);
   });
 
   it('ошибка 400 → текст сервера в уведомлении', async () => {

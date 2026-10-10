@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
 import {
   MAX_TRANSFER_ARCHIVE_BYTES,
+  MAX_TRANSFER_MANIFEST_BYTES,
   TRANSFER_FILE_EXT,
   TRANSFER_FORMAT,
   TRANSFER_FORMAT_VERSION,
   TRANSFER_MANIFEST_FILE,
   transferFilePath,
-  type TransferManifest,
+  TransferManifest,
   type TransferParam,
   type TransferQuery,
   type TransferTemplate,
@@ -86,7 +87,26 @@ export async function buildArchive(
       sha256: createHash('sha256').update(it.data).digest('hex'),
     })),
   };
-  zip.file(TRANSFER_MANIFEST_FILE, JSON.stringify(manifest, null, 2));
+  // Архив должен загрузиться: та же схема, что при загрузке (длина имени, правила параметров
+  // и запросов могли ужесточиться после сохранения шаблона).
+  const checked = TransferManifest.safeParse(manifest);
+  if (!checked.success) {
+    const issue = checked.error.issues[0]!;
+    const [first, index, ...rest] = issue.path;
+    const name =
+      first === 'templates' && typeof index === 'number' ? manifest.templates[index]?.name : null;
+    const where = rest.length ? ` (${rest.join('.')})` : '';
+    throw badRequest(
+      name !== null && name !== undefined
+        ? `шаблон «${name}» нельзя выгрузить${where}: ${issue.message}`
+        : `архив не проходит проверку: ${issue.message}`,
+    );
+  }
+  const manifestJson = Buffer.from(JSON.stringify(manifest, null, 2));
+  if (manifestJson.length > MAX_TRANSFER_MANIFEST_BYTES) {
+    throw badRequest('описание шаблонов (manifest.json) больше 20 МБ — выгрузите их частями');
+  }
+  zip.file(TRANSFER_MANIFEST_FILE, manifestJson);
   manifest.templates.forEach((t, i) =>
     zip.file(t.file, items[i]!.data, { createFolders: false, compression: 'STORE' }),
   );
@@ -153,12 +173,12 @@ async function runExport(deps: ExportDeps, ids: string[], now: Date): Promise<Ex
       .select()
       .from(templateQueries)
       .where(inArray(templateQueries.templateId, uniqueIds))
-      .orderBy(asc(templateQueries.sortOrder)),
+      .orderBy(asc(templateQueries.sortOrder), asc(templateQueries.key)),
     db
       .select()
       .from(templateParams)
       .where(inArray(templateParams.templateId, uniqueIds))
-      .orderBy(asc(templateParams.sortOrder)),
+      .orderBy(asc(templateParams.sortOrder), asc(templateParams.name)),
   ]);
 
   // Архив с одинаковыми названиями не загрузится (§33.2): сообщаем сразу.

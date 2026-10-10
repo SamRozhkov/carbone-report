@@ -17,7 +17,8 @@ export const TRANSFER_FORMAT_VERSION = 1;
 export const TRANSFER_MANIFEST_FILE = 'manifest.json';
 export const TRANSFER_FILE_EXT = '.crt.zip';
 
-/** Лимиты архива (§33.2). */
+/** Лимиты архива (§33.2); лимит manifest.json проверяется и при выгрузке, и при загрузке. */
+export const MAX_TRANSFER_MANIFEST_BYTES = 20 * 1024 * 1024;
 export const MAX_TRANSFER_ARCHIVE_BYTES = 50 * 1024 * 1024;
 export const MAX_TRANSFER_UNPACKED_BYTES = 200 * 1024 * 1024;
 export const MAX_TRANSFER_ENTRIES = 1000;
@@ -153,21 +154,28 @@ export const ImportDecision = z
   .strictObject({
     index: z.number().int().min(0),
     action: ImportAction,
-    datasourceId: z.uuid('неверный идентификатор источника').nullish(),
+    datasourceId: z
+      .uuid('неверный идентификатор источника')
+      .transform((id) => id.toLowerCase())
+      .nullish(),
     targetId: z
       .uuid('неверный идентификатор шаблона')
       .transform((id) => id.toLowerCase())
       .nullish(),
+    /** `existing[].updatedAt` выбранного шаблона из предпросмотра — как есть, без преобразований. */
+    targetUpdatedAt: z.string().max(64).nullish(),
   })
   .superRefine((d, ctx) => {
-    if (d.action === 'update' && !d.targetId)
-      ctx.addIssue({ code: 'custom', path: ['targetId'], message: 'укажите обновляемый шаблон' });
-    if (d.action !== 'update' && d.targetId)
-      ctx.addIssue({
-        code: 'custom',
-        path: ['targetId'],
-        message: 'обновляемый шаблон указывается только для «обновить»',
-      });
+    const issue = (path: string, message: string) =>
+      ctx.addIssue({ code: 'custom', path: [path], message });
+    if (d.action === 'update') {
+      if (!d.targetId) issue('targetId', 'укажите обновляемый шаблон');
+      if (!d.targetUpdatedAt) issue('targetUpdatedAt', 'укажите время изменения из предпросмотра');
+    } else {
+      if (d.targetId) issue('targetId', 'обновляемый шаблон указывается только для «обновить»');
+      if (d.targetUpdatedAt)
+        issue('targetUpdatedAt', 'время изменения указывается только для «обновить»');
+    }
   });
 export type ImportDecision = z.infer<typeof ImportDecision>;
 
@@ -179,7 +187,11 @@ export type ImportDecisions = z.infer<typeof ImportDecisions>;
 export interface ImportExisting {
   id: string;
   name: string;
-  /** ISO-8601. */
+  /**
+   * Время последнего изменения, ISO-8601 UTC с микросекундами (`…T10:00:00.123456Z`).
+   * Для `update` передаётся без изменений в `targetUpdatedAt`: шаблон, изменённый после
+   * предпросмотра, не обновляется (409).
+   */
   updatedAt: string;
 }
 

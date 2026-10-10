@@ -150,11 +150,21 @@ describe('ImportDecisions', () => {
   const ID = '3F2B8C1E-0D4A-4B7E-9C55-2A1F6E8D7B90';
   it('targetId обязателен для update и запрещён для прочих действий', () => {
     const ok = ImportDecisions.parse([
-      { index: 0, action: 'update', datasourceId: ID, targetId: ID },
+      { index: 0, action: 'update', datasourceId: ID, targetId: ID, targetUpdatedAt: 'x' },
       { index: 1, action: 'create', datasourceId: ID },
       { index: 2, action: 'skip', targetId: null },
     ]);
     expect(ok[0]!.targetId).toBe(ID.toLowerCase());
+    expect(ok[0]!.datasourceId).toBe(ID.toLowerCase());
+    expect(
+      ImportDecisions.safeParse([{ index: 0, action: 'update', datasourceId: ID, targetId: ID }])
+        .success,
+    ).toBe(false);
+    expect(
+      ImportDecisions.safeParse([
+        { index: 0, action: 'copy', datasourceId: ID, targetUpdatedAt: 'x' },
+      ]).success,
+    ).toBe(false);
     expect(
       ImportDecisions.safeParse([{ index: 0, action: 'update', datasourceId: ID }]).success,
     ).toBe(false);

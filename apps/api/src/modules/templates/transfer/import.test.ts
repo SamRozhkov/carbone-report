@@ -379,6 +379,20 @@ describe('readTransferArchive: регрессия по фаззингу', () => 
     );
   });
 
+  it('manifest.json больше своего лимита — отказ до разбора JSON', async () => {
+    const zip = rawZip([
+      { name: 'manifest.json', data: mj },
+      { name: file, data: DOC },
+    ]);
+    const limits = { archiveBytes: 1 << 30, entries: 10, unpackedBytes: 1 << 20 };
+    expect(
+      await invalid(readTransferArchive(zip, { ...limits, manifestBytes: mj.length - 1 })),
+    ).toMatch(/^manifest.json больше/);
+    expect((await readTransferArchive(zip, { ...limits, manifestBytes: mj.length })).files).toEqual(
+      [DOC],
+    );
+  });
+
   const bad: [string, () => Buffer][] = [
     [
       'имя не в UTF-8',
@@ -533,8 +547,9 @@ describe('resolveDecisions', () => {
   const DS = '3f2b8c1e-0d4a-4b7e-9c55-2a1f6e8d7b90';
   const item = (index: number, name: string, over: Partial<ImportPreviewItem> = {}) =>
     ({ index, name, existing: [], errors: [], ...over }) as ImportPreviewItem;
+  const AT = '2026-10-10T10:00:00.123456Z';
   const ex = (...ids: string[]) => ({
-    existing: ids.map((id) => ({ id, name: 'Есть', updatedAt: '2026-10-10T10:00:00.000Z' })),
+    existing: ids.map((id) => ({ id, name: 'Есть', updatedAt: AT })),
   });
   const ctx = (taken: string[] = []) => ({
     datasourceIds: new Set([DS]),
@@ -545,11 +560,13 @@ describe('resolveDecisions', () => {
     action: ImportDecision['action'],
     datasourceId: string | null = DS,
     targetId: string | null = null,
+    targetUpdatedAt: string | null = targetId ? AT : null,
   ) => ({
     index,
     action,
     datasourceId,
     targetId,
+    targetUpdatedAt,
   });
   const fails = (fn: () => unknown, re: RegExp, code = 'BAD_REQUEST', status = 400) => {
     try {
@@ -585,7 +602,7 @@ describe('resolveDecisions', () => {
     ]);
   });
 
-  it('нет datasourceId — 400; неизвестный источник — 400; skip без источника — можно', () => {
+  it('нет datasourceId — 400; источник удалён после предпросмотра — 409; skip без источника — можно', () => {
     fails(
       () => resolveDecisions([item(0, 'A')], [d(0, 'create', null)], ctx()),
       /выберите источник/,
@@ -597,21 +614,34 @@ describe('resolveDecisions', () => {
           [d(0, 'create', '00000000-0000-4000-8000-000000000000')],
           ctx(),
         ),
-      /источник данных не найден/,
+      /источник данных не найден — повторите предпросмотр/,
+      'CONFLICT',
+      409,
     );
     expect(resolveDecisions([item(0, 'A')], [d(0, 'skip', null)], ctx())[0]!.action).toBe('skip');
   });
 
-  it('create при существующем имени — 400, в том числе созданном раньше в этом же архиве', () => {
-    fails(() => resolveDecisions([item(0, 'A')], [d(0, 'create')], ctx(['A'])), /уже есть/);
+  it('create при занятом имени (шаблон появился после предпросмотра) — 409', () => {
+    fails(
+      () => resolveDecisions([item(0, 'A')], [d(0, 'create')], ctx(['A'])),
+      /уже есть — повторите предпросмотр/,
+      'CONFLICT',
+      409,
+    );
     fails(
       () => resolveDecisions([item(0, 'A'), item(1, 'A')], [d(0, 'create'), d(1, 'create')], ctx()),
       /уже есть/,
+      'CONFLICT',
+      409,
     );
   });
 
   it('update: targetId обязателен и должен быть среди кандидатов предпросмотра, иначе 409', () => {
     fails(() => resolveDecisions([item(0, 'A', ex('e1'))], [d(0, 'update')], ctx()), /укажите/);
+    fails(
+      () => resolveDecisions([item(0, 'A', ex('e1'))], [d(0, 'update', DS, 'e1', null)], ctx()),
+      /укажите время изменения/,
+    );
     const changed = /изменился после предпросмотра — повторите предпросмотр/;
     // Совпадения больше нет (удалён или переименован) или выбран не тот шаблон.
     fails(
@@ -626,6 +656,21 @@ describe('resolveDecisions', () => {
       'CONFLICT',
       409,
     );
+    // Изменён после предпросмотра: время другое, хоть на микросекунду.
+    fails(
+      () =>
+        resolveDecisions(
+          [item(0, 'A', ex('e1'))],
+          [d(0, 'update', DS, 'e1', '2026-10-10T10:00:00.123457Z')],
+          ctx(),
+        ),
+      changed,
+      'CONFLICT',
+      409,
+    );
+    expect(
+      resolveDecisions([item(0, 'A', ex('e1'))], [d(0, 'update', DS, 'e1')], ctx())[0],
+    ).toMatchObject({ targetId: 'e1', targetUpdatedAt: AT });
   });
 
   it('дважды один шаблон, нет решения, повтор, чужой номер', () => {

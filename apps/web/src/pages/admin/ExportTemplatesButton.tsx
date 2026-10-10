@@ -2,6 +2,7 @@ import { ArrowDownToSquare } from '@gravity-ui/icons';
 import { Button, Icon, useToaster } from '@gravity-ui/uikit';
 import { useMutation } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { MAX_TRANSFER_TEMPLATES } from '@carbone-reports/shared/template-transfer';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/errors';
 import { triggerDownload } from '../../lib/download';
@@ -38,7 +39,18 @@ export function ExportTemplatesButton({
       view={view}
       disabled={ids.length === 0}
       loading={exp.isPending}
-      onClick={() => exp.mutate()}
+      onClick={() => {
+        if (ids.length > MAX_TRANSFER_TEMPLATES) {
+          add({
+            name: `tpl-export-limit-${Date.now()}`,
+            title: 'Слишком много шаблонов',
+            content: `За один раз можно выгрузить не больше ${MAX_TRANSFER_TEMPLATES} шаблонов, выбрано ${ids.length}.`,
+            theme: 'warning',
+          });
+          return;
+        }
+        exp.mutate();
+      }}
     >
       <Icon data={ArrowDownToSquare} />
       {children}

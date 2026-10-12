@@ -21,6 +21,7 @@ var model = require('./html-model');
 var htmlDocx = require('./html-docx');
 var htmlDocxParts = require('./html-docx-parts');
 var htmlOdt = require('./html-odt');
+var common = require('./html-xml');
 var media = require('./media');
 var mediaFormats = require('./media-formats');
 
@@ -36,13 +37,11 @@ var SUPPORTED = ['docx', 'odt', 'html', 'xhtml'];
 var IMAGE_FORMATS = ['docx', 'odt'];
 
 var MSG = {
-  outside : 'html ставится в текст абзаца.',
+  outside : common.MSG_OUTSIDE,
   tooBig  : 'html: значение больше 1 МБ.'
 };
 
-function templateError (message, source) {
-  return new Error(message + ' Source: "' + source + '"');
-}
+var templateError = common.templateError;
 
 function unquote (arg) {
   var _match = /^\s*'([\s\S]*)'\s*$/.exec(arg);

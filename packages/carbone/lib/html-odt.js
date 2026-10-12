@@ -13,14 +13,16 @@
 // Оформление (R8): HTML — внутренний text:span с автоматическим стилем CRh<n> (style:family="text"), из которого
 // исключены свойства, уже заданные оформлением метки (стили text:span вокруг метки с родителями, текст
 // автоматического стиля абзаца метки). Свойства абзаца блока (отступ цитаты, линия hr, разрывы страницы) —
-// автоматический стиль CRhp<n> с родителем — стилем абзаца метки. Автоматические стили и style:font-face Courier New —
-// в той же части (content.xml или styles.xml для колонтитулов), стили заголовков — в office:styles styles.xml
-// (lib/html-odt-styles.js).
+// автоматический стиль CRhp<n> с родителем — стилем абзаца метки. Стиль страницы, номер страницы и разрыв до из
+// стиля абзаца метки остаются только у первого созданного абзаца, разрыв после — у последнего (resolvePage).
+// Автоматические стили и style:font-face Courier New — в той же части (content.xml или styles.xml для колонтитулов),
+// стили заголовков — в office:styles styles.xml (lib/html-odt-styles.js).
 //
 // Блоки (§34.4): заголовок — text:h text:outline-level со стилем Heading_20_N или <headingtheme>N (создаётся: жирный,
 // 20/16/14/13/12/11pt); blockquote — fo:margin-left 1.058cm (40px) на уровень к отступу стиля метки либо стиль
-// quotetheme; pre — строки через text:line-break; hr — пустой абзац с нижней линией; разрывы — fo:break-before/after
-// в стиле абзаца. Пробелы: повторы и пробел в начале абзаца или строки — text:s; табуляция — text:tab; флажок — ☒/☐.
+// quotetheme (нет в styles.xml — отступ); pre — строки через text:line-break; hr — пустой абзац с нижней линией;
+// разрывы — fo:break-before/after в стиле абзаца. Пробелы: повторы и пробел в начале абзаца или строки — text:s;
+// табуляция — text:tab; флажок — ☒/☐.
 //
 // BLOCKS — запись блока по типу (blockXml), INLINES — Inline по типу; ctx абзаца — paragraphCtx; абзацы блоков —
 // writePara (стиль абзаца, цитата, разрывы, span метки). Списки, таблицы, ссылки, изображения — Task 8.
@@ -32,8 +34,6 @@ var odfStyles = require('./html-odt-styles');
 
 var escapeText = common.escapeText;
 var templateError = common.templateError;
-
-var MSG_OUTSIDE = 'html ставится в текст абзаца.';
 
 // абзацы; элементы между абзацем и текстом метки; закладки (переходят из пустой части); не содержимое
 var PARAGRAPHS = ['text:p', 'text:h'];
@@ -207,8 +207,8 @@ function writePara (block, inner, ctx, opts) {
   var _base = _own === true ? _o.style : ctx.pStyle;
   var _props = [];
   var _quote = block.quote > 0 ? block.quote : 0;
-  if (_quote > 0 && ctx.options.quotetheme !== null && _own === false) {
-    _base = escapeText(ctx.options.quotetheme);
+  if (_quote > 0 && ctx.quoteTheme !== null && _own === false) {
+    _base = ctx.quoteTheme;
   }
   else if (_quote > 0 || ctx.indent !== 0) {
     _props.push(['fo:margin-left', odfStyles.formatCm(odfStyles.marginCm(ctx.odfStyles, _base) + ctx.indent + QUOTE_INDENT * _quote)]);
@@ -225,17 +225,89 @@ function writePara (block, inner, ctx, opts) {
     _props.push(['fo:break-after', 'page']);
     ctx.breakAfter = false;
   }
-  var _style = ctx.odfStyles.paragraph(_base, _props);
   var _tag = _o.tag || 'text:p';
-  var _open = '<' + _tag + (_style !== null ? ' text:style-name="' + _style + '"' : '') + (_o.level !== undefined ? ' text:outline-level="' + _o.level + '"' : '');
+  var _open = '<' + _tag + styleAttr(ctx, _base, _props) + (_o.level !== undefined ? ' text:outline-level="' + _o.level + '"' : '');
   var _content = wrapSpans(inner, ctx);
   return _content === '' ? _open + '/>' : _open + '>' + _content + '</' + _tag + '>';
 }
 
 /** Пустой абзац после блока и абзац разрыва страницы: стиль абзаца метки (props — свои свойства абзаца) */
 function spacerXml (ctx, props) {
-  var _style = ctx.odfStyles.paragraph(ctx.pStyle, props);
-  return '<text:p' + (_style !== null ? ' text:style-name="' + _style + '"' : '') + '/>';
+  return '<text:p' + styleAttr(ctx, ctx.pStyle, props) + '/>';
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Свойства страницы абзаца метки (стиль страницы, номер страницы, разрывы — решение контроллера к R8): стиль страницы,
+// номер и разрыв до — только у первого созданного абзаца, разрыв после — только у последнего. Пока абзацы пишутся,
+// их стиль неизвестен: атрибут text:style-name — заполнитель запроса { base, props }, после записи всего абзаца
+// метки (writeParagraph) заполнители заменяются стилями по месту абзаца (resolvePage)
+
+// заполнитель: символы частного использования (отличны от жетона :html U+E040/U+E041) и ключ рендера
+var PAGE_OPEN = '\uE042';
+var PAGE_CLOSE = '\uE043';
+
+/** Атрибут text:style-name абзаца со стилем base и свойствами props (или заполнитель, если у метки есть свойства страницы) */
+function styleAttr (ctx, base, props) {
+  if (ctx.page === null) {
+    var _style = ctx.odfStyles.paragraph(base, props);
+    return _style !== null ? ' text:style-name="' + _style + '"' : '';
+  }
+  ctx.page.requests.push({ base : base, props : props });
+  return ' text:style-name="' + PAGE_OPEN + ctx.page.nonce + 'p' + (ctx.page.requests.length - 1) + PAGE_CLOSE + '"';
+}
+
+/** Стиль абзаца по запросу и месту: абзацы со стилем метки теряют свойства не своего места, прочие — получают своего */
+function pageStyle (odfStyles, page, request, first, last) {
+  var _info = page.info;
+  var _props = request.props.slice();
+  var _attrs = [];
+  var _set = function (name, value) {
+    if (_props.some(function (prop) { return prop[0] === name; }) === false) {
+      _props.push([name, value]);
+    }
+  };
+  if (request.base === page.base) {
+    if (first === false && _info.master !== null) {
+      _attrs.push(['style:master-page-name', '']);
+      _set('style:page-number', null);
+    }
+    if (first === false && _info.before !== null) {
+      _set('fo:break-before', 'auto');
+    }
+    if (last === false && _info.after !== null) {
+      _set('fo:break-after', 'auto');
+    }
+  }
+  else {
+    if (first === true && _info.master !== null) {
+      _attrs.push(['style:master-page-name', _info.master]);
+      if (_info.pageNumber !== null) {
+        _set('style:page-number', _info.pageNumber);
+      }
+    }
+    if (first === true && _info.before !== null) {
+      _set('fo:break-before', _info.before);
+    }
+    if (last === true && _info.after !== null) {
+      _set('fo:break-after', _info.after);
+    }
+  }
+  return odfStyles.paragraph(request.base, _props, _attrs);
+}
+
+/** Заполнители стилей XML абзацев метки → стили: первый — с началом страницы, последний — с разрывом после */
+function resolvePage (xml, page, odfStyles) {
+  if (page === null) {
+    return xml;
+  }
+  var _regex = new RegExp(' text:style-name="' + PAGE_OPEN + page.nonce + 'p(\\d+)' + PAGE_CLOSE + '"', 'g');
+  var _count = (xml.match(_regex) || []).length;
+  var _i = 0;
+  return xml.replace(_regex, function (all, k) {
+    var _style = pageStyle(odfStyles, page, page.requests[k], _i === 0, _i === _count - 1);
+    _i++;
+    return _style !== null ? ' text:style-name="' + _style + '"' : '';
+  });
 }
 
 var BLOCKS = {
@@ -310,7 +382,7 @@ function blocksXml (blocks, ctx) {
  *   pStyle — text:style-name абзаца метки (как в XML) или null; spans — text:style-name text:span вокруг метки
  *   (снаружи внутрь); exclude — свойства текста, заданные оформлением метки (R8)
  */
-function paragraphCtx (xml, p, token, item, job) {
+function paragraphCtx (xml, p, token, item, job, page) {
   var _spans = [];
   for (var _el = token.el; _el !== p; _el = _el.parent) {
     var _name = _el.name === 'text:span' ? xmltree.attr(xml, _el, 'text:style-name') : null;
@@ -318,7 +390,8 @@ function paragraphCtx (xml, p, token, item, job) {
       _spans.unshift(_name);
     }
   }
-  var _pStyle = xmltree.attr(xml, p, 'text:style-name');
+  // стиль абзаца метки — исходный (в копиях абзаца на его месте может стоять заполнитель)
+  var _pStyle = page.pStyle;
   var _exclude = new Set();
   var _add = function (entry) {
     odfStyles.textPropNames(entry).forEach(function (name) {
@@ -342,6 +415,10 @@ function paragraphCtx (xml, p, token, item, job) {
     odfStyles  : job.odfStyles,
     parts      : job.parts,
     pStyle     : _pStyle,
+    // свойства страницы абзаца метки (resolvePage) или null
+    page       : page.page,
+    // стиль quotetheme, если он есть в styles.xml (иначе — отступ)
+    quoteTheme : quoteTheme(item.options.quotetheme, job),
     spans      : _spans,
     exclude    : _exclude,
     // предыдущий символ — пробел или начало абзаца (textXml)
@@ -353,6 +430,15 @@ function paragraphCtx (xml, p, token, item, job) {
     indent     : 0,
     quoteStyle : null
   };
+}
+
+/** Стиль quotetheme (имя как в XML), если он есть среди общих стилей styles.xml; иначе (или без параметра) — null */
+function quoteTheme (theme, job) {
+  if (theme === null || theme === undefined) {
+    return null;
+  }
+  var _name = escapeText(theme);
+  return job.parts !== null && job.parts.common(_name, 'paragraph') !== null ? _name : null;
 }
 
 /** Абзац жетона (R6: жетон — в тексте text:p/text:h, возможно внутри text:span, text:a, text:meta) */
@@ -367,7 +453,7 @@ function paragraphOf (token, job) {
       return _el;
     }
   }
-  throw templateError(MSG_OUTSIDE, job.registry.items[token.id].source);
+  throw templateError(common.MSG_OUTSIDE, job.registry.items[token.id].source);
 }
 
 /** Часть абзаца (содержимое без тега абзаца): пустая — нет текста кроме пробелов и элементов кроме span и закладок */
@@ -474,10 +560,28 @@ function appendMarkers (xml, markers) {
 }
 
 /**
- * Переписать абзац с жетонами (XML ровно одного text:p/text:h; вложенных абзацев с жетонами в нём уже нет)
+ * Переписать абзац с жетонами (XML ровно одного text:p/text:h; вложенных абзацев с жетонами в нём уже нет). Если у
+ * стиля абзаца метки есть свойства страницы, стиль абзаца — заполнитель уже в исходном абзаце (копии «до» и «после»
+ * получают его), стили по месту абзацев — после записи (resolvePage)
  * @return {String} XML абзацев на его месте
  */
 function writeParagraph (pXml, job) {
+  var _p = xmltree.parse(pXml).root.children[0];
+  var _pStyle = xmltree.attr(pXml, _p, 'text:style-name');
+  var _info = _pStyle !== null ? job.odfStyles.page(_pStyle) : null;
+  var _mark = { pStyle : _pStyle, page : null };
+  var _xml = pXml;
+  if (_info !== null) {
+    _mark.page = { info : _info, base : _pStyle, requests : [], nonce : job.registry.nonce };
+    var _range = xmltree.attrRange(pXml, _p, 'text:style-name');
+    var _attr = styleAttr({ page : _mark.page }, _pStyle, []);
+    _xml = pXml.slice(0, _range.start) + _attr.slice(_attr.indexOf('"') + 1, -1) + pXml.slice(_range.end);
+  }
+  return resolvePage(writeParts(_xml, job, _mark), _mark.page, job.odfStyles);
+}
+
+/** Абзац метки по жетонам: «до», блоки, «после» (mark — { pStyle, page } исходного абзаца) */
+function writeParts (pXml, job, mark) {
   var _out = '';
   var _xml = pXml;
   // абзац — продолжение после блоков: пустой не остаётся
@@ -495,7 +599,7 @@ function writeParagraph (pXml, job) {
       _xml = _strip;
       continue;
     }
-    var _ctx = paragraphCtx(_xml, _p, _token, _item, job);
+    var _ctx = paragraphCtx(_xml, _p, _token, _item, job, mark);
     if (_item.options.inline === true) {
       // перед жетоном пробел или тег — пробел в начале разметки как text:s
       var _prev = _xml[_token.pos - 1];

@@ -65,9 +65,7 @@ var MSG = {
   tooDeep : 'html: вложенность тегов больше 32.'
 };
 
-function templateError (message, source) {
-  return new Error(message + ' Source: "' + source + '"');
-}
+var templateError = require('./html-xml').templateError;
 
 // ---------------------------------------------------------------------------------------------------------------
 // Параметры форматтера

@@ -28,11 +28,23 @@ var COURIER_FACE = '<style:font-face style:name="Courier New" svg:font-family="\
 // длины ODF в см
 var CM_PER_UNIT = { cm : 1, mm : 0.1, in : 2.54, pt : 2.54 / 72, pc : 2.54 / 6, px : 2.54 / 96 };
 
-/** Атрибуты [[имя, значение]] → ' имя="значение"…' (значения уже экранированы) */
+/** Атрибуты [[имя, значение]] → ' имя="значение"…' (значения уже экранированы; null — атрибута нет) */
 function attrsXml (props) {
-  return props.map(function (prop) {
+  return props.filter(function (prop) {
+    return prop[1] !== null;
+  }).map(function (prop) {
     return ' ' + prop[0] + '="' + prop[1] + '"';
   }).join('');
+}
+
+/** Открывающий тег с атрибутами props: значение заменяется или дописывается, null — атрибут удаляется */
+function withAttrs (tag, props) {
+  var _tag = tag;
+  props.forEach(function (prop) {
+    _tag = prop[1] !== null ? xmltree.putAttr(_tag, prop[0], prop[1])
+      : _tag.replace(new RegExp('\\s' + prop[0].replace(/[.:-]/g, '\\$&') + '\\s*=\\s*(?:"[^"]*"|\'[^\']*\')'), '');
+  });
+  return _tag;
 }
 
 /** Имена атрибутов открывающего тега */
@@ -247,21 +259,53 @@ function createOdfStyles (job) {
       }
       return _cache.get(_key);
     },
-    /** Стиль абзаца: base (имя как в XML или null) с изменёнными свойствами абзаца; без свойств — base */
-    paragraph : function (base, props) {
-      if (props.length === 0) {
+    /**
+     * Стиль абзаца: base (имя как в XML или null) с изменёнными свойствами абзаца props и атрибутами стиля attrs
+     * (style:master-page-name…; null — убрать); без изменений — base. Автоматический base копируется (родителем быть
+     * не может), общий — родитель нового стиля
+     */
+    paragraph : function (base, props, attrs) {
+      var _attrs = attrs || [];
+      if (props.length === 0 && _attrs.length === 0) {
         return base;
       }
-      var _key = 'paragraph|' + (base === null ? '' : base) + '|' + attrsXml(props);
+      var _key = 'paragraph|' + JSON.stringify([base, props, _attrs]);
       if (_cache.has(_key) === false) {
         var _name = _next('CRhp');
         _cache.set(_key, _name);
         var _own = base !== null ? _api.automatic(base, 'paragraph') : null;
-        _added.push(_own !== null ? cloneParagraph(_own, _name, props)
+        var _pp = attrsXml(props);
+        _added.push(_own !== null ? cloneParagraph(_own, _name, props, _attrs)
           : '<style:style style:name="' + _name + '" style:family="paragraph"' + (base !== null ? ' style:parent-style-name="' + base + '"' : '')
-            + '><style:paragraph-properties' + attrsXml(props) + '/></style:style>');
+            + attrsXml(_attrs) + '>' + (_pp !== '' ? '<style:paragraph-properties' + _pp + '/>' : '') + '</style:style>');
       }
       return _cache.get(_key);
+    },
+    /**
+     * Свойства страницы стиля абзаца (по цепочке родителей; ближайшее значение важнее): { master, pageNumber, before,
+     * after } — значения как в XML или null (разрыв «auto» и пустое имя страницы — нет); без разрывов и стиля
+     * страницы — null
+     */
+    page : function (base) {
+      var _found = { master : null, pageNumber : null, before : null, after : null };
+      var _seen = {};
+      var _take = function (key, value) {
+        if (value !== null && _seen[key] !== true) {
+          _seen[key] = true;
+          // пустое имя страницы и разрыв auto — нет свойства; page-number="auto" — значение
+          _found[key] = value === '' || (value === 'auto' && key !== 'pageNumber') ? null : value;
+        }
+      };
+      _api.chain(base, 'paragraph').forEach(function (entry) {
+        _take('master', xmltree.attr(entry.src, entry.el, 'style:master-page-name'));
+        var _pp = childNamed(entry.el, 'style:paragraph-properties');
+        if (_pp !== null) {
+          _take('pageNumber', xmltree.attr(entry.src, _pp, 'style:page-number'));
+          _take('before', xmltree.attr(entry.src, _pp, 'fo:break-before'));
+          _take('after', xmltree.attr(entry.src, _pp, 'fo:break-after'));
+        }
+      });
+      return _found.master !== null || _found.before !== null || _found.after !== null ? _found : null;
     },
     /** style:font-face Courier New (дописывается, если его нет в части) */
     font : function () {
@@ -295,22 +339,27 @@ function createOdfStyles (job) {
   return _api;
 }
 
-/** Копия автоматического стиля абзаца с именем name и свойствами абзаца props (поверх его собственных) */
-function cloneParagraph (entry, name, props) {
+/**
+ * Копия автоматического стиля абзаца с именем name, свойствами абзаца props и атрибутами стиля attrs (поверх его
+ * собственных; null — убрать); style:paragraph-properties без атрибутов и детей не остаётся
+ */
+function cloneParagraph (entry, name, props, attrs) {
   var _src = entry.src;
   var _el = entry.el;
-  var _tag = xmltree.setAttr(xmltree.startTag(_src, _el), 'style:name', name);
+  var _tag = withAttrs(xmltree.setAttr(xmltree.startTag(_src, _el), 'style:name', name), attrs);
+  var _new = attrsXml(props);
+  var _newPP = _new !== '' ? '<style:paragraph-properties' + _new + '/>' : '';
   if (_el.openEnd === _el.end) {
-    return _tag.replace(/\s*\/>$/, '>') + '<style:paragraph-properties' + attrsXml(props) + '/></style:style>';
+    return _tag.replace(/\s*\/>$/, '>') + _newPP + '</style:style>';
   }
   var _pp = childNamed(_el, 'style:paragraph-properties');
   if (_pp === null) {
-    return _tag + '<style:paragraph-properties' + attrsXml(props) + '/>' + _src.slice(_el.openEnd, _el.end);
+    return _tag + _newPP + _src.slice(_el.openEnd, _el.end);
   }
-  var _ppTag = xmltree.startTag(_src, _pp);
-  props.forEach(function (prop) {
-    _ppTag = xmltree.putAttr(_ppTag, prop[0], prop[1]);
-  });
+  var _ppTag = withAttrs(xmltree.startTag(_src, _pp), props);
+  if (_pp.openEnd === _pp.end && /^<style:paragraph-properties\s*\/>$/.test(_ppTag) === true) {
+    _ppTag = '';
+  }
   return _tag + _src.slice(_el.openEnd, _pp.start) + _ppTag + _src.slice(_pp.openEnd, _el.end);
 }
 

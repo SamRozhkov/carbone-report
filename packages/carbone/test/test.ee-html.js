@@ -1789,11 +1789,9 @@ describe('html: ODT — абзац метки', function () {
 
   it('Review Focus 2: мусорный HTML — корректный XML, текст сохранён, скрипт удалён', async function () {
     const html = '<div>Начало <span class="x">спан</span><script>alert(1)</script> <b><i>x</b></i> &nbsp;&lt; " 😀 a\u0001b￾c <p>незакрыт';
-    const out = await odtBody(html);
-    assert.ok(!out.includes('alert'), out);
-    for (const s of ['Начало ', 'спан', '&lt;', '&quot;', '😀', ' ', 'abc', 'незакрыт']) {
-      assert.ok(out.includes(s), s + ' в ' + out);
-    }
+    const r = await renderOdt(oP('{d.h:html}'), { h: html });
+    assert.strictEqual(r.body, oP('Начало спан ' + oS('CRh1', 'x') + '  &lt; &quot; 😀 abc') + oSP() + oP('незакрыт') + oSP());
+    assert.strictEqual(r.auto, tStyle('CRh1', O_BOLD + ' ' + O_ITALIC));
   });
 
   it('{o.preReleaseFeatureIn=…} в шаблоне не мешает; defaultURL + html (R4)', async function () {
@@ -1801,8 +1799,10 @@ describe('html: ODT — абзац метки', function () {
     assert.ok(r.body.endsWith(oP(oS('CRh1', 'x')) + oSP()), r.body);
   });
 
-  it('R6: жетон в атрибуте — ошибка шаблона', async function () {
-    for (const body of ['<text:p><text:span text:style-name="{d.h:html}">l</text:span></text:p>', '<text:p><text:bookmark text:name="{d.h:html}"/>l</text:p>']) {
+  it('R6: жетон в атрибуте или в замещающем тексте рамки — ошибка шаблона', async function () {
+    const frame = '<text:p><draw:frame draw:name="f" text:anchor-type="as-char" svg:width="1cm" svg:height="1cm"><draw:text-box><text:p>t</text:p></draw:text-box>'
+      + '<svg:title>{d.h:html}</svg:title></draw:frame></text:p>';
+    for (const body of ['<text:p><text:span text:style-name="{d.h:html}">l</text:span></text:p>', '<text:p><text:bookmark text:name="{d.h:html}"/>l</text:p>', frame]) {
       const tpl = await buildOdt(body);
       assert.strictEqual(await rejection(carbone.renderBuffer(tpl, 'odt', { h: '<b>x</b>' }, {})), 'html ставится в текст абзаца. Source: "{d.h:html}"');
     }
@@ -1867,10 +1867,15 @@ describe('html: ODT — цитаты, pre, hr, разрывы', function () {
     assert.strictEqual(r.auto, pStyle('CRhp1', 'Text_20_body', 'fo:margin-left="2.328cm"'));
   });
 
-  it('quotetheme:Intense_20_Quote — стиль абзаца вместо отступа', async function () {
-    const r = await renderOdt(oP('{d.h:html(nospace, quotetheme:Intense_20_Quote)}'), { h: '<blockquote>a<blockquote>b</blockquote></blockquote><p>c</p>' });
+  it('quotetheme:Intense_20_Quote — стиль абзаца вместо отступа; стиля нет в шаблоне — отступ', async function () {
+    const marker = oP('{d.h:html(nospace, quotetheme:Intense_20_Quote)}');
+    const h = { h: '<blockquote>a<blockquote>b</blockquote></blockquote><p>c</p>' };
+    let r = await renderOdt(marker, h, { styles: O_STYLES({ styles: '<style:style style:name="Intense_20_Quote" style:family="paragraph"/>' }) });
     assert.strictEqual(r.body, oP('a', 'Intense_20_Quote') + oP('b', 'Intense_20_Quote') + oP('c'));
     assert.strictEqual(r.auto, null);
+    r = await renderOdt(marker, h);
+    assert.strictEqual(r.body, oP('a', 'CRhp1') + oP('b', 'CRhp2') + oP('c'));
+    assert.strictEqual(r.auto, pStyle('CRhp1', null, 'fo:margin-left="1.058cm"') + pStyle('CRhp2', null, 'fo:margin-left="2.116cm"'));
   });
 
   it('tabletheme в ODT допускается и не влияет', async function () {
@@ -1888,5 +1893,61 @@ describe('html: ODT — цитаты, pre, hr, разрывы', function () {
     assert.strictEqual(r.body, oH(1, 'a', 'CRhp1') + oSP('CRhp2'));
     assert.strictEqual(r.auto, pStyle('CRhp1', 'Heading_20_1', 'fo:break-before="page"')
       + pStyle('CRhp2', null, O_HR + ' fo:break-before="page" fo:break-after="page"'));
+  });
+});
+
+describe('html: ODT — разрывы и стиль страницы абзаца метки (доработка 1)', function () {
+  // типичные автоматические стили LibreOffice: первый абзац документа и абзац после разрыва страницы
+  const P1 = '<style:style style:name="P1" style:family="paragraph" style:parent-style-name="Standard" style:master-page-name="Standard">'
+    + '<style:paragraph-properties style:page-number="auto"/></style:style>';
+  const P2 = pStyle('P2', 'Standard', 'fo:break-before="page"');
+  const P3 = pStyle('P3', 'Standard', 'fo:break-after="page"');
+  const P1_REST = '<style:style style:name="CRhp1" style:family="paragraph" style:parent-style-name="Standard" style:master-page-name=""></style:style>';
+
+  it('master-page-name и page-number — только у первого абзаца', async function () {
+    const r = await renderOdt(oP('{d.h:html}', 'P1'), { h: '<p>a</p><p>b</p>' }, { automatic: P1 });
+    assert.strictEqual(r.body, oP('a', 'P1') + oSP('CRhp1') + oP('b', 'CRhp1') + oSP('CRhp1'));
+    assert.strictEqual(r.auto, P1 + P1_REST);
+  });
+
+  it('fo:break-before — только у первого абзаца («до»), прочие блоки, пустые абзацы и «после» — без разрыва', async function () {
+    const r = await renderOdt(oP('X {d.h:html} Y', 'P2'), { h: '<p>a</p><blockquote>q</blockquote><pre>p</pre><hr><h2>h</h2>' }, { automatic: P2 });
+    assert.strictEqual(r.body, oP('X ', 'P2') + oP('a', 'CRhp1') + oSP('CRhp1') + oP('q', 'CRhp2') + oSP('CRhp1') + oP(oS('CRh1', 'p'), 'CRhp1')
+      + oSP('CRhp1') + oSP('CRhp3') + oH(2, 'h') + oSP('CRhp1') + oP(' Y', 'CRhp1'));
+    assert.ok(r.auto.endsWith(pStyle('CRhp1', 'Standard', 'fo:break-before="auto"') + pStyle('CRhp2', 'Standard', 'fo:break-before="auto" fo:margin-left="1.058cm"')
+      + pStyle('CRhp3', 'Standard', 'fo:break-before="auto" ' + O_HR)), r.auto);
+    assert.strictEqual((r.auto.match(/fo:break-before="page"/g) || []).length, 1, r.auto);
+  });
+
+  it('первый абзац — заголовок: стиль страницы метки переходит к нему', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}', 'P1'), { h: '<h1>h</h1><p>a</p>' }, { automatic: P1 });
+    assert.strictEqual(r.body, oH(1, 'h', 'CRhp1') + oP('a', 'CRhp2'));
+    assert.strictEqual(r.auto, P1 + '<style:style style:name="CRhp1" style:family="paragraph" style:parent-style-name="Heading_20_1" style:master-page-name="Standard">'
+      + '<style:paragraph-properties style:page-number="auto"/></style:style>' + P1_REST.replace('CRhp1', 'CRhp2'));
+  });
+
+  it('fo:break-after — только у последнего абзаца', async function () {
+    const r = await renderOdt(oP('{d.h:html}', 'P3'), { h: '<p>a</p><p>b</p>' }, { automatic: P3 });
+    assert.strictEqual(r.body, oP('a', 'CRhp1') + oSP('CRhp1') + oP('b', 'CRhp1') + oSP('P3'));
+    assert.strictEqual(r.auto, P3 + pStyle('CRhp1', 'Standard', 'fo:break-after="auto"'));
+  });
+
+  it('общий стиль с разрывом: прочие абзацы — автоматический стиль с fo:break-before="auto"', async function () {
+    const styles = O_STYLES({ styles: pStyle('Break_20_style', null, 'fo:break-before="page"') });
+    const r = await renderOdt(oP('{d.h:html(nospace)}', 'Break_20_style'), { h: '<p>a</p><p>b</p>' }, { styles });
+    assert.strictEqual(r.body, oP('a', 'Break_20_style') + oP('b', 'CRhp1'));
+    assert.strictEqual(r.auto, pStyle('CRhp1', 'Break_20_style', 'fo:break-before="auto"'));
+  });
+
+  it('один абзац — все свойства страницы у него', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}', 'P1'), { h: '<blockquote>q</blockquote>' }, { automatic: P1 });
+    assert.strictEqual(r.body, oP('q', 'CRhp1'));
+    assert.strictEqual(r.auto, P1 + '<style:style style:name="CRhp1" style:family="paragraph" style:parent-style-name="Standard" style:master-page-name="Standard">'
+      + '<style:paragraph-properties style:page-number="auto" fo:margin-left="1.058cm"/></style:style>');
+  });
+
+  it('две метки в абзаце с разрывом — разрыв один раз', async function () {
+    const r = await renderOdt(oP('{d.a:html}-{d.b:html}', 'P2'), { a: 'x', b: 'y' }, { automatic: P2 });
+    assert.strictEqual(r.body, oP('x', 'P2') + oSP('CRhp1') + oP('-', 'CRhp1') + oP('y', 'CRhp1') + oSP('CRhp1'));
   });
 });

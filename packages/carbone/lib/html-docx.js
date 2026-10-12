@@ -36,8 +36,6 @@ var table = require('./html-docx-table');
 var links = require('./links');
 var common = require('./html-xml');
 
-var MSG_OUTSIDE = 'html ставится в текст абзаца.';
-
 // порядок дочерних элементов по схеме (ECMA-376 CT_RPr, CT_PPr); элементы не из списка стоят после известных
 var W_RPR = ['w:ins', 'w:del', 'w:moveFrom', 'w:moveTo', 'w:rStyle', 'w:rFonts', 'w:b', 'w:bCs', 'w:i', 'w:iCs', 'w:caps',
   'w:smallCaps', 'w:strike', 'w:dstrike', 'w:outline', 'w:shadow', 'w:emboss', 'w:imprint', 'w:noProof', 'w:snapToGrid',
@@ -714,7 +712,7 @@ function paragraphOf (token, job) {
   var _el = token.el;
   var _p = _el.name === 'w:t' && _el.parent !== null && _el.parent.name === 'w:r' ? xmltree.closest(_el, ['w:p']) : null;
   if (_p === null) {
-    throw templateError(MSG_OUTSIDE, job.registry.items[token.id].source);
+    throw templateError(common.MSG_OUTSIDE, job.registry.items[token.id].source);
   }
   return _p;
 }

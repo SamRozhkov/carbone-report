@@ -3,6 +3,9 @@
 
 var xmltree = require('./xmltree');
 
+// R6: жетон :html вне текста абзаца (DOCX, ODT, имя отчёта)
+var MSG_OUTSIDE = 'html ставится в текст абзаца.';
+
 // символы, недопустимые в XML 1.0, и одиночные суррогаты
 var INVALID_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 
@@ -93,6 +96,7 @@ function declareNs (xml, root, used, namespaces) {
 }
 
 module.exports = {
+  MSG_OUTSIDE,
   templateError,
   escapeText,
   parseTokens,

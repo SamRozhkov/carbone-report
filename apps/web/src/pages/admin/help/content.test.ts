@@ -14,7 +14,7 @@ const canonicalRow = (line: string) => {
 };
 
 describe('содержание справки', () => {
-  it('восемь разделов в порядке §23.2 (+ §32)', () => {
+  it('десять разделов в порядке §23.2 (+ §32, §34)', () => {
     expect(HELP_SECTIONS.map((s) => [s.id, s.title])).toEqual([
       ['basics', 'Основы'],
       ['tables', 'Таблицы'],
@@ -23,6 +23,8 @@ describe('содержание справки', () => {
       ['aggregates', 'Итоги и нумерация'],
       ['totals', 'Итоги и группировка'],
       ['media', 'Изображения, штрихкоды, цвета, ссылки'],
+      ['charts', 'Диаграммы'],
+      ['html', 'HTML'],
       ['unavailable', 'Недоступно в бесплатной версии'],
     ]);
     for (const s of HELP_SECTIONS) expect(s.examples.length, s.id).toBeGreaterThan(0);
@@ -92,12 +94,36 @@ describe('содержание справки', () => {
     }
   });
 
+  it('rich — только в разделе «HTML», и все его примеры с :html', () => {
+    const rich = HELP_SECTIONS.flatMap((s) =>
+      s.examples.filter((e) => e.rich).map((e) => [s.id, e] as const),
+    );
+    const html = HELP_SECTIONS.find((s) => s.id === 'html')!.examples;
+    expect(rich.map(([, e]) => e.id)).toEqual(html.map((e) => e.id));
+    for (const [sid, e] of rich) {
+      expect(sid, e.id).toBe('html');
+      expect(e.template, e.id).toMatch(/\{d\.[^{}\n]*:html(\([^{}\n]*\))?\}/);
+      expect(e.picture, e.id).toBeUndefined();
+      expect(e.unavailable, e.id).toBeUndefined();
+    }
+  });
+
+  it('диаграммы: примеры — строки цикла [i] и [i+1]; chart остаётся недоступным с пояснением', () => {
+    for (const e of HELP_SECTIONS.find((s) => s.id === 'charts')!.examples) {
+      expect(e.template, e.id).toMatch(/\[i\]/);
+      expect(e.template, e.id).toMatch(/\[i\+1\]/);
+    }
+    const chart = examples.find((e) => e.id === 'na-chart')!;
+    expect(chart.unavailable).toBe(true);
+    expect(chart.note).toContain('«Диаграммы»');
+  });
+
   it('примеры, которые больше не «недоступны», убраны из последнего раздела', () => {
     const ids = [
       ...examples.map((e) => e.id),
       ...HELP_SECTIONS.flatMap((s) => (s.limits ?? []).map((l) => l.id)),
     ];
-    for (const gone of ['na-color', 'na-barcode', 'na-default-url', 'na-images']) {
+    for (const gone of ['na-color', 'na-barcode', 'na-default-url', 'na-images', 'na-html']) {
       expect(ids).not.toContain(gone);
     }
   });

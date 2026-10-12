@@ -173,6 +173,16 @@ async function pictureProblem(docx: Buffer, tag: string): Promise<string | null>
   return null;
 }
 
+/**
+ * Пример с `rich`: результат — оформленный документ, `result` описывает его словами. Проверяется только,
+ * что в документе есть текст и HTML не напечатан как есть.
+ */
+function richProblem(text: string): string | null {
+  if (text.trim() === '') return 'пустой текст документа';
+  if (/<\/?[a-z]/i.test(text)) return `HTML напечатан как текст: ${text}`;
+  return null;
+}
+
 // ---- проверки ----
 
 function mismatch(e: HelpExample, want: string, got: string): void {
@@ -226,6 +236,8 @@ async function liveCheck(examples: HelpExample[]): Promise<number> {
         got = 'отчёт сформирован, а ожидалась ошибка «disabled in the Community Edition»';
       } else if (e.picture) {
         got = (await pictureProblem(out, e.template)) ?? e.result;
+      } else if (e.rich) {
+        got = richProblem(docxText(await documentXml(out))) ?? e.result;
       } else {
         got = docxText(await documentXml(out));
         if (got.trim() === '') got = 'пустой текст документа';

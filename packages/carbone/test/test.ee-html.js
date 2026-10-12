@@ -610,7 +610,7 @@ describe('html: DOCX — разметка текста', function () {
         + wBR() + wR('  c', COURIER)) + wSP());
   });
 
-  it('прочие блоки (до Task 5–6) — абзацы с их текстом', async function () {
+  it('заголовок, список и таблица — текст на месте', async function () {
     const out = await htmlBody('<h1>H</h1><ul><li>x</li></ul><table><tr><td>c</td></tr></table>');
     assert.ok(out.includes(wR('H')) && out.includes(wR('x')) && out.includes(wR('c')), out);
   });
@@ -1095,5 +1095,434 @@ describe('html: DOCX — части и производительность (Tas
     assert.strictEqual((numbering.match(/<w:num /g) || []).length, 6000);
     assert.strictEqual((numbering.match(/<w:abstractNum /g) || []).length, 2);
     assert.ok(ms < 3000, 'сборка ' + ms + ' мс');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// :html в DOCX (Task 6): таблицы, ссылки, изображения
+
+const http = require('http');
+const zlib = require('zlib');
+const { renderBufferWithWarnings } = carbone;
+
+const HYPERLINK_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
+const IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
+const DOC_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+  + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+
+// ожидаемая таблица
+const TBL_LOOK = '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>';
+const tblPr = (style, more) => '<w:tblPr><w:tblStyle w:val="' + style + '"/><w:tblW w:w="5000" w:type="pct"/>' + (more || '') + TBL_LOOK + '</w:tblPr>';
+const grid = (n, w) => '<w:tblGrid>' + ('<w:gridCol w:w="' + w + '"/>').repeat(n) + '</w:tblGrid>';
+const tc = (inner, w, o) => '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>' + (o && o.span ? '<w:gridSpan w:val="' + o.span + '"/>' : '')
+  + (o && o.merge ? (o.merge === 'restart' ? '<w:vMerge w:val="restart"/>' : '<w:vMerge/>') : '') + '</w:tcPr>' + inner + '</w:tc>';
+const tr = (cells) => '<w:tr>' + cells.join('') + '</w:tr>';
+const TABLE_GRID = '<w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:tblPr><w:tblBorders>'
+  + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map((s) => '<w:' + s + ' w:val="single" w:sz="4" w:space="0" w:color="000000"/>').join('')
+  + '</w:tblBorders></w:tblPr></w:style>';
+const LINK_RPR = '<w:color w:val="0563C1"/><w:u w:val="single"/>';
+
+/** Настоящий PNG w×h (RGB); seed меняет пиксель */
+function pngChunk (type, data) {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(zlib.crc32(body));
+  return Buffer.concat([len, body, crc]);
+}
+function png (w, h, seed) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 2;
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  raw[1] = seed || 0;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', ihdr), pngChunk('IDAT', zlib.deflateSync(raw)), pngChunk('IEND', Buffer.alloc(0))]);
+}
+/** PNG-заголовок с «хвостом» до size байт */
+function bigPng (size, seed) {
+  const buf = Buffer.alloc(size);
+  png(1, 1, seed).copy(buf);
+  buf[size - 1] = seed || 0;
+  return buf;
+}
+const dataUri = (buf) => 'data:image/png;base64,' + buf.toString('base64');
+
+/** DOCX со своим w:body (sectPr — как задан) */
+function rawDocx (bodyXml, opts) {
+  const o = opts || {};
+  const extra = Object.entries(o.files || {}).map(([name, data]) => ({ name, data }));
+  return zipBuffer([
+    { name: '[Content_Types].xml', data: XML_HEAD + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>' },
+    { name: '_rels/.rels', data: XML_HEAD + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
+    { name: 'word/_rels/document.xml.rels', data: XML_HEAD + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + (o.rels || '') + '</Relationships>' },
+    { name: 'word/document.xml', data: XML_HEAD + '<w:document ' + (o.ns || DOC_NS) + '><w:body>' + bodyXml + '</w:body></w:document>' },
+    ...extra
+  ]);
+}
+
+async function renderOut (tpl, data, options) {
+  const res = await renderBufferWithWarnings(tpl, 'docx', data, options || {});
+  const get = (name) => readEntry(res.buffer, name).catch(() => null);
+  const r = {
+    out: res.buffer,
+    warnings: res.warnings,
+    doc: await get('word/document.xml'),
+    rels: await get('word/_rels/document.xml.rels'),
+    styles: await get('word/styles.xml'),
+    ct: await get('[Content_Types].xml')
+  };
+  for (const k of ['doc', 'rels', 'styles', 'ct']) {
+    if (r[k] !== null) assertWellFormed(r[k]);
+  }
+  r.body = r.doc.slice(r.doc.indexOf('<w:body>') + 8, r.doc.lastIndexOf('</w:body>'));
+  return r;
+}
+
+/** Рендер одной метки в шаблоне buildDocx; body — без хвоста buildDocx */
+async function renderHtml (html, marker, options, opts) {
+  const o = opts || {};
+  const tpl = await buildDocx('<<RAW>>', [mp(marker || '{d.h:html}')], o.rels || '', o.files);
+  const r = await renderOut(tpl, { h: html }, options);
+  r.body = r.body.slice(0, r.body.lastIndexOf(BODY_END.replace('</w:body>', '')));
+  return r;
+}
+
+/** Target связи Id в rels */
+function relOf (rels, id) {
+  const m = new RegExp('<Relationship [^>]*Id="' + id + '"[^>]*/>').exec(rels);
+  assert.ok(m, 'нет связи ' + id + ' в ' + rels);
+  return m[0];
+}
+
+describe('html: DOCX — таблицы', function () {
+  it('th, colspan, rowspan: сетка, gridSpan, vMerge, пустой w:p в объединённых ячейках; TableGrid создаётся', async function () {
+    const r = await renderHtml('<table><tr><th>A</th><th colspan="2">B</th></tr><tr><td rowspan="2">c</td><td>d</td><td>e</td></tr>'
+      + '<tr><td>f</td><td>g</td></tr></table>');
+    const w = 3212;
+    assert.strictEqual(r.body, '<w:tbl>' + tblPr('TableGrid') + grid(3, w)
+      + tr([tc(wP(wR('A', '<w:b/>')), w), tc(wP(wR('B', '<w:b/>')), w * 2, { span: 2 })])
+      + tr([tc(wP(wR('c')), w, { merge: 'restart' }), tc(wP(wR('d')), w), tc(wP(wR('e')), w)])
+      + tr([tc('<w:p/>', w, { merge: 'cont' }), tc(wP(wR('f')), w), tc(wP(wR('g')), w)])
+      + '</w:tbl>' + wSP());
+    assert.ok(r.styles.includes(TABLE_GRID), r.styles);
+  });
+
+  it('tabletheme:GridTable2 — стиль создаётся при отсутствии; есть в шаблоне — используется без копии', async function () {
+    let r = await renderHtml('<table><tr><td>a</td></tr></table>', '{d.h:html(tabletheme:GridTable2)}');
+    assert.ok(r.body.startsWith('<w:tbl>' + tblPr('GridTable2')), r.body);
+    assert.ok(r.styles.includes('<w:style w:type="table" w:styleId="GridTable2"><w:name w:val="GridTable2"/>'), r.styles);
+    const style = '<w:style w:type="table" w:styleId="GridTable2"><w:name w:val="Grid Table 2"/></w:style>';
+    r = await renderHtml('<table><tr><td>a</td></tr></table>', '{d.h:html(tabletheme:GridTable2)}', {}, {
+      rels: '<Relationship Id="rId2" Type="' + STY_REL + '" Target="styles.xml"/>', files: { 'word/styles.xml': STYLES(style) }
+    });
+    assert.ok(r.body.startsWith('<w:tbl>' + tblPr('GridTable2')), r.body);
+    assert.strictEqual((r.styles.match(/<w:style /g) || []).length, 1, r.styles);
+  });
+
+  it('стиль таблиц по умолчанию документа (w:default) важнее TableGrid', async function () {
+    const style = '<w:style w:type="table" w:default="1" w:styleId="MyTable"><w:name w:val="My Table"/></w:style>';
+    const r = await renderHtml('<table><tr><td>a</td></tr></table>', null, {}, {
+      rels: '<Relationship Id="rId2" Type="' + STY_REL + '" Target="styles.xml"/>', files: { 'word/styles.xml': STYLES(style) }
+    });
+    assert.ok(r.body.startsWith('<w:tbl>' + tblPr('MyTable')), r.body);
+    assert.ok(!r.styles.includes('TableGrid'), r.styles);
+  });
+
+  it('ширина столбцов — по w:pgSz и w:pgMar последнего w:sectPr документа', async function () {
+    const sect = '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="1701"/></w:sectPr>';
+    const first = '<w:p><w:pPr><w:sectPr><w:pgSz w:w="20000"/><w:pgMar w:left="0" w:right="0"/></w:sectPr></w:pPr></w:p>';
+    const r = await renderOut(await rawDocx(first + mp('{d.h:html(nospace)}') + sect), { h: '<table><tr><td>a</td><td colspan="2">b</td></tr></table>' });
+    const w = Math.floor((11906 - 1701 - 850) / 3);
+    assert.ok(r.body.includes(grid(3, w) + tr([tc(wP(wR('a')), w), tc(wP(wR('b')), w * 2, { span: 2 })])), r.body);
+  });
+
+  it('thead/tbody/tfoot — строки по порядку, caption — абзацем перед таблицей', async function () {
+    const r = await renderHtml('<table><caption>Подпись</caption><thead><tr><th>h</th></tr></thead><tbody><tr><td>b</td></tr></tbody>'
+      + '<tfoot><tr><td>f</td></tr></tfoot></table>', null, {}, {});
+    const w = 9638;
+    assert.strictEqual(r.body, wP(wR('Подпись')) + '<w:tbl>' + tblPr('TableGrid') + grid(1, w)
+      + tr([tc(wP(wR('h', '<w:b/>')), w)]) + tr([tc(wP(wR('b')), w)]) + tr([tc(wP(wR('f')), w)]) + '</w:tbl>' + wSP());
+  });
+
+  it('неровные строки дополняются пустой ячейкой; rowspan за последнюю строку обрезается; пустая ячейка — w:p', async function () {
+    const r = await renderHtml('<table><tr><td>a</td><td rowspan="9">b</td><td>c</td></tr><tr><td></td></tr></table>', '{d.h:html(nospace)}');
+    const w = 3212;
+    assert.strictEqual(r.body, '<w:tbl>' + tblPr('TableGrid') + grid(3, w)
+      + tr([tc(wP(wR('a')), w), tc(wP(wR('b')), w, { merge: 'restart' }), tc(wP(wR('c')), w)])
+      + tr([tc('<w:p/>', w), tc('<w:p/>', w, { merge: 'cont' }), tc('<w:p/>', w)])
+      + '</w:tbl>' + '<w:p/>');
+  });
+
+  it('больше 63 столбцов: сетка 63, содержимое лишних ячеек — в последнюю ячейку строки', async function () {
+    const cells = Array.from({ length: 70 }, (v, i) => '<td>c' + i + '</td>').join('');
+    const r = await renderHtml('<table><tr>' + cells + '</tr><tr><td colspan="1000">x</td></tr></table>', '{d.h:html(nospace)}');
+    const w = Math.floor(9638 / 63);
+    assert.strictEqual((r.body.match(/<w:gridCol /g) || []).length, 63);
+    const rows = r.body.match(/<w:tr>[\s\S]*?<\/w:tr>/g);
+    assert.strictEqual((rows[0].match(/<w:tc>/g) || []).length, 63);
+    const last = [62, 63, 64, 65, 66, 67, 68, 69].map((i) => wP(wR('c' + i))).join('');
+    assert.ok(rows[0].endsWith(tc(last, w) + '</w:tr>'), rows[0]);
+    assert.ok(rows[1].includes(tc(wP(wR('x')), w * 63, { span: 63 })), rows[1]);
+  });
+
+  it('вложенная таблица и таблица в ячейке шаблона — ячейка заканчивается w:p', async function () {
+    const tpl = await buildDocx('| {d.h:html(nospace)} |');
+    const r = await renderOut(tpl, { h: '<table><tr><td>a<table><tr><td>b</td></tr></table></td></tr></table>' });
+    const cells = r.body.match(/<w:tc>(?:(?!<w:tc>)[\s\S])*?<\/w:tc>/g);
+    for (const c of cells) assert.ok(c.endsWith('</w:p></w:tc>') || c.endsWith('<w:p/></w:tc>'), c);
+    assert.strictEqual((r.body.match(/<w:tbl>/g) || []).length, 3);
+    assert.ok(r.body.includes('</w:tbl><w:p/></w:tc>'), r.body);
+  });
+
+  it('список в ячейке внутри пункта — с уровня 0; заголовок в ячейке — стиль заголовка', async function () {
+    const r = await renderHtml('<ul><li>x<table><tr><td><ul><li>a</li></ul><h2>h</h2></td></tr></table></li></ul>', '{d.h:html(nospace)}');
+    assert.ok(/<w:numPr><w:ilvl w:val="0"\/><w:numId w:val="2"\/><\/w:numPr><w:ind w:left="720" w:hanging="360"\/><\/w:pPr><w:r><w:t xml:space="preserve">a</.test(r.body), r.body);
+    assert.ok(r.body.includes(wP(wR('h'), '<w:pStyle w:val="Heading2"/>')), r.body);
+    // таблица в пункте — с отступом пункта
+    assert.ok(r.body.includes(tblPr('TableGrid', '<w:tblInd w:w="720" w:type="dxa"/>')), r.body);
+  });
+
+  it('таблица в цитате — отступ цитаты; разрыв страницы до таблицы — отдельным абзацем перед ней', async function () {
+    const r = await renderHtml('<blockquote><table style="break-before: page"><tr><td>a</td></tr></table></blockquote>', '{d.h:html(nospace)}');
+    assert.ok(r.body.startsWith(wP('<w:r><w:br w:type="page"/></w:r>') + '<w:tbl>' + tblPr('TableGrid', '<w:tblInd w:w="600" w:type="dxa"/>')), r.body);
+  });
+
+  it('Review Focus 3: в ячейке цикла список и таблица — свой numId, каждая ячейка заканчивается w:p', async function () {
+    const tpl = await buildDocx('| {d.rows[i].h:html} |\n| {d.rows[i+1].h:html} |');
+    const rows = [1, 2, 3].map((n) => ({ h: '<ol><li>a' + n + '</li></ol><table><tr><td>t' + n + '</td><td><ul><li>u' + n + '</li></ul></td></tr></table>' }));
+    const r = await renderOut(tpl, { rows });
+    const outer = r.body.match(/<w:tr>[\s\S]*?<\/w:tbl>[\s\S]*?<\/w:tr>/g);
+    assert.strictEqual(outer.length, 3);
+    const ids = new Set();
+    outer.forEach((row, i) => {
+      assert.ok(row.endsWith('</w:p></w:tc></w:tr>') || row.endsWith('<w:p/></w:tc></w:tr>'), row);
+      assert.ok(row.includes(wR('t' + (i + 1))) && row.includes(wR('u' + (i + 1))), row);
+      const found = [...new Set([...row.matchAll(/<w:numId w:val="(\d+)"\/>/g)].map((m) => m[1]))];
+      assert.strictEqual(found.length, 2, row);
+      found.forEach((id) => ids.add(id));
+      // список во вложенной ячейке — с уровня 0
+      assert.ok(!row.includes('<w:ilvl w:val="1"/>'), row);
+    });
+    assert.strictEqual(ids.size, 6);
+    for (const c of r.body.match(/<w:tc>(?:(?!<w:tc>)[\s\S])*?<\/w:tc>/g)) assert.ok(/(?:<\/w:p>|<w:p\/>)<\/w:tc>$/.test(c), c);
+  });
+
+  it('5000 ячеек в 1000 строках — линейно', async function () {
+    this.timeout(20000);
+    const rows = Array.from({ length: 1000 }, (v, i) => '<tr><td rowspan="2">' + i + '</td><td>a</td><td>b</td><td>c</td><td>d</td></tr>').join('');
+    const start = Date.now();
+    const r = await renderHtml('<table>' + rows + '</table>');
+    assert.ok(Date.now() - start < 3000, (Date.now() - start) + ' мс');
+    assert.strictEqual((r.body.match(/<w:tr>/g) || []).length, 1000);
+  });
+});
+
+describe('html: DOCX — ссылки', function () {
+  const link = (id, inner) => '<w:hyperlink r:id="' + id + '">' + inner + '</w:hyperlink>';
+
+  it('допустимая ссылка — w:hyperlink со связью External, оформление цветом и подчёркиванием', async function () {
+    const r = await renderHtml('<p>см. <a href="https://site.ru/a?b=1&amp;c=2"><b>тут</b></a></p>');
+    const m = /<w:hyperlink r:id="([^"]+)">/.exec(r.body);
+    assert.ok(m, r.body);
+    assert.strictEqual(r.body, wP(wR('см. ') + link(m[1], wR('тут', '<w:b/>' + LINK_RPR))) + wSP());
+    assert.strictEqual(relOf(r.rels, m[1]), '<Relationship Id="' + m[1] + '" Type="' + HYPERLINK_REL + '" Target="https://site.ru/a?b=1&amp;c=2" TargetMode="External"/>');
+  });
+
+  it('адрес без схемы — https://; javascript:, пустой и якорь — #; одинаковые адреса — одна связь', async function () {
+    const r = await renderHtml('<a href="site.ru">a</a><a href="javascript:alert(1)">b</a><a href="">c</a><a href="#x">d</a><a href="site.ru">e</a>');
+    const ids = [...r.body.matchAll(/<w:hyperlink r:id="([^"]+)">/g)].map((m) => m[1]);
+    assert.strictEqual(ids.length, 5);
+    assert.ok(relOf(r.rels, ids[0]).includes('Target="https://site.ru"'), r.rels);
+    for (const id of ids.slice(1, 4)) assert.ok(relOf(r.rels, id).includes('Target="#" TargetMode="External"'), r.rels);
+    assert.strictEqual(ids[4], ids[0]);
+    assert.strictEqual(ids[1], ids[2]);
+    assert.ok(!r.body.includes('w:anchor'), r.body);
+  });
+
+  it('defaultURL(\'https://site.ru\') — запасной адрес недопустимых ссылок (R4); недопустимый запасной — #', async function () {
+    let r = await renderHtml('<a href="javascript:x">a</a><a href="https://ok.ru">b</a>', '{d.h:defaultURL(\'https://site.ru\'):html}');
+    let ids = [...r.body.matchAll(/<w:hyperlink r:id="([^"]+)">/g)].map((m) => m[1]);
+    assert.ok(relOf(r.rels, ids[0]).includes('Target="https://site.ru"'), r.rels);
+    assert.ok(relOf(r.rels, ids[1]).includes('Target="https://ok.ru"'), r.rels);
+    r = await renderHtml('<a href="javascript:x">a</a>', '{d.h:defaultURL(\'javascript:y\'):html}');
+    ids = [...r.body.matchAll(/<w:hyperlink r:id="([^"]+)">/g)].map((m) => m[1]);
+    assert.ok(relOf(r.rels, ids[0]).includes('Target="#"'), r.rels);
+  });
+
+  it('стиль Hyperlink в styles.xml — w:rStyle вместо цвета; свойство метки побеждает', async function () {
+    const style = '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/></w:style>';
+    const r = await renderHtml('<a href="https://a.ru">x</a>', null, {}, {
+      rels: '<Relationship Id="rId2" Type="' + STY_REL + '" Target="styles.xml"/>', files: { 'word/styles.xml': STYLES(style) }
+    });
+    assert.ok(r.body.includes(wR('x', '<w:rStyle w:val="Hyperlink"/>') + '</w:hyperlink>'), r.body);
+    const r2 = await renderHtml('<a href="https://a.ru">x</a>', null, {}, {});
+    assert.ok(r2.body.includes(wR('x', LINK_RPR)), r2.body);
+    assert.strictEqual(r2.styles, null);
+  });
+
+  it('ссылка с флажком и переносом внутри; inline — w:hyperlink в абзаце метки', async function () {
+    const r = await renderHtml('<a href="https://a.ru">x<br>y</a>', 'До {d.h:html(inline)}');
+    assert.ok(/<w:hyperlink r:id="[^"]+">/.test(r.body), r.body);
+    assert.strictEqual((r.body.match(/<w:p>/g) || []).length, 1, r.body);
+  });
+
+  it('inline внутри w:hyperlink шаблона — без вложенного w:hyperlink, текст ссылки с оформлением', async function () {
+    const raw = '<w:p><w:hyperlink r:id="rIdT"><w:r><w:t>{d.h:html(inline)}</w:t></w:r></w:hyperlink></w:p>';
+    const tpl = await buildDocx('<<RAW>>', [raw], '<Relationship Id="rIdT" Type="' + HYPERLINK_REL + '" Target="https://t.ru" TargetMode="External"/>');
+    const r = await renderOut(tpl, { h: '<a href="https://a.ru"><b>x</b></a> y' });
+    assert.strictEqual((r.body.match(/<w:hyperlink /g) || []).length, 1, r.body);
+    assert.ok(r.body.includes('<w:hyperlink r:id="rIdT">' + wR('x', '<w:b/>') + wR(' y') + '</w:hyperlink>'), r.body);
+    assert.ok(!r.rels.includes('https://a.ru'), r.rels);
+  });
+});
+
+describe('html: DOCX — изображения', function () {
+  const extent = (body) => [...body.matchAll(/<(wp:extent|a:ext) cx="(\d+)" cy="(\d+)"\/>/g)].map((m) => m[1] + ' ' + m[2] + '×' + m[3]);
+
+  it('data URI PNG 200×100 без размеров — ширина 5 см (1800000 EMU) с пропорциями; media-файл, связь, тип', async function () {
+    const img = png(200, 100);
+    const r = await renderHtml('<p>a<img src="' + dataUri(img) + '">b</p>');
+    assert.deepStrictEqual(extent(r.body), ['wp:extent 1800000×900000', 'a:ext 1800000×900000']);
+    const id = /<a:blip r:embed="([^"]+)"\/>/.exec(r.body)[1];
+    const rel = relOf(r.rels, id);
+    assert.ok(rel.includes('Type="' + IMAGE_REL + '"'), rel);
+    const target = /Target="([^"]+)"/.exec(rel)[1];
+    assert.match(target, /^media\/cr-img-\d+\.png$/);
+    assert.ok(Buffer.from(await readEntry(r.out, 'word/' + target, true)).equals(img));
+    assert.ok(r.ct.includes('<Default Extension="png" ContentType="image/png"/>'), r.ct);
+    assert.ok(r.body.startsWith('<w:p>' + wR('a') + '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">'), r.body);
+  });
+
+  it('width="300" — 2857500×1428750; height — ширина по пропорциям; оба — как заданы', async function () {
+    const src = dataUri(png(200, 100));
+    let r = await renderHtml('<img src="' + src + '" width="300">');
+    assert.deepStrictEqual(extent(r.body), ['wp:extent 2857500×1428750', 'a:ext 2857500×1428750']);
+    r = await renderHtml('<img src="' + src + '" height="50">');
+    assert.deepStrictEqual(extent(r.body), ['wp:extent 952500×476250', 'a:ext 952500×476250']);
+    r = await renderHtml('<img src="' + src + '" width="10" height="20">');
+    assert.deepStrictEqual(extent(r.body), ['wp:extent 95250×190500', 'a:ext 95250×190500']);
+  });
+
+  it('одинаковый src — один media-файл; wp:docPr и pic:cNvPr — уникальные id выше максимума части', async function () {
+    const src = dataUri(png(2, 1));
+    const pic = '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1" cy="1"/><wp:docPr id="7" name="x"/></wp:inline></w:drawing></w:r></w:p>';
+    const tpl = await buildDocx('<<RAW>>\n<<RAW>>', [pic, mp('{d.h:html}')]);
+    const r = await renderOut(tpl, { h: '<img src="' + src + '"><img src="' + src + '">' });
+    assert.deepStrictEqual([...r.body.matchAll(/<wp:docPr id="(\d+)"/g)].map((m) => m[1]), ['7', '8', '9']);
+    assert.deepStrictEqual([...r.body.matchAll(/<pic:cNvPr id="(\d+)"/g)].map((m) => m[1]), ['8', '9']);
+    const ids = [...r.body.matchAll(/<a:blip r:embed="([^"]+)"\/>/g)].map((m) => m[1]);
+    assert.strictEqual(ids[0], ids[1]);
+    const names = await require('./golden-lib').entryNames(r.out);
+    assert.strictEqual(names.filter((n) => n.startsWith('word/media/')).length, 1);
+  });
+
+  it('изображение в ссылке; неверный data URI и SVG — пропуск с предупреждением', async function () {
+    const r = await renderHtml('<a href="https://a.ru"><img src="' + dataUri(png(2, 1)) + '"></a><img src="data:image/png;base64,@@">'
+      + '<img src="data:image/svg+xml;base64,PHN2Zz4=">x');
+    assert.ok(/<w:hyperlink r:id="[^"]+"><w:r>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:drawing>/.test(r.body), r.body);
+    assert.strictEqual((r.body.match(/<w:drawing>/g) || []).length, 1);
+    assert.deepStrictEqual(r.warnings, [
+      'изображение не вставлено: неверный data URI изображения (ожидается data:image/png;base64,…) Метка: {d.h:html}',
+      'изображение не вставлено: SVG не поддерживается (изображения: PNG, JPEG, GIF) Метка: {d.h:html}'
+    ]);
+  });
+
+  it('100 млн пикселей — ошибка шаблона', async function () {
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(10001, 0);
+    ihdr.writeUInt32BE(10000, 4);
+    ihdr[8] = 8;
+    ihdr[9] = 2;
+    const header = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', ihdr)]);
+    assert.strictEqual(await rejection(renderHtml('<img src="' + dataUri(header) + '">')),
+      'изображение больше 100 млн пикселей (ширина × высота) Source: "{d.h:html}"');
+  });
+
+  it('колонтитул: связь в word/_rels/header1.xml.rels', async function () {
+    const header = XML_HEAD + '<w:hdr ' + W_NS + '>' + mp('{d.h:html}') + '</w:hdr>';
+    const tpl = await buildDocx('<<RAW>>', [mp('тело')], '', { 'word/header1.xml': header });
+    const r = await renderOut(tpl, { h: '<img src="' + dataUri(png(4, 2)) + '"><a href="https://a.ru">l</a>' });
+    const xml = await readEntry(r.out, 'word/header1.xml');
+    assertWellFormed(xml);
+    const rels = await readEntry(r.out, 'word/_rels/header1.xml.rels');
+    const id = /<a:blip r:embed="([^"]+)"\/>/.exec(xml)[1];
+    assert.ok(relOf(rels, id).includes('Target="media/cr-img-'), rels);
+    const lid = /<w:hyperlink r:id="([^"]+)">/.exec(xml)[1];
+    assert.ok(relOf(rels, lid).includes('Target="https://a.ru"'), rels);
+    // пространства имён r и wp объявлены на корне колонтитула
+    assert.ok(/^<w:hdr [^>]*xmlns:r="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships"/.test(xml.slice(xml.indexOf('<w:hdr'))), xml);
+    assert.ok(/^<w:hdr [^>]*xmlns:wp="http:\/\/schemas\.openxmlformats\.org\/drawingml\/2006\/wordprocessingDrawing"/.test(xml.slice(xml.indexOf('<w:hdr'))), xml);
+    assert.ok(!r.rels.includes('cr-img'), r.rels);
+  });
+
+  describe('по адресу (локальный сервер)', function () {
+    let server;
+    let host;
+    let base;
+    before(async function () {
+      server = http.createServer((req, res) => {
+        const p = new URL(req.url, 'http://x').pathname;
+        if (p === '/ok.png') {
+          res.writeHead(200, { 'Content-Type': 'image/png' });
+          return res.end(png(30, 10));
+        }
+        if (p === '/big11') {
+          res.writeHead(200, { 'Content-Type': 'image/png' });
+          return res.end(bigPng(11 * 1024 * 1024, 1));
+        }
+        if (p.startsWith('/big/')) {
+          res.writeHead(200, { 'Content-Type': 'image/png' });
+          return res.end(bigPng(9 * 1024 * 1024, Number(p.slice(5))));
+        }
+        res.writeHead(404);
+        res.end();
+      });
+      await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+      host = '127.0.0.1:' + server.address().port;
+      base = 'http://' + host;
+    });
+    after(function () {
+      server.closeAllConnections();
+      server.close();
+    });
+
+    it('URL из белого списка загружается', async function () {
+      const r = await renderHtml('<img src="' + base + '/ok.png" width="30">', null, { imageUrlAllowlist: [host] });
+      assert.deepStrictEqual(r.warnings, []);
+      assert.deepStrictEqual(extent(r.body), ['wp:extent 285750×95250', 'a:ext 285750×95250']);
+    });
+
+    it('хост вне списка, загрузка выключена, 404 — пропуск и предупреждение', async function () {
+      let r = await renderHtml('<p>a<img src="' + base + '/ok.png"></p>', null, { imageUrlAllowlist: ['example.org'] });
+      assert.strictEqual(r.body, wP(wR('a')) + wSP());
+      assert.deepStrictEqual(r.warnings, ['изображение не вставлено: хост «' + host + '» не входит в белый список IMAGE_URL_ALLOWLIST Метка: {d.h:html}']);
+      r = await renderHtml('<img src="' + base + '/ok.png">x');
+      assert.deepStrictEqual(r.warnings, ['изображение не вставлено: загрузка изображений по адресу выключена (IMAGE_URL_ALLOWLIST) Метка: {d.h:html}']);
+      r = await renderHtml('<img src="' + base + '/none.png?k=1">x', null, { imageUrlAllowlist: [host] });
+      assert.deepStrictEqual(r.warnings, ['изображение не загружено: ' + base + '/none.png — код ответа 404 Метка: {d.h:html}']);
+    });
+
+    it('11 МБ по адресу — ошибка шаблона', async function () {
+      const msg = await rejection(renderHtml('<img src="' + base + '/big11">', null, { imageUrlAllowlist: [host] }));
+      assert.strictEqual(msg, 'изображение больше 10 МБ (адрес ' + base + '/big11) Source: "{d.h:html}"');
+    });
+
+    it('общий лимит 50 МБ вместе с картинкой-заглушкой {d.img} — ошибка шаблона', async function () {
+      this.timeout(20000);
+      const pic = '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="1" name="p" descr="{d.img}"/><a:graphic>'
+        + '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="p"/>'
+        + '<pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
+      const tpl = await buildDocx('<<RAW>>\n<<RAW>>', [mp('{d.h:html}'), pic], '<Relationship Id="rIdImg" Type="' + IMAGE_REL + '" Target="media/p.png"/>', { 'word/media/p.png': png(1, 1) });
+      const html = [1, 2, 3, 4, 5].map((n) => '<img src="' + base + '/big/' + n + '">').join('');
+      const opts = { imageUrlAllowlist: [host] };
+      // только :html (45 МБ) — можно
+      const ok = await renderOut(tpl, { h: html, img: '' }, opts);
+      assert.strictEqual((ok.body.match(/<w:drawing>/g) || []).length, 5);
+      assert.strictEqual(await rejection(renderOut(tpl, { h: html, img: base + '/big/6' }, opts)),
+        'изображения отчёта больше 50 МБ Source: "{d.img}"');
+    });
   });
 });

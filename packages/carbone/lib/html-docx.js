@@ -19,13 +19,21 @@
 // через w:br; hr — пустой абзац с нижней линией; флажок — w:sdt с w14:checkbox (w14 объявляется на корне части).
 // R7: заголовки, пункты и блоки внутри пунктов берут из w:pPr метки только w:jc, w:bidi, w:ind, w:spacing.
 //
-// Расширение (Task 6): BLOCKS — запись блока по типу (blockXml), inlineXml — запись Inline по типу; ctx абзаца:
-//   { job, item, options, images, pPr, sectPr, rPr, pageBreak, numbering, styles, indent, depth, lead, quoteStyle }
-//   — см. paragraphCtx; абзацы блоков — writePara (свойства по R7, цитата, отступ контейнера, номер пункта).
+// Таблица — lib/html-docx-table.js (ячейка — свой контейнер: списки с уровня 0, заголовок — настоящий). Ссылка —
+// w:hyperlink со связью части (TargetMode External; адрес по §32.5 — links.resolveLink, запасной — defaultURL метки,
+// R4), текст — стилем Hyperlink, если он есть в styles.xml, иначе синим с подчёркиванием; метка inline внутри
+// w:hyperlink шаблона — текст ссылок HTML без вложенного w:hyperlink. Изображение — w:drawing/wp:inline (данные
+// загружает html.finish в job.images до записи; null — картинка пропускается), media-файл — job.media (storeMedia),
+// связь — в .rels части; wp:docPr/pic:cNvPr id — выше максимума части.
+//
+// BLOCKS — запись блока по типу (blockXml), inlineXml — запись Inline по типу; ctx абзаца — см. paragraphCtx; абзацы
+// блоков — writePara (свойства по R7, цитата, отступ контейнера, номер пункта).
 
 var xmltree = require('./xmltree');
 var model = require('./html-model');
 var parts = require('./html-docx-parts');
+var table = require('./html-docx-table');
+var links = require('./links');
 
 var MSG_OUTSIDE = 'html ставится в текст абзаца.';
 
@@ -57,7 +65,22 @@ var HR_PPR = [
   { name : 'w:pBdr', xml : '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr>' },
   { name : 'w:spacing', xml : '<w:spacing w:before="120" w:after="120"/>' }
 ];
-var W14_NS = 'http://schemas.microsoft.com/office/word/2010/wordml';
+// пространства имён, которые разметка HTML объявляет на корне части при необходимости (job.ns)
+var NAMESPACES = {
+  w14 : 'http://schemas.microsoft.com/office/word/2010/wordml',
+  r   : 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+  wp  : 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
+};
+var A_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+var PIC_NS = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
+// ссылка без стиля Hyperlink в styles.xml
+var LINK_RPR = [
+  { name : 'w:color', xml : '<w:color w:val="0563C1"/>' },
+  { name : 'w:u', xml : '<w:u w:val="single"/>' }
+];
+// изображение: EMU на пиксель (96 dpi), ширина без width/height — 5 см
+var EMU_PER_PX = 9525;
+var DEFAULT_IMAGE_WIDTH = 1800000;
 // символы, недопустимые в XML 1.0, и одиночные суррогаты
 var INVALID_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 
@@ -208,30 +231,109 @@ function textXml (text) {
   }).join('<w:tab/>');
 }
 
+/** Свойства текста внутри ссылки: оформление ссылки (ctx.linkProps) — если такого свойства ещё нет */
+function withLink (list, ctx) {
+  if (ctx === undefined || ctx.linkProps === null) {
+    return list;
+  }
+  return list.concat(ctx.linkProps.filter(function (kid) {
+    return has(list, kid.name) === false;
+  }));
+}
+
+/** Оформление ссылок части: стиль Hyperlink из styles.xml (часть не создаётся) или цвет с подчёркиванием */
+function linkProps (ctx) {
+  if (ctx.job.linkProps === undefined) {
+    var _style = ctx.styles.find('Hyperlink', 'character', 'Hyperlink');
+    ctx.job.linkProps = _style !== null ? [{ name : 'w:rStyle', xml : '<w:rStyle w:val="' + escapeText(_style) + '"/>' }] : LINK_RPR;
+  }
+  return ctx.job.linkProps;
+}
+
 var INLINES = {
-  text : function (inline, rPr) {
+  text : function (inline, rPr, ctx) {
     var _content = textXml(inline.text);
-    return _content === '' ? '' : '<w:r>' + rPrXml(mergeRPr(rPr, inline.marks)) + _content + '</w:r>';
+    return _content === '' ? '' : '<w:r>' + rPrXml(withLink(mergeRPr(rPr, inline.marks), ctx)) + _content + '</w:r>';
   },
-  break : function (inline, rPr) {
-    return '<w:r>' + rPrXml(rPr) + '<w:br/></w:r>';
+  break : function (inline, rPr, ctx) {
+    return '<w:r>' + rPrXml(withLink(rPr, ctx)) + '<w:br/></w:r>';
   },
-  // ссылка — Task 6 (w:hyperlink); до него — текст ссылки
+  // ссылка: w:hyperlink со связью части; внутри w:hyperlink шаблона (inline) — только текст с оформлением HTML
   link : function (inline, rPr, ctx) {
-    return inlinesXml(inline.children, rPr, ctx);
+    if (ctx.inHyperlink === true || ctx.linkProps !== null) {
+      return inlinesXml(inline.children, rPr, ctx);
+    }
+    ctx.linkProps = linkProps(ctx);
+    var _inner = inlinesXml(inline.children, rPr, ctx);
+    ctx.linkProps = null;
+    if (_inner === '') {
+      return '';
+    }
+    ctx.job.ns.r = true;
+    var _id = ctx.links.link(links.resolveLink(inline.href, ctx.item.defaultUrl));
+    return '<w:hyperlink r:id="' + escapeText(_id) + '">' + _inner + '</w:hyperlink>';
   },
   checkbox : function (inline, rPr, ctx) {
     return checkboxXml(inline.checked === true, rPr, ctx);
   },
-  // изображение — Task 6
-  image : function () {
-    return '';
+  image : function (inline, rPr, ctx) {
+    var _image = ctx.images.get(inline.src);
+    return _image === undefined || _image === null ? '' : imageXml(inline, _image, rPr, ctx);
   }
 };
 
+/**
+ * Размер изображения в EMU: width/height в px (96 dpi); задан один — второй по пропорциям; ни одного — ширина
+ * 5 см с пропорциями
+ */
+function imageEmu (inline, image) {
+  var _w = inline.width;
+  var _h = inline.height;
+  if (_w !== null && _h !== null) {
+    return { cx : Math.round(_w * EMU_PER_PX), cy : Math.round(_h * EMU_PER_PX) };
+  }
+  if (_w !== null) {
+    return { cx : Math.round(_w * EMU_PER_PX), cy : Math.round(_w * EMU_PER_PX * image.height / image.width) };
+  }
+  if (_h !== null) {
+    return { cx : Math.round(_h * EMU_PER_PX * image.width / image.height), cy : Math.round(_h * EMU_PER_PX) };
+  }
+  return { cx : DEFAULT_IMAGE_WIDTH, cy : Math.round(DEFAULT_IMAGE_WIDTH * image.height / image.width) };
+}
+
+/** Следующий id картинки части (wp:docPr, pic:cNvPr): выше максимума исходной части */
+function nextDrawingId (job) {
+  if (job.drawingId === undefined) {
+    var _max = 0;
+    job.xml.replace(/<(?:wp:docPr|pic:cNvPr)(?:\s[^>]*?)?\sid\s*=\s*["'](\d+)/g, function (all, id) {
+      _max = Math.max(_max, parseInt(id, 10));
+      return all;
+    });
+    job.drawingId = _max;
+  }
+  return ++job.drawingId;
+}
+
+/** Изображение «в тексте»: w:r с w:drawing/wp:inline, a:blip — на media-файл (job.media) через связь части */
+function imageXml (inline, image, rPr, ctx) {
+  var _size = imageEmu(inline, image);
+  var _id = nextDrawingId(ctx.job);
+  var _ref = escapeText(ctx.links.ref(ctx.media.path(image)));
+  var _ext = 'cx="' + _size.cx + '" cy="' + _size.cy + '"';
+  ctx.job.ns.r = true;
+  ctx.job.ns.wp = true;
+  return '<w:r>' + rPrXml(rPr) + '<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent ' + _ext + '/>'
+    + '<wp:docPr id="' + _id + '" name="Picture ' + _id + '"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="' + A_NS + '" noChangeAspect="1"/>'
+    + '</wp:cNvGraphicFramePr><a:graphic xmlns:a="' + A_NS + '"><a:graphicData uri="' + PIC_NS + '"><pic:pic xmlns:pic="' + PIC_NS + '">'
+    + '<pic:nvPicPr><pic:cNvPr id="' + _id + '" name="Picture ' + _id + '"/><pic:cNvPicPr/></pic:nvPicPr>'
+    + '<pic:blipFill><a:blip r:embed="' + _ref + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+    + '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext ' + _ext + '/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+    + '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+}
+
 /** Флажок Word (кликабельный): w:sdt с w14:checkbox и символом ☒/☐; часть получит объявление w14 */
 function checkboxXml (checked, rPr, ctx) {
-  ctx.job.w14 = true;
+  ctx.job.ns.w14 = true;
   var _rPr = rPrXml(rPr);
   return '<w:sdt><w:sdtPr>' + _rPr + '<w14:checkbox><w14:checked w14:val="' + (checked === true ? '1' : '0') + '"/>'
     + '<w14:checkedState w14:val="2612" w14:font="MS Gothic"/><w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/>'
@@ -337,13 +439,6 @@ function spacerXml (runs, ctx) {
   }), runs, ctx);
 }
 
-/** Блоки, которые до Task 6 выводятся абзацами с их текстом */
-function nestedXml (blocks, ctx) {
-  return blocks.map(function (block) {
-    return blockXml(block, ctx);
-  }).join('');
-}
-
 /** Пункт списка: первый абзац — с номером (numPr) или флажком, прочие блоки — с отступом пункта */
 function itemXml (item, numPr, ctx) {
   var _runs = '';
@@ -364,7 +459,7 @@ var BLOCKS = {
   },
   // заголовок: стиль Heading1…6 (или <headingtheme>1…6); в пункте списка — оформление заголовка в абзаце пункта
   heading : function (block, ctx) {
-    if (ctx.depth > 0) {
+    if (ctx.level > 0) {
       var _rPr = ctx.rPr.concat([
         { name : 'w:b', xml : '<w:b/>' },
         { name : 'w:sz', xml : '<w:sz w:val="' + parts.HEADING_SIZES[block.level - 1] + '"/>' }
@@ -379,7 +474,7 @@ var BLOCKS = {
   },
   // pre: строки — через w:br (оформление Courier New уже в marks)
   pre : function (block, ctx) {
-    var _break = INLINES.break(null, ctx.rPr);
+    var _break = INLINES.break(null, ctx.rPr, ctx);
     return writePara(block, block.lines.map(function (line) {
       return inlinesXml(line, ctx.rPr, ctx);
     }).join(_break), ctx, null);
@@ -388,11 +483,11 @@ var BLOCKS = {
   hr : function (block, ctx) {
     return writePara(block, '', ctx, null, HR_PPR);
   },
-  // список: свой w:num (номера не сквозные между списками и ячейками), уровень — глубина вложенности списков
+  // список: свой w:num (номера не сквозные между списками и ячейками), уровень — вложенность списков в контейнере
   list : function (block, ctx) {
-    var _saved = { indent : ctx.indent, depth : ctx.depth, quoteStyle : ctx.quoteStyle };
+    var _saved = { indent : ctx.indent, depth : ctx.depth, level : ctx.level, quoteStyle : ctx.quoteStyle };
     var _themed = block.quote > 0 && ctx.options.quotetheme !== null;
-    var _level = Math.min(_saved.depth, parts.LEVELS - 1);
+    var _level = Math.min(_saved.level, parts.LEVELS - 1);
     var _numId = null;
     var _out = '';
     block.items.forEach(function (item) {
@@ -406,22 +501,19 @@ var BLOCKS = {
       // quote блоков пункта считается от 0 — отступ цитаты списка входит в отступ пункта
       ctx.indent = _saved.indent + (_themed === true ? 0 : QUOTE_INDENT * block.quote) + parts.LEVEL_INDENT;
       ctx.depth = _saved.depth + 1;
+      ctx.level = _saved.level + 1;
       ctx.quoteStyle = _themed === true ? ctx.styles.ensure(ctx.options.quotetheme, 'quote') : null;
       _out += itemXml(item, _numPr, ctx);
       ctx.indent = _saved.indent;
       ctx.depth = _saved.depth;
+      ctx.level = _saved.level;
       ctx.quoteStyle = _saved.quoteStyle;
     });
     return _out;
   },
-  // таблицы — Task 6
+  // таблица — lib/html-docx-table.js
   table : function (block, ctx) {
-    var _caption = block.caption !== null ? paraXml(ctx.pPr, inlinesXml(block.caption, ctx.rPr, ctx), ctx) : '';
-    return _caption + block.rows.map(function (row) {
-      return row.cells.map(function (cell) {
-        return nestedXml(cell.blocks, ctx);
-      }).join('');
-    }).join('');
+    return table.tableXml(block, ctx, TABLE_API);
   }
 };
 
@@ -461,6 +553,14 @@ function blocksXml (blocks, ctx) {
   return _out;
 }
 
+// помощники для html-docx-table.js (взаимная зависимость модулей — через объект, а не require)
+var TABLE_API = {
+  blocksXml  : blocksXml,
+  writePara  : writePara,
+  inlinesXml : inlinesXml,
+  spacerXml  : spacerXml
+};
+
 /** w:sectPr метки — в последний абзац созданного XML (R7); если последним стоит не абзац — отдельным абзацем */
 function appendSectPr (xml, sectPr) {
   if (sectPr === null) {
@@ -487,9 +587,11 @@ function appendSectPr (xml, sectPr) {
 
 /**
  * Контекст абзаца для записи блоков: свойства абзаца и текста метки
- * @return {Object} { job, item, options, images, pPr, sectPr, rPr, pageBreak, numbering, styles, indent, depth, lead,
- *                   quoteStyle }
- *   pPr — дочерние w:pPr метки без w:sectPr; sectPr — XML w:sectPr метки или null; rPr — дочерние w:rPr w:r метки
+ * @return {Object} { job, item, options, images, links, media, pPr, sectPr, rPr, pageBreak, numbering, styles, indent,
+ *                   depth, level, lead, quoteStyle, width, linkProps, inHyperlink }
+ *   pPr — дочерние w:pPr метки без w:sectPr; sectPr — XML w:sectPr метки или null; rPr — дочерние w:rPr w:r метки;
+ *   images — Map(src → { buffer, type, width, height } | null); links — связи части { ref(mediaPath), link(url) };
+ *   media — media-файлы отчёта { path(image) }
  */
 function paragraphCtx (xml, p, wr, item, job) {
   var _pPr = childNamed(p, 'w:pPr');
@@ -499,6 +601,8 @@ function paragraphCtx (xml, p, wr, item, job) {
     item       : item,
     options    : item.options,
     images     : job.images,
+    links      : job.links,
+    media      : job.media,
     pPr        : kids(xml, _pPr, ['w:sectPr']),
     sectPr     : _sect !== null ? xml.slice(_sect.start, _sect.end) : null,
     rPr        : kids(xml, childNamed(wr, 'w:rPr')),
@@ -506,11 +610,18 @@ function paragraphCtx (xml, p, wr, item, job) {
     // общие части отчёта (numbering.xml, styles.xml)
     numbering  : job.parts.numbering,
     styles     : job.parts.styles,
-    // контейнер (пункт списка): прямой отступ слева, глубина списков, номер/флажок первого абзаца, стиль цитаты
-    indent     : 0,
-    depth      : 0,
-    lead       : null,
-    quoteStyle : null
+    // контейнер (пункт списка, ячейка): прямой отступ слева, глубина контейнеров (> 0 — не на месте метки: без
+    // пустых абзацев, свойства метки по R7), уровень списков (ячейка начинает с 0), номер/флажок первого абзаца,
+    // стиль цитаты, ширина для вложенной таблицы (null — ширина текста раздела)
+    indent      : 0,
+    depth       : 0,
+    level       : 0,
+    lead        : null,
+    quoteStyle  : null,
+    width       : null,
+    // оформление текста внутри ссылки; метка inline внутри w:hyperlink шаблона
+    linkProps   : null,
+    inHyperlink : false
   };
 }
 
@@ -635,7 +746,8 @@ function writeParagraph (pXml, job) {
     }
     var _ctx = paragraphCtx(_xml, _p, _token.el.parent, _item, job);
     if (_item.options.inline === true) {
-      var _runs = inlinesXml(model.inlineOnly(_item.value, _item.source), _ctx.rPr, _ctx);
+      _ctx.inHyperlink = xmltree.closest(_token.el, ['w:hyperlink']) !== null;
+      var _runs = inlinesXml(model.content(_item), _ctx.rPr, _ctx);
       if (_runs === '') {
         _xml = _strip;
         continue;
@@ -644,8 +756,7 @@ function writeParagraph (pXml, job) {
       _xml = _parts.head + _runs + _parts.tail;
       continue;
     }
-    var _blocks = model.parse(_item.value, _item.source);
-    var _body = blocksXml(_blocks, _ctx);
+    var _body = blocksXml(model.content(_item), _ctx);
     if (_body === '') {
       _xml = _strip;
       continue;
@@ -653,6 +764,10 @@ function writeParagraph (pXml, job) {
     var _split = splitParagraph(_xml, _p, _token);
     _out += (_split.before !== null ? _split.before : '');
     if (_split.after === null) {
+      // таблица последней (nospace) — абзац после неё: ячейка и колонтитул заканчиваются w:p
+      if (_body.slice(-8) === '</w:tbl>') {
+        _body += spacerXml('', _ctx);
+      }
       return _out + appendSectPr(_body, _ctx.sectPr);
     }
     _out += _body;
@@ -661,29 +776,35 @@ function writeParagraph (pXml, job) {
 }
 
 /**
- * Объявить пространство имён w14 на корне части (если флажки записаны и его там нет). Правки абзацев не задевают
- * открывающий тег корня — его позиция в новом XML та же, что в исходном (job.root)
+ * Объявить на корне части пространства имён, которые использует записанная разметка (job.ns: w14 — флажки, r —
+ * ссылки и изображения, wp — изображения), если их там нет. Правки абзацев не задевают открывающий тег корня — его
+ * позиция в новом XML та же, что в исходном (job.root)
  */
-function declareW14 (xml, job) {
+function declareNs (xml, job) {
   var _top = job.root.children.length > 0 ? job.root.children[0] : null;
-  if (job.w14 !== true || _top === null) {
+  if (_top === null) {
     return xml;
   }
   var _tag = xml.slice(_top.start, _top.openEnd);
-  if (/\sxmlns:w14\s*=/.test(_tag) === true) {
-    return xml;
-  }
-  return xml.slice(0, _top.start) + xmltree.putAttr(_tag, 'xmlns:w14', W14_NS) + xml.slice(_top.openEnd);
+  var _new = _tag;
+  Object.keys(NAMESPACES).forEach(function (prefix) {
+    if (job.ns[prefix] === true && new RegExp('\\sxmlns:' + prefix + '\\s*=').test(_new) === false) {
+      _new = xmltree.putAttr(_new, 'xmlns:' + prefix, NAMESPACES[prefix]);
+    }
+  });
+  return _new === _tag ? xml : xml.slice(0, _top.start) + _new + xml.slice(_top.openEnd);
 }
 
 /**
  * Записать HTML на месте жетонов части DOCX
- * @param  {Object} job  { template, file, xml, root, tokens, registry, options, images, tokenRegex, parts }
- *                       parts — общие части отчёта (html-docx-parts.create), сохраняет вызывающий
+ * @param  {Object} job  { template, file, xml, root, tokens, registry, options, images, links, media, tokenRegex,
+ *                       parts } — parts — общие части отчёта (html-docx-parts.create), сохраняет вызывающий (как и
+ *                       links — связи части, и media — media-файлы отчёта)
  * @return {String}      новый XML части
  */
 function write (job) {
-  return declareW14(writeParagraphs(job), job);
+  job.ns = {};
+  return declareNs(writeParagraphs(job), job);
 }
 
 function writeParagraphs (job) {

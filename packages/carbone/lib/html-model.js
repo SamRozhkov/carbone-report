@@ -1054,7 +1054,72 @@ function inlineOnly (html, source) {
   return _buffer.finish();
 }
 
+/**
+ * Модель значения записи реестра :html (разбирается один раз и запоминается в item.content): блоки parse или, при
+ * параметре inline, Inline[] inlineOnly
+ * @param  {Object} item  { value, options, source }
+ * @return {Array}
+ */
+function content (item) {
+  if (item.content === undefined) {
+    item.content = item.options !== null && item.options !== undefined && item.options.inline === true
+      ? inlineOnly(item.value, item.source) : parse(item.value, item.source);
+  }
+  return item.content;
+}
+
+/**
+ * Адреса изображений модели (блоки или Inline[]) — в порядке документа
+ * @param  {Array}   list  блоки или Inline[]
+ * @param  {Function} fn   fn(src) для каждого img
+ */
+function eachImage (list, fn) {
+  var _inlines = function (inlines) {
+    for (var i = 0; i < inlines.length; i++) {
+      if (inlines[i].type === 'image') {
+        fn(inlines[i].src);
+      }
+      else if (inlines[i].type === 'link') {
+        _inlines(inlines[i].children);
+      }
+    }
+  };
+  var _blocks = function (blocks) {
+    for (var i = 0; i < blocks.length; i++) {
+      var _block = blocks[i];
+      if (_block.inlines !== undefined) {
+        _inlines(_block.inlines);
+      }
+      else if (_block.type === 'pre') {
+        _block.lines.forEach(_inlines);
+      }
+      else if (_block.type === 'list') {
+        _block.items.forEach(function (item) {
+          _blocks(item.blocks);
+        });
+      }
+      else if (_block.type === 'table') {
+        if (_block.caption !== null) {
+          _inlines(_block.caption);
+        }
+        _block.rows.forEach(function (row) {
+          row.cells.forEach(function (cell) {
+            _blocks(cell.blocks);
+          });
+        });
+      }
+      else if (_block.type !== undefined && _block.type !== 'hr') {
+        // Inline[] (режим inline)
+        _inlines([_block]);
+      }
+    }
+  };
+  _blocks(list);
+}
+
 module.exports = {
+  content      : content,
+  eachImage    : eachImage,
   parseOptions : parseOptions,
   parse        : parse,
   inlineOnly   : inlineOnly,

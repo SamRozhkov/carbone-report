@@ -42,6 +42,8 @@ var HEADING_SIZES = [40, 32, 28, 26, 24, 22];
 // отступ созданного стиля цитаты (twips) — как один уровень blockquote
 var QUOTE_INDENT = 600;
 var TABLE_BORDER = ' w:val="single" w:sz="4" w:space="0" w:color="000000"/>';
+// ширина текста раздела по умолчанию (twips): A4 (11906) без полей 2 см (1134) с каждой стороны
+var DEFAULT_TEXT_WIDTH = 9638;
 
 /** Значение атрибута name в тексте открывающего тега или null */
 function attrOf (tag, name) {
@@ -85,9 +87,10 @@ function mainPart (template) {
 
 /**
  * Часть пакета по связи основного документа (создаётся при отсутствии вместе со связью и типом)
- * @return {Object} файл шаблона { name, data }
+ * @param  {Boolean} [create]  false — не создавать: нет части — null
+ * @return {Object|null} файл шаблона { name, data }
  */
-function openPart (template, kind) {
+function openPart (template, kind, create) {
   var _def = PARTS[kind];
   var _main = mainPart(template);
   var _dir = path.posix.dirname(_main);
@@ -106,6 +109,9 @@ function openPart (template, kind) {
   }
   var _name = _target === null ? path.posix.join(_dir, _def.name)
     : (_target[0] === '/' ? _target.slice(1) : path.posix.normalize(path.posix.join(_dir, _target)));
+  if (create === false && formats.topFile(template, _name) === undefined) {
+    return null;
+  }
   if (_target === null) {
     if (_rels === undefined) {
       _rels = formats.addFile(template, { name : _relsName, data : PROLOG + '<Relationships xmlns="' + formats.RELS_NS + '"></Relationships>', isMarked : false, parent : '' });
@@ -223,8 +229,12 @@ function styles (template) {
   var _names = null;
   var _defaultTable = null;
   var _added = '';
-  var _open = function () {
-    _file = openPart(template, 'styles');
+  // create false — только прочитать существующую часть (не создавать styles.xml ради поиска стиля)
+  var _open = function (create) {
+    _file = openPart(template, 'styles', create);
+    if (_file === null) {
+      return;
+    }
     _ids = new Set();
     _names = new Map();
     // самозакрытый w:style — первым, иначе вторая ветка захватила бы его вместе со следующим стилем
@@ -249,7 +259,7 @@ function styles (template) {
   };
   var _ensureOpen = function () {
     if (_file === null) {
-      _open();
+      _open(true);
     }
   };
   return {
@@ -284,6 +294,26 @@ function styles (template) {
       _ids.add(styleId);
       return styleId;
     },
+    /**
+     * Стиль, который уже есть в styles.xml (часть не создаётся): по styleId или по имени
+     * @param  {String} styleId
+     * @param  {String} type     w:type стиля (paragraph, character, table)
+     * @param  {String} name     имя стиля (w:name, без учёта регистра)
+     * @return {String|null}     styleId или null
+     */
+    find : function (styleId, type, name) {
+      if (_file === null) {
+        _open(false);
+      }
+      if (_file === null) {
+        return null;
+      }
+      if (_ids.has(styleId) === true) {
+        return styleId;
+      }
+      var _byName = _names.get(type + ':' + name.toLowerCase());
+      return _byName !== undefined ? _byName : null;
+    },
     /** Стиль таблиц по умолчанию документа (w:default) или null */
     defaultTable : function () {
       _ensureOpen();
@@ -297,17 +327,59 @@ function styles (template) {
   };
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Ширина текста раздела
+
+/** Атрибут name элемента tag (первого) в xml как число или null */
+function numberAttr (xml, tag, name) {
+  var _match = new RegExp('<' + tag + '\\b[^>]*>').exec(xml);
+  if (_match === null) {
+    return null;
+  }
+  var _value = parseInt(attrOf(_match[0], name), 10);
+  return Number.isFinite(_value) === true ? _value : null;
+}
+
+/**
+ * Ширина текста раздела (twips): w:pgSz w:w − w:pgMar w:left − w:right последнего w:sectPr основного документа;
+ * без w:pgSz w:w (или при ширине не больше 0) — DEFAULT_TEXT_WIDTH (A4 с полями 2 см)
+ */
+function textWidth (template) {
+  var _file = formats.topFile(template, mainPart(template));
+  var _xml = _file !== undefined && typeof _file.data === 'string' ? _file.data : '';
+  var _at = _xml.lastIndexOf('<w:sectPr');
+  if (_at === -1) {
+    return DEFAULT_TEXT_WIDTH;
+  }
+  var _end = _xml.indexOf('</w:sectPr>', _at);
+  var _sect = _xml.slice(_at, _end === -1 ? _xml.length : _end);
+  var _page = numberAttr(_sect, 'w:pgSz', 'w:w');
+  if (_page === null) {
+    return DEFAULT_TEXT_WIDTH;
+  }
+  var _width = _page - (numberAttr(_sect, 'w:pgMar', 'w:left') || 0) - (numberAttr(_sect, 'w:pgMar', 'w:right') || 0);
+  return _width > 0 ? _width : DEFAULT_TEXT_WIDTH;
+}
+
 /**
  * Общие части DOCX одного отчёта
  * @param  {Object} template  собранный шаблон { files }
- * @return {Object}           { numbering : { add }, styles : { ensure, defaultTable }, save() }
+ * @return {Object}           { numbering : { add }, styles : { ensure, find, defaultTable }, textWidth(), save() }
  */
 function create (template) {
   var _numbering = numbering(template);
   var _styles = styles(template);
+  var _width = null;
   return {
     numbering : _numbering,
     styles    : _styles,
+    // ширина текста раздела — один раз на отчёт
+    textWidth : function () {
+      if (_width === null) {
+        _width = textWidth(template);
+      }
+      return _width;
+    },
     save      : function () {
       _numbering.save();
       _styles.save();

@@ -7,7 +7,11 @@
 //      области частного использования (ключ — случайный на рендер: жетон из данных отчёта не совпадёт с ним);
 //   3. finish — после сборки всех файлов (renderBuffer, до диаграмм и изображений): жетоны файлов верхнего уровня
 //      заменяются разметкой — DOCX: lib/html-docx.js, ODT: lib/html-odt.js (Task 7; до него — текст модели),
-//      HTML-шаблон: значение как есть. Жетон без значения убирается.
+//      HTML-шаблон: значение как есть. Жетон без значения убирается. До записи загружаются изображения img всех
+//      жетонов (уникальные src, не больше 4 одновременно, media.loadImage — те же форматы, лимиты и белый список, что
+//      у картинок-заглушек; общий счётчик 50 МБ — options.__media.total). R5: превышение лимитов — ошибка шаблона,
+//      прочие ошибки (неверный data URI, SVG, хост вне списка, сбой сети) — картинка пропускается, предупреждение в
+//      options.warnings.
 // Старые renderXML/render() шаг finish не выполняют: :html работает только через renderBuffer.
 
 var crypto = require('crypto');
@@ -16,6 +20,8 @@ var xmltree = require('./xmltree');
 var model = require('./html-model');
 var htmlDocx = require('./html-docx');
 var htmlDocxParts = require('./html-docx-parts');
+var media = require('./media');
+var mediaFormats = require('./media-formats');
 
 // жетон: символы частного использования, отличные от агрегаторов (U+E000/U+E001), drop/keep (U+E010/U+E011),
 // color (U+E012/U+E013), изображений (U+E020/U+E021) и ссылок (U+E030…U+E034)
@@ -25,6 +31,8 @@ var TOKEN_REGEX = /h([0-9a-f]{12})i(\d+)/g;
 
 // форматы, где работает :html; прочие — ошибка шаблона
 var SUPPORTED = ['docx', 'odt', 'html', 'xhtml'];
+// форматы, где img из HTML вставляется изображением (ODT — Task 7)
+var IMAGE_FORMATS = ['docx'];
 
 var MSG = {
   outside : 'html ставится в текст абзаца.',
@@ -266,6 +274,63 @@ function writeOdtText (job) {
 }
 
 /**
+ * Изображения img из HTML (R5): уникальные src, не больше media.CONCURRENCY загрузок одновременно
+ * @param  {Map}    sources  src → метка (первая, где он встретился) — для ошибок и предупреждений
+ * @param  {Object} options  опции рендера (imageUrlAllowlist, imageUrlTimeoutMs, warnings, __media)
+ * @return {Promise<Map>}    src → { buffer, type, width, height } или null (картинка пропускается)
+ */
+function loadImages (sources, options) {
+  var _srcs = Array.from(sources.keys());
+  return media.loadAll(_srcs, media.CONCURRENCY, function (src, i, signal) {
+    var _item = { value : src, kind : 'image', source : sources.get(src), strictLimits : true };
+    return media.loadImage(_item, options, signal).then(function (image) {
+      // общий лимит отчёта (вместе с картинками-заглушками media.finish)
+      media.countTotal(options, image, _item.source);
+      return image;
+    }, function (error) {
+      if (error !== null && typeof error === 'object' && error.limit === true) {
+        throw error;
+      }
+      if (Array.isArray(options.warnings) === true) {
+        var _message = String(error !== null && typeof error === 'object' && error.message !== undefined ? error.message : error);
+        options.warnings.push('изображение не вставлено: ' + _message.replace(/ Source: "[\s\S]*"$/, '') + ' Метка: ' + _item.source);
+      }
+      return null;
+    });
+  }).then(function (images) {
+    var _map = new Map();
+    _srcs.forEach(function (src, i) {
+      _map.set(src, images[i]);
+    });
+    return _map;
+  });
+}
+
+/** Связи части, которые создаются при первом обращении (без ссылок и изображений .rels части не трогается) */
+function lazyLinks (fmt, template, partName) {
+  var _links = null;
+  var _get = function () {
+    if (_links === null) {
+      _links = fmt.links(template, partName);
+    }
+    return _links;
+  };
+  return {
+    ref : function (mediaPath) {
+      return _get().ref(mediaPath);
+    },
+    link : function (url) {
+      return _get().link(url);
+    },
+    save : function () {
+      if (_links !== null) {
+        _links.save();
+      }
+    }
+  };
+}
+
+/**
  * Заменить жетоны :html после сборки всех файлов (renderBuffer, после walkFiles, до диаграмм и изображений)
  * @param  {Object} template  собранный шаблон { files, extension, reportName }
  * @param  {Object} options   опции рендера (реестр options.__html)
@@ -289,8 +354,7 @@ function finish (template, options) {
         throw templateError(MSG.outside, _registry.items[_inName[0].id].source);
       }
     }
-    // numbering.xml и styles.xml — общие для тела и колонтитулов, записываются после всех частей
-    var _parts = _ext === 'docx' ? htmlDocxParts.create(template) : null;
+    var _jobs = [];
     // копия списка: части пакета могут добавлять файлы по ходу
     template.files.slice().forEach(function (file) {
       if ((file.parent !== '' && file.parent !== undefined) || typeof file.data !== 'string' || file.data.indexOf(OPEN) === -1) {
@@ -306,7 +370,7 @@ function finish (template, options) {
       if (_parsed.tokens.length === 0) {
         return;
       }
-      var _job = {
+      _jobs.push({
         template   : template,
         file       : file,
         xml        : file.data,
@@ -314,15 +378,56 @@ function finish (template, options) {
         tokens     : _parsed.tokens,
         registry   : _registry,
         options    : options,
-        images     : new Map(),
+        images     : null,
+        links      : null,
+        media      : null,
         tokenRegex : TOKEN_REGEX,
-        parts      : _parts
-      };
-      file.data = _ext === 'docx' ? htmlDocx.write(_job) : writeOdtText(_job);
+        parts      : null
+      });
     });
-    if (_parts !== null) {
-      _parts.save();
+    if (_jobs.length === 0) {
+      return;
     }
+    // img всех жетонов: модель разбирается здесь один раз (model.content запоминает её в записи реестра)
+    var _sources = new Map();
+    if (IMAGE_FORMATS.indexOf(_ext) !== -1) {
+      _jobs.forEach(function (job) {
+        job.tokens.forEach(function (token) {
+          var _item = _registry.items[token.id];
+          if (_item.value === '') {
+            return;
+          }
+          model.eachImage(model.content(_item), function (src) {
+            if (_sources.has(src) === false) {
+              _sources.set(src, _item.source);
+            }
+          });
+        });
+      });
+    }
+    return loadImages(_sources, options).then(function (images) {
+      var _fmt = mediaFormats.formatOf(_ext);
+      // numbering.xml и styles.xml — общие для тела и колонтитулов, записываются после всех частей; media-файлы —
+      // общие для отчёта
+      var _parts = _ext === 'docx' ? htmlDocxParts.create(template) : null;
+      var _store = _fmt !== null ? mediaFormats.storeMedia(template, _fmt) : null;
+      _jobs.forEach(function (job) {
+        job.images = images;
+        job.parts = _parts;
+        job.media = _store;
+        job.links = _fmt !== null ? lazyLinks(_fmt, template, job.file.name) : null;
+        job.file.data = _ext === 'docx' ? htmlDocx.write(job) : writeOdtText(job);
+        if (job.links !== null) {
+          job.links.save();
+        }
+      });
+      if (_store !== null) {
+        _store.register();
+      }
+      if (_parts !== null) {
+        _parts.save();
+      }
+    });
   });
 }
 

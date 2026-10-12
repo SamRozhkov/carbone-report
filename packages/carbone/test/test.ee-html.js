@@ -500,3 +500,262 @@ describe('html: модель', function () {
     });
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// :html в DOCX (Task 4): конвейер и текст; сборка через renderBuffer — шаг finish выполняется только там
+
+const carbone = require('../lib/index');
+const { buildDocx, readEntry, zipBuffer } = require('./golden-lib');
+
+const W_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+const COURIER = '<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Courier New"/>';
+const JC = '<w:jc w:val="center"/>';
+const SZ = '<w:sz w:val="28"/>';
+
+// XML правильно вложен, сущности допустимы, жетонов (символы частного использования) не осталось
+function assertWellFormed (xml) {
+  const stack = [];
+  const re = /<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<(\/?)([^\s/>!?]+)(?:[^>"']|"[^"]*"|'[^']*')*?(\/?)>/g;
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    if (m[2] === undefined || m[3] === '/') continue;
+    if (m[1] === '/') assert.strictEqual(stack.pop(), m[2], 'закрывающий </' + m[2] + '> в ' + xml);
+    else stack.push(m[2]);
+  }
+  assert.deepStrictEqual(stack, [], 'незакрытые теги в ' + xml);
+  const text = xml.replace(re, '');
+  assert.ok(!/[<>]/.test(text), 'символ < или > вне тега в ' + xml);
+  assert.ok(!/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/.test(xml), 'неверная сущность в ' + xml);
+  assert.ok(!/[-]/.test(xml), 'жетон остался в ' + xml);
+  assert.ok(!/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(xml), 'недопустимый символ XML в ' + xml);
+}
+
+// ожидаемая разметка
+const wR = (text, rPr) => '<w:r>' + (rPr ? '<w:rPr>' + rPr + '</w:rPr>' : '') + '<w:t xml:space="preserve">' + text + '</w:t></w:r>';
+const wBR = (rPr) => '<w:r>' + (rPr ? '<w:rPr>' + rPr + '</w:rPr>' : '') + '<w:br/></w:r>';
+const wP = (inner, pPr) => '<w:p>' + (pPr ? '<w:pPr>' + pPr + '</w:pPr>' : '') + inner + '</w:p>';
+const wSP = (pPr) => (pPr ? '<w:p><w:pPr>' + pPr + '</w:pPr></w:p>' : '<w:p/>');
+// абзац шаблона с меткой
+const mp = (text, pPr, rPr) => '<w:p>' + (pPr ? '<w:pPr>' + pPr + '</w:pPr>' : '') + '<w:r>' + (rPr ? '<w:rPr>' + rPr + '</w:rPr>' : '')
+  + '<w:t>' + text + '</w:t></w:r></w:p>';
+
+const BODY_END = '<w:p/><w:sectPr/></w:body>';
+
+async function renderDocx (raws, data, files, options) {
+  const tpl = await buildDocx(raws.map(() => '<<RAW>>').join('\n'), raws, '', files);
+  return carbone.renderBuffer(tpl, 'docx', data, options || {});
+}
+
+// содержимое w:body без хвоста buildDocx
+async function bodyOf (raws, data, options) {
+  const xml = await readEntry(await renderDocx(raws, data, undefined, options), 'word/document.xml');
+  assertWellFormed(xml);
+  return xml.slice(xml.indexOf('<w:body>') + 8, xml.lastIndexOf(BODY_END));
+}
+
+async function htmlBody (html, marker, pPr, rPr) {
+  return bodyOf([mp(marker || '{d.h:html}', pPr, rPr)], { h: html });
+}
+
+async function rejection (promise) {
+  try {
+    await promise;
+  }
+  catch (e) {
+    return e.message;
+  }
+  throw new Error('ожидалась ошибка');
+}
+
+function renderXml (extension, xml, data) {
+  return new Promise((resolve, reject) => carbone.renderXML(xml, data, { extension }, (err, res) => err ? reject(err) : resolve(res)));
+}
+
+describe('html: DOCX — разметка текста', function () {
+  const one = [
+    ['b', '<w:b/>'], ['strong', '<w:b/>'], ['i', '<w:i/>'], ['em', '<w:i/>'], ['u', '<w:u w:val="single"/>'],
+    ['s', '<w:strike/>'], ['del', '<w:strike/>'], ['sup', '<w:vertAlign w:val="superscript"/>'],
+    ['sub', '<w:vertAlign w:val="subscript"/>'], ['mark', '<w:highlight w:val="yellow"/>'],
+    ['code', COURIER], ['kbd', COURIER], ['samp', COURIER]
+  ];
+  for (const [tag, rPr] of one) {
+    it('<' + tag + '>', async function () {
+      assert.strictEqual(await htmlBody('<' + tag + '>x</' + tag + '>'), wP(wR('x', rPr)) + wSP());
+    });
+  }
+
+  it('вложенные теги: порядок w:rPr по схеме', async function () {
+    assert.strictEqual(await htmlBody('<u><s><i><b>x</b></i></s></u>'), wP(wR('x', '<w:b/><w:i/><w:strike/><w:u w:val="single"/>')) + wSP());
+    assert.strictEqual(await htmlBody('<sup><mark><code>x</code></mark></sup>'),
+      wP(wR('x', COURIER + '<w:highlight w:val="yellow"/><w:vertAlign w:val="superscript"/>')) + wSP());
+  });
+
+  it('color и background-color', async function () {
+    assert.strictEqual(await htmlBody('<span style="color:red;background-color:#00ff00">x</span>'),
+      wP(wR('x', '<w:color w:val="FF0000"/><w:shd w:val="clear" w:fill="00FF00"/>')) + wSP());
+  });
+
+  it('текст по частям: оформление меняется внутри абзаца, экранирование & < > "', async function () {
+    assert.strictEqual(await htmlBody('a &amp; <b>b &lt;"&gt;</b> c'),
+      wP(wR('a &amp; ') + wR('b &lt;&quot;&gt;', '<w:b/>') + wR(' c')) + wSP());
+  });
+
+  it('p и br', async function () {
+    assert.strictEqual(await htmlBody('<p>a</p><p>b<br>c</p>'), wP(wR('a')) + wSP() + wP(wR('b') + wBR() + wR('c')) + wSP());
+  });
+
+  it('pre: табуляция — w:tab, пробелы сохраняются', async function () {
+    assert.strictEqual(await htmlBody('<pre>a\tb\n  c</pre>'),
+      wP('<w:r><w:rPr>' + COURIER + '</w:rPr><w:t xml:space="preserve">a</w:t><w:tab/><w:t xml:space="preserve">b</w:t></w:r>'
+        + wBR() + wR('  c', COURIER)) + wSP());
+  });
+
+  it('прочие блоки (до Task 5–6) — абзацы с их текстом', async function () {
+    const out = await htmlBody('<h1>H</h1><ul><li>x</li></ul><table><tr><td>c</td></tr></table>');
+    assert.ok(out.includes(wR('H')) && out.includes(wR('x')) && out.includes(wR('c')), out);
+  });
+});
+
+describe('html: DOCX — абзац метки', function () {
+  it('метка одна в абзаце: пустые «до» и «после» не создаются', async function () {
+    assert.strictEqual(await htmlBody('<p>a</p>'), wP(wR('a')) + wSP());
+  });
+
+  it('текст до и после метки — в своих абзацах с тем же w:pPr и w:rPr', async function () {
+    assert.strictEqual(await htmlBody('<p>a</p>', 'До {d.h:html} после', JC, SZ),
+      wP(wR('До ', SZ), JC) + wP(wR('a', SZ), JC) + wSP(JC) + wP(wR(' после', SZ), JC));
+  });
+
+  it('метка в своём w:r между другими: соседние w:r остаются, пустой w:r метки не остаётся', async function () {
+    const raw = '<w:p><w:r><w:t>A</w:t></w:r><w:r><w:t>{d.h:html}</w:t></w:r><w:r><w:t>B</w:t></w:r></w:p>';
+    assert.strictEqual(await bodyOf([raw], { h: 'x' }),
+      '<w:p><w:r><w:t>A</w:t></w:r></w:p>' + wP(wR('x')) + wSP() + '<w:p><w:r><w:t>B</w:t></w:r></w:p>');
+  });
+
+  it('две метки в одном абзаце', async function () {
+    assert.strictEqual(await bodyOf([mp('{d.a:html}-{d.b:html}')], { a: 'x', b: 'y' }),
+      wP(wR('x')) + wSP() + wP(wR('-')) + wP(wR('y')) + wSP());
+  });
+
+  it('nospace: без пустых абзацев', async function () {
+    assert.strictEqual(await htmlBody('<p>a</p><p>b</p>', '{d.h:html(nospace)}'), wP(wR('a')) + wP(wR('b')));
+  });
+
+  it('наследование w:rPr метки: шрифт, размер, цвет; свойство метки побеждает', async function () {
+    const rPr = '<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:color w:val="0000FF"/>' + SZ;
+    assert.strictEqual(await htmlBody('<span style="color:red"><b>x</b></span><code>y</code>', null, null, rPr),
+      wP(wR('x', '<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:color w:val="0000FF"/>' + SZ) + wR('y', rPr)) + wSP());
+  });
+
+  it('w:sectPr метки (R7) — только в последнем созданном абзаце', async function () {
+    const sect = '<w:sectPr><w:pgSz w:w="11906"/></w:sectPr>';
+    assert.strictEqual(await htmlBody('<p>a</p><p>b</p>', null, JC + sect),
+      wP(wR('a'), JC) + wSP(JC) + wP(wR('b'), JC) + wSP(JC + sect));
+    assert.strictEqual(await htmlBody('<p>a</p><p>b</p>', '{d.h:html(nospace)}', JC + sect),
+      wP(wR('a'), JC) + wP(wR('b'), JC + sect));
+    assert.strictEqual(await htmlBody('<p>a</p>', 'X{d.h:html}Y', JC + sect),
+      wP(wR('X'), JC) + wP(wR('a'), JC) + wSP(JC) + wP(wR('Y'), JC + sect));
+  });
+
+  it('разрыв страницы до и после блока', async function () {
+    assert.strictEqual(await htmlBody('<p style="break-before: page">a</p><p style="break-after: page">b</p>'),
+      wP('<w:r><w:br w:type="page"/></w:r>' + wR('a')) + wSP() + wP(wR('b')) + wSP() + wP('<w:r><w:br w:type="page"/></w:r>'));
+  });
+
+  it('null, undefined и \'\' — ничего, абзац как у обычной метки', async function () {
+    const plain = await bodyOf([mp('{d.h}')], { h: '' });
+    for (const h of [null, undefined, '']) {
+      assert.strictEqual(await bodyOf([mp('{d.h:html}')], { h }), plain);
+    }
+  });
+
+  it('HTML без содержимого (только script) — абзац метки остаётся пустым', async function () {
+    assert.strictEqual(await htmlBody('<script>x</script>'), await bodyOf([mp('{d.h}')], { h: '' }));
+  });
+
+  it('ячейка таблицы: ячейка заканчивается w:p', async function () {
+    const tpl = await buildDocx('| {d.h:html(nospace)} |');
+    const xml = await readEntry(await carbone.renderBuffer(tpl, 'docx', { h: '<p>a</p><p>b</p>' }, {}), 'word/document.xml');
+    assertWellFormed(xml);
+    assert.ok(xml.includes('</w:tcPr>' + wP(wR('a')) + wP(wR('b')) + '</w:tc>'), xml);
+  });
+
+  it('колонтитул word/header1.xml', async function () {
+    const header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:hdr ' + W_NS + '>' + mp('{d.h:html}') + '</w:hdr>';
+    const out = await renderDocx([mp('тело')], { h: '<b>x</b>' }, { 'word/header1.xml': header });
+    const xml = await readEntry(out, 'word/header1.xml');
+    assertWellFormed(xml);
+    assert.ok(xml.endsWith('<w:hdr ' + W_NS + '>' + wP(wR('x', '<w:b/>')) + wSP() + '</w:hdr>'), xml);
+  });
+
+  it('inline: в том же абзаце, разметка внутри, блоки — текст', async function () {
+    assert.strictEqual(await htmlBody('<p>a <b>b</b></p><h1>c <code>d</code></h1>', 'До {d.h:html(inline)} после', JC, SZ),
+      wP(wR('До ', SZ) + wR('a ', SZ) + wR('b', '<w:b/>' + SZ) + wR(' c d', SZ) + wR(' после', SZ), JC));
+  });
+
+  it('Review Focus 2: мусорный HTML — корректный XML, текст сохранён, скрипт удалён', async function () {
+    const html = '<div>Начало <span class="x">спан</span><script>alert(1)</script> <b><i>x</b></i> &nbsp;&lt; " 😀 a\u0001b <p>незакрыт';
+    const out = await htmlBody(html);
+    assert.ok(!out.includes('alert'), out);
+    for (const s of ['Начало ', 'спан', '&lt;', '&quot;', '😀', ' ', 'ab', 'незакрыт']) {
+      assert.ok(out.includes(s), s + ' в ' + out);
+    }
+  });
+
+  it('{o.preReleaseFeatureIn=…} в шаблоне не мешает', async function () {
+    assert.strictEqual(await bodyOf([mp('{o.preReleaseFeatureIn=5011000}'), mp('{d.h:html}')], { h: 'x' }),
+      '<w:p><w:r><w:t></w:t></w:r></w:p>' + wP(wR('x')) + wSP());
+  });
+
+  it('defaultURL + html (R4): значение не меняется', async function () {
+    assert.strictEqual(await htmlBody('<b>x</b>', '{d.h:defaultURL(\'https://site.ru\'):html}'), wP(wR('x', '<w:b/>')) + wSP());
+  });
+});
+
+describe('html: HTML-шаблон и ODT', function () {
+  it('HTML-шаблон: значение без экранирования', async function () {
+    const out = await carbone.renderBuffer(Buffer.from('<html><body>{d.h:html}|{d.e:html}</body></html>'), 'html', { h: '<b>X</b> & "y"', e: null }, {});
+    assert.strictEqual(out.toString(), '<html><body><b>X</b> & "y"|</body></html>');
+  });
+
+  it('ODT: допускается, жетон не остаётся', async function () {
+    const content = '<?xml version="1.0" encoding="UTF-8"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'
+      + ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text><text:p>{d.h:html}</text:p>'
+      + '</office:text></office:body></office:document-content>';
+    const tpl = await zipBuffer([{ name: 'mimetype', data: 'application/vnd.oasis.opendocument.text' }, { name: 'content.xml', data: content }]);
+    const xml = await readEntry(await carbone.renderBuffer(tpl, 'odt', { h: '<b>x</b> &amp; y' }, {}), 'content.xml');
+    assertWellFormed(xml);
+    assert.ok(xml.includes('x &amp; y'), xml);
+  });
+});
+
+describe('html: ошибки шаблона', function () {
+  it('XLSX, PPTX, ODS, ODP, XML — html не поддерживается', async function () {
+    for (const ext of ['xlsx', 'pptx', 'ods', 'odp', 'xml']) {
+      assert.strictEqual(await rejection(renderXml(ext, '<a>{d.h:html}</a>', { h: 'x' })),
+        'html не поддерживается в ' + ext.toUpperCase() + '. Source: "{d.h:html}"');
+    }
+    assert.strictEqual(await rejection(carbone.renderBuffer(Buffer.from('<a>{d.h:html}</a>'), 'xml', { h: 'x' }, {})),
+      'html не поддерживается в XML. Source: "{d.h:html}"');
+  });
+
+  it('неизвестный параметр — ошибка до сборки, даже если метка не выполняется', async function () {
+    assert.strictEqual(await rejection(renderDocx([mp('{d.h:html(foo)}')], {})), 'html: неизвестный параметр «foo». Source: "{d.h:html(foo)}"');
+  });
+
+  it('жетон в замещающем тексте картинки (R6)', async function () {
+    const drawing = '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1" cy="1"/><wp:docPr id="1" name="p" descr="{d.h:html}"/>'
+      + '</wp:inline></w:drawing></w:r></w:p>';
+    assert.strictEqual(await rejection(renderDocx([drawing], { h: '<b>x</b>' })), 'html ставится в текст абзаца. Source: "{d.h:html}"');
+  });
+
+  it('значение больше 1 МБ', async function () {
+    assert.strictEqual(await rejection(renderDocx([mp('{d.h:html}')], { h: 'a'.repeat(1024 * 1024 + 1) })),
+      'html: значение больше 1 МБ. Source: "{d.h:html}"');
+  });
+
+  it('вложенность глубже 32', async function () {
+    assert.strictEqual(await rejection(renderDocx([mp('{d.h:html}')], { h: '<span>'.repeat(33) + 'x' })),
+      'html: вложенность тегов больше 32. Source: "{d.h:html}"');
+  });
+});

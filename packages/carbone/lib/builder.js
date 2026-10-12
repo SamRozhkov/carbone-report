@@ -7,6 +7,7 @@ var aggregate = require('./aggregate');
 var drop = require('./drop');
 var color = require('./color');
 var media = require('./media');
+var html = require('./html');
 var links = require('./links');
 
 var builder = {
@@ -72,6 +73,8 @@ var builder = {
                 _colorRegistry = color.prepare(_markers, options.extension);
                 // изображения из данных: номера меток __img/imageFit, замена картинок — после сборки отчёта (lib/media.js)
                 media.prepare(_markers, options);
+                // :html: проверка формата и параметров, номера меток; разметка — после сборки отчёта (lib/html.js)
+                html.prepare(_markers, options);
               }
               catch (e) {
                 return callback(e, null);

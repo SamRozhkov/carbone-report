@@ -99,8 +99,8 @@ function oneOf (list, upper) {
   };
 }
 
-// метки, которые не становятся метками изображения: удаление элемента, условные блоки, цвет, set
-var NOT_IMAGE_MARKER = /:\s*(?:__img|drop|keep|showBegin|showEnd|hideBegin|hideEnd|color|set)\b/;
+// метки, которые не становятся метками изображения: удаление элемента, условные блоки, цвет, set, html
+var NOT_IMAGE_MARKER = /:\s*(?:__img|drop|keep|showBegin|showEnd|hideBegin|hideEnd|color|set|html)\b/;
 // метка изображения и в смешанном замещающем тексте: штрихкод и imageFit
 var IMAGE_FORMATTER = /:\s*(?:barcode|imageFit)\b/;
 // замещающий текст — одна метка (пробелы вокруг не в счёт)

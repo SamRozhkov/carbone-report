@@ -11,6 +11,7 @@ var translator = require('./translator');
 var preprocessor = require('./preprocessor');
 var media = require('./media');
 var links = require('./links');
+var charts = require('./charts');
 var dayjs = require('dayjs');
 var locales = require('../formatters/_locale');
 
@@ -142,6 +143,13 @@ var carbone = {
           walkFiles(template, data, options, 0, function (err, report) {
             if (err) {
               return callback(err, null);
+            }
+            // диаграммы: препроцессор пометил листы книг с диаграммами — служебные атрибуты снимаются здесь
+            try {
+              charts.finish(report);
+            }
+            catch (e) {
+              return callback(e, null);
             }
             // assemble all files and zip if necessary
             file.buildFile(report, function (err, result) {
@@ -288,6 +296,8 @@ function renderBuffer (template, extension, data, options) {
             // XLSX для OnlyOffice: текст ячеек — снова общими строками (со встроенными Document Server при
             // конвертации теряет все ячейки-строки, кроме первой), номера строк и ячеек, убранные препроцессором,
             // ставятся заново (после циклов и drop). Старый API render() (тесты апстрима) собирает XLSX как CE 3.8.2.
+            // диаграммы DOCX/XLSX: диапазоны, кэши точек, числа (lib/charts.js) — до номеров строк finishXlsx
+            charts.finish(_report);
             // изображения из данных: media-файлы, связи и типы — после сборки всех файлов, до finishXlsx
             media.finish(_report, _options).then(_guard(function () {
               preprocessor.finishXlsx(_report);

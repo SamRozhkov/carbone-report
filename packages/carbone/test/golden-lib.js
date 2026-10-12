@@ -94,6 +94,72 @@ function buildDocx (template, raw, rels, files) {
   ]);
 }
 
+const CT_NS = 'http://schemas.openxmlformats.org/package/2006/content-types';
+const OFFICE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const SHEET_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+const CHART_CT = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
+const escAttr = (s) => esc(s).replace(/"/g, '&quot;');
+
+// файлы минимальной книги: workbook.xml с одним листом sheetName, связи, лист с содержимым sheetData = sheetXml
+function workbookFiles (sheetXml, sheetName, sheetExtra, extraTypes) {
+  return [
+    { name: '[Content_Types].xml', data: XML + '<Types xmlns="' + CT_NS + '"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'
+      + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+      + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' + (extraTypes || '') + '</Types>' },
+    { name: '_rels/.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+    { name: 'xl/workbook.xml', data: XML + '<workbook xmlns="' + SHEET_NS + '" xmlns:r="' + OFFICE_REL + '"><sheets><sheet name="' + escAttr(sheetName || 'Sheet1') + '" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+    { name: 'xl/_rels/workbook.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' },
+    { name: 'xl/worksheets/sheet1.xml', data: XML + '<worksheet xmlns="' + SHEET_NS + '" xmlns:r="' + OFFICE_REL + '"><sheetData>' + sheetXml + '</sheetData>' + (sheetExtra || '') + '</worksheet>' }
+  ];
+}
+
+/**
+ * Собрать XLSX с одним листом и (если chartXml задан) диаграммой на нём.
+ * sheetXml — содержимое sheetData (строки), chartXml — весь xl/charts/chart1.xml без пролога.
+ */
+function buildXlsxWithChart ({ sheetXml, chartXml, sheetName }) {
+  if (chartXml === undefined || chartXml === null) {
+    return zipBuffer(workbookFiles(sheetXml, sheetName));
+  }
+  const files = workbookFiles(sheetXml, sheetName, '<drawing r:id="rId1"/>',
+    '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>'
+    + '<Override PartName="/xl/charts/chart1.xml" ContentType="' + CHART_CT + '"/>');
+  return zipBuffer([
+    ...files,
+    { name: 'xl/worksheets/_rels/sheet1.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/drawing" Target="../drawings/drawing1.xml"/></Relationships>' },
+    { name: 'xl/drawings/drawing1.xml', data: XML + '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+      + '<xdr:oneCellAnchor><xdr:from><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="5400000" cy="2700000"/>'
+      + '<xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="1" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/>'
+      + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="' + OFFICE_REL + '" r:id="rId1"/></a:graphicData></a:graphic>'
+      + '</xdr:graphicFrame><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>' },
+    { name: 'xl/drawings/_rels/drawing1.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/chart" Target="../charts/chart1.xml"/></Relationships>' },
+    { name: 'xl/charts/chart1.xml', data: XML + chartXml }
+  ]);
+}
+
+/**
+ * Собрать DOCX с диаграммой word/charts/chart1.xml и встроенной книгой word/embeddings/Microsoft_Excel_Worksheet.xlsx.
+ * documentXml — содержимое w:body (по умолчанию абзац с диаграммой), embeddedSheetXml — содержимое sheetData книги.
+ */
+async function buildDocxWithChart ({ documentXml, chartXml, embeddedSheetXml, sheetName }) {
+  const embedded = await zipBuffer(workbookFiles(embeddedSheetXml, sheetName));
+  const drawing = '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="5486400" cy="3200400"/><wp:docPr id="1" name="Chart 1"/>'
+    + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId5"/></a:graphicData></a:graphic>'
+    + '</wp:inline></w:drawing></w:r></w:p>';
+  return zipBuffer([
+    { name: '[Content_Types].xml', data: XML + '<Types xmlns="' + CT_NS + '"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'
+      + '<Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>'
+      + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+      + '<Override PartName="/word/charts/chart1.xml" ContentType="' + CHART_CT + '"/></Types>' },
+    { name: '_rels/.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/officeDocument" Target="word/document.xml"/></Relationships>' },
+    { name: 'word/_rels/document.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId5" Type="' + OFFICE_REL + '/chart" Target="charts/chart1.xml"/></Relationships>' },
+    { name: 'word/document.xml', data: XML + '<w:document ' + NS + '><w:body>' + (documentXml !== undefined ? documentXml : drawing) + '<w:sectPr/></w:body></w:document>' },
+    { name: 'word/charts/chart1.xml', data: XML + chartXml },
+    { name: 'word/charts/_rels/chart1.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/package" Target="../embeddings/Microsoft_Excel_Worksheet.xlsx"/></Relationships>' },
+    { name: 'word/embeddings/Microsoft_Excel_Worksheet.xlsx', data: embedded }
+  ]);
+}
+
 const TEXT_RE = /<w:t(?:\s[^>]*)?\/>|<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:br\b[^>]*\/>/g;
 const BLOCK_RE = /<w:tbl>[\s\S]*?<\/w:tbl>|<w:p(?:\s[^>]*)?\/>|<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g;
 const PARA_RE = /<w:p(?:\s[^>]*)?\/>|<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g;
@@ -174,4 +240,4 @@ function normalizeError (message) {
     .replace(/ Source: [\s\S]*$/, '');
 }
 
-module.exports = { buildDocx, docxText, normalizeError, readEntry, entryNames };
+module.exports = { buildDocx, buildDocxWithChart, buildXlsxWithChart, docxText, entryNames, normalizeError, readEntry, zipBuffer };

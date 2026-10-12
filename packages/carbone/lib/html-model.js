@@ -31,7 +31,8 @@
 //     пустая последняя строка отбрасываются; внутри pre работают только теги оформления, a и br — прочие теги дают
 //     только текст; тексту pre ставится mono (как code);
 //   - th: header true и жирный текст (bold в marks) — писателям не нужно делать его жирным отдельно;
-//   - списки: текст прямо в ul/ol — свой пункт; флажок input type=checkbox до любого содержимого пункта —
+//   - списки: текст прямо в ul/ol — свой пункт; ul/ol прямо в ul/ol — в блоки предыдущего пункта (если его нет —
+//     новый пункт), текст после него до следующего li — туда же; флажок input type=checkbox до любого содержимого пункта —
 //     item.checkbox (true/false), в остальных местах — Inline checkbox; пустой список отбрасывается;
 //   - таблицы: thead/tbody/tfoot прозрачны; tr вне строки и td вне строки создают недостающие; строки без ячеек и
 //     таблицы без строк отбрасываются (подпись такой таблицы — абзацем); colspan 1…1000, rowspan 1…65534, неверное
@@ -152,8 +153,10 @@ var NAMED_COLORS = {
   yellow : 'FFFF00', yellowgreen : '9ACD32'
 };
 
-var NUMBER = '[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[-+]?\\d+)?';
-var FUNC_REGEX = /^(rgba?|hsla?)\(\s*([^()]*?)\s*\)$/;
+// регулярные выражения без соседних повторов, которые могут съесть одни и те же символы (линейное время на
+// данных отчёта: длинные числа и пробелы)
+var NUMBER = '[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[-+]?\\d+)?';
+var FUNC_REGEX = /^(rgba?|hsla?)\(([^()]*)\)$/;
 var NUMBER_UNIT_REGEX = new RegExp('^(' + NUMBER + ')(%|deg|grad|rad|turn)?$');
 
 function hex2 (value) {
@@ -188,7 +191,11 @@ function funcArgs (body) {
     if (_match === null) {
       return null;
     }
-    _args.push({ value : parseFloat(_match[1]), unit : _match[2] || '' });
+    var _number = parseFloat(_match[1]);
+    if (!Number.isFinite(_number)) {
+      return null; // 1e999
+    }
+    _args.push({ value : _number, unit : _match[2] || '' });
   }
   return _args;
 }
@@ -253,7 +260,7 @@ function cssColor (value) {
   if (_match === null) {
     return null;
   }
-  var _args = funcArgs(_match[2]);
+  var _args = funcArgs(_match[2].trim());
   if (_args === null) {
     return null;
   }
@@ -278,7 +285,7 @@ function parseStyle (style) {
       return;
     }
     var _name = declaration.slice(0, _colon).trim().toLowerCase();
-    var _value = declaration.slice(_colon + 1).replace(/!\s*important\s*$/i, '').trim();
+    var _value = declaration.slice(_colon + 1).trim().replace(/![ \t\n\r\f]*important$/i, '').trim();
     if (_name === 'color' || _name === 'background-color') {
       var _color = cssColor(_value);
       if (_color !== null) {
@@ -387,12 +394,20 @@ InlineBuffer.prototype.finish = function () {
   return _inlines;
 };
 
+function trimSpacesEnd (text) {
+  var _end = text.length;
+  while (_end > 0 && text[_end - 1] === ' ') {
+    _end--;
+  }
+  return text.slice(0, _end);
+}
+
 // обрезать пробелы в конце (заходя в последнюю ссылку)
 function trimTail (inlines) {
   while (inlines.length > 0) {
     var _last = inlines[inlines.length - 1];
     if (_last.type === 'text') {
-      _last.text = _last.text.replace(/ +$/, '');
+      _last.text = trimSpacesEnd(_last.text);
       if (_last.text !== '') {
         return;
       }
@@ -472,12 +487,13 @@ function runParser (html, source, handlers) {
 }
 
 function spanValue (value, max) {
-  var _value = /^\s*\d+\s*$/.test(value || '') ? parseInt(value, 10) : 1;
+  var _text = (value || '').trim();
+  var _value = /^\d+$/.test(_text) ? parseInt(_text, 10) : 1;
   return _value >= 1 ? Math.min(_value, max) : 1;
 }
 
 function pixels (value) {
-  var _match = /^\s*(\d+(?:\.\d+)?)\s*(?:px)?\s*$/i.exec(value || '');
+  var _match = /^(\d+(?:\.\d+)?)[ \t\n\r\f]*(?:px)?$/i.exec((value || '').trim());
   if (_match === null) {
     return null;
   }
@@ -516,9 +532,15 @@ Builder.prototype.pushFlow = function (blocks, item) {
 };
 
 /** Рамка для содержимого: неявный пункт в списке, неявная строка и ячейка в таблице */
-Builder.prototype.ensureFlow = function () {
+Builder.prototype.ensureFlow = function (nestedList) {
   var _top = this.top();
   if (_top.kind === 'list') {
+    var _items = _top.block.items;
+    if (nestedList && _items.length > 0) {
+      // ul/ol прямо в списке (вставка из Google Docs) — во вложенные блоки предыдущего пункта
+      var _item = _items[_items.length - 1];
+      return this.pushFlow(_item.blocks, _item);
+    }
     return this.openItem(_top);
   }
   if (_top.kind === 'table') {
@@ -846,7 +868,7 @@ Builder.prototype.openTablePart = function (element, name, attribs) {
 };
 
 Builder.prototype.openBlock = function (element, name, level, style) {
-  var _flow = this.ensureFlow();
+  var _flow = this.ensureFlow(name === 'ul' || name === 'ol');
   this.flush(_flow);
   if (style.breakBefore) {
     _flow.pending = true;

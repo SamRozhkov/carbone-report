@@ -336,6 +336,66 @@ describe('html: модель', function () {
     });
   });
 
+  describe('parse: регрессии ревью 1', function () {
+    function fast (fn) {
+      const start = Date.now();
+      const result = fn();
+      assert.ok(Date.now() - start < 100, 'дольше 100 мс: ' + (Date.now() - start));
+      return result;
+    }
+
+    it('список прямо в списке — в блоки предыдущего пункта (вставка из Google Docs)', function () {
+      assert.deepStrictEqual(parse('<ul><li>a</li><ul><li>b</li></ul><li>c</li></ul>'), [
+        LIST(false, [LI([P([T('a')]), LIST(false, [LI([P([T('b')])])])]), LI([P([T('c')])])])
+      ]);
+    });
+
+    it('список прямо в списке без предыдущего пункта — новый пункт', function () {
+      assert.deepStrictEqual(parse('<ol><ul><li>b</li></ul></ol>'), [
+        LIST(true, [LI([LIST(false, [LI([P([T('b')])])])])])
+      ]);
+    });
+
+    it('width/height: ~200 КБ значения разбираются линейно', function () {
+      const result = fast(function () {
+        return parse('<img src="x" width="1' + ' '.repeat(200000) + 'x" height=" 30 px ">');
+      });
+      assert.deepStrictEqual(result, [P([IMG('x', null, 30)])]);
+    });
+
+    it('colspan и style: ~200 КБ значения разбираются линейно', function () {
+      fast(function () {
+        return parse('<table><tr><td colspan="1' + ' '.repeat(200000) + 'x">a</td></tr></table>');
+      });
+      const result = fast(function () {
+        return parse('<span style="color: red !' + ' '.repeat(200000) + 'x">a</span>');
+      });
+      assert.deepStrictEqual(result, [P([T('a')])]);
+    });
+
+    it('cssColor: длинные числа и пробелы в rgb()/hsl() — линейно', function () {
+      fast(function () {
+        assert.strictEqual(model.cssColor('rgb(' + '1'.repeat(200000) + 'x 0 0)'), null);
+      });
+      fast(function () {
+        assert.strictEqual(model.cssColor('rgb(' + ' '.repeat(200000) + 'x'), null);
+      });
+      fast(function () {
+        assert.strictEqual(model.cssColor('hsl(1 2 3' + ' '.repeat(200000) + 'x'), null);
+      });
+      fast(function () {
+        assert.strictEqual(model.cssColor('rgb(' + '1.'.repeat(100000) + ' 0 0)'), null);
+      });
+    });
+
+    it('cssColor: бесконечные числа (1e999) — null, без исключения', function () {
+      ['rgb(1e999 0 0)', 'rgb(0, 0, -1e999)', 'hsl(1e999 50% 50%)', 'hsl(120 1e999% 50%)', 'hsl(120, 50, 1e999)']
+        .forEach(function (value) {
+          assert.strictEqual(model.cssColor(value), null, value);
+        });
+    });
+  });
+
   describe('inlineOnly', function () {
     it('только a, b, strong, em, i, s, del, u; прочее — текст; br и блоки — пробел; pre — пробелы', function () {
       assert.deepStrictEqual(model.inlineOnly(

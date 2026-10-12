@@ -187,7 +187,8 @@ function numbering (template) {
         return;
       }
       // схема: w:abstractNum — перед всеми w:num, w:num — перед w:numIdMacAtCleanup
-      insertBefore(_file, /<w:num[\s>/]/, 'w:numbering', _abstractXml);
+      // без w:num якорь — w:numIdMacAtCleanup (иначе abstractNum встал бы после него)
+      insertBefore(_file, /<w:(?:num|numIdMacAtCleanup)[\s>/]/, 'w:numbering', _abstractXml);
       insertBefore(_file, /<w:numIdMacAtCleanup[\s>/]/, 'w:numbering', _numXml);
     }
   };

@@ -892,6 +892,16 @@ describe('html: DOCX — списки', function () {
     assert.strictEqual((r.rels.match(/relationships\/numbering"/g) || []).length, 1, r.rels);
   });
 
+  it('numbering.xml без w:num, но с w:numIdMacAtCleanup — порядок по схеме', async function () {
+    const r = await renderParts([mp('{d.h:html}')], { h: '<ul><li>a</li></ul><ol><li>b</li></ol>' }, {
+      rels: '<Relationship Id="rId9" Type="' + NUM_REL + '" Target="numbering.xml"/>',
+      files: { 'word/numbering.xml': NUMBERING('<w:numIdMacAtCleanup w:val="2"/>') }
+    });
+    assert.strictEqual(r.numbering.slice(r.numbering.indexOf('<w:numbering')), NUMBERING(abstractNum(0, false) + abstractNum(1, true)
+      + '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/>'
+      + '<w:lvlOverride w:ilvl="0"><w:startOverride w:val="1"/></w:lvlOverride></w:num><w:numIdMacAtCleanup w:val="2"/>').slice(XML_HEAD.length));
+  });
+
   it('связь numbering.xml с другим путём — пишется в него', async function () {
     const r = await renderParts([mp('{d.h:html}')], { h: '<ul><li>a</li></ul>' }, {
       rels: '<Relationship Id="rId9" Type="' + NUM_REL + '" Target="/word/num2.xml"/>',

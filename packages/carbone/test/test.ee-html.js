@@ -759,3 +759,30 @@ describe('html: ошибки шаблона', function () {
       'html: вложенность тегов больше 32. Source: "{d.h:html}"');
   });
 });
+
+describe('html: доработка 1', function () {
+  it('форматтер после html — ошибка шаблона', async function () {
+    for (const m of ['{d.h:html:upperCase}', '{d.h:html(inline):substr(0,2)}', '{d.h:html:print(x)}']) {
+      assert.strictEqual(await rejection(renderDocx([mp(m)], { h: 'x' })), 'html должен быть последним форматтером. Source: "' + m + '"');
+    }
+    assert.strictEqual(await htmlBody('<b>x</b>', '{d.h:html:defaultURL(\'https://site.ru\')}'), wP(wR('x', '<w:b/>')) + wSP());
+  });
+
+  it('5000 строк таблицы с :html — без квадратичной проверки вложенных абзацев', async function () {
+    this.timeout(30000);
+    const rows = Array.from({ length: 5000 }, (v, i) => ({ h: '<b>' + i + '</b>' }));
+    const tpl = await buildDocx('| {d.rows[i].h:html(nospace)} |\n| {d.rows[i+1].h:html(nospace)} |');
+    const start = Date.now();
+    const xml = await readEntry(await carbone.renderBuffer(tpl, 'docx', { rows }, {}), 'word/document.xml');
+    const ms = Date.now() - start;
+    assert.ok(xml.includes(wR('4999', '<w:b/>')), 'последняя строка');
+    assert.ok(ms < 1500, 'сборка ' + ms + ' мс');
+  });
+
+  it('вложенный абзац (надпись) с жетоном внутри абзаца с жетоном', async function () {
+    const raw = '<w:p><w:r><w:t>{d.a:html}</w:t></w:r><w:r><w:pict><w:txbxContent>' + mp('{d.b:html}') + '</w:txbxContent></w:pict></w:r></w:p>';
+    const out = await bodyOf([raw], { a: 'x', b: 'y' });
+    assert.ok(out.includes('<w:txbxContent>' + wP(wR('y')) + wSP() + '</w:txbxContent>'), out);
+    assert.ok(out.startsWith(wP(wR('x')) + wSP()), out);
+  });
+});

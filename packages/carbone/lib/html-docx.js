@@ -479,16 +479,6 @@ function writeParagraph (pXml, job) {
   }
 }
 
-/** Абзац a — предок b */
-function contains (a, b) {
-  for (var _el = b.parent; _el !== null; _el = _el.parent) {
-    if (_el === a) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /**
  * Записать HTML на месте жетонов части DOCX
  * @param  {Object} job  { template, file, xml, root, tokens, registry, options, images, tokenRegex }
@@ -505,17 +495,24 @@ function write (job) {
     if (_groups.size === 0) {
       return _xml;
     }
-    var _paragraphs = Array.from(_groups);
-    var _edits = [];
-    _paragraphs.forEach(function (p) {
-      // внешний абзац — в следующий проход, после вложенных
-      if (_paragraphs.some(function (q) { return q !== p && contains(p, q); }) === true) {
-        return;
+    // внешний абзац — в следующий проход, после вложенных: абзацы с вложенными отмечаются подъёмом по предкам
+    // (линейно по числу абзацев и глубине)
+    var _outer = new Set();
+    _groups.forEach(function (p) {
+      for (var _el = p.parent; _el !== null; _el = _el.parent) {
+        if (_groups.has(_el) === true) {
+          _outer.add(_el);
+        }
       }
-      _edits.push({ start : p.start, end : p.end, rep : writeParagraph(_xml.slice(p.start, p.end), job) });
+    });
+    var _edits = [];
+    _groups.forEach(function (p) {
+      if (_outer.has(p) === false) {
+        _edits.push({ start : p.start, end : p.end, rep : writeParagraph(_xml.slice(p.start, p.end), job) });
+      }
     });
     _xml = xmltree.applyEdits(_xml, _edits);
-    if (_edits.length === _paragraphs.length) {
+    if (_outer.size === 0) {
       return _xml;
     }
     _tokens = parseTokens(_xml, job).tokens;

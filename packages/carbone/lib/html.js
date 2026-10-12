@@ -113,6 +113,12 @@ function prepare (markers, options) {
     if (_ext !== '' && SUPPORTED.indexOf(_ext) === -1) {
       throw templateError('html не поддерживается в ' + formatName(_options.extension) + '.', _source);
     }
+    // форматтер после html испортил бы жетон; defaultURL (R4) — допустим
+    for (var a = _names.indexOf('html', 1) + 1; a < _names.length; a++) {
+      if (_names[a] !== 'defaultURL' && _names[a] !== '__htmlUrl') {
+        throw templateError('html должен быть последним форматтером.', _source);
+      }
+    }
     // литералы проверяются сразу (и в метке, которая при сборке не выполнится); пути (.x, d.x, c.x) — при сборке
     for (var j = 1; j < _chain.length; j++) {
       if (_names[j] === 'html') {

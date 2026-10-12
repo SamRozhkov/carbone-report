@@ -1969,7 +1969,7 @@ function listStyle (name, ordered, offset) {
   }
   return xml + '</text:list-style>';
 }
-const oL = (style, inner, cont) => '<text:list text:style-name="' + style + '"' + (cont ? ' text:continue-numbering="true"' : '') + '>' + inner + '</text:list>';
+const oL = (style, inner) => '<text:list text:style-name="' + style + '">' + inner + '</text:list>';
 const oLI = (inner) => '<text:list-item>' + inner + '</text:list-item>';
 const oLH = (inner) => '<text:list-header>' + inner + '</text:list-header>';
 // таблица: стиль таблицы, столбцы, ячейки
@@ -2135,7 +2135,8 @@ describe('html: ODT — таблицы', function () {
 
   it('таблица в пункте списка: список закрывается, таблица с отступом пункта, список продолжается (text:list-header)', async function () {
     let r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<ol><li>x<table><tr><td>a</td></tr></table>y</li><li>z</li></ol>' });
-    assert.strictEqual(r.body, oL('CRhl1', oLI(oP('x'))) + oTable(1, 'CRht1', oCols(1), [[oTD(oP('a'))]]) + oL('CRhl1', oLH(oP('y')) + oLI(oP('z')), true));
+    assert.strictEqual(r.body, '<text:list text:style-name="CRhl1" xml:id="CRhList1">' + oLI(oP('x')) + '</text:list>' + oTable(1, 'CRht1', oCols(1), [[oTD(oP('a'))]])
+      + '<text:list text:style-name="CRhl1" text:continue-list="CRhList1">' + oLH(oP('y')) + oLI(oP('z')) + '</text:list>');
     assert.strictEqual(r.auto, listStyle('CRhl1', true) + tableStyle('CRht1', 'style:width="15.73cm" fo:margin-left="1.27cm" table:align="left"')
       + colStyle('CRhtc1', '15.73cm') + CELL_STYLE);
     // таблица в конце вложенного пункта: пустые продолжения списков не остаются
@@ -2317,5 +2318,57 @@ describe('html: ODT — изображения', function () {
       'xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"', 'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"']) {
       assert.ok(root.includes(ns), root);
     }
+  });
+});
+
+describe('html: ODT — списки и таблицы (доработка 1 Task 8)', function () {
+  const oLid = (style, id, inner) => '<text:list text:style-name="' + style + '" xml:id="' + id + '">' + inner + '</text:list>';
+  const oLc = (style, id, inner) => '<text:list text:style-name="' + style + '" text:continue-list="' + id + '">' + inner + '</text:list>';
+  const one = (n, inner) => oTable(n, 'CRht1', oCols(1), [[oTD(inner)]]);
+
+  it('после таблицы в пункте продолжается свой список (text:continue-list), а не список из ячейки', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<ol><li>x<table><tr><td><ol><li>a</li><li>b</li><li>c</li></ol></td></tr></table>y</li><li>z</li></ol>' });
+    assert.strictEqual(r.body, oLid('CRhl1', 'CRhList1', oLI(oP('x')))
+      + one(1, oL('CRhl1', oLI(oP('a')) + oLI(oP('b')) + oLI(oP('c'))))
+      + oLc('CRhl1', 'CRhList1', oLH(oP('y')) + oLI(oP('z'))));
+  });
+
+  it('вложенные списки A > B > C, таблица, затем b2, b3 и a2 — каждый уровень продолжает свой список', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), {
+      h: '<ol><li>a1<ol><li>b1<ol><li>c1<table><tr><td>t</td></tr></table></li></ol></li><li>b2</li><li>b3</li></ol></li><li>a2</li></ol>'
+    });
+    assert.strictEqual(r.body, oLid('CRhl1', 'CRhList1', oLI(oP('a1') + oLid('CRhl1', 'CRhList2', oLI(oP('b1') + oL('CRhl1', oLI(oP('c1')))))))
+      + one(1, oP('t'))
+      + oLc('CRhl1', 'CRhList1', oLH(oLc('CRhl1', 'CRhList2', oLI(oP('b2')) + oLI(oP('b3')))) + oLI(oP('a2'))));
+    assert.ok(r.auto.includes(tableStyle('CRht1', 'style:width="13.19cm" fo:margin-left="3.81cm" table:align="left"')), r.auto);
+  });
+
+  it('xml:id списков уникален в части (выше CRhList шаблона)', async function () {
+    const r = await renderOdt('<text:list xml:id="CRhList4"><text:list-item><text:p>t</text:p></text:list-item></text:list>' + oP('{d.h:html(nospace)}'),
+      { h: '<ul><li>x<table><tr><td>a</td></tr></table>y</li></ul>' });
+    assert.ok(r.body.includes(oLid('CRhl1', 'CRhList5', oLI(oP('x')))) && r.body.includes(oLc('CRhl1', 'CRhList5', oLH(oP('y')))), r.body);
+  });
+
+  it('стиль метки с fo:margin-left: абзацы пунктов — отступ метки + 1.27cm × уровень, висячий как у списка', async function () {
+    const P1 = pStyle('P1', 'Standard', 'fo:margin-left="2cm"');
+    const r = await renderOdt(oP('{d.h:html(nospace)}', 'P1'), { h: '<ul><li>a<ul><li>b</li></ul></li></ul><p>c</p>' }, { automatic: P1 });
+    assert.strictEqual(r.body, oL('CRhl1', oLI(oP('a', 'CRhp1') + oL('CRhl1', oLI(oP('b', 'CRhp2'))))) + oP('c', 'P1'));
+    assert.strictEqual(r.auto, P1 + listStyle('CRhl1', false) + pStyle('CRhp1', 'Standard', 'fo:margin-left="3.27cm" fo:text-indent="-0.635cm"')
+      + pStyle('CRhp2', 'Standard', 'fo:margin-left="4.54cm" fo:text-indent="-0.635cm"'));
+    // общий стиль с отступом — автоматический дочерний; стиль без отступа — без изменений
+    const styles = O_STYLES({ styles: pStyle('Text_20_body', null, 'fo:margin-left="1cm"') });
+    const r2 = await renderOdt(oP('{d.h:html(nospace)}', 'Text_20_body'), { h: '<ol><li>a</li></ol>' }, { styles });
+    assert.strictEqual(r2.body, oL('CRhl1', oLI(oP('a', 'CRhp1'))));
+    assert.strictEqual(r2.auto, listStyle('CRhl1', true) + pStyle('CRhp1', 'Text_20_body', 'fo:margin-left="2.27cm" fo:text-indent="-0.635cm"'));
+  });
+
+  it('пустые ul и table отбрасываются; пустой li — пустой абзац пункта', async function () {
+    assert.strictEqual(await odtBody('<ul></ul><table></table><p>x</p>', oP('{d.h:html(nospace)}')), oP('x'));
+    assert.strictEqual(await odtBody('<ul><li></li></ul>', oP('{d.h:html(nospace)}')), oL('CRhl1', oLI(oSP())));
+  });
+
+  it('таблица в пункте с флажком — список закрывается и продолжается', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<ul><li><input type="checkbox" checked>x<table><tr><td>t</td></tr></table>y</li><li>z</li></ul>' });
+    assert.strictEqual(r.body, oLid('CRhl1', 'CRhList1', oLH(oP('☒ x'))) + one(1, oP('t')) + oLc('CRhl1', 'CRhList1', oLH(oP('y')) + oLI(oP('z'))));
   });
 });

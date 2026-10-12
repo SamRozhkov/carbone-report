@@ -12,7 +12,8 @@
 // table:number-rows-spanned и table:covered-table-cell в следующих строках. Подпись — абзацем перед таблицей. Разрывы
 // страницы у таблицы — в её стиле. Ячейка — свой контейнер (отступ 0, списки с уровня 0, заголовок — text:h), в ней
 // всегда есть text:p. Таблица внутри пункта списка (в text:list-item таблиц не бывает): открытые списки закрываются,
-// после таблицы открываются заново (text:continue-numbering, пункт продолжается text:list-header без маркера).
+// после таблицы открываются заново — text:continue-list на xml:id своего списка (CRhList<n>, уникален в части; только
+// у списков, которые продолжаются), пункт продолжается text:list-header без маркера.
 
 var layout = require('./html-docx-table').layout;
 var common = require('./html-xml');
@@ -22,8 +23,10 @@ var QUOTE_INDENT = odfStyles.QUOTE_INDENT;
 // блоки, которые сами пишут первый абзац пункта (с номером или флажком); перед прочими — пустой абзац пункта
 var LEAD_BLOCKS = { para : true, heading : true, pre : true };
 var COVERED = '<table:covered-table-cell/>';
-// продолжения списков после таблицы, оставшиеся пустыми
-var EMPTY_REOPEN = /<text:list-header><\/text:list-header>|<text:list text:style-name="[^"]*" text:continue-numbering="true"><\/text:list>/g;
+// продолжения списков после таблицы, оставшиеся пустыми; xml:id списков (продолжение которых могло уйти с ними)
+var EMPTY_REOPEN = /<text:list-header><\/text:list-header>|<text:list text:style-name="[^"]*" text:continue-list="[^"]*"><\/text:list>/g;
+var LIST_ID = / xml:id="(CRhList\d+)"/g;
+var CONTINUE = /text:continue-list="(CRhList\d+)"/g;
 
 // ---------------------------------------------------------------------------------------------------------------
 // Списки
@@ -54,10 +57,11 @@ function listXml (block, ctx, api) {
   ctx.breakAfter = false;
   var _themed = block.quote > 0 && ctx.quoteTheme !== null;
   var _offset = _saved.listOffset + (_themed === true ? 0 : QUOTE_INDENT * block.quote);
-  // открытый список: стиль и текущий пункт (после таблицы — text:list-header)
-  var _frame = { style : ctx.odfStyles.list(block.ordered === true, _offset), item : null };
+  // открытый список: стиль, текущий пункт (после таблицы — text:list-header), xml:id (появляется, если список
+  // продолжается после таблицы — открывающий тег пишется в конце)
+  var _frame = { style : ctx.odfStyles.list(block.ordered === true, _offset), item : null, id : null };
   ctx.lists.push(_frame);
-  var _out = '<text:list text:style-name="' + _frame.style + '">';
+  var _out = '';
   block.items.forEach(function (item) {
     _frame.item = item.checkbox === null ? 'text:list-item' : 'text:list-header';
     _out += '<' + _frame.item + '>';
@@ -72,20 +76,34 @@ function listXml (block, ctx, api) {
   Object.assign(ctx, _saved);
   ctx.lists.pop();
   ctx.breakAfter = _after;
-  _out += '</text:list>';
+  _out = '<text:list text:style-name="' + _frame.style + '"' + (_frame.id !== null ? ' xml:id="' + _frame.id + '"' : '') + '>' + _out + '</text:list>';
   if (ctx.lists.length === 0 && ctx.reopened === true) {
     ctx.reopened = false;
-    var _prev;
-    do {
-      _prev = _out;
-      _out = _out.replace(EMPTY_REOPEN, '');
-    } while (_out !== _prev);
+    _out = dropEmptyReopen(_out);
   }
   return _out;
 }
 
+/** Пустые продолжения списков убираются (вложенные — проходами), затем xml:id списков, которые не продолжаются */
+function dropEmptyReopen (xml) {
+  var _out = xml;
+  var _prev;
+  do {
+    _prev = _out;
+    _out = _out.replace(EMPTY_REOPEN, '');
+  } while (_out !== _prev);
+  var _used = new Set();
+  _out.replace(CONTINUE, function (all, id) {
+    _used.add(id);
+    return all;
+  });
+  return _out.replace(LIST_ID, function (all, id) {
+    return _used.has(id) === true ? all : '';
+  });
+}
+
 /** Таблица внутри пункта: открытые списки закрываются до неё и открываются после (продолжение — без маркера) */
-function outsideLists (xml, ctx) {
+function outsideLists (xml, ctx, api) {
   if (ctx.lists.length === 0) {
     return xml;
   }
@@ -95,7 +113,10 @@ function outsideLists (xml, ctx) {
     _close += '</' + ctx.lists[i].item + '></text:list>';
   }
   ctx.lists.forEach(function (frame) {
-    _open += '<text:list text:style-name="' + frame.style + '" text:continue-numbering="true"><text:list-header>';
+    if (frame.id === null) {
+      frame.id = api.uniqueName(ctx.job, 'CRhList');
+    }
+    _open += '<text:list text:style-name="' + frame.style + '" text:continue-list="' + frame.id + '"><text:list-header>';
     frame.item = 'text:list-header';
   });
   ctx.reopened = true;
@@ -113,7 +134,7 @@ function outsideLists (xml, ctx) {
  */
 function cellContent (cells, width, ctx, api) {
   var _saved = { indent : ctx.indent, depth : ctx.depth, level : ctx.level, lead : ctx.lead, quoteStyle : ctx.quoteStyle, width : ctx.width,
-    lists : ctx.lists, listOffset : ctx.listOffset, inCell : ctx.inCell };
+    lists : ctx.lists, listOffset : ctx.listOffset, inCell : ctx.inCell, reopened : ctx.reopened };
   ctx.indent = 0;
   ctx.depth = _saved.depth + 1;
   ctx.level = 0;
@@ -123,6 +144,7 @@ function cellContent (cells, width, ctx, api) {
   ctx.lists = [];
   ctx.listOffset = 0;
   ctx.inCell = true;
+  ctx.reopened = false;
   var _xml = '';
   cells.forEach(function (cell) {
     _xml += api.blocksXml(cell.blocks, ctx);
@@ -185,7 +207,7 @@ function tableXml (block, ctx, api) {
     }
     _xml += '</table:table-row>';
   });
-  return _out + outsideLists(_xml + '</table:table>', ctx);
+  return _out + outsideLists(_xml + '</table:table>', ctx, api);
 }
 
 module.exports = {

@@ -275,16 +275,22 @@ function writePara (block, inner, ctx, opts) {
   var _base = _own === true ? _o.style : ctx.pStyle;
   var _props = [];
   var _quote = block.quote > 0 ? block.quote : 0;
+  var _inList = ctx.lists.length > 0;
   if (_quote > 0 && ctx.quoteTheme !== null && _own === false) {
     _base = ctx.quoteTheme;
   }
   else if (_quote > 0) {
-    // в пункте списка отступ задаёт стиль списка, а не стиль абзаца
-    var _from = ctx.lists.length > 0 ? 0 : odfStyles.marginCm(ctx.odfStyles, _base);
+    // в пункте списка — от отступа пункта (и отступа стиля метки, если он задан)
+    var _from = _inList === true ? ctx.markerMargin || 0 : odfStyles.marginCm(ctx.odfStyles, _base);
     _props.push(['fo:margin-left', odfStyles.formatCm(_from + ctx.indent + QUOTE_INDENT * _quote)]);
   }
   else if (_own === false && ctx.quoteStyle !== null) {
     _base = ctx.quoteStyle;
+  }
+  else if (_own === false && _inList === true && ctx.markerMargin !== null) {
+    // отступ стиля метки как прямой отступ абзаца перебил бы отступы уровней списка — отступ метки плюс отступ пункта
+    // и висячий отступ номера, как в стиле списка
+    _props.push(['fo:margin-left', odfStyles.formatCm(ctx.markerMargin + ctx.indent)], ['fo:text-indent', odfStyles.formatCm(-odfStyles.HANGING)]);
   }
   _props = _props.concat(_o.props || []);
   if (ctx.pageBreak === true) {
@@ -495,7 +501,7 @@ var BLOCKS_API = {
 
 /**
  * Контекст абзаца для записи блоков
- * @return {Object} { job, item, options, images, links, media, odfStyles, parts, pStyle, page, quoteTheme, spans,
+ * @return {Object} { job, item, options, images, links, media, odfStyles, parts, pStyle, markerMargin, page, quoteTheme, spans,
  *                   exclude, space, pageBreak, breakAfter, depth, indent, level, lists, listOffset, lead, quoteStyle,
  *                   width, inCell, reopened, inLink }
  *   pStyle — text:style-name абзаца метки (как в XML) или null; spans — text:style-name text:span вокруг метки
@@ -534,6 +540,8 @@ function paragraphCtx (xml, p, token, item, job, page) {
     odfStyles  : job.odfStyles,
     parts      : job.parts,
     pStyle     : _pStyle,
+    // отступ слева стиля абзаца метки (см) или null — абзацы пунктов списков получают его вместе с отступом пункта
+    markerMargin : _pStyle !== null ? odfStyles.ownMarginCm(job.odfStyles, _pStyle) : null,
     // свойства страницы абзаца метки (resolvePage) или null
     page       : page.page,
     // стиль quotetheme, если он есть в styles.xml (иначе — отступ)

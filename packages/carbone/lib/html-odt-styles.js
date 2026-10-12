@@ -480,9 +480,14 @@ function paragraphProp (styles, base, name) {
   return null;
 }
 
+/** Отступ слева стиля абзаца (по цепочке родителей), см; без него или в процентах — null */
+function ownMarginCm (styles, base) {
+  return lengthCm(paragraphProp(styles, base, 'fo:margin-left'));
+}
+
 /** Отступ слева стиля абзаца (по цепочке родителей), см; без него или в процентах — 0 */
 function marginCm (styles, base) {
-  var _cm = lengthCm(paragraphProp(styles, base, 'fo:margin-left'));
+  var _cm = ownMarginCm(styles, base);
   return _cm !== null ? _cm : 0;
 }
 
@@ -491,10 +496,12 @@ module.exports = {
   create : createOdfStyles,
   textPropNames,
   marginCm,
+  ownMarginCm,
   formatCm,
   NAMESPACES,
   COURIER,
   HEADING_SIZES,
   LEVEL_INDENT,
+  HANGING,
   QUOTE_INDENT
 };

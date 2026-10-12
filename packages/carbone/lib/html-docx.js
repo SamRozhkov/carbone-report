@@ -11,11 +11,21 @@
 //   - пустое значение или HTML без содержимого — жетон убирается, абзац остаётся как у обычной метки.
 // Абзацы во вложенных абзацах (надпись внутри абзаца) обрабатываются раньше внешних — проходами по файлу.
 //
-// Расширение (Task 5–6): BLOCKS — запись блока по типу (blockXml), inlineXml — запись Inline по типу; ctx абзаца:
-//   { job, item, options, images, pPr, sectPr, rPr, pageBreak } — см. paragraphCtx.
+// Блоки (§34.4): заголовок — стиль Heading1…6 или <headingtheme>1…6 (создаётся в styles.xml при отсутствии), внутри
+// пункта списка — абзац пункта с оформлением заголовка (w:b, w:sz); список — свой w:num на каждый список (часть
+// numbering.xml общая для отчёта, lib/html-docx-parts.js), пункт — w:p с w:numPr и прямым отступом уровня (720 twips
+// на уровень, висячий 360), прочие блоки пункта — абзацы с тем же отступом без номера, пункт с флажком — без w:numPr,
+// флажок первым; blockquote — w:ind слева 600 twips на уровень (к отступу метки) либо w:pStyle quotetheme; pre — строки
+// через w:br; hr — пустой абзац с нижней линией; флажок — w:sdt с w14:checkbox (w14 объявляется на корне части).
+// R7: заголовки, пункты и блоки внутри пунктов берут из w:pPr метки только w:jc, w:bidi, w:ind, w:spacing.
+//
+// Расширение (Task 6): BLOCKS — запись блока по типу (blockXml), inlineXml — запись Inline по типу; ctx абзаца:
+//   { job, item, options, images, pPr, sectPr, rPr, pageBreak, numbering, styles, indent, depth, lead, quoteStyle }
+//   — см. paragraphCtx; абзацы блоков — writePara (свойства по R7, цитата, отступ контейнера, номер пункта).
 
 var xmltree = require('./xmltree');
 var model = require('./html-model');
+var parts = require('./html-docx-parts');
 
 var MSG_OUTSIDE = 'html ставится в текст абзаца.';
 
@@ -37,6 +47,17 @@ var PAGE_BREAK = '<w:r><w:br w:type="page"/></w:r>';
 var BACKGROUND = ['w:highlight', 'w:shd'];
 // блоки, после которых ставится пустой абзац (кроме nospace)
 var SPACED = { para : true, heading : true, pre : true, list : true, table : true };
+// R7: свойства абзаца метки, которые берут заголовки, пункты списков и блоки внутри них
+var R7 = ['w:jc', 'w:bidi', 'w:ind', 'w:spacing'];
+// отступ уровня blockquote (40px), twips
+var QUOTE_INDENT = 600;
+// блоки, которые сами пишут первый абзац пункта (с номером или флажком); перед прочими — пустой абзац пункта
+var LEAD_BLOCKS = { para : true, heading : true, pre : true };
+var HR_PPR = [
+  { name : 'w:pBdr', xml : '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr>' },
+  { name : 'w:spacing', xml : '<w:spacing w:before="120" w:after="120"/>' }
+];
+var W14_NS = 'http://schemas.microsoft.com/office/word/2010/wordml';
 // символы, недопустимые в XML 1.0, и одиночные суррогаты
 var INVALID_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 
@@ -79,6 +100,40 @@ function has (list, name) {
   return list.some(function (kid) {
     return kid.name === name;
   });
+}
+
+/** Список свойств с kid вместо одноимённого */
+function setKid (list, kid) {
+  return list.filter(function (k) {
+    return k.name !== kid.name;
+  }).concat([kid]);
+}
+
+function removeAttr (tag, name) {
+  return tag.replace(new RegExp('\\s' + name.replace(/[:]/g, '\\$&') + '\\s*=\\s*(?:"[^"]*"|\'[^\']*\')'), '');
+}
+
+/**
+ * w:ind со сдвигом левого отступа на extra twips (к отступу метки) и висячим отступом hanging (или без изменения
+ * первой строки при null)
+ */
+function withIndent (list, extra, hanging) {
+  var _old = list.filter(function (kid) {
+    return kid.name === 'w:ind';
+  });
+  var _tag = _old.length > 0 ? /^<w:ind\b[^>]*>/.exec(_old[0].xml)[0].replace(/\s*\/?>$/, '/>') : '<w:ind/>';
+  var _side = /\sw:left\s*=/.test(_tag) === false && /\sw:start\s*=/.test(_tag) === true ? 'w:start' : 'w:left';
+  var _match = new RegExp('\\s' + _side + '\\s*=\\s*["\']\\s*(-?\\d+)').exec(_tag);
+  var _base = _match !== null ? parseInt(_match[1], 10) : 0;
+  // отступ в символах (w:leftChars) у Word важнее twips — снимается
+  _tag = xmltree.putAttr(removeAttr(_tag, _side + 'Chars'), _side, String(_base + extra));
+  if (hanging !== null) {
+    ['w:firstLine', 'w:firstLineChars', 'w:hangingChars'].forEach(function (name) {
+      _tag = removeAttr(_tag, name);
+    });
+    _tag = xmltree.putAttr(_tag, 'w:hanging', String(hanging));
+  }
+  return setKid(list, { name : 'w:ind', xml : _tag });
 }
 
 /** Элемент свойств по схеме (стабильно: известные — по order, неизвестные — после, в исходном порядке) */
@@ -165,15 +220,23 @@ var INLINES = {
   link : function (inline, rPr, ctx) {
     return inlinesXml(inline.children, rPr, ctx);
   },
-  // флажок — Task 6 (w14:checkbox); до него — символ
-  checkbox : function (inline, rPr) {
-    return '<w:r>' + rPrXml(rPr) + textXml(inline.checked === true ? '☒' : '☐') + '</w:r>';
+  checkbox : function (inline, rPr, ctx) {
+    return checkboxXml(inline.checked === true, rPr, ctx);
   },
   // изображение — Task 6
   image : function () {
     return '';
   }
 };
+
+/** Флажок Word (кликабельный): w:sdt с w14:checkbox и символом ☒/☐; часть получит объявление w14 */
+function checkboxXml (checked, rPr, ctx) {
+  ctx.job.w14 = true;
+  var _rPr = rPrXml(rPr);
+  return '<w:sdt><w:sdtPr>' + _rPr + '<w14:checkbox><w14:checked w14:val="' + (checked === true ? '1' : '0') + '"/>'
+    + '<w14:checkedState w14:val="2612" w14:font="MS Gothic"/><w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/>'
+    + '</w14:checkbox></w:sdtPr><w:sdtContent><w:r>' + _rPr + textXml(checked === true ? '☒' : '☐') + '</w:r></w:sdtContent></w:sdt>';
+}
 
 /**
  * Inline модели → w:r
@@ -207,44 +270,149 @@ function paraXml (pPr, runs, ctx) {
   return _pPr === '' && _runs === '' ? '<w:p/>' : '<w:p>' + _pPr + _runs + '</w:p>';
 }
 
-/** Пустой абзац после блока и абзац разрыва страницы: w:pPr метки без нумерации */
+/**
+ * Свойства абзаца блока: w:pPr метки (целиком — у абзацев, pre и hr вне списков; по R7 — у заголовков и внутри
+ * пунктов), стиль, отступ цитаты и контейнера (ctx.indent), номер пункта (ctx.lead — первому абзацу пункта)
+ * @param  {Object}      block  блок модели (quote)
+ * @param  {Object}      ctx
+ * @param  {String|null} style  свой стиль блока (заголовок) или null
+ * @return {Object}             { pPr : [{ name, xml }], lead : { numPr, runs } | null }
+ */
+function blockPPr (block, ctx, style) {
+  var _list = ctx.depth > 0 || style !== null ? ctx.pPr.filter(function (kid) {
+    return R7.indexOf(kid.name) !== -1;
+  }) : ctx.pPr;
+  var _style = style;
+  var _extra = ctx.indent;
+  var _quote = block.quote > 0 ? block.quote : 0;
+  if (_quote > 0 && ctx.options.quotetheme !== null && style === null) {
+    _style = ctx.styles.ensure(ctx.options.quotetheme, 'quote');
+  }
+  else if (_quote > 0) {
+    _extra += QUOTE_INDENT * _quote;
+  }
+  else if (style === null && ctx.quoteStyle !== null) {
+    _style = ctx.quoteStyle;
+  }
+  if (_style !== null) {
+    _list = setKid(_list, { name : 'w:pStyle', xml : '<w:pStyle w:val="' + escapeText(_style) + '"/>' });
+  }
+  var _lead = ctx.lead;
+  ctx.lead = null;
+  if (_lead !== null && _lead.numPr !== null) {
+    _list = setKid(_list, { name : 'w:numPr', xml : _lead.numPr });
+  }
+  var _hanging = _lead !== null && _lead.numPr !== null ? parts.HANGING : null;
+  if (_extra !== 0 || _hanging !== null) {
+    _list = withIndent(_list, _extra, _hanging);
+  }
+  return { pPr : _list, lead : _lead };
+}
+
+/**
+ * Абзац блока (свойства — blockPPr; первому абзацу пункта — номер или флажок)
+ * @param  {Array} [more]  дополнительные свойства абзаца [{ name, xml }] (заменяют одноимённые)
+ */
+function writePara (block, runs, ctx, style, more) {
+  var _props = blockPPr(block, ctx, style);
+  var _pPr = _props.pPr;
+  (more || []).forEach(function (kid) {
+    _pPr = setKid(_pPr, kid);
+  });
+  if (ctx.pageBreak === true && has(_pPr, 'w:numPr') === true) {
+    // разрыв перед пунктом с номером — свойством абзаца, иначе номер остался бы на прежней странице
+    _pPr = setKid(_pPr, { name : 'w:pageBreakBefore', xml : '<w:pageBreakBefore/>' });
+    ctx.pageBreak = false;
+  }
+  return paraXml(_pPr, (_props.lead !== null ? _props.lead.runs : '') + runs, ctx);
+}
+
+/** Пустой абзац после блока и абзац разрыва страницы: w:pPr метки без нумерации (в пункте — отступ пункта) */
 function spacerXml (runs, ctx) {
+  if (ctx.depth > 0) {
+    return writePara({ quote : 0 }, runs, ctx, null);
+  }
   return paraXml(ctx.pPr.filter(function (kid) {
     return kid.name !== 'w:numPr';
   }), runs, ctx);
 }
 
-/** Блоки, которые до Task 5–6 выводятся абзацами с их текстом */
+/** Блоки, которые до Task 6 выводятся абзацами с их текстом */
 function nestedXml (blocks, ctx) {
   return blocks.map(function (block) {
     return blockXml(block, ctx);
   }).join('');
 }
 
+/** Пункт списка: первый абзац — с номером (numPr) или флажком, прочие блоки — с отступом пункта */
+function itemXml (item, numPr, ctx) {
+  var _runs = '';
+  if (item.checkbox !== null) {
+    _runs = checkboxXml(item.checkbox, ctx.rPr, ctx) + '<w:r>' + rPrXml(ctx.rPr) + textXml(' ') + '</w:r>';
+  }
+  ctx.lead = { numPr : numPr, runs : _runs };
+  var _out = '';
+  if (item.blocks.length === 0 || LEAD_BLOCKS[item.blocks[0].type] !== true) {
+    _out += writePara({ quote : 0 }, '', ctx, null);
+  }
+  return _out + blocksXml(item.blocks, ctx);
+}
+
 var BLOCKS = {
   para : function (block, ctx) {
-    return paraXml(ctx.pPr, inlinesXml(block.inlines, ctx.rPr, ctx), ctx);
+    return writePara(block, inlinesXml(block.inlines, ctx.rPr, ctx), ctx, null);
   },
-  // заголовок — Task 5 (стили Heading1…6, headingtheme)
+  // заголовок: стиль Heading1…6 (или <headingtheme>1…6); в пункте списка — оформление заголовка в абзаце пункта
   heading : function (block, ctx) {
-    return paraXml(ctx.pPr, inlinesXml(block.inlines, ctx.rPr, ctx), ctx);
+    if (ctx.depth > 0) {
+      var _rPr = ctx.rPr.concat([
+        { name : 'w:b', xml : '<w:b/>' },
+        { name : 'w:sz', xml : '<w:sz w:val="' + parts.HEADING_SIZES[block.level - 1] + '"/>' }
+      ].filter(function (kid) {
+        return has(ctx.rPr, kid.name) === false;
+      }));
+      return writePara(block, inlinesXml(block.inlines, _rPr, ctx), ctx, null);
+    }
+    var _prefix = ctx.options.headingtheme !== null ? ctx.options.headingtheme : 'Heading';
+    var _style = ctx.styles.ensure(_prefix + block.level, 'heading', block.level);
+    return writePara(block, inlinesXml(block.inlines, ctx.rPr, ctx), ctx, _style);
   },
   // pre: строки — через w:br (оформление Courier New уже в marks)
   pre : function (block, ctx) {
     var _break = INLINES.break(null, ctx.rPr);
-    return paraXml(ctx.pPr, block.lines.map(function (line) {
+    return writePara(block, block.lines.map(function (line) {
       return inlinesXml(line, ctx.rPr, ctx);
-    }).join(_break), ctx);
+    }).join(_break), ctx, null);
   },
-  // hr — Task 5
-  hr : function () {
-    return '';
+  // hr: пустой абзац с нижней линией и отступами 0,5em сверху и снизу
+  hr : function (block, ctx) {
+    return writePara(block, '', ctx, null, HR_PPR);
   },
-  // списки — Task 5 (numbering.xml)
+  // список: свой w:num (номера не сквозные между списками и ячейками), уровень — глубина вложенности списков
   list : function (block, ctx) {
-    return block.items.map(function (item) {
-      return nestedXml(item.blocks, ctx);
-    }).join('');
+    var _saved = { indent : ctx.indent, depth : ctx.depth, quoteStyle : ctx.quoteStyle };
+    var _themed = block.quote > 0 && ctx.options.quotetheme !== null;
+    var _level = Math.min(_saved.depth, parts.LEVELS - 1);
+    var _numId = null;
+    var _out = '';
+    block.items.forEach(function (item) {
+      var _numPr = null;
+      if (item.checkbox === null) {
+        if (_numId === null) {
+          _numId = ctx.numbering.add(block.ordered === true, _level);
+        }
+        _numPr = '<w:numPr><w:ilvl w:val="' + _level + '"/><w:numId w:val="' + _numId + '"/></w:numPr>';
+      }
+      // quote блоков пункта считается от 0 — отступ цитаты списка входит в отступ пункта
+      ctx.indent = _saved.indent + (_themed === true ? 0 : QUOTE_INDENT * block.quote) + parts.LEVEL_INDENT;
+      ctx.depth = _saved.depth + 1;
+      ctx.quoteStyle = _themed === true ? ctx.styles.ensure(ctx.options.quotetheme, 'quote') : null;
+      _out += itemXml(item, _numPr, ctx);
+      ctx.indent = _saved.indent;
+      ctx.depth = _saved.depth;
+      ctx.quoteStyle = _saved.quoteStyle;
+    });
+    return _out;
   },
   // таблицы — Task 6
   table : function (block, ctx) {
@@ -268,18 +436,22 @@ function blockXml (block, ctx) {
   return _write === undefined ? '' : _write(block, ctx);
 }
 
-/** Блоки HTML на месте абзаца метки: пустой абзац после блока, разрывы страницы */
+/**
+ * Блоки HTML на месте абзаца метки (и внутри пункта списка): разрывы страницы; пустой абзац после блока — только
+ * на месте метки (ctx.depth 0)
+ */
 function blocksXml (blocks, ctx) {
   var _out = '';
   blocks.forEach(function (block) {
-    ctx.pageBreak = block.breakBefore === true;
+    // разрыв, ожидающий от списка, переходит к первому блоку пункта
+    ctx.pageBreak = ctx.pageBreak === true || block.breakBefore === true;
     var _block = blockXml(block, ctx);
     if (ctx.pageBreak === true) {
       // блок не создал абзаца — разрыв отдельным абзацем перед ним
       _block = spacerXml('', ctx) + _block;
     }
     _out += _block;
-    if (ctx.options.nospace !== true && SPACED[block.type] === true) {
+    if (ctx.depth === 0 && ctx.options.nospace !== true && SPACED[block.type] === true) {
       _out += spacerXml('', ctx);
     }
     if (block.breakAfter === true) {
@@ -315,21 +487,30 @@ function appendSectPr (xml, sectPr) {
 
 /**
  * Контекст абзаца для записи блоков: свойства абзаца и текста метки
- * @return {Object} { job, item, options, images, pPr, sectPr, rPr, pageBreak }
+ * @return {Object} { job, item, options, images, pPr, sectPr, rPr, pageBreak, numbering, styles, indent, depth, lead,
+ *                   quoteStyle }
  *   pPr — дочерние w:pPr метки без w:sectPr; sectPr — XML w:sectPr метки или null; rPr — дочерние w:rPr w:r метки
  */
 function paragraphCtx (xml, p, wr, item, job) {
   var _pPr = childNamed(p, 'w:pPr');
   var _sect = _pPr !== null ? childNamed(_pPr, 'w:sectPr') : null;
   return {
-    job       : job,
-    item      : item,
-    options   : item.options,
-    images    : job.images,
-    pPr       : kids(xml, _pPr, ['w:sectPr']),
-    sectPr    : _sect !== null ? xml.slice(_sect.start, _sect.end) : null,
-    rPr       : kids(xml, childNamed(wr, 'w:rPr')),
-    pageBreak : false
+    job        : job,
+    item       : item,
+    options    : item.options,
+    images     : job.images,
+    pPr        : kids(xml, _pPr, ['w:sectPr']),
+    sectPr     : _sect !== null ? xml.slice(_sect.start, _sect.end) : null,
+    rPr        : kids(xml, childNamed(wr, 'w:rPr')),
+    pageBreak  : false,
+    // общие части отчёта (numbering.xml, styles.xml)
+    numbering  : job.parts.numbering,
+    styles     : job.parts.styles,
+    // контейнер (пункт списка): прямой отступ слева, глубина списков, номер/флажок первого абзаца, стиль цитаты
+    indent     : 0,
+    depth      : 0,
+    lead       : null,
+    quoteStyle : null
   };
 }
 
@@ -480,11 +661,32 @@ function writeParagraph (pXml, job) {
 }
 
 /**
+ * Объявить пространство имён w14 на корне части (если флажки записаны и его там нет). Правки абзацев не задевают
+ * открывающий тег корня — его позиция в новом XML та же, что в исходном (job.root)
+ */
+function declareW14 (xml, job) {
+  var _top = job.root.children.length > 0 ? job.root.children[0] : null;
+  if (job.w14 !== true || _top === null) {
+    return xml;
+  }
+  var _tag = xml.slice(_top.start, _top.openEnd);
+  if (/\sxmlns:w14\s*=/.test(_tag) === true) {
+    return xml;
+  }
+  return xml.slice(0, _top.start) + xmltree.putAttr(_tag, 'xmlns:w14', W14_NS) + xml.slice(_top.openEnd);
+}
+
+/**
  * Записать HTML на месте жетонов части DOCX
- * @param  {Object} job  { template, file, xml, root, tokens, registry, options, images, tokenRegex }
+ * @param  {Object} job  { template, file, xml, root, tokens, registry, options, images, tokenRegex, parts }
+ *                       parts — общие части отчёта (html-docx-parts.create), сохраняет вызывающий
  * @return {String}      новый XML части
  */
 function write (job) {
+  return declareW14(writeParagraphs(job), job);
+}
+
+function writeParagraphs (job) {
   var _xml = job.xml;
   var _tokens = job.tokens;
   for (;;) {
@@ -521,6 +723,7 @@ function write (job) {
 
 module.exports = {
   write,
+  writePara,
   blockXml,
   inlineXml,
   BLOCKS,

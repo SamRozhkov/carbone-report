@@ -617,6 +617,9 @@ function formatOf (extension) {
 module.exports = {
   formatOf,
   addFile,
+  topFile,
+  relsPath,
+  RELS_NS,
   uniqueIds,
   fitSize,
   TYPES

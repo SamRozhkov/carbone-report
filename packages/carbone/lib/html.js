@@ -15,6 +15,7 @@ var splitChain = require('./set').splitChain;
 var xmltree = require('./xmltree');
 var model = require('./html-model');
 var htmlDocx = require('./html-docx');
+var htmlDocxParts = require('./html-docx-parts');
 
 // жетон: символы частного использования, отличные от агрегаторов (U+E000/U+E001), drop/keep (U+E010/U+E011),
 // color (U+E012/U+E013), изображений (U+E020/U+E021) и ссылок (U+E030…U+E034)
@@ -288,7 +289,10 @@ function finish (template, options) {
         throw templateError(MSG.outside, _registry.items[_inName[0].id].source);
       }
     }
-    template.files.forEach(function (file) {
+    // numbering.xml и styles.xml — общие для тела и колонтитулов, записываются после всех частей
+    var _parts = _ext === 'docx' ? htmlDocxParts.create(template) : null;
+    // копия списка: части пакета могут добавлять файлы по ходу
+    template.files.slice().forEach(function (file) {
       if ((file.parent !== '' && file.parent !== undefined) || typeof file.data !== 'string' || file.data.indexOf(OPEN) === -1) {
         return;
       }
@@ -311,10 +315,14 @@ function finish (template, options) {
         registry   : _registry,
         options    : options,
         images     : new Map(),
-        tokenRegex : TOKEN_REGEX
+        tokenRegex : TOKEN_REGEX,
+        parts      : _parts
       };
       file.data = _ext === 'docx' ? htmlDocx.write(_job) : writeOdtText(_job);
     });
+    if (_parts !== null) {
+      _parts.save();
+    }
   });
 }
 

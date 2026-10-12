@@ -786,3 +786,304 @@ describe('html: доработка 1', function () {
     assert.ok(out.startsWith(wP(wR('x')) + wSP()), out);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// :html в DOCX (Task 5): списки, заголовки, цитаты, pre, hr, разрывы, флажки
+
+const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+const NUM_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering';
+const STY_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles';
+const NUM_CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml';
+const STY_CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml';
+const W14_NS = 'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"';
+
+// ожидаемая разметка пунктов
+const numPr = (ilvl, numId) => '<w:numPr><w:ilvl w:val="' + ilvl + '"/><w:numId w:val="' + numId + '"/></w:numPr>';
+const ind = (left, hanging) => '<w:ind w:left="' + left + '"' + (hanging ? ' w:hanging="' + hanging + '"' : '') + '/>';
+const wLI = (inner, ilvl, numId, left, more) => wP(inner, numPr(ilvl, numId) + ind(left, 360) + (more || ''));
+const BOX = (checked, rPr) => '<w:sdt><w:sdtPr>' + (rPr ? '<w:rPr>' + rPr + '</w:rPr>' : '') + '<w14:checkbox><w14:checked w14:val="' + (checked ? 1 : 0) + '"/>'
+  + '<w14:checkedState w14:val="2612" w14:font="MS Gothic"/><w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox></w:sdtPr>'
+  + '<w:sdtContent>' + wR(checked ? '☒' : '☐', rPr) + '</w:sdtContent></w:sdt>';
+
+// уровни abstractNum, как их пишет html-docx-parts
+function levels (ordered) {
+  const fmt = ordered ? ['decimal', 'lowerLetter', 'lowerRoman'] : ['bullet', 'bullet', 'bullet'];
+  const bullets = ['•', '◦', '▪'];
+  let out = '';
+  for (let i = 0; i < 9; i++) {
+    out += '<w:lvl w:ilvl="' + i + '"><w:start w:val="1"/><w:numFmt w:val="' + fmt[i % 3] + '"/>'
+      + '<w:lvlText w:val="' + (ordered ? '%' + (i + 1) + '.' : bullets[i % 3]) + '"/><w:lvlJc w:val="left"/>'
+      + '<w:pPr><w:ind w:left="' + (720 * (i + 1)) + '" w:hanging="360"/></w:pPr></w:lvl>';
+  }
+  return out;
+}
+const abstractNum = (id, ordered) => '<w:abstractNum w:abstractNumId="' + id + '"><w:multiLevelType w:val="hybridMultilevel"/>' + levels(ordered) + '</w:abstractNum>';
+
+// сборка с частями: { doc, numbering, styles, rels, ct, header }
+async function renderParts (raws, data, opts) {
+  const o = opts || {};
+  const tpl = await buildDocx(raws.map(() => '<<RAW>>').join('\n'), raws, o.rels || '', o.files);
+  const out = await carbone.renderBuffer(tpl, 'docx', data, {});
+  const get = (name) => readEntry(out, name).catch(() => null);
+  const res = {
+    doc: await get('word/document.xml'),
+    numbering: await get('word/numbering.xml'),
+    styles: await get('word/styles.xml'),
+    rels: await get('word/_rels/document.xml.rels'),
+    ct: await get('[Content_Types].xml'),
+    header: await get('word/header1.xml')
+  };
+  for (const k of Object.keys(res)) {
+    if (res[k] !== null) assertWellFormed(res[k]);
+  }
+  res.body = res.doc.slice(res.doc.indexOf('<w:body>') + 8, res.doc.lastIndexOf(BODY_END));
+  return res;
+}
+
+const STYLES = (inner) => XML_HEAD + '<w:styles ' + W_NS + '>' + inner + '</w:styles>';
+const NUMBERING = (inner) => XML_HEAD + '<w:numbering ' + W_NS + '>' + inner + '</w:numbering>';
+const styleP = (id, name) => '<w:style w:type="paragraph" w:styleId="' + id + '"><w:name w:val="' + name + '"/></w:style>';
+
+describe('html: DOCX — списки', function () {
+  it('ul три уровня: пункты с w:numPr и отступом, маркеры •/◦/▪ в numbering.xml', async function () {
+    const r = await renderParts([mp('{d.h:html}')], { h: '<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li><li>d</li></ul>' });
+    assert.strictEqual(r.body,
+      wLI(wR('a'), 0, 1, 720) + wLI(wR('b'), 1, 2, 1440) + wLI(wR('c'), 2, 3, 2160) + wLI(wR('d'), 0, 1, 720) + wSP());
+    assert.strictEqual(r.numbering, XML_HEAD + '<w:numbering ' + W_NS + '>' + abstractNum(0, false)
+      + '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="0"/></w:num>'
+      + '<w:num w:numId="3"><w:abstractNumId w:val="0"/></w:num></w:numbering>');
+  });
+
+  it('ol три уровня: 1./a./i., свой счёт каждого списка (startOverride)', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace)}')], { h: '<ol><li>a<ol><li>b<ol><li>c</li></ol></li></ol></li></ol>' });
+    assert.strictEqual(r.body, wLI(wR('a'), 0, 1, 720) + wLI(wR('b'), 1, 2, 1440) + wLI(wR('c'), 2, 3, 2160));
+    assert.ok(r.numbering.includes(abstractNum(0, true)), r.numbering);
+    for (let i = 0; i < 3; i++) {
+      assert.ok(r.numbering.includes('<w:num w:numId="' + (i + 1) + '"><w:abstractNumId w:val="0"/><w:lvlOverride w:ilvl="' + i + '">'
+        + '<w:startOverride w:val="1"/></w:lvlOverride></w:num>'), r.numbering);
+    }
+  });
+
+  it('два списка в одном значении — разные numId; ul и ol — свои abstractNum', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace)}')], { h: '<ol><li>a</li></ol><p>x</p><ol><li>b</li></ol><ul><li>c</li></ul>' });
+    assert.strictEqual(r.body, wLI(wR('a'), 0, 1, 720) + wP(wR('x')) + wLI(wR('b'), 0, 2, 720) + wLI(wR('c'), 0, 3, 720));
+    assert.ok(r.numbering.includes(abstractNum(0, true) + abstractNum(1, false)), r.numbering);
+    assert.ok(r.numbering.includes('<w:num w:numId="3"><w:abstractNumId w:val="1"/></w:num>'), r.numbering);
+  });
+
+  it('шаблон без numbering.xml — часть, связь и тип создаются', async function () {
+    const r = await renderParts([mp('{d.h:html}')], { h: '<ul><li>a</li></ul>' });
+    assert.ok(r.numbering !== null);
+    assert.ok(/<Relationship Id="[^"]+" Type="http:\/\/schemas\.openxmlformats\.org\/officeDocument\/2006\/relationships\/numbering" Target="numbering\.xml"\/>/.test(r.rels), r.rels);
+    assert.ok(r.ct.includes('<Override PartName="/word/numbering.xml" ContentType="' + NUM_CT + '"/>'), r.ct);
+  });
+
+  it('шаблон с numbering.xml — определения дописываются после существующих, номера выше максимума', async function () {
+    const existing = '<w:abstractNum w:abstractNumId="3"><w:lvl w:ilvl="0"/></w:abstractNum><w:num w:numId="7"><w:abstractNumId w:val="3"/></w:num>'
+      + '<w:numIdMacAtCleanup w:val="2"/>';
+    const r = await renderParts([mp('{d.h:html}')], { h: '<ul><li>a</li></ul>' }, {
+      rels: '<Relationship Id="rId9" Type="' + NUM_REL + '" Target="numbering.xml"/>',
+      files: { 'word/numbering.xml': NUMBERING(existing) }
+    });
+    assert.strictEqual(r.body, wLI(wR('a'), 0, 8, 720) + wSP());
+    // пролог существующей части Carbone нормализует (перенос строки → пробел) — сравнивается корень
+    assert.strictEqual(r.numbering.slice(r.numbering.indexOf('<w:numbering')), NUMBERING('<w:abstractNum w:abstractNumId="3"><w:lvl w:ilvl="0"/></w:abstractNum>' + abstractNum(4, false)
+      + '<w:num w:numId="7"><w:abstractNumId w:val="3"/></w:num><w:num w:numId="8"><w:abstractNumId w:val="4"/></w:num><w:numIdMacAtCleanup w:val="2"/>').slice(XML_HEAD.length));
+    assert.strictEqual((r.rels.match(/relationships\/numbering"/g) || []).length, 1, r.rels);
+  });
+
+  it('связь numbering.xml с другим путём — пишется в него', async function () {
+    const r = await renderParts([mp('{d.h:html}')], { h: '<ul><li>a</li></ul>' }, {
+      rels: '<Relationship Id="rId9" Type="' + NUM_REL + '" Target="/word/num2.xml"/>',
+      files: { 'word/num2.xml': NUMBERING('') }
+    });
+    assert.strictEqual(r.numbering, null);
+    assert.strictEqual(r.body, wLI(wR('a'), 0, 1, 720) + wSP());
+  });
+
+  it('колонтитул и тело — общий numbering.xml, номера не повторяются', async function () {
+    const header = XML_HEAD + '<w:hdr ' + W_NS + '>' + mp('{d.h:html(nospace)}') + '</w:hdr>';
+    const r = await renderParts([mp('{d.h:html(nospace)}')], { h: '<ul><li>a</li></ul>' }, { files: { 'word/header1.xml': header } });
+    const ids = [r.body, r.header].map((x) => /<w:numId w:val="(\d+)"\/>/.exec(x)[1]);
+    assert.notStrictEqual(ids[0], ids[1]);
+    assert.strictEqual((r.numbering.match(/<w:num /g) || []).length, 2);
+    assert.strictEqual((r.numbering.match(/<w:abstractNum /g) || []).length, 1);
+  });
+
+  it('вложенные блоки пункта — абзацы с отступом пункта без номера', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace)}')], { h: '<ul><li><p>a</p><p>b</p><pre>c</pre></li></ul>' });
+    assert.strictEqual(r.body, wLI(wR('a'), 0, 1, 720) + wP(wR('b'), ind(720)) + wP(wR('c', COURIER), ind(720)));
+  });
+
+  it('пункт со списком первым — пустой пункт с номером, затем вложенный список', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace)}')], { h: '<ul><ul><li>a</li></ul></ul>' });
+    assert.strictEqual(r.body, wP('', numPr(0, 1) + ind(720, 360)) + wLI(wR('a'), 1, 2, 1440));
+  });
+
+  it('R7: пункты и заголовки берут у метки только jc, bidi, ind, spacing', async function () {
+    const markerPPr = '<w:pStyle w:val="Body"/>' + numPr(0, 42) + '<w:bidi/><w:spacing w:after="80"/><w:ind w:left="100" w:firstLine="200"/>' + JC;
+    const r = await renderParts([mp('{d.h:html(nospace)}', markerPPr)], { h: '<ul><li>a</li></ul><h2>b</h2><p>c</p>' });
+    assert.strictEqual(r.body,
+      wP(wR('a'), numPr(0, 1) + '<w:bidi/><w:spacing w:after="80"/><w:ind w:left="820" w:hanging="360"/>' + JC)
+      + wP(wR('b'), '<w:pStyle w:val="Heading2"/><w:bidi/><w:spacing w:after="80"/><w:ind w:left="100" w:firstLine="200"/>' + JC)
+      + wP(wR('c'), markerPPr));
+  });
+
+  it('Review Focus 3: список в ячейке цикла — свой numId в каждой строке, ячейка заканчивается w:p', async function () {
+    const tpl = await buildDocx('| {d.rows[i].h:html} |\n| {d.rows[i+1].h:html} |');
+    const rows = [1, 2, 3].map((n) => ({ h: '<p>r' + n + '</p><ol><li>a' + n + '</li><li>b' + n + '</li></ol>' }));
+    const out = await carbone.renderBuffer(tpl, 'docx', { rows }, {});
+    const xml = await readEntry(out, 'word/document.xml');
+    assertWellFormed(xml);
+    const cells = xml.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
+    assert.strictEqual(cells.length, 3);
+    const ids = cells.map((c, i) => {
+      assert.ok(c.endsWith('</w:p></w:tc>') || c.endsWith('<w:p/></w:tc>'), c);
+      const found = [...new Set([...c.matchAll(/<w:numId w:val="(\d+)"\/>/g)].map((m) => m[1]))];
+      assert.strictEqual(found.length, 1, c);
+      assert.ok(c.includes(wR('b' + (i + 1))), c);
+      return found[0];
+    });
+    assert.strictEqual(new Set(ids).size, 3);
+    const numbering = await readEntry(out, 'word/numbering.xml');
+    for (const id of ids) {
+      assert.ok(numbering.includes('<w:num w:numId="' + id + '"><w:abstractNumId w:val="0"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="1"/></w:lvlOverride></w:num>'), numbering);
+    }
+  });
+});
+
+describe('html: DOCX — заголовки', function () {
+  it('h1–h6 без styles.xml: стили создаются (жирный, кегль, outlineLvl), часть, связь и тип', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace)}')], { h: '<h1>1</h1><h2>2</h2><h3>3</h3><h4>4</h4><h5>5</h5><h6>6</h6>' });
+    const sizes = [40, 32, 28, 26, 24, 22];
+    assert.strictEqual(r.body, sizes.map((s, i) => wP(wR(String(i + 1)), '<w:pStyle w:val="Heading' + (i + 1) + '"/>')).join(''));
+    sizes.forEach((s, i) => {
+      assert.ok(r.styles.includes('<w:style w:type="paragraph" w:styleId="Heading' + (i + 1) + '"><w:name w:val="heading ' + (i + 1) + '"/>'
+        + '<w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:outlineLvl w:val="' + i + '"/></w:pPr>'
+        + '<w:rPr><w:b/><w:bCs/><w:sz w:val="' + s + '"/><w:szCs w:val="' + s + '"/></w:rPr></w:style>'), r.styles);
+    });
+    assert.ok(new RegExp('<Relationship Id="[^"]+" Type="' + STY_REL.replace(/[./]/g, '\\$&') + '" Target="styles\\.xml"/>').test(r.rels), r.rels);
+    assert.ok(r.ct.includes('<Override PartName="/word/styles.xml" ContentType="' + STY_CT + '"/>'), r.ct);
+  });
+
+  it('стили шаблона используются, недостающие дописываются; русский Word — styleId по имени «heading N»', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace)}')], { h: '<h1>a</h1><h2>b</h2><h3>c</h3>' }, {
+      rels: '<Relationship Id="rId2" Type="' + STY_REL + '" Target="styles.xml"/>',
+      files: { 'word/styles.xml': STYLES(styleP('Heading1', 'heading 1') + styleP('2', 'heading 2')) }
+    });
+    assert.strictEqual(r.body, wP(wR('a'), '<w:pStyle w:val="Heading1"/>') + wP(wR('b'), '<w:pStyle w:val="2"/>') + wP(wR('c'), '<w:pStyle w:val="Heading3"/>'));
+    assert.strictEqual((r.styles.match(/<w:style /g) || []).length, 3);
+    assert.ok(r.styles.endsWith('</w:style></w:styles>'), r.styles);
+    assert.ok(r.styles.includes('w:styleId="Heading3"'), r.styles);
+    assert.strictEqual((r.rels.match(/relationships\/styles"/g) || []).length, 1, r.rels);
+  });
+
+  it('headingtheme:custom- — стили custom-1…, создаются при отсутствии', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace, headingtheme:custom-)}')], { h: '<h1>a</h1><h4>b</h4>' }, {
+      rels: '<Relationship Id="rId2" Type="' + STY_REL + '" Target="styles.xml"/>',
+      files: { 'word/styles.xml': STYLES(styleP('custom-1', 'custom-1') + styleP('Heading4', 'heading 4')) }
+    });
+    assert.strictEqual(r.body, wP(wR('a'), '<w:pStyle w:val="custom-1"/>') + wP(wR('b'), '<w:pStyle w:val="custom-4"/>'));
+    assert.ok(r.styles.includes('<w:style w:type="paragraph" w:styleId="custom-4"><w:name w:val="custom-4"/><w:basedOn w:val="Normal"/>'), r.styles);
+    assert.ok(r.styles.includes('<w:outlineLvl w:val="3"/></w:pPr><w:rPr><w:b/><w:bCs/><w:sz w:val="26"/>'), r.styles);
+  });
+
+  it('заголовок в li — оформление заголовка в пункте, без стиля', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace)}', null, SZ)], { h: '<ul><li><h1>a</h1><h3>b</h3></li></ul>' });
+    assert.strictEqual(r.body, wLI(wR('a', '<w:b/>' + SZ), 0, 1, 720) + wP(wR('b', '<w:b/>' + SZ), ind(720)));
+    assert.strictEqual(r.styles, null);
+    const r2 = await renderParts([mp('{d.h:html(nospace)}')], { h: '<ol><li><h2>a</h2></li></ol>' });
+    assert.strictEqual(r2.body, wLI(wR('a', '<w:b/><w:sz w:val="32"/>'), 0, 1, 720));
+  });
+});
+
+describe('html: DOCX — цитаты, pre, hr, разрывы', function () {
+  it('blockquote: 600 twips на уровень, вложенный — 1200; список в цитате — отступ цитаты плюс уровень', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace)}')], { h: '<blockquote>a<blockquote>b</blockquote></blockquote><blockquote><ul><li>c</li></ul></blockquote>' });
+    assert.strictEqual(r.body, wP(wR('a'), ind(600)) + wP(wR('b'), ind(1200)) + wLI(wR('c'), 0, 1, 1320));
+  });
+
+  it('blockquote: отступ прибавляется к отступу метки', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace)}', '<w:ind w:left="100" w:right="50"/>')], { h: '<blockquote>a</blockquote>' });
+    assert.strictEqual(r.body, wP(wR('a'), '<w:ind w:left="700" w:right="50"/>'));
+  });
+
+  it('quotetheme:Quote — стиль вместо отступа, создаётся при отсутствии', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace, quotetheme:Quote)}')], { h: '<blockquote>a<blockquote>b</blockquote></blockquote><p>c</p>' }, {
+      rels: '<Relationship Id="rId2" Type="' + STY_REL + '" Target="styles.xml"/>',
+      files: { 'word/styles.xml': STYLES(styleP('Quote', 'Quote')) }
+    });
+    assert.strictEqual(r.body, wP(wR('a'), '<w:pStyle w:val="Quote"/>') + wP(wR('b'), '<w:pStyle w:val="Quote"/>') + wP(wR('c')));
+    assert.strictEqual((r.styles.match(/<w:style /g) || []).length, 1);
+    const r2 = await renderParts([mp('{d.h:html(nospace, quotetheme:Cite)}')], { h: '<blockquote>a</blockquote>' });
+    assert.ok(r2.styles.includes('<w:style w:type="paragraph" w:styleId="Cite"><w:name w:val="Cite"/><w:basedOn w:val="Normal"/><w:qFormat/>'
+      + '<w:pPr><w:ind w:left="600"/></w:pPr></w:style>'), r2.styles);
+  });
+
+  it('pre: пробелы и переносы сохраняются, Courier New', async function () {
+    const r = await renderParts([mp('{d.h:html}')], { h: '<pre>  a  b\n\n c </pre>' });
+    assert.strictEqual(r.body, wP(wR('  a  b', COURIER) + wBR() + wBR() + wR(' c ', COURIER)) + wSP());
+  });
+
+  it('hr — пустой абзац с нижней линией и отступами 120, без пустого абзаца после', async function () {
+    const r = await renderParts([mp('{d.h:html}', '<w:spacing w:after="80"/>' + JC)], { h: '<p>a</p><hr><blockquote><hr></blockquote>' });
+    const HR = '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr><w:spacing w:before="120" w:after="120"/>';
+    const sp = '<w:spacing w:after="80"/>' + JC;
+    assert.strictEqual(r.body, wP(wR('a'), sp) + wSP(sp) + wSP(HR + JC) + wSP(HR + ind(600) + JC));
+  });
+
+  it('break-before/break-after у заголовка, списка и hr', async function () {
+    const PB = '<w:r><w:br w:type="page"/></w:r>';
+    const r = await renderParts([mp('{d.h:html(nospace)}')], {
+      h: '<h1 style="break-before:page">a</h1><ul style="break-before:page;break-after:page"><li>b</li></ul><hr style="break-before:page">'
+    });
+    const HR = '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr><w:spacing w:before="120" w:after="120"/>';
+    assert.strictEqual(r.body, wP(PB + wR('a'), '<w:pStyle w:val="Heading1"/>')
+      + wP(wR('b'), '<w:pageBreakBefore/>' + numPr(0, 1) + ind(720, 360)) + wP(PB)
+      + wP(PB, HR));
+  });
+});
+
+describe('html: DOCX — флажки', function () {
+  it('отмеченный и нет — w14:checkbox, w14 объявляется на корне части', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace)}', null, SZ)], { h: '<p><input type="checkbox" checked> да <input type="checkbox"> нет</p>' });
+    assert.strictEqual(r.body, wP(BOX(true, SZ) + wR(' да ', SZ) + BOX(false, SZ) + wR(' нет', SZ)));
+    assert.ok(/<w:document [^>]*xmlns:w14="http:\/\/schemas\.microsoft\.com\/office\/word\/2010\/wordml"/.test(r.doc), r.doc.slice(0, 600));
+  });
+
+  it('w14 уже объявлен — второй раз не добавляется', async function () {
+    const header = XML_HEAD + '<w:hdr ' + W_NS + ' ' + W14_NS + '>' + mp('{d.h:html(nospace)}') + '</w:hdr>';
+    const r = await renderParts([mp('x')], { h: '<input type="checkbox">' }, { files: { 'word/header1.xml': header } });
+    assert.strictEqual((r.header.match(/xmlns:w14=/g) || []).length, 1, r.header);
+    assert.ok(r.header.includes(BOX(false)), r.header);
+    assert.ok(!r.doc.includes('xmlns:w14'), 'тело без флажков не меняется');
+  });
+
+  it('флажок в пункте списка — без номера, отступ уровня, флажок первым', async function () {
+    const r = await renderParts([mp('{d.h:html(nospace)}')], { h: '<ul><li><input type="checkbox" checked>a</li><li>b<ul><li><input type="checkbox">c</li></ul></li></ul>' });
+    assert.strictEqual(r.body, wP(BOX(true) + wR(' ') + wR('a'), ind(720)) + wLI(wR('b'), 0, 1, 720)
+      + wP(BOX(false) + wR(' ') + wR('c'), ind(1440)));
+  });
+});
+
+describe('html: DOCX — части и производительность (Task 5)', function () {
+  it('без списков и заголовков numbering.xml и styles.xml не создаются', async function () {
+    const r = await renderParts([mp('{d.h:html}')], { h: '<p>a</p><blockquote>b</blockquote><hr><pre>c</pre>' });
+    assert.strictEqual(r.numbering, null);
+    assert.strictEqual(r.styles, null);
+    assert.ok(!r.rels.includes('numbering') && !r.rels.includes('styles'), r.rels);
+  });
+
+  it('3000 строк таблицы со списком и заголовком — линейно', async function () {
+    this.timeout(30000);
+    const rows = Array.from({ length: 3000 }, (v, i) => ({ h: '<h2>' + i + '</h2><ol><li>a</li><li>b<ul><li>c</li></ul></li></ol>' }));
+    const tpl = await buildDocx('| {d.rows[i].h:html(nospace)} |\n| {d.rows[i+1].h:html(nospace)} |');
+    const start = Date.now();
+    const out = await carbone.renderBuffer(tpl, 'docx', { rows }, {});
+    const ms = Date.now() - start;
+    const numbering = await readEntry(out, 'word/numbering.xml');
+    assert.strictEqual((numbering.match(/<w:num /g) || []).length, 6000);
+    assert.strictEqual((numbering.match(/<w:abstractNum /g) || []).length, 2);
+    assert.ok(ms < 3000, 'сборка ' + ms + ' мс');
+  });
+});

@@ -6,7 +6,7 @@
 //   2. форматтер html кладёт значение и параметры в реестр options.__html.items и печатает жетон «h<ключ>i<n>» из
 //      области частного использования (ключ — случайный на рендер: жетон из данных отчёта не совпадёт с ним);
 //   3. finish — после сборки всех файлов (renderBuffer, до диаграмм и изображений): жетоны файлов верхнего уровня
-//      заменяются разметкой — DOCX: lib/html-docx.js, ODT: lib/html-odt.js (Task 7; до него — текст модели),
+//      заменяются разметкой — DOCX: lib/html-docx.js, ODT: lib/html-odt.js,
 //      HTML-шаблон: значение как есть. Жетон без значения убирается. До записи загружаются изображения img всех
 //      жетонов (уникальные src, не больше 4 одновременно, media.loadImage — те же форматы, лимиты и белый список, что
 //      у картинок-заглушек; общий счётчик 50 МБ — options.__media.total). R5: превышение лимитов — ошибка шаблона,
@@ -20,6 +20,7 @@ var xmltree = require('./xmltree');
 var model = require('./html-model');
 var htmlDocx = require('./html-docx');
 var htmlDocxParts = require('./html-docx-parts');
+var htmlOdt = require('./html-odt');
 var media = require('./media');
 var mediaFormats = require('./media-formats');
 
@@ -31,8 +32,8 @@ var TOKEN_REGEX = /h([0-9a-f]{12})i(\d+)/g;
 
 // форматы, где работает :html; прочие — ошибка шаблона
 var SUPPORTED = ['docx', 'odt', 'html', 'xhtml'];
-// форматы, где img из HTML вставляется изображением (ODT — Task 7)
-var IMAGE_FORMATS = ['docx'];
+// форматы, где img из HTML вставляется изображением
+var IMAGE_FORMATS = ['docx', 'odt'];
 
 var MSG = {
   outside : 'html ставится в текст абзаца.',
@@ -215,64 +216,6 @@ function __htmlUrl (d, url, k) {
 // ---------------------------------------------------------------------------------------------------------------
 // 3. finish
 
-/** Текст блоков модели (ODT до Task 7): блоки через пробел */
-function plainText (blocks) {
-  var _parts = [];
-  var _inlines = function (list) {
-    return list.map(function (inline) {
-      if (inline.type === 'text') {
-        return inline.text;
-      }
-      if (inline.type === 'link') {
-        return _inlines(inline.children);
-      }
-      return inline.type === 'break' ? ' ' : '';
-    }).join('');
-  };
-  var _walk = function (block) {
-    if (block.type === 'para' || block.type === 'heading') {
-      _parts.push(_inlines(block.inlines));
-    }
-    else if (block.type === 'pre') {
-      _parts.push(block.lines.map(_inlines).join(' '));
-    }
-    else if (block.type === 'list') {
-      block.items.forEach(function (item) {
-        item.blocks.forEach(_walk);
-      });
-    }
-    else if (block.type === 'table') {
-      if (block.caption !== null) {
-        _parts.push(_inlines(block.caption));
-      }
-      block.rows.forEach(function (row) {
-        row.cells.forEach(function (cell) {
-          cell.blocks.forEach(_walk);
-        });
-      });
-    }
-  };
-  blocks.forEach(_walk);
-  return _parts.join(' ');
-}
-
-function escapeXml (str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-/** ODT до Task 7: жетон → текст модели */
-function writeOdtText (job) {
-  return job.xml.replace(TOKEN_REGEX, function (all, nonce, id) {
-    var _item = nonce === job.registry.nonce ? job.registry.items[id] : undefined;
-    if (_item === undefined) {
-      return all;
-    }
-    return escapeXml(_item.options.inline === true
-      ? plainText([{ type : 'para', inlines : model.inlineOnly(_item.value, _item.source) }])
-      : plainText(model.parse(_item.value, _item.source)));
-  });
-}
-
 /**
  * Изображения img из HTML (R5): уникальные src, не больше media.CONCURRENCY загрузок одновременно
  * @param  {Map}    sources  src → метка (первая, где он встретился) — для ошибок и предупреждений
@@ -407,16 +350,16 @@ function finish (template, options) {
     }
     return loadImages(_sources, options).then(function (images) {
       var _fmt = mediaFormats.formatOf(_ext);
-      // numbering.xml и styles.xml — общие для тела и колонтитулов, записываются после всех частей; media-файлы —
-      // общие для отчёта
-      var _parts = _ext === 'docx' ? htmlDocxParts.create(template) : null;
+      // numbering.xml и styles.xml (DOCX), стили styles.xml (ODT) — общие для тела и колонтитулов, записываются после
+      // всех частей; media-файлы — общие для отчёта
+      var _parts = _ext === 'docx' ? htmlDocxParts.create(template) : htmlOdt.parts(template);
       var _store = _fmt !== null ? mediaFormats.storeMedia(template, _fmt) : null;
       _jobs.forEach(function (job) {
         job.images = images;
         job.parts = _parts;
         job.media = _store;
         job.links = _fmt !== null ? lazyLinks(_fmt, template, job.file.name) : null;
-        job.file.data = _ext === 'docx' ? htmlDocx.write(job) : writeOdtText(job);
+        job.file.data = _ext === 'docx' ? htmlDocx.write(job) : htmlOdt.write(job);
         if (job.links !== null) {
           job.links.save();
         }

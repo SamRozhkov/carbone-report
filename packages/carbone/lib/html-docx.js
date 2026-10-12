@@ -34,6 +34,7 @@ var model = require('./html-model');
 var parts = require('./html-docx-parts');
 var table = require('./html-docx-table');
 var links = require('./links');
+var common = require('./html-xml');
 
 var MSG_OUTSIDE = 'html ставится в текст абзаца.';
 
@@ -83,19 +84,8 @@ var EMU_PER_PX = 9525;
 var DEFAULT_IMAGE_WIDTH = 1800000;
 // наибольшая сторона изображения: 22 дюйма (наибольший размер страницы Word), EMU
 var MAX_IMAGE_EMU = 20116800;
-// символы, недопустимые в XML 1.0, и одиночные суррогаты
-var INVALID_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
-
-function templateError (message, source) {
-  return new Error(message + ' Source: "' + source + '"');
-}
-
-function escapeText (text) {
-  return text.replace(INVALID_XML, function (all) {
-    // у одиночного младшего суррогата сохраняется предыдущий символ
-    return all.length === 2 ? all[0] : '';
-  }).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+var templateError = common.templateError;
+var escapeText = common.escapeText;
 
 // ---------------------------------------------------------------------------------------------------------------
 // Свойства: дочерние элементы [{ name, xml }]
@@ -719,14 +709,6 @@ function splitParagraph (xml, p, token) {
   };
 }
 
-/** Жетоны этого рендера в XML */
-function parseTokens (xml, job) {
-  return xmltree.parse(xml, job.tokenRegex, function (match) {
-    var _id = parseInt(match[2], 10);
-    return match[1] === job.registry.nonce && job.registry.items[_id] !== undefined ? { id : _id } : null;
-  });
-}
-
 /** Абзац жетона (R6: жетон — в w:t, прямом потомке w:r внутри w:p) */
 function paragraphOf (token, job) {
   var _el = token.el;
@@ -745,7 +727,7 @@ function writeParagraph (pXml, job) {
   var _out = '';
   var _xml = pXml;
   for (;;) {
-    var _parsed = parseTokens(_xml, job);
+    var _parsed = common.parseTokens(_xml, job);
     if (_parsed.tokens.length === 0) {
       return _out + _xml;
     }
@@ -789,70 +771,16 @@ function writeParagraph (pXml, job) {
 }
 
 /**
- * Объявить на корне части пространства имён, которые использует записанная разметка (job.ns: w14 — флажки, r —
- * ссылки и изображения, wp — изображения), если их там нет. Правки абзацев не задевают открывающий тег корня — его
- * позиция в новом XML та же, что в исходном (job.root)
- */
-function declareNs (xml, job) {
-  var _top = job.root.children.length > 0 ? job.root.children[0] : null;
-  if (_top === null) {
-    return xml;
-  }
-  var _tag = xml.slice(_top.start, _top.openEnd);
-  var _new = _tag;
-  Object.keys(NAMESPACES).forEach(function (prefix) {
-    if (job.ns[prefix] === true && new RegExp('\\sxmlns:' + prefix + '\\s*=').test(_new) === false) {
-      _new = xmltree.putAttr(_new, 'xmlns:' + prefix, NAMESPACES[prefix]);
-    }
-  });
-  return _new === _tag ? xml : xml.slice(0, _top.start) + _new + xml.slice(_top.openEnd);
-}
-
-/**
  * Записать HTML на месте жетонов части DOCX
  * @param  {Object} job  { template, file, xml, root, tokens, registry, options, images, links, media, tokenRegex,
  *                       parts } — parts — общие части отчёта (html-docx-parts.create), сохраняет вызывающий (как и
  *                       links — связи части, и media — media-файлы отчёта)
- * @return {String}      новый XML части
+ * @return {String}      новый XML части; на корне объявляются пространства имён разметки (job.ns: w14 — флажки, r —
+ *                       ссылки и изображения, wp — изображения)
  */
 function write (job) {
   job.ns = {};
-  return declareNs(writeParagraphs(job), job);
-}
-
-function writeParagraphs (job) {
-  var _xml = job.xml;
-  var _tokens = job.tokens;
-  for (;;) {
-    var _groups = new Set();
-    _tokens.forEach(function (token) {
-      _groups.add(paragraphOf(token, job));
-    });
-    if (_groups.size === 0) {
-      return _xml;
-    }
-    // внешний абзац — в следующий проход, после вложенных: абзацы с вложенными отмечаются подъёмом по предкам
-    // (линейно по числу абзацев и глубине)
-    var _outer = new Set();
-    _groups.forEach(function (p) {
-      for (var _el = p.parent; _el !== null; _el = _el.parent) {
-        if (_groups.has(_el) === true) {
-          _outer.add(_el);
-        }
-      }
-    });
-    var _edits = [];
-    _groups.forEach(function (p) {
-      if (_outer.has(p) === false) {
-        _edits.push({ start : p.start, end : p.end, rep : writeParagraph(_xml.slice(p.start, p.end), job) });
-      }
-    });
-    _xml = xmltree.applyEdits(_xml, _edits);
-    if (_outer.size === 0) {
-      return _xml;
-    }
-    _tokens = parseTokens(_xml, job).tokens;
-  }
+  return common.declareNs(common.rewriteParagraphs(job, paragraphOf, writeParagraph), job.root, job.ns, NAMESPACES);
 }
 
 module.exports = {

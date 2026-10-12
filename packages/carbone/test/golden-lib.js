@@ -65,7 +65,8 @@ function zipBuffer (files) {
     const zip = new yazl.ZipFile();
     const parts = [];
     zip.outputStream.on('data', (c) => parts.push(c)).on('error', reject).on('end', () => resolve(Buffer.concat(parts)));
-    for (const f of files) zip.addBuffer(Buffer.from(f.data), f.name);
+    // mimetype (OpenDocument) — первым и без сжатия
+    for (const f of files) zip.addBuffer(Buffer.from(f.data), f.name, { compress: f.name !== 'mimetype' });
     zip.end();
   });
 }
@@ -240,4 +241,39 @@ function normalizeError (message) {
     .replace(/ Source: [\s\S]*$/, '');
 }
 
-module.exports = { buildDocx, buildDocxWithChart, buildXlsxWithChart, docxText, entryNames, normalizeError, readEntry, zipBuffer };
+// OpenDocument: минимальный пакет ODT/ODS/ODP
+const ODF_MIME = { odt: 'text', ods: 'spreadsheet', odp: 'presentation' };
+const ODF_NS = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
+  + ' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"'
+  + ' xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink"'
+  + ' xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0"'
+  + ' xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"';
+const ODF_FILE_TYPES = { png: 'image/png', jpeg: 'image/jpeg', jpg: 'image/jpeg', gif: 'image/gif', xml: 'text/xml' };
+
+/**
+ * ODT/ODS/ODP: body — содержимое office:text / office:spreadsheet / office:presentation.
+ * opts: { fonts, automatic — содержимое office:font-face-decls / office:automatic-styles content.xml (не задано —
+ * элемента нет), files — { имя: данные } дополнительные файлы (styles.xml, Pictures/…; в manifest.xml по расширению) }
+ */
+function buildOdf (ext, body, opts) {
+  const o = opts || {};
+  const mime = 'application/vnd.oasis.opendocument.' + ODF_MIME[ext];
+  const extra = Object.entries(o.files || {}).map(([name, data]) => ({ name, data }));
+  const entries = extra.map((f) => '<manifest:file-entry manifest:full-path="' + f.name + '" manifest:media-type="'
+    + (ODF_FILE_TYPES[(/\.([a-z]+)$/i.exec(f.name) || [])[1]] || '') + '"/>').join('');
+  return zipBuffer([
+    { name: 'mimetype', data: mime },
+    { name: 'META-INF/manifest.xml', data: XML + '<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">'
+      + '<manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="' + mime + '"/>'
+      + '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>' + entries + '</manifest:manifest>' },
+    { name: 'content.xml', data: XML + '<office:document-content ' + ODF_NS + ' office:version="1.3">'
+      + (o.fonts !== undefined ? '<office:font-face-decls>' + o.fonts + '</office:font-face-decls>' : '')
+      + (o.automatic !== undefined ? '<office:automatic-styles>' + o.automatic + '</office:automatic-styles>' : '')
+      + '<office:body><office:' + ODF_MIME[ext] + '>' + body + '</office:' + ODF_MIME[ext] + '></office:body></office:document-content>' },
+    ...extra
+  ]);
+}
+
+const buildOdt = (body, opts) => buildOdf('odt', body, opts);
+
+module.exports = { ODF_NS, buildOdf, buildOdt, buildDocx, buildDocxWithChart, buildXlsxWithChart, docxText, entryNames, normalizeError, readEntry, zipBuffer };

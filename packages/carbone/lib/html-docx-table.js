@@ -25,7 +25,8 @@ var TBL_LOOK = '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColu
 /**
  * Разметка сетки: по строкам — ячейки с первым столбцом и числом столбцов
  * @param  {Array} rows  строки модели [{ cells : [{ colspan, rowspan, blocks, … }] }]
- * @return {Object}      { columns, rows : [[{ col, span, cell, merge : null|'restart'|'cont', more : [ячейки] }]] }
+ * @return {Object}      { columns, rows : [[{ col, span, cell, merge : null|'restart'|'cont', rowspan, more : [ячейки] }]] }
+ *                        rowspan — число строк объединения (обрезано по последней строке; у 'cont' — 1)
  */
 function layout (rows) {
   // carry[c] — объединённая по вертикали ячейка, начатая в столбце c выше: { left : ещё строк, span }
@@ -39,7 +40,7 @@ function layout (rows) {
     var _flush = function () {
       while (_c < MAX_COLUMNS && _carry[_c] !== null) {
         var _carried = _carry[_c];
-        _entries.push({ col : _c, span : _carried.span, cell : null, merge : 'cont', more : null });
+        _entries.push({ col : _c, span : _carried.span, cell : null, merge : 'cont', rowspan : 1, more : null });
         if (--_carried.left === 0) {
           _carry[_c] = null;
         }
@@ -63,7 +64,7 @@ function layout (rows) {
         }
       }
       var _rowspan = Math.min(cell.rowspan, rows.length - r);
-      _lastOwn = { col : _c, span : _span, cell : cell, merge : _rowspan > 1 ? 'restart' : null, more : [] };
+      _lastOwn = { col : _c, span : _span, cell : cell, merge : _rowspan > 1 ? 'restart' : null, rowspan : _rowspan, more : [] };
       _entries.push(_lastOwn);
       if (_rowspan > 1) {
         _carry[_c] = { left : _rowspan - 1, span : _span };

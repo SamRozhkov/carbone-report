@@ -77,11 +77,6 @@ var LINK_RPR = [
   { name : 'w:color', xml : '<w:color w:val="0563C1"/>' },
   { name : 'w:u', xml : '<w:u w:val="single"/>' }
 ];
-// изображение: EMU на пиксель (96 dpi), ширина без width/height — 5 см
-var EMU_PER_PX = 9525;
-var DEFAULT_IMAGE_WIDTH = 1800000;
-// наибольшая сторона изображения: 22 дюйма (наибольший размер страницы Word), EMU
-var MAX_IMAGE_EMU = 20116800;
 var templateError = common.templateError;
 var escapeText = common.escapeText;
 
@@ -272,36 +267,6 @@ var INLINES = {
   }
 };
 
-/**
- * Размер изображения в EMU: width/height в px (96 dpi); задан один — второй по пропорциям; ни одного — ширина
- * 5 см с пропорциями. Больше MAX_IMAGE_EMU по любой стороне — уменьшается с пропорциями (Word не открывает такие
- * размеры); каждая сторона — не меньше 1 EMU
- */
-function imageEmu (inline, image) {
-  var _w = inline.width;
-  var _h = inline.height;
-  var _cx;
-  var _cy;
-  if (_w !== null && _h !== null) {
-    _cx = _w * EMU_PER_PX;
-    _cy = _h * EMU_PER_PX;
-  }
-  else if (_w !== null) {
-    _cx = _w * EMU_PER_PX;
-    _cy = _cx * image.height / image.width;
-  }
-  else if (_h !== null) {
-    _cy = _h * EMU_PER_PX;
-    _cx = _cy * image.width / image.height;
-  }
-  else {
-    _cx = DEFAULT_IMAGE_WIDTH;
-    _cy = DEFAULT_IMAGE_WIDTH * image.height / image.width;
-  }
-  var _scale = Math.min(1, MAX_IMAGE_EMU / _cx, MAX_IMAGE_EMU / _cy);
-  return { cx : Math.max(1, Math.round(_cx * _scale)), cy : Math.max(1, Math.round(_cy * _scale)) };
-}
-
 /** Следующий id картинки части (wp:docPr, pic:cNvPr): выше максимума исходной части */
 function nextDrawingId (job) {
   if (job.drawingId === undefined) {
@@ -317,7 +282,7 @@ function nextDrawingId (job) {
 
 /** Изображение «в тексте»: w:r с w:drawing/wp:inline, a:blip — на media-файл (job.media) через связь части */
 function imageXml (inline, image, rPr, ctx) {
-  var _size = imageEmu(inline, image);
+  var _size = common.imageSize(inline, image);
   var _id = nextDrawingId(ctx.job);
   var _ref = escapeText(ctx.links.ref(ctx.media.path(image)));
   var _ext = 'cx="' + _size.cx + '" cy="' + _size.cy + '"';
@@ -338,7 +303,7 @@ function checkboxXml (checked, rPr, ctx) {
   var _rPr = rPrXml(rPr);
   return '<w:sdt><w:sdtPr>' + _rPr + '<w14:checkbox><w14:checked w14:val="' + (checked === true ? '1' : '0') + '"/>'
     + '<w14:checkedState w14:val="2612" w14:font="MS Gothic"/><w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/>'
-    + '</w14:checkbox></w:sdtPr><w:sdtContent><w:r>' + _rPr + textXml(checked === true ? '☒' : '☐') + '</w:r></w:sdtContent></w:sdt>';
+    + '</w14:checkbox></w:sdtPr><w:sdtContent><w:r>' + _rPr + textXml(common.checkboxSymbol(checked)) + '</w:r></w:sdtContent></w:sdt>';
 }
 
 /**

@@ -1951,3 +1951,371 @@ describe('html: ODT — разрывы и стиль страницы абзац
     assert.strictEqual(r.body, oP('x', 'P2') + oSP('CRhp1') + oP('-', 'CRhp1') + oP('y', 'CRhp1') + oSP('CRhp1'));
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// :html в ODT (Task 8): списки, таблицы, ссылки, изображения
+
+const oCm = (cm) => String(Math.round(cm * 1000) / 1000) + 'cm';
+// автоматический стиль списка: 10 уровней, маркеры •◦▪ или номера 1/a/i с точкой, уровень — 1.27cm к отступу offset
+function listStyle (name, ordered, offset) {
+  let xml = '<text:list-style style:name="' + name + '">';
+  for (let k = 1; k <= 10; k++) {
+    const m = oCm((offset || 0) + 1.27 * k);
+    const props = '<style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment'
+      + ' text:label-followed-by="listtab" text:list-tab-stop-position="' + m + '" fo:text-indent="-0.635cm" fo:margin-left="' + m + '"/></style:list-level-properties>';
+    xml += ordered
+      ? '<text:list-level-style-number text:level="' + k + '" style:num-suffix="." style:num-format="' + ['1', 'a', 'i'][(k - 1) % 3] + '">' + props + '</text:list-level-style-number>'
+      : '<text:list-level-style-bullet text:level="' + k + '" text:bullet-char="' + ['•', '◦', '▪'][(k - 1) % 3] + '">' + props + '</text:list-level-style-bullet>';
+  }
+  return xml + '</text:list-style>';
+}
+const oL = (style, inner, cont) => '<text:list text:style-name="' + style + '"' + (cont ? ' text:continue-numbering="true"' : '') + '>' + inner + '</text:list>';
+const oLI = (inner) => '<text:list-item>' + inner + '</text:list-item>';
+const oLH = (inner) => '<text:list-header>' + inner + '</text:list-header>';
+// таблица: стиль таблицы, столбцы, ячейки
+const oTable = (n, style, cols, rows) => '<table:table table:name="CRhTable' + n + '" table:style-name="' + style + '">'
+  + cols + rows.map((cells) => '<table:table-row>' + cells.join('') + '</table:table-row>').join('') + '</table:table>';
+const oCols = (count, style) => ('<table:table-column table:style-name="' + (style || 'CRhtc1') + '"/>').repeat(count);
+const oTD = (inner, o) => '<table:table-cell table:style-name="' + ((o && o.style) || 'CRhtd1') + '"' + (o && o.cols ? ' table:number-columns-spanned="' + o.cols + '"' : '')
+  + (o && o.rows ? ' table:number-rows-spanned="' + o.rows + '"' : '') + '>' + inner + '</table:table-cell>';
+const oCOV = '<table:covered-table-cell/>';
+const tableStyle = (name, props, attrs) => '<style:style style:name="' + name + '" style:family="table"' + (attrs || '') + '><style:table-properties ' + props + '/></style:style>';
+const colStyle = (name, width) => '<style:style style:name="' + name + '" style:family="table-column"><style:table-column-properties style:column-width="' + width + '"/></style:style>';
+const CELL_STYLE = '<style:style style:name="CRhtd1" style:family="table-cell"><style:table-cell-properties fo:border="0.5pt solid #000000"/></style:style>';
+const oLink = (href, inner, style) => '<text:a xlink:type="simple" xlink:href="' + href + '"' + (style ? ' text:style-name="' + style + '"' : '') + '>' + inner + '</text:a>';
+const oFrame = (n, w, h, file) => '<draw:frame draw:name="CRhImage' + n + '" text:anchor-type="as-char" svg:width="' + w + '" svg:height="' + h + '">'
+  + '<draw:image xlink:href="Pictures/' + (file || 'cr-img-1.png') + '" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>';
+
+// сборка ODT с предупреждениями: { out, warnings, content, body, auto, styles, manifest }
+async function renderOdtW (body, data, opts) {
+  const o = opts || {};
+  const tpl = await buildOdt(body, { automatic: o.automatic, files: Object.assign(o.styles !== undefined ? { 'styles.xml': o.styles } : {}, o.files || {}) });
+  const res = await renderBufferWithWarnings(tpl, 'odt', data, o.options || {});
+  const content = await readEntry(res.buffer, 'content.xml');
+  assertWellFormed(content);
+  return {
+    out: res.buffer,
+    warnings: res.warnings,
+    content,
+    manifest: await readEntry(res.buffer, 'META-INF/manifest.xml'),
+    styles: await readEntry(res.buffer, 'styles.xml').catch(() => null),
+    body: between(content, '<office:text>', '</office:text>'),
+    auto: between(content, '<office:automatic-styles>', '</office:automatic-styles>')
+  };
+}
+
+describe('html: ODT — списки', function () {
+  it('ul три уровня: вложенные text:list в text:list-item, маркеры •/◦/▪, 1.27cm на уровень', async function () {
+    const r = await renderOdt(oP('{d.h:html}'), { h: '<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li><li>d</li></ul>' });
+    assert.strictEqual(r.body, oL('CRhl1', oLI(oP('a') + oL('CRhl1', oLI(oP('b') + oL('CRhl1', oLI(oP('c')))))) + oLI(oP('d'))) + oSP());
+    assert.strictEqual(r.auto, listStyle('CRhl1', false));
+  });
+
+  it('ol: 1./a./i.; два списка — отдельные text:list (свой счёт), ul и ol — свои стили', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<ol><li>a<ol><li>b</li></ol></li></ol><p>x</p><ol><li>c</li></ol><ul><li>d</li></ul>' });
+    assert.strictEqual(r.body, oL('CRhl1', oLI(oP('a') + oL('CRhl1', oLI(oP('b'))))) + oP('x') + oL('CRhl1', oLI(oP('c'))) + oL('CRhl2', oLI(oP('d'))));
+    assert.strictEqual(r.auto, listStyle('CRhl1', true) + listStyle('CRhl2', false));
+  });
+
+  it('вложенные блоки пункта — абзацы пункта; пункт со списком первым — пустой абзац с номером', async function () {
+    assert.strictEqual(await odtBody('<ul><li><p>a</p><p>b</p><pre>c</pre></li></ul>', oP('{d.h:html(nospace)}')),
+      oL('CRhl1', oLI(oP('a') + oP('b') + oP(oS('CRh1', 'c')))));
+    assert.strictEqual(await odtBody('<ul><ul><li>a</li></ul></ul>', oP('{d.h:html(nospace)}')),
+      oL('CRhl1', oLI(oSP() + oL('CRhl1', oLI(oP('a'))))));
+  });
+
+  it('флажок в пункте — text:list-header с символом и пробелом', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<ul><li><input type="checkbox" checked>a</li><li>b<ul><li><input type="checkbox">c</li></ul></li></ul>' });
+    assert.strictEqual(r.body, oL('CRhl1', oLH(oP('☒ a')) + oLI(oP('b') + oL('CRhl1', oLH(oP('☐ c'))))));
+  });
+
+  it('стиль абзаца и span метки — у абзацев пунктов', async function () {
+    const auto = pStyle('P1', 'Standard', 'fo:text-align="center"') + tStyle('T1', 'fo:font-size="14pt"');
+    const r = await renderOdt(oP(oS('T1', '{d.h:html(nospace)}'), 'P1'), { h: '<ol><li>a</li></ol>' }, { automatic: auto });
+    assert.strictEqual(r.body, oL('CRhl1', oLI(oP(oS('T1', 'a'), 'P1'))));
+  });
+
+  it('список в цитате — отступ уровней от 1.058cm; цитата в пункте — от отступа пункта', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<blockquote><ul><li>a<blockquote>q</blockquote></li></ul></blockquote>' });
+    assert.strictEqual(r.body, oL('CRhl1', oLI(oP('a') + oP('q', 'CRhp1'))));
+    assert.strictEqual(r.auto, listStyle('CRhl1', false, 1.058) + pStyle('CRhp1', null, 'fo:margin-left="3.386cm"'));
+  });
+
+  it('quotetheme: список в цитате — абзацы пунктов со стилем цитаты, без отступа', async function () {
+    const styles = O_STYLES({ styles: '<style:style style:name="Quotations" style:family="paragraph"/>' });
+    const r = await renderOdt(oP('{d.h:html(nospace, quotetheme:Quotations)}'), { h: '<blockquote><ul><li>a</li></ul></blockquote>' }, { styles });
+    assert.strictEqual(r.body, oL('CRhl1', oLI(oP('a', 'Quotations'))));
+    assert.strictEqual(r.auto, listStyle('CRhl1', false));
+  });
+
+  it('заголовок в пункте — абзац пункта с жирным текстом и кеглем заголовка', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<ul><li><h2>h</h2></li></ul>' });
+    assert.strictEqual(r.body, oL('CRhl1', oLI(oP(oS('CRh1', 'h')))));
+    assert.strictEqual(r.auto, listStyle('CRhl1', false) + tStyle('CRh1', O_BOLD + ' fo:font-size="16pt"'));
+  });
+
+  it('разрыв после списка — отдельным абзацем; разрыв до — у первого пункта', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<ul style="break-before:page;break-after:page"><li>a</li><li>b</li></ul>' });
+    assert.strictEqual(r.body, oL('CRhl1', oLI(oP('a', 'CRhp1')) + oLI(oP('b'))) + oSP('CRhp2'));
+    assert.strictEqual(r.auto, listStyle('CRhl1', false) + pStyle('CRhp1', null, 'fo:break-before="page"') + pStyle('CRhp2', null, 'fo:break-after="page"'));
+  });
+
+  it('стиль страницы метки: первый абзац пункта — с ним, прочие — без', async function () {
+    const P2 = pStyle('P2', 'Standard', 'fo:break-before="page"');
+    const r = await renderOdt(oP('{d.h:html}', 'P2'), { h: '<ul><li>a</li><li>b</li></ul>' }, { automatic: P2 });
+    assert.strictEqual(r.body, oL('CRhl1', oLI(oP('a', 'P2')) + oLI(oP('b', 'CRhp1'))) + oSP('CRhp1'));
+  });
+
+  it('стили CRhl шаблона не повторяются', async function () {
+    const auto = '<text:list-style style:name="CRhl3"/>';
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<ul><li>a</li></ul>' }, { automatic: auto });
+    assert.strictEqual(r.body, oL('CRhl4', oLI(oP('a'))));
+  });
+});
+
+describe('html: ODT — таблицы', function () {
+  const T17 = tableStyle('CRht1', 'style:width="17cm" table:align="margins"');
+
+  it('th, colspan, rowspan: столбцы, number-columns/rows-spanned, covered-table-cell, рамки ячеек', async function () {
+    const r = await renderOdt(oP('{d.h:html}'), { h: '<table><tr><th>A</th><th colspan="2">B</th></tr><tr><td rowspan="2">c</td><td>d</td><td>e</td></tr>'
+      + '<tr><td>f</td><td>g</td></tr></table>' });
+    assert.strictEqual(r.body, oTable(1, 'CRht1', oCols(3), [
+      [oTD(oP(oS('CRh1', 'A'))), oTD(oP(oS('CRh1', 'B')), { cols: 2 }), oCOV],
+      [oTD(oP('c'), { rows: 2 }), oTD(oP('d')), oTD(oP('e'))],
+      [oCOV, oTD(oP('f')), oTD(oP('g'))]
+    ]) + oSP());
+    assert.strictEqual(r.auto, T17 + colStyle('CRhtc1', '5.667cm') + CELL_STYLE + tStyle('CRh1', O_BOLD));
+  });
+
+  it('ширина — по fo:page-width и полям макета страницы Standard из styles.xml', async function () {
+    const styles = O_STYLES({
+      automatic: '<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin-left="2cm" fo:margin-right="10mm"/></style:page-layout>'
+        + '<style:page-layout style:name="pm2"><style:page-layout-properties fo:page-width="50cm"/></style:page-layout>',
+      master: '<style:master-page style:name="Other" style:page-layout-name="pm2"/><style:master-page style:name="Standard" style:page-layout-name="pm1"/>'
+    });
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<table><tr><td>a</td><td colspan="3">b</td></tr></table>' }, { styles });
+    assert.strictEqual(r.body, oTable(1, 'CRht1', oCols(4), [[oTD(oP('a')), oTD(oP('b'), { cols: 3 }), oCOV, oCOV]]));
+    assert.strictEqual(r.auto, tableStyle('CRht1', 'style:width="18cm" table:align="margins"') + colStyle('CRhtc1', '4.5cm') + CELL_STYLE);
+  });
+
+  it('caption — абзацем перед таблицей; thead/tbody/tfoot — строки по порядку', async function () {
+    assert.strictEqual(await odtBody('<table><caption>Подпись</caption><thead><tr><th>h</th></tr></thead><tbody><tr><td>b</td></tr></tbody><tfoot><tr><td>f</td></tr></tfoot></table>'),
+      oP('Подпись') + oTable(1, 'CRht1', oCols(1), [[oTD(oP(oS('CRh1', 'h')))], [oTD(oP('b'))], [oTD(oP('f'))]]) + oSP());
+  });
+
+  it('неровные строки дополняются пустой ячейкой; rowspan обрезается; в пустой ячейке — text:p', async function () {
+    assert.strictEqual(await odtBody('<table><tr><td>a</td><td rowspan="9">b</td><td>c</td></tr><tr><td></td></tr></table>', oP('{d.h:html(nospace)}')),
+      oTable(1, 'CRht1', oCols(3), [[oTD(oP('a')), oTD(oP('b'), { rows: 2 }), oTD(oP('c'))], [oTD(oSP()), oCOV, oTD(oSP())]]));
+  });
+
+  it('больше 63 столбцов: 63 столбца, содержимое лишних ячеек — в последнюю ячейку строки', async function () {
+    const cells = Array.from({ length: 70 }, (v, i) => '<td>c' + i + '</td>').join('');
+    const body = await odtBody('<table><tr>' + cells + '</tr><tr><td colspan="1000">x</td></tr></table>', oP('{d.h:html(nospace)}'));
+    const rows = body.match(/<table:table-row>[\s\S]*?<\/table:table-row>/g);
+    assert.strictEqual((body.match(/<table:table-column /g) || []).length, 63);
+    assert.strictEqual((rows[0].match(/<table:table-cell /g) || []).length, 63);
+    assert.ok(rows[0].endsWith(oTD([62, 63, 64, 65, 66, 67, 68, 69].map((i) => oP('c' + i)).join('')) + '</table:table-row>'), rows[0]);
+    assert.strictEqual(rows[1], '<table:table-row>' + oTD(oP('x'), { cols: 63 }) + oCOV.repeat(62) + '</table:table-row>');
+  });
+
+  it('вложенная таблица — ширина своей ячейки; ячейка с таблицей последней заканчивается text:p; имена таблиц уникальны', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<table><tr><td>a<table><tr><td>b</td><td>c</td></tr></table></td><td>x</td></tr></table>' });
+    assert.strictEqual(r.body, oTable(1, 'CRht1', oCols(2), [[
+      oTD(oP('a') + oTable(2, 'CRht2', oCols(2, 'CRhtc2'), [[oTD(oP('b')), oTD(oP('c'))]]) + oSP()), oTD(oP('x'))
+    ]]));
+    assert.strictEqual(r.auto, T17 + colStyle('CRhtc1', '8.5cm') + CELL_STYLE + tableStyle('CRht2', 'style:width="8.5cm" table:align="margins"') + colStyle('CRhtc2', '4.25cm'));
+  });
+
+  it('таблица в цитате — отступ слева и ширина меньше; разрыв до — в стиле таблицы', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<blockquote><table style="break-before: page"><tr><td>a</td></tr></table></blockquote>' });
+    assert.strictEqual(r.body, oTable(1, 'CRht1', oCols(1), [[oTD(oP('a'))]]));
+    assert.strictEqual(r.auto, tableStyle('CRht1', 'style:width="15.942cm" fo:margin-left="1.058cm" table:align="left" fo:break-before="page"')
+      + colStyle('CRhtc1', '15.942cm') + CELL_STYLE);
+  });
+
+  it('таблица в пункте списка: список закрывается, таблица с отступом пункта, список продолжается (text:list-header)', async function () {
+    let r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<ol><li>x<table><tr><td>a</td></tr></table>y</li><li>z</li></ol>' });
+    assert.strictEqual(r.body, oL('CRhl1', oLI(oP('x'))) + oTable(1, 'CRht1', oCols(1), [[oTD(oP('a'))]]) + oL('CRhl1', oLH(oP('y')) + oLI(oP('z')), true));
+    assert.strictEqual(r.auto, listStyle('CRhl1', true) + tableStyle('CRht1', 'style:width="15.73cm" fo:margin-left="1.27cm" table:align="left"')
+      + colStyle('CRhtc1', '15.73cm') + CELL_STYLE);
+    // таблица в конце вложенного пункта: пустые продолжения списков не остаются
+    r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<ul><li>x<ul><li>y<table><tr><td>a</td></tr></table></li></ul></li></ul>' });
+    assert.strictEqual(r.body, oL('CRhl1', oLI(oP('x') + oL('CRhl1', oLI(oP('y'))))) + oTable(1, 'CRht1', oCols(1), [[oTD(oP('a'))]]));
+  });
+
+  it('список в ячейке внутри пункта — свой список в ячейке; заголовок в ячейке — text:h', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<ul><li>x<table><tr><td><ul><li>a</li></ul><h2>h</h2></td></tr></table></li></ul>' });
+    assert.strictEqual(r.body, oL('CRhl1', oLI(oP('x'))) + oTable(1, 'CRht1', oCols(1), [[oTD(oL('CRhl1', oLI(oP('a'))) + oH(2, 'h'))]]));
+  });
+
+  it('стиль страницы метки (master-page-name) — у таблицы первой, абзацы ячеек — без него', async function () {
+    const P1 = '<style:style style:name="P1" style:family="paragraph" style:parent-style-name="Standard" style:master-page-name="Standard">'
+      + '<style:paragraph-properties style:page-number="auto"/></style:style>';
+    const r = await renderOdt(oP('{d.h:html(nospace)}', 'P1'), { h: '<table><tr><td>a</td></tr></table><p>b</p>' }, { automatic: P1 });
+    assert.strictEqual(r.body, oTable(1, 'CRht1', oCols(1), [[oTD(oP('a', 'CRhp1'))]]) + oP('b', 'CRhp1'));
+    assert.strictEqual(r.auto, P1 + colStyle('CRhtc1', '17cm') + CELL_STYLE
+      + '<style:style style:name="CRhp1" style:family="paragraph" style:parent-style-name="Standard" style:master-page-name=""></style:style>'
+      + tableStyle('CRht1', 'style:width="17cm" table:align="margins" style:page-number="auto"', ' style:master-page-name="Standard"'));
+  });
+
+  it('разрыв после из стиля метки — у таблицы последней; разрыв до — у первого абзаца', async function () {
+    const P3 = pStyle('P3', 'Standard', 'fo:break-before="page" fo:break-after="page"');
+    const r = await renderOdt(oP('{d.h:html(nospace)}', 'P3'), { h: '<p>a</p><table><tr><td>c</td></tr></table>' }, { automatic: P3 });
+    assert.strictEqual(r.body, oP('a', 'CRhp2') + oTable(1, 'CRht1', oCols(1), [[oTD(oP('c', 'CRhp1'))]]));
+    assert.strictEqual(r.auto, P3 + colStyle('CRhtc1', '17cm') + CELL_STYLE + pStyle('CRhp1', 'Standard', 'fo:break-before="auto" fo:break-after="auto"')
+      + pStyle('CRhp2', 'Standard', 'fo:break-before="page" fo:break-after="auto"') + tableStyle('CRht1', 'style:width="17cm" table:align="margins" fo:break-after="page"'));
+  });
+
+  it('tabletheme в ODT не влияет на таблицу', async function () {
+    assert.strictEqual(await odtBody('<table><tr><td>a</td></tr></table>', oP('{d.h:html(nospace, tabletheme:Grid)}')),
+      oTable(1, 'CRht1', oCols(1), [[oTD(oP('a'))]]));
+  });
+
+  it('Review Focus 3: в ячейке цикла список и таблица — свои text:list, каждая ячейка с text:p', async function () {
+    const body = '<table:table table:name="T"><table:table-column/><table:table-row><table:table-cell>' + oP('{d.rows[i].h:html}')
+      + '</table:table-cell></table:table-row><table:table-row><table:table-cell>' + oP('{d.rows[i+1].h:html}')
+      + '</table:table-cell></table:table-row></table:table>';
+    const rows = [1, 2, 3].map((n) => ({ h: '<ol><li>a' + n + '</li><li>b' + n + '</li></ol><table><tr><td>t' + n + '</td><td><ul><li>u' + n + '</li></ul></td></tr></table>' }));
+    const r = await renderOdt(body, { rows });
+    const inner = (n) => oL('CRhl1', oLI(oP('a' + n)) + oLI(oP('b' + n))) + oSP()
+      + oTable(n, 'CRht1', oCols(2), [[oTD(oP('t' + n)), oTD(oL('CRhl2', oLI(oP('u' + n))))]]) + oSP();
+    assert.strictEqual(r.body, '<table:table table:name="T"><table:table-column/>' + [1, 2, 3].map((n) => '<table:table-row><table:table-cell>' + inner(n)
+      + '</table:table-cell></table:table-row>').join('') + '</table:table>');
+    assert.strictEqual(r.auto, listStyle('CRhl1', true) + T17 + colStyle('CRhtc1', '8.5cm') + CELL_STYLE + listStyle('CRhl2', false));
+  });
+
+  it('3000 строк цикла с таблицей и списком — линейно', async function () {
+    this.timeout(30000);
+    const rows = Array.from({ length: 3000 }, (v, i) => ({ h: '<ol><li>' + i + '</li></ol><table><tr><td>a</td><td rowspan="2">b</td></tr><tr><td>c</td></tr></table>' }));
+    const body = '<table:table table:name="T"><table:table-column/><table:table-row><table:table-cell>' + oP('{d.rows[i].h:html(nospace)}')
+      + '</table:table-cell></table:table-row><table:table-row><table:table-cell>' + oP('{d.rows[i+1].h:html(nospace)}')
+      + '</table:table-cell></table:table-row></table:table>';
+    const start = Date.now();
+    const r = await renderOdt(body, { rows });
+    const ms = Date.now() - start;
+    assert.strictEqual((r.body.match(/<table:table table:name="CRhTable/g) || []).length, 3000);
+    assert.ok(r.body.includes('table:name="CRhTable3000"'), 'уникальные имена');
+    assert.ok(ms < 3000, 'сборка ' + ms + ' мс');
+  });
+});
+
+describe('html: ODT — ссылки', function () {
+  it('допустимая ссылка — text:a xlink:type="simple" xlink:href', async function () {
+    assert.strictEqual(await odtBody('<p>см. <a href="https://site.ru/a?b=1&amp;c=2"><b>тут</b></a></p>'),
+      oP('см. ' + oLink('https://site.ru/a?b=1&amp;c=2', oS('CRh1', 'тут'))) + oSP());
+  });
+
+  it('адрес без схемы — https://; javascript:, пустой и якорь — #', async function () {
+    assert.strictEqual(await odtBody('<a href="site.ru">a</a><a href="javascript:alert(1)">b</a><a href="">c</a><a href="#x">d</a>'),
+      oP(oLink('https://site.ru', 'a') + oLink('#', 'b') + oLink('#', 'c') + oLink('#', 'd')) + oSP());
+  });
+
+  it('defaultURL — запасной адрес недопустимых ссылок (R4)', async function () {
+    assert.strictEqual(await odtBody('<a href="javascript:x">a</a><a href="https://ok.ru">b</a>', oP('{d.h:defaultURL(\'https://site.ru\'):html}')),
+      oP(oLink('https://site.ru', 'a') + oLink('https://ok.ru', 'b')) + oSP());
+  });
+
+  it('стиль Internet_20_link в styles.xml — text:style-name ссылки', async function () {
+    const styles = O_STYLES({ styles: tStyle('Internet_20_link', 'fo:color="#000080"') });
+    assert.strictEqual(await odtBody('<a href="https://a.ru">x</a>', null, { styles }), oP(oLink('https://a.ru', 'x', 'Internet_20_link')) + oSP());
+  });
+
+  it('inline внутри text:a шаблона — без вложенного text:a, текст с оформлением', async function () {
+    const marker = '<text:p><text:a xlink:type="simple" xlink:href="https://t.ru">{d.h:html(inline)}</text:a></text:p>';
+    assert.strictEqual(await odtBody('<a href="https://a.ru"><b>x</b></a> y', marker),
+      '<text:p>' + oLink('https://t.ru', oS('CRh1', 'x') + ' y') + '</text:p>');
+  });
+
+  it('inline вне ссылки шаблона — text:a в абзаце метки (перенос в inline — пробел)', async function () {
+    assert.strictEqual(await odtBody('<a href="https://a.ru">x<br>y</a>', oP('До {d.h:html(inline)}')), oP('До ' + oLink('https://a.ru', 'x y')));
+  });
+});
+
+describe('html: ODT — изображения', function () {
+  it('data URI PNG 200×100 без размеров — 5cm с пропорциями; draw:frame as-char в абзаце, файл и manifest', async function () {
+    const img = png(200, 100);
+    const r = await renderOdtW(oP('{d.h:html}'), { h: '<p>a<img src="' + dataUri(img) + '">b</p>' });
+    assert.strictEqual(r.body, oP('a' + oFrame(1, '5cm', '2.5cm') + 'b') + oSP());
+    assert.ok(Buffer.from(await readEntry(r.out, 'Pictures/cr-img-1.png', true)).equals(img));
+    assert.ok(r.manifest.includes('<manifest:file-entry manifest:full-path="Pictures/cr-img-1.png" manifest:media-type="image/png"/>'), r.manifest);
+    assert.deepStrictEqual(r.warnings, []);
+  });
+
+  it('абзац только с изображением содержит рамку; изображение в ссылке', async function () {
+    const src = dataUri(png(2, 1));
+    assert.strictEqual(await odtBody('<img src="' + src + '">'), oP(oFrame(1, '5cm', '2.5cm')) + oSP());
+    assert.strictEqual(await odtBody('<a href="https://a.ru"><img src="' + src + '"></a>'), oP(oLink('https://a.ru', oFrame(1, '5cm', '2.5cm'))) + oSP());
+  });
+
+  it('width/height в px при 96 dpi (см = px × 2.54 / 96)', async function () {
+    const src = dataUri(png(200, 100));
+    assert.strictEqual(await odtBody('<img src="' + src + '" width="300">'), oP(oFrame(1, '7.938cm', '3.969cm')) + oSP());
+    assert.strictEqual(await odtBody('<img src="' + src + '" height="50">'), oP(oFrame(1, '2.646cm', '1.323cm')) + oSP());
+    assert.strictEqual(await odtBody('<img src="' + src + '" width="10" height="20">'), oP(oFrame(1, '0.265cm', '0.529cm')) + oSP());
+  });
+
+  it('размер: не больше 55.88cm (22″) по стороне с пропорциями, не меньше 0.001cm', async function () {
+    assert.strictEqual(await odtBody('<img src="' + dataUri(png(200, 100)) + '" width="999999">'), oP(oFrame(1, '55.88cm', '27.94cm')) + oSP());
+    assert.strictEqual(await odtBody('<img src="' + dataUri(png(20000, 1)) + '" width="1">'), oP(oFrame(1, '0.026cm', '0.001cm')) + oSP());
+  });
+
+  it('общий размер (html-xml.imageSize): EMU; размер изображения 0 — без NaN', function () {
+    const { imageSize } = require('../lib/html-xml');
+    assert.deepStrictEqual(imageSize({ width: null, height: null }, { width: 200, height: 100 }), { cx: 1800000, cy: 900000 });
+    assert.deepStrictEqual(imageSize({ width: null, height: null }, { width: 0, height: 0 }), { cx: 1800000, cy: 1800000 });
+    assert.deepStrictEqual(imageSize({ width: 10, height: null }, { width: 0, height: 5 }), { cx: 95250, cy: 95250 });
+    assert.deepStrictEqual(imageSize({ width: null, height: 10 }, { width: 3, height: 0 }), { cx: 95250, cy: 95250 });
+  });
+
+  it('одинаковый src — один файл; draw:name уникален в части (выше имён шаблона)', async function () {
+    const src = dataUri(png(2, 1));
+    const frame = '<text:p><draw:frame draw:name="CRhImage1" text:anchor-type="as-char" svg:width="1cm" svg:height="1cm"><draw:image xlink:href="Pictures/p.png"/></draw:frame></text:p>';
+    const r = await renderOdtW(frame + oP('{d.h:html(nospace)}'), { h: '<img src="' + src + '"><img src="' + src + '">' }, { files: { 'Pictures/p.png': png(1, 1) } });
+    assert.strictEqual(r.body, frame + oP(oFrame(2, '5cm', '2.5cm') + oFrame(3, '5cm', '2.5cm')));
+    const names = await require('./golden-lib').entryNames(r.out);
+    assert.deepStrictEqual(names.filter((n) => n.startsWith('Pictures/')).sort(), ['Pictures/cr-img-1.png', 'Pictures/p.png']);
+  });
+
+  it('неверный data URI и SVG — пропуск с предупреждением', async function () {
+    const r = await renderOdtW(oP('{d.h:html}'), { h: '<img src="data:image/png;base64,@@"><img src="data:image/svg+xml;base64,PHN2Zz4=">x' });
+    assert.strictEqual(r.body, oP('x') + oSP());
+    assert.deepStrictEqual(r.warnings, [
+      'изображение не вставлено: неверный data URI изображения (ожидается data:image/png;base64,…) Метка: {d.h:html}',
+      'изображение не вставлено: SVG не поддерживается (изображения: PNG, JPEG, GIF) Метка: {d.h:html}'
+    ]);
+  });
+
+  it('100 млн пикселей — ошибка шаблона', async function () {
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(10001, 0);
+    ihdr.writeUInt32BE(10000, 4);
+    ihdr[8] = 8;
+    ihdr[9] = 2;
+    const header = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', ihdr)]);
+    assert.strictEqual(await rejection(renderOdtW(oP('{d.h:html}'), { h: '<img src="' + dataUri(header) + '">' })),
+      'изображение больше 100 млн пикселей (ширина × высота) Source: "{d.h:html}"');
+  });
+
+  it('колонтитул в styles.xml: рамка в колонтитуле, файл в Pictures/', async function () {
+    const master = '<style:master-page style:name="Standard"><style:header>' + oP('{d.h:html(nospace)}') + '</style:header></style:master-page>';
+    const r = await renderOdtW(oP('тело'), { h: '<img src="' + dataUri(png(4, 2)) + '">' }, { styles: O_STYLES({ styles: '', master }) });
+    assert.ok(r.styles.includes('<style:header>' + oP(oFrame(1, '5cm', '2.5cm')) + '</style:header>'), r.styles);
+    assert.ok(r.manifest.includes('manifest:full-path="Pictures/cr-img-1.png"'), r.manifest);
+  });
+
+  it('пространства имён draw, xlink, svg, table объявляются на корне части', async function () {
+    const content = '<?xml version="1.0" encoding="UTF-8"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'
+      + ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text><text:p>{d.h:html}</text:p>'
+      + '</office:text></office:body></office:document-content>';
+    const manifest = '<?xml version="1.0" encoding="UTF-8"?>\n<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"></manifest:manifest>';
+    const tpl = await zipBuffer([{ name: 'mimetype', data: 'application/vnd.oasis.opendocument.text' }, { name: 'META-INF/manifest.xml', data: manifest }, { name: 'content.xml', data: content }]);
+    const html = '<a href="https://a.ru">l</a><img src="' + dataUri(png(2, 1)) + '"><table><tr><td>a</td></tr></table>';
+    const xml = await readEntry(await carbone.renderBuffer(tpl, 'odt', { h: html }, {}), 'content.xml');
+    assertWellFormed(xml);
+    const root = /<office:document-content [^>]*>/.exec(xml)[0];
+    for (const ns of ['xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"', 'xmlns:xlink="http://www.w3.org/1999/xlink"',
+      'xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"', 'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"']) {
+      assert.ok(root.includes(ns), root);
+    }
+  });
+});

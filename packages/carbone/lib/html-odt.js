@@ -22,15 +22,23 @@
 // 20/16/14/13/12/11pt); blockquote — fo:margin-left 1.058cm (40px) на уровень к отступу стиля метки либо стиль
 // quotetheme (нет в styles.xml — отступ); pre — строки через text:line-break; hr — пустой абзац с нижней линией;
 // разрывы — fo:break-before/after в стиле абзаца. Пробелы: повторы и пробел в начале абзаца или строки — text:s;
-// табуляция — text:tab; флажок — ☒/☐.
+// табуляция — text:tab; флажок — ☒/☐ (html-xml). Списки и таблицы — lib/html-odt-blocks.js.
+//
+// Ссылка — text:a xlink:type="simple" (адрес по §32.5 — links.resolveLink, запасной — defaultURL метки, R4; стиль
+// Internet_20_link, если он есть в styles.xml); метка inline внутри text:a шаблона — текст ссылок HTML без вложенного
+// text:a. Изображение — draw:frame «как символ» (имя CRhImage<n>, уникальное в части; размер — html-xml.imageSize в
+// см) с draw:image на файл Pictures/… (job.media, запись в manifest.xml); данные загружает html.finish в job.images,
+// null — картинка пропускается.
 //
 // BLOCKS — запись блока по типу (blockXml), INLINES — Inline по типу; ctx абзаца — paragraphCtx; абзацы блоков —
-// writePara (стиль абзаца, цитата, разрывы, span метки). Списки, таблицы, ссылки, изображения — Task 8.
+// writePara (стиль абзаца, цитата, разрывы, флажок пункта, span метки).
 
 var xmltree = require('./xmltree');
 var model = require('./html-model');
 var common = require('./html-xml');
 var odfStyles = require('./html-odt-styles');
+var blocks = require('./html-odt-blocks');
+var links = require('./links');
 
 var escapeText = common.escapeText;
 var templateError = common.templateError;
@@ -45,9 +53,13 @@ var IGNORED = ['text:soft-page-break'];
 // блоки, после которых ставится пустой абзац (кроме nospace)
 var SPACED = { para : true, heading : true, pre : true, list : true, table : true };
 // отступ уровня blockquote (40px), см; hr: нижняя линия и отступы 0,5em
-var QUOTE_INDENT = 1.058;
+var QUOTE_INDENT = odfStyles.QUOTE_INDENT;
 var HR_PROPS = [['fo:border-bottom', '0.5pt solid #000000'], ['fo:margin-top', '0.21cm'], ['fo:margin-bottom', '0.21cm']];
 var LINE_BREAK = '<text:line-break/>';
+// EMU в см (размер изображения — html-xml.imageSize); наименьшая сторона в ODT, см
+var EMU_PER_CM = 360000;
+var MIN_IMAGE_CM = 0.001;
+var LINK_STYLE = 'Internet_20_link';
 
 // разметка HTML → свойства текста: keys — свойства, при которых у метки разметка не применяется (§34.3)
 var TEXT_PROPS = [
@@ -144,15 +156,70 @@ var INLINES = {
     ctx.space = true;
     return LINE_BREAK;
   },
-  // ссылки — Task 8 (пока текст)
+  // ссылка: text:a; внутри text:a шаблона (inline) или другой ссылки — только содержимое
   link : function (inline, ctx) {
-    return inlinesXml(inline.children, ctx);
+    if (ctx.inLink === true) {
+      return inlinesXml(inline.children, ctx);
+    }
+    ctx.inLink = true;
+    var _inner = inlinesXml(inline.children, ctx);
+    ctx.inLink = false;
+    if (_inner === '') {
+      return '';
+    }
+    ctx.job.ns.xlink = true;
+    var _href = escapeText(ctx.links.link(links.resolveLink(inline.href, ctx.item.defaultUrl)));
+    return '<text:a xlink:type="simple" xlink:href="' + _href + '"' + linkStyle(ctx) + '>' + _inner + '</text:a>';
   },
   checkbox : function (inline, ctx) {
     ctx.space = false;
-    return inline.checked === true ? '☒' : '☐';
+    return common.checkboxSymbol(inline.checked);
+  },
+  image : function (inline, ctx) {
+    var _image = ctx.images !== null ? ctx.images.get(inline.src) : undefined;
+    return _image === undefined || _image === null ? '' : imageXml(inline, _image, ctx);
   }
 };
+
+/** Стиль ссылок: Internet_20_link, если он есть в styles.xml (один раз на часть) */
+function linkStyle (ctx) {
+  if (ctx.job.linkStyle === undefined) {
+    ctx.job.linkStyle = ctx.parts !== null && ctx.parts.common(LINK_STYLE, 'text') !== null ? ' text:style-name="' + LINK_STYLE + '"' : '';
+  }
+  return ctx.job.linkStyle;
+}
+
+/** Имя, уникальное в части: prefix + номер выше номеров с этим prefix в исходной части (draw:name, table:name) */
+function uniqueName (job, prefix) {
+  job.names = job.names || {};
+  if (job.names[prefix] === undefined) {
+    var _max = 0;
+    job.xml.replace(new RegExp('"' + prefix + '(\\d+)"', 'g'), function (all, n) {
+      _max = Math.max(_max, parseInt(n, 10));
+      return all;
+    });
+    job.names[prefix] = _max;
+  }
+  return prefix + (++job.names[prefix]);
+}
+
+/** Длина стороны изображения: EMU → см (не меньше MIN_IMAGE_CM) */
+function imageCm (emu) {
+  return odfStyles.formatCm(Math.max(MIN_IMAGE_CM, emu / EMU_PER_CM));
+}
+
+/** Изображение «как символ»: draw:frame с draw:image на файл пакета (job.media) */
+function imageXml (inline, image, ctx) {
+  var _size = common.imageSize(inline, image);
+  var _href = escapeText(ctx.links.ref(ctx.media.path(image)));
+  ctx.job.ns.draw = true;
+  ctx.job.ns.svg = true;
+  ctx.job.ns.xlink = true;
+  ctx.space = false;
+  return '<draw:frame draw:name="' + uniqueName(ctx.job, 'CRhImage') + '" text:anchor-type="as-char" svg:width="' + imageCm(_size.cx)
+    + '" svg:height="' + imageCm(_size.cy) + '"><draw:image xlink:href="' + _href + '" xlink:type="simple" xlink:show="embed"'
+    + ' xlink:actuate="onLoad"/></draw:frame>';
+}
 
 /**
  * Inline модели → разметка абзаца ODT
@@ -193,8 +260,9 @@ function wrapSpans (inner, ctx) {
 }
 
 /**
- * Абзац блока: стиль абзаца метки (или свой — заголовок), отступ цитаты (к отступу стиля и контейнера ctx.indent),
- * стиль quotetheme, ожидающие разрывы страницы (ctx.pageBreak — до, ctx.breakAfter — после)
+ * Абзац блока: стиль абзаца метки (или свой — заголовок), отступ цитаты (к отступу стиля метки, в пункте списка — к
+ * отступу пункта ctx.indent), стиль quotetheme, ожидающие разрывы страницы (ctx.pageBreak — до, ctx.breakAfter —
+ * после), флажок пункта (ctx.lead — первому абзацу пункта)
  * @param  {Object} block  блок модели (quote)
  * @param  {String} inner  содержимое (без span метки)
  * @param  {Object} ctx
@@ -210,8 +278,10 @@ function writePara (block, inner, ctx, opts) {
   if (_quote > 0 && ctx.quoteTheme !== null && _own === false) {
     _base = ctx.quoteTheme;
   }
-  else if (_quote > 0 || ctx.indent !== 0) {
-    _props.push(['fo:margin-left', odfStyles.formatCm(odfStyles.marginCm(ctx.odfStyles, _base) + ctx.indent + QUOTE_INDENT * _quote)]);
+  else if (_quote > 0) {
+    // в пункте списка отступ задаёт стиль списка, а не стиль абзаца
+    var _from = ctx.lists.length > 0 ? 0 : odfStyles.marginCm(ctx.odfStyles, _base);
+    _props.push(['fo:margin-left', odfStyles.formatCm(_from + ctx.indent + QUOTE_INDENT * _quote)]);
   }
   else if (_own === false && ctx.quoteStyle !== null) {
     _base = ctx.quoteStyle;
@@ -225,9 +295,14 @@ function writePara (block, inner, ctx, opts) {
     _props.push(['fo:break-after', 'page']);
     ctx.breakAfter = false;
   }
+  var _inner = inner;
+  if (ctx.lead !== null) {
+    _inner = escapeText(ctx.lead) + _inner;
+    ctx.lead = null;
+  }
   var _tag = _o.tag || 'text:p';
   var _open = '<' + _tag + styleAttr(ctx, _base, _props) + (_o.level !== undefined ? ' text:outline-level="' + _o.level + '"' : '');
-  var _content = wrapSpans(inner, ctx);
+  var _content = wrapSpans(_inner, ctx);
   return _content === '' ? _open + '/>' : _open + '>' + _content + '</' + _tag + '>';
 }
 
@@ -238,9 +313,10 @@ function spacerXml (ctx, props) {
 
 // ---------------------------------------------------------------------------------------------------------------
 // Свойства страницы абзаца метки (стиль страницы, номер страницы, разрывы — решение контроллера к R8): стиль страницы,
-// номер и разрыв до — только у первого созданного абзаца, разрыв после — только у последнего. Пока абзацы пишутся,
-// их стиль неизвестен: атрибут text:style-name — заполнитель запроса { base, props }, после записи всего абзаца
-// метки (writeParagraph) заполнители заменяются стилями по месту абзаца (resolvePage)
+// номер и разрыв до — только у первого созданного абзаца или таблицы, разрыв после — только у последнего. Пока они
+// пишутся, их стиль неизвестен: атрибут text:style-name (table:style-name) — заполнитель запроса { kind, base, props },
+// после записи всего абзаца метки (writeParagraph) заполнители заменяются стилями по месту (resolvePage). Абзацы в
+// ячейках таблиц свойств страницы не получают (стиль — сразу, без заполнителя)
 
 // заполнитель: символы частного использования (отличны от жетона :html U+E040/U+E041) и ключ рендера
 var PAGE_OPEN = '\uE042';
@@ -248,15 +324,31 @@ var PAGE_CLOSE = '\uE043';
 
 /** Атрибут text:style-name абзаца со стилем base и свойствами props (или заполнитель, если у метки есть свойства страницы) */
 function styleAttr (ctx, base, props) {
-  if (ctx.page === null) {
-    var _style = ctx.odfStyles.paragraph(base, props);
+  if (ctx.page === null || ctx.inCell === true) {
+    var _request = { kind : 'paragraph', base : base, props : props };
+    var _style = ctx.page === null ? ctx.odfStyles.paragraph(base, props) : pageStyle(ctx.odfStyles, ctx.page, _request, false, false);
     return _style !== null ? ' text:style-name="' + _style + '"' : '';
   }
-  ctx.page.requests.push({ base : base, props : props });
-  return ' text:style-name="' + PAGE_OPEN + ctx.page.nonce + 'p' + (ctx.page.requests.length - 1) + PAGE_CLOSE + '"';
+  return placeholder(ctx, 'text', { kind : 'paragraph', base : base, props : props });
 }
 
-/** Стиль абзаца по запросу и месту: абзацы со стилем метки теряют свойства не своего места, прочие — получают своего */
+/** Атрибут table:style-name таблицы со свойствами props (или заполнитель, если у метки есть свойства страницы) */
+function tableStyleAttr (ctx, props) {
+  if (ctx.page === null || ctx.inCell === true) {
+    return ' table:style-name="' + ctx.odfStyles.table(props, []) + '"';
+  }
+  return placeholder(ctx, 'table', { kind : 'table', base : null, props : props });
+}
+
+function placeholder (ctx, prefix, request) {
+  ctx.page.requests.push(request);
+  return ' ' + prefix + ':style-name="' + PAGE_OPEN + ctx.page.nonce + 'p' + (ctx.page.requests.length - 1) + PAGE_CLOSE + '"';
+}
+
+/**
+ * Стиль по запросу и месту: абзацы со стилем метки теряют свойства не своего места, прочие абзацы и таблицы —
+ * получают своего
+ */
 function pageStyle (odfStyles, page, request, first, last) {
   var _info = page.info;
   var _props = request.props.slice();
@@ -266,7 +358,7 @@ function pageStyle (odfStyles, page, request, first, last) {
       _props.push([name, value]);
     }
   };
-  if (request.base === page.base) {
+  if (request.kind === 'paragraph' && request.base === page.base) {
     if (first === false && _info.master !== null) {
       _attrs.push(['style:master-page-name', '']);
       _set('style:page-number', null);
@@ -292,7 +384,7 @@ function pageStyle (odfStyles, page, request, first, last) {
       _set('fo:break-after', _info.after);
     }
   }
-  return odfStyles.paragraph(request.base, _props, _attrs);
+  return request.kind === 'table' ? odfStyles.table(_props, _attrs) : odfStyles.paragraph(request.base, _props, _attrs);
 }
 
 /** Заполнители стилей XML абзацев метки → стили: первый — с началом страницы, последний — с разрывом после */
@@ -300,13 +392,13 @@ function resolvePage (xml, page, odfStyles) {
   if (page === null) {
     return xml;
   }
-  var _regex = new RegExp(' text:style-name="' + PAGE_OPEN + page.nonce + 'p(\\d+)' + PAGE_CLOSE + '"', 'g');
+  var _regex = new RegExp(' (text|table):style-name="' + PAGE_OPEN + page.nonce + 'p(\\d+)' + PAGE_CLOSE + '"', 'g');
   var _count = (xml.match(_regex) || []).length;
   var _i = 0;
-  return xml.replace(_regex, function (all, k) {
+  return xml.replace(_regex, function (all, prefix, k) {
     var _style = pageStyle(odfStyles, page, page.requests[k], _i === 0, _i === _count - 1);
     _i++;
-    return _style !== null ? ' text:style-name="' + _style + '"' : '';
+    return _style !== null ? ' ' + prefix + ':style-name="' + _style + '"' : '';
   });
 }
 
@@ -314,8 +406,17 @@ var BLOCKS = {
   para : function (block, ctx) {
     return writePara(block, lineXml(block.inlines, ctx), ctx);
   },
-  // заголовок: text:h со стилем Heading_20_N (или <headingtheme>N), стиль создаётся в styles.xml при отсутствии
+  // заголовок: text:h со стилем Heading_20_N (или <headingtheme>N), стиль создаётся в styles.xml при отсутствии; в
+  // пункте списка — абзац пункта с жирным текстом и кеглем заголовка (кроме свойств, заданных оформлением метки)
   heading : function (block, ctx) {
+    if (ctx.level > 0) {
+      var _inner = lineXml(block.inlines, ctx);
+      var _props = [['fo:font-weight', 'bold'], ['fo:font-size', odfStyles.HEADING_SIZES[block.level - 1] + 'pt']].filter(function (prop) {
+        return ctx.exclude.has(prop[0]) === false;
+      });
+      var _span = _inner !== '' ? ctx.odfStyles.text(_props) : null;
+      return writePara(block, _span !== null ? '<text:span text:style-name="' + _span + '">' + _inner + '</text:span>' : _inner, ctx);
+    }
     var _theme = ctx.options.headingtheme;
     var _name = _theme !== null ? escapeText(_theme + block.level) : 'Heading_20_' + block.level;
     var _style = ctx.parts.heading(_name, block.level, _theme !== null ? null : 'Heading ' + block.level);
@@ -330,6 +431,13 @@ var BLOCKS = {
   // hr: пустой абзац с нижней линией и отступами 0,5em сверху и снизу
   hr : function (block, ctx) {
     return writePara(block, '', ctx, { props : HR_PROPS });
+  },
+  // списки и таблицы — lib/html-odt-blocks.js
+  list : function (block, ctx) {
+    return blocks.listXml(block, ctx, BLOCKS_API);
+  },
+  table : function (block, ctx) {
+    return blocks.tableXml(block, ctx, BLOCKS_API);
   }
 };
 
@@ -372,13 +480,24 @@ function blocksXml (blocks, ctx) {
   return _out;
 }
 
+// помощники для html-odt-blocks.js (взаимная зависимость модулей — через объект, а не require)
+var BLOCKS_API = {
+  blocksXml      : blocksXml,
+  writePara      : writePara,
+  lineXml        : lineXml,
+  spacerXml      : spacerXml,
+  tableStyleAttr : tableStyleAttr,
+  uniqueName     : uniqueName
+};
+
 // ---------------------------------------------------------------------------------------------------------------
 // Абзац метки
 
 /**
  * Контекст абзаца для записи блоков
- * @return {Object} { job, item, options, images, links, media, odfStyles, parts, pStyle, spans, exclude, space,
- *                   pageBreak, breakAfter, depth, indent, quoteStyle }
+ * @return {Object} { job, item, options, images, links, media, odfStyles, parts, pStyle, page, quoteTheme, spans,
+ *                   exclude, space, pageBreak, breakAfter, depth, indent, level, lists, listOffset, lead, quoteStyle,
+ *                   width, inCell, reopened, inLink }
  *   pStyle — text:style-name абзаца метки (как в XML) или null; spans — text:style-name text:span вокруг метки
  *   (снаружи внутрь); exclude — свойства текста, заданные оформлением метки (R8)
  */
@@ -425,10 +544,22 @@ function paragraphCtx (xml, p, token, item, job, page) {
     space      : true,
     pageBreak  : false,
     breakAfter : false,
-    // контейнер (пункт списка, ячейка — Task 8): глубина (> 0 — без пустых абзацев), отступ слева (см), стиль цитаты
+    // контейнер (пункт списка, ячейка): глубина (> 0 — без пустых абзацев), отступ слева содержимого пункта (см),
+    // уровень списков (ячейка начинает с 0), открытые списки [{ style, item }] и отступ стиля списка (см), флажок
+    // первого абзаца пункта, стиль цитаты, ширина для вложенной таблицы (см; null — ширина текста), ячейка таблицы
     depth      : 0,
     indent     : 0,
-    quoteStyle : null
+    level      : 0,
+    lists      : [],
+    listOffset : 0,
+    lead       : null,
+    quoteStyle : null,
+    width      : null,
+    inCell     : false,
+    // списки открывались заново после таблицы (пустые продолжения убираются)
+    reopened   : false,
+    // метка inline внутри text:a шаблона или текст внутри ссылки
+    inLink     : false
   };
 }
 
@@ -604,6 +735,7 @@ function writeParts (pXml, job, mark) {
       // перед жетоном пробел или тег — пробел в начале разметки как text:s
       var _prev = _xml[_token.pos - 1];
       _ctx.space = _prev === ' ' || _prev === '>';
+      _ctx.inLink = xmltree.closest(_token.el, ['text:a']) !== null;
       _xml = _xml.slice(0, _token.pos) + inlinesXml(model.content(_item), _ctx) + _xml.slice(_token.pos + _token.len);
       continue;
     }

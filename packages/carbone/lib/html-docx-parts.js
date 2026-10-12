@@ -9,6 +9,7 @@
 
 var path = require('path');
 var formats = require('./media-formats');
+var common = require('./html-xml');
 
 var W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 var REL_BASE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
@@ -31,9 +32,8 @@ var PARTS = {
   }
 };
 
-// маркеры и форматы номеров по уровням (повтор по кругу), отступ уровня
-var BULLETS = ['•', '◦', '▪'];
-var NUM_FORMATS = ['decimal', 'lowerLetter', 'lowerRoman'];
+// форматы номеров Word по форматам уровней (html-xml NUMBER_FORMATS); отступ уровня
+var NUM_FORMATS = { 1 : 'decimal', a : 'lowerLetter', i : 'lowerRoman' };
 var LEVELS = 9;
 var LEVEL_INDENT = 720;
 var HANGING = 360;
@@ -139,8 +139,8 @@ function openPart (template, kind, create) {
 function abstractNumXml (id, ordered) {
   var _levels = '';
   for (var i = 0; i < LEVELS; i++) {
-    _levels += '<w:lvl w:ilvl="' + i + '"><w:start w:val="1"/><w:numFmt w:val="' + (ordered === true ? NUM_FORMATS[i % 3] : 'bullet') + '"/>'
-      + '<w:lvlText w:val="' + (ordered === true ? '%' + (i + 1) + '.' : BULLETS[i % 3]) + '"/><w:lvlJc w:val="left"/>'
+    _levels += '<w:lvl w:ilvl="' + i + '"><w:start w:val="1"/><w:numFmt w:val="' + (ordered === true ? NUM_FORMATS[common.NUMBER_FORMATS[i % 3]] : 'bullet') + '"/>'
+      + '<w:lvlText w:val="' + (ordered === true ? '%' + (i + 1) + '.' : common.BULLETS[i % 3]) + '"/><w:lvlJc w:val="left"/>'
       + '<w:pPr><w:ind w:left="' + (LEVEL_INDENT * (i + 1)) + '" w:hanging="' + HANGING + '"/></w:pPr></w:lvl>';
   }
   return '<w:abstractNum w:abstractNumId="' + id + '"><w:multiLevelType w:val="hybridMultilevel"/>' + _levels + '</w:abstractNum>';

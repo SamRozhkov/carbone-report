@@ -1,5 +1,6 @@
-// :html (2.5.0, спецификация §34.3): общие для записи DOCX (lib/html-docx.js) и ODT (lib/html-odt.js) помощники —
-// экранирование текста, жетоны части, проходы по абзацам с жетонами, объявление пространств имён на корне части.
+// :html (2.5.0, спецификация §34.3–34.4): общие для записи DOCX (lib/html-docx.js) и ODT (lib/html-odt.js) помощники —
+// экранирование текста, жетоны части, проходы по абзацам с жетонами, объявление пространств имён на корне части,
+// независимые от формата правила: маркеры и номера уровней списков, символ флажка, размер изображения.
 
 var xmltree = require('./xmltree');
 
@@ -8,6 +9,15 @@ var MSG_OUTSIDE = 'html ставится в текст абзаца.';
 
 // символы, недопустимые в XML 1.0, и одиночные суррогаты
 var INVALID_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+// уровни списков (повтор по кругу): маркеры и форматы номеров (как type у ol в HTML: 1, a, i)
+var BULLETS = ['•', '◦', '▪'];
+var NUMBER_FORMATS = ['1', 'a', 'i'];
+// изображение: EMU (914400 на дюйм, 360000 на см) на пиксель при 96 dpi; ширина без width/height — 5 см; наибольшая
+// сторона — 22 дюйма (наибольший размер страницы Word)
+var EMU_PER_PX = 9525;
+var DEFAULT_IMAGE_WIDTH = 1800000;
+var MAX_IMAGE_EMU = 20116800;
 
 function templateError (message, source) {
   return new Error(message + ' Source: "' + source + '"');
@@ -19,6 +29,43 @@ function escapeText (text) {
     // у одиночного младшего суррогата сохраняется предыдущий символ
     return all.length === 2 ? all[0] : '';
   }).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** Символ флажка: ☒ — отмечен, ☐ — нет */
+function checkboxSymbol (checked) {
+  return checked === true ? '☒' : '☐';
+}
+
+/**
+ * Размер изображения в EMU: width/height в px (96 dpi); задан один — второй по пропорциям; ни одного — ширина 5 см
+ * с пропорциями (неизвестные пропорции — размер изображения 0 — как у квадрата). Больше MAX_IMAGE_EMU по любой
+ * стороне — уменьшается с пропорциями; каждая сторона — целое, не меньше 1 EMU
+ * @param  {Object} inline  { width, height } — px или null
+ * @param  {Object} image   { width, height } — размер изображения в пикселях
+ * @return {Object}         { cx, cy }
+ */
+function imageSize (inline, image) {
+  var _ratio = image.width > 0 && image.height > 0 ? image.height / image.width : 1;
+  var _cx;
+  var _cy;
+  if (inline.width !== null && inline.height !== null) {
+    _cx = inline.width * EMU_PER_PX;
+    _cy = inline.height * EMU_PER_PX;
+  }
+  else if (inline.width !== null) {
+    _cx = inline.width * EMU_PER_PX;
+    _cy = _cx * _ratio;
+  }
+  else if (inline.height !== null) {
+    _cy = inline.height * EMU_PER_PX;
+    _cx = _cy / _ratio;
+  }
+  else {
+    _cx = DEFAULT_IMAGE_WIDTH;
+    _cy = DEFAULT_IMAGE_WIDTH * _ratio;
+  }
+  var _scale = Math.min(1, MAX_IMAGE_EMU / _cx, MAX_IMAGE_EMU / _cy);
+  return { cx : Math.max(1, Math.round(_cx * _scale)), cy : Math.max(1, Math.round(_cy * _scale)) };
 }
 
 /** Жетоны этого рендера в XML (xmltree.parse: { root, tokens }) */
@@ -97,6 +144,10 @@ function declareNs (xml, root, used, namespaces) {
 
 module.exports = {
   MSG_OUTSIDE,
+  BULLETS,
+  NUMBER_FORMATS,
+  checkboxSymbol,
+  imageSize,
   templateError,
   escapeText,
   parseTokens,

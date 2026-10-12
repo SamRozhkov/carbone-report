@@ -3,9 +3,11 @@
 //   - parts(template) — общие для отчёта стили styles.xml (office:styles): поиск стилей метки и стили заголовков,
 //     создаваемые при отсутствии (styles.xml создаётся вместе с записью в manifest.xml, если его нет); save() — после
 //     всех частей отчёта (styles.xml переписывается и как часть с колонтитулами);
+//     ширина текста — по макету стиля страницы Standard (textWidth);
 //   - create(job) — автоматические стили части (ctx.odfStyles): CRh<n> (текст), CRhp<n> (абзац; автоматический стиль
-//     метки родителем быть не может — его свойства копируются вместе с его родителем), style:font-face Courier New;
-//     save(xml) пишет их в office:automatic-styles и office:font-face-decls части (элементы создаются при отсутствии).
+//     метки родителем быть не может — его свойства копируются вместе с его родителем), CRhl<n> (список), CRht<n>,
+//     CRhtc<n>, CRhtd<n> (таблица, столбец, ячейка), style:font-face Courier New; save(xml) пишет их в
+//     office:automatic-styles и office:font-face-decls части (элементы создаются при отсутствии).
 
 var xmltree = require('./xmltree');
 var common = require('./html-xml');
@@ -18,13 +20,25 @@ var NAMESPACES = {
   style  : 'urn:oasis:names:tc:opendocument:xmlns:style:1.0',
   text   : 'urn:oasis:names:tc:opendocument:xmlns:text:1.0',
   fo     : 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0',
-  svg    : 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0'
+  svg    : 'urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0',
+  table  : 'urn:oasis:names:tc:opendocument:xmlns:table:1.0',
+  draw   : 'urn:oasis:names:tc:opendocument:xmlns:drawing:1.0',
+  xlink  : 'http://www.w3.org/1999/xlink'
 };
 
 // кегль созданного стиля заголовка (pt) по уровню 1…6
 var HEADING_SIZES = [20, 16, 14, 13, 12, 11];
 var COURIER = 'Courier New';
 var COURIER_FACE = '<style:font-face style:name="Courier New" svg:font-family="\'Courier New\'" style:font-family-generic="modern" style:font-pitch="fixed"/>';
+// отступ уровня blockquote (40px), см — у абзацев, списков и таблиц
+var QUOTE_INDENT = 1.058;
+// списки: уровней в стиле (наибольшее в ODF), отступ уровня и висячий отступ номера, см
+var LIST_LEVELS = 10;
+var LEVEL_INDENT = 1.27;
+var HANGING = 0.635;
+// ширина текста без макета страницы Standard, см; рамка ячеек таблиц
+var DEFAULT_TEXT_WIDTH = 17;
+var CELL_BORDER = '0.5pt solid #000000';
 // длины ODF в см
 var CM_PER_UNIT = { cm : 1, mm : 0.1, in : 2.54, pt : 2.54 / 72, pc : 2.54 / 6, px : 2.54 / 96 };
 
@@ -123,10 +137,12 @@ function appendEdit (src, top, name, xml, after) {
  * Изменения записываются одним save() после всех частей отчёта (styles.xml может переписываться и как часть с
  * колонтитулами)
  * @param  {Object} template  собранный шаблон { files }
- * @return {Object}           { common(name, family) → { src, el } | null, heading(name, level, display) → name, save() }
+ * @return {Object}           { common(name, family) → { src, el } | null, heading(name, level, display) → name,
+ *                            textWidth() → см, save() }
  */
 function parts (template) {
   var _index = null;
+  var _width = null;
   var _pending = [];
   var _created = new Set();
   var _load = function () {
@@ -156,6 +172,13 @@ function parts (template) {
       }
       return name;
     },
+    // ширина текста (см) — один раз на отчёт
+    textWidth : function () {
+      if (_width === null) {
+        _width = textWidth(template);
+      }
+      return _width;
+    },
     save : function () {
       if (_pending.length === 0) {
         return;
@@ -175,6 +198,55 @@ function parts (template) {
       _file.data = common.declareNs(_data, _root, { style : true, fo : true }, NAMESPACES);
     }
   };
+}
+
+/**
+ * Ширина текста (см): fo:page-width − fo:margin-left − fo:margin-right макета (style:page-layout) стиля страницы
+ * Standard из styles.xml; без него, без ширины страницы или при ширине текста не больше 0 — DEFAULT_TEXT_WIDTH
+ */
+function textWidth (template) {
+  var _file = formats.topFile(template, 'styles.xml');
+  var _top = _file !== undefined && typeof _file.data === 'string' ? topOf(xmltree.parse(_file.data).root) : null;
+  if (_top === null) {
+    return DEFAULT_TEXT_WIDTH;
+  }
+  var _src = _file.data;
+  var _named = function (container, name, value) {
+    var _found = null;
+    (container !== null ? container.children : []).forEach(function (el) {
+      if (_found === null && el.name === name && xmltree.attr(_src, el, 'style:name') === value) {
+        _found = el;
+      }
+    });
+    return _found;
+  };
+  var _master = _named(childNamed(_top, 'office:master-styles'), 'style:master-page', 'Standard');
+  var _layoutName = _master !== null ? xmltree.attr(_src, _master, 'style:page-layout-name') : null;
+  var _layout = _layoutName !== null ? _named(childNamed(_top, 'office:automatic-styles'), 'style:page-layout', _layoutName) : null;
+  var _props = _layout !== null ? childNamed(_layout, 'style:page-layout-properties') : null;
+  var _page = _props !== null ? lengthCm(xmltree.attr(_src, _props, 'fo:page-width')) : null;
+  if (_page === null) {
+    return DEFAULT_TEXT_WIDTH;
+  }
+  var _width = _page - (lengthCm(xmltree.attr(_src, _props, 'fo:margin-left')) || 0) - (lengthCm(xmltree.attr(_src, _props, 'fo:margin-right')) || 0);
+  return _width > 0 ? _width : DEFAULT_TEXT_WIDTH;
+}
+
+/** Уровни стиля списка: маркеры или номера (html-xml), отступ уровня k — offset + 1.27cm × k, висячий 0.635cm */
+function listLevelsXml (ordered, offset) {
+  var _xml = '';
+  for (var k = 1; k <= LIST_LEVELS; k++) {
+    var _margin = formatCm(offset + LEVEL_INDENT * k);
+    var _props = '<style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment'
+      + ' text:label-followed-by="listtab" text:list-tab-stop-position="' + _margin + '" fo:text-indent="-' + formatCm(HANGING) + '" fo:margin-left="'
+      + _margin + '"/></style:list-level-properties>';
+    _xml += ordered === true
+      ? '<text:list-level-style-number text:level="' + k + '" style:num-suffix="." style:num-format="' + common.NUMBER_FORMATS[(k - 1) % 3] + '">'
+        + _props + '</text:list-level-style-number>'
+      : '<text:list-level-style-bullet text:level="' + k + '" text:bullet-char="' + common.BULLETS[(k - 1) % 3] + '">' + _props
+        + '</text:list-level-style-bullet>';
+  }
+  return _xml;
 }
 
 /** styles.xml для пакета без него: office:styles с xml, запись в manifest.xml; версия ODF — как у content.xml */
@@ -208,7 +280,7 @@ function createStyles (template, xml) {
  */
 function createOdfStyles (job) {
   var _max = {};
-  job.xml.replace(/style:name\s*=\s*["'](CRh[a-z]?)(\d+)["']/g, function (all, prefix, n) {
+  job.xml.replace(/style:name\s*=\s*["'](CRh[a-z]*)(\d+)["']/g, function (all, prefix, n) {
     _max[prefix] = Math.max(_max[prefix] || 0, parseInt(n, 10));
     return all;
   });
@@ -225,6 +297,15 @@ function createOdfStyles (job) {
   var _added = [];
   // Courier New: null — не нужен, true — дописать, false — уже есть
   var _font = null;
+  // одинаковые стили — один (ключ → имя); xml(name) — разметка нового стиля
+  var _cached = function (key, prefix, xml) {
+    if (_cache.has(key) === false) {
+      var _name = _next(prefix);
+      _cache.set(key, _name);
+      _added.push(xml(_name));
+    }
+    return _cache.get(key);
+  };
   var _api = {
     automatic : function (name, family) {
       var _found = _auto.get(family + '|' + name);
@@ -251,13 +332,9 @@ function createOdfStyles (job) {
         return null;
       }
       var _attrs = attrsXml(props);
-      var _key = 'text' + _attrs;
-      if (_cache.has(_key) === false) {
-        var _name = _next('CRh');
-        _cache.set(_key, _name);
-        _added.push('<style:style style:name="' + _name + '" style:family="text"><style:text-properties' + _attrs + '/></style:style>');
-      }
-      return _cache.get(_key);
+      return _cached('text' + _attrs, 'CRh', function (name) {
+        return '<style:style style:name="' + name + '" style:family="text"><style:text-properties' + _attrs + '/></style:style>';
+      });
     },
     /**
      * Стиль абзаца: base (имя как в XML или null) с изменёнными свойствами абзаца props и атрибутами стиля attrs
@@ -269,17 +346,38 @@ function createOdfStyles (job) {
       if (props.length === 0 && _attrs.length === 0) {
         return base;
       }
-      var _key = 'paragraph|' + JSON.stringify([base, props, _attrs]);
-      if (_cache.has(_key) === false) {
-        var _name = _next('CRhp');
-        _cache.set(_key, _name);
+      return _cached('paragraph|' + JSON.stringify([base, props, _attrs]), 'CRhp', function (name) {
         var _own = base !== null ? _api.automatic(base, 'paragraph') : null;
         var _pp = attrsXml(props);
-        _added.push(_own !== null ? cloneParagraph(_own, _name, props, _attrs)
-          : '<style:style style:name="' + _name + '" style:family="paragraph"' + (base !== null ? ' style:parent-style-name="' + base + '"' : '')
-            + attrsXml(_attrs) + '>' + (_pp !== '' ? '<style:paragraph-properties' + _pp + '/>' : '') + '</style:style>');
-      }
-      return _cache.get(_key);
+        return _own !== null ? cloneParagraph(_own, name, props, _attrs)
+          : '<style:style style:name="' + name + '" style:family="paragraph"' + (base !== null ? ' style:parent-style-name="' + base + '"' : '')
+            + attrsXml(_attrs) + '>' + (_pp !== '' ? '<style:paragraph-properties' + _pp + '/>' : '') + '</style:style>';
+      });
+    },
+    /** Стиль списка (маркеры или номера), отступ уровней — от offset (см) */
+    list : function (ordered, offset) {
+      return _cached('list|' + ordered + '|' + formatCm(offset), 'CRhl', function (name) {
+        return '<text:list-style style:name="' + name + '">' + listLevelsXml(ordered, offset) + '</text:list-style>';
+      });
+    },
+    /** Стиль таблицы: свойства таблицы props и атрибуты стиля attrs (style:master-page-name) */
+    table : function (props, attrs) {
+      return _cached('table|' + JSON.stringify([props, attrs]), 'CRht', function (name) {
+        return '<style:style style:name="' + name + '" style:family="table"' + attrsXml(attrs) + '><style:table-properties' + attrsXml(props) + '/></style:style>';
+      });
+    },
+    /** Стиль столбца таблицы шириной width (см) */
+    column : function (width) {
+      var _width = formatCm(width);
+      return _cached('column|' + _width, 'CRhtc', function (name) {
+        return '<style:style style:name="' + name + '" style:family="table-column"><style:table-column-properties style:column-width="' + _width + '"/></style:style>';
+      });
+    },
+    /** Стиль ячейки таблицы: рамка */
+    cell : function () {
+      return _cached('cell', 'CRhtd', function (name) {
+        return '<style:style style:name="' + name + '" style:family="table-cell"><style:table-cell-properties fo:border="' + CELL_BORDER + '"/></style:style>';
+      });
     },
     /**
      * Свойства страницы стиля абзаца (по цепочке родителей; ближайшее значение важнее): { master, pageNumber, before,
@@ -395,5 +493,8 @@ module.exports = {
   marginCm,
   formatCm,
   NAMESPACES,
-  COURIER
+  COURIER,
+  HEADING_SIZES,
+  LEVEL_INDENT,
+  QUOTE_INDENT
 };

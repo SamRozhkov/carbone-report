@@ -24,6 +24,7 @@ var EMU_PER_PT = 12700;
 var MM_PER_PX = 25.4 / 96;
 var IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
 var RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+var HYPERLINK_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 
 function isTop (file) {
   return file.parent === '' || file.parent === undefined;
@@ -402,7 +403,8 @@ function relativeTo (partName, mediaPath) {
 
 /**
  * OOXML: связи части (существующий .rels или новый); ref(mediaPath) → Id связи-изображения (новой или уже
- * добавленной), save() дописывает новые связи
+ * добавленной), link(url) → Id внешней связи-гиперссылки (TargetMode="External"; :html), save() дописывает новые
+ * связи в порядке добавления
  */
 function ooxmlLinks (template, partName) {
   var _name = relsPath(partName);
@@ -415,28 +417,39 @@ function ooxmlLinks (template, partName) {
     _ids.add(double !== undefined ? double : single);
     return all;
   });
+  // ключ (вид + адрес) → { id, xml } новой связи
   var _added = new Map();
-  var _counter = 0;
+  var _counters = { img : 0, lnk : 0 };
+  var _add = function (key, prefix, xml) {
+    if (_added.has(key) === false) {
+      var _id;
+      do {
+        _id = 'rIdCr' + (prefix === 'img' ? 'Img' : 'Lnk') + (++_counters[prefix]);
+      } while (_ids.has(_id) === true);
+      _ids.add(_id);
+      _added.set(key, { id : _id, xml : xml(_id) });
+    }
+    return _added.get(key).id;
+  };
   return {
     ref : function (mediaPath) {
       var _target = relativeTo(partName, mediaPath);
-      if (_added.has(_target) === false) {
-        var _id;
-        do {
-          _id = 'rIdCrImg' + (++_counter);
-        } while (_ids.has(_id) === true);
-        _ids.add(_id);
-        _added.set(_target, _id);
-      }
-      return _added.get(_target);
+      return _add('i' + _target, 'img', function (id) {
+        return '<Relationship Id="' + id + '" Type="' + IMAGE_REL + '" Target="' + escapeAttr(_target) + '"/>';
+      });
+    },
+    link : function (url) {
+      return _add('l' + url, 'lnk', function (id) {
+        return '<Relationship Id="' + id + '" Type="' + HYPERLINK_REL + '" Target="' + escapeAttr(url) + '" TargetMode="External"/>';
+      });
     },
     save : function () {
       if (_added.size === 0) {
         return;
       }
       var _xml = '';
-      _added.forEach(function (id, target) {
-        _xml += '<Relationship Id="' + id + '" Type="' + IMAGE_REL + '" Target="' + escapeAttr(target) + '"/>';
+      _added.forEach(function (rel) {
+        _xml += rel.xml;
       });
       var _close = _file.data.lastIndexOf('</Relationships>');
       if (_close !== -1) {
@@ -474,11 +487,14 @@ function addContentTypes (template, media) {
   }
 }
 
-/** OpenDocument: ссылка — путь файла относительно части; связей нет */
+/** OpenDocument: ссылка — путь файла относительно части, адрес гиперссылки — как есть; связей нет */
 function odfLinks (template, partName) {
   return {
     ref : function (mediaPath) {
       return relativeTo(partName, mediaPath);
+    },
+    link : function (url) {
+      return url;
     },
     save : function () {}
   };
@@ -544,12 +560,48 @@ function uniqueIds (xml, root, names, kept) {
 }
 
 /**
+ * Хранилище media-файлов отчёта (общее для частей одного шага: media.finish или html.finish)
+ * @param  {Object} template  собранный шаблон { files }
+ * @param  {Object} fmt       правила формата (formatOf)
+ * @return {Object} { path(image) → путь нового media-файла (одно изображение — один файл), register() — регистрация
+ *                  новых файлов в пакете ([Content_Types].xml или manifest.xml) }
+ */
+function storeMedia (template, fmt) {
+  var _names = new Set(template.files.map(function (f) {
+    return f.name;
+  }));
+  var _mediaOf = new Map(); // изображение → путь media-файла
+  var _media = []; // новые файлы [{ name, type }]
+  var _counter = 0;
+  return {
+    path : function (image) {
+      if (_mediaOf.has(image) === false) {
+        var _name;
+        do {
+          _name = fmt.mediaDir + 'cr-img-' + (++_counter) + '.' + TYPES[image.type].ext;
+        } while (_names.has(_name) === true);
+        _names.add(_name);
+        _mediaOf.set(image, _name);
+        _media.push({ name : _name, type : image.type });
+        addFile(template, { name : _name, data : image.buffer, isMarked : false, parent : '' });
+      }
+      return _mediaOf.get(image);
+    },
+    register : function () {
+      if (_media.length > 0) {
+        fmt.register(template, _media);
+      }
+    }
+  };
+}
+
+/**
  * Правила форматов по семействам (xmltree.family). Каждое:
  *   altHint              — быстрая проверка файла до разбора: есть ли метка в замещающем тексте;
  *   altRanges(xml, root) → [{ start, end }] — где метка становится меткой изображения (решение R2);
  *   container(el)        → контейнер картинки вокруг элемента с жетоном или null (он же удаляется при пустом значении);
  *   place(xml, container, image, ref, fit) → правки внутри контейнера: [{ el, tag(startTag) }] или [{ el, remove }];
- *   links(template, partName) → { ref(mediaPath) → ссылка для place, save() };
+ *   links(template, partName) → { ref(mediaPath) → ссылка для place, link(url) → ссылка гиперссылки, save() };
  *   register(template, media) — регистрация новых файлов [{ name, type }] в пакете;
  *   idTags               — элементы с id, уникальным в части (повторы после циклов перенумеровываются);
  *   mediaDir             — папка media-файлов в архиве.
@@ -621,6 +673,7 @@ module.exports = {
   relsPath,
   RELS_NS,
   uniqueIds,
+  storeMedia,
   fitSize,
   TYPES
 };

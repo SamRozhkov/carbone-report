@@ -251,7 +251,10 @@ function styles (template) {
       if (_nameVal !== null && _names.has(_type + ':' + _nameVal.toLowerCase()) === false) {
         _names.set(_type + ':' + _nameVal.toLowerCase(), _id);
       }
-      if (_type === 'table' && _defaultTable === null && /^(1|true|on)$/.test(attrOf(_tag, 'w:default') || '') === true) {
+      // «Normal Table» (встроенный стиль без границ, по умолчанию почти в каждом документе Word) не берётся — тогда
+      // TableGrid; сравнение по имени: русский Word хранит его под styleId вроде «a1»
+      if (_type === 'table' && _defaultTable === null && /^(1|true|on)$/.test(attrOf(_tag, 'w:default') || '') === true
+        && (_nameVal === null || _nameVal.toLowerCase() !== 'normal table')) {
         _defaultTable = _id;
       }
       return all;
@@ -314,7 +317,7 @@ function styles (template) {
       var _byName = _names.get(type + ':' + name.toLowerCase());
       return _byName !== undefined ? _byName : null;
     },
-    /** Стиль таблиц по умолчанию документа (w:default) или null */
+    /** Стиль таблиц по умолчанию документа (w:default, кроме «Normal Table») или null */
     defaultTable : function () {
       _ensureOpen();
       return _defaultTable;

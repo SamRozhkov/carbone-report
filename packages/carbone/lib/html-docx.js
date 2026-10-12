@@ -81,6 +81,8 @@ var LINK_RPR = [
 // изображение: EMU на пиксель (96 dpi), ширина без width/height — 5 см
 var EMU_PER_PX = 9525;
 var DEFAULT_IMAGE_WIDTH = 1800000;
+// наибольшая сторона изображения: 22 дюйма (наибольший размер страницы Word), EMU
+var MAX_IMAGE_EMU = 20116800;
 // символы, недопустимые в XML 1.0, и одиночные суррогаты
 var INVALID_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 
@@ -284,21 +286,32 @@ var INLINES = {
 
 /**
  * Размер изображения в EMU: width/height в px (96 dpi); задан один — второй по пропорциям; ни одного — ширина
- * 5 см с пропорциями
+ * 5 см с пропорциями. Больше MAX_IMAGE_EMU по любой стороне — уменьшается с пропорциями (Word не открывает такие
+ * размеры); каждая сторона — не меньше 1 EMU
  */
 function imageEmu (inline, image) {
   var _w = inline.width;
   var _h = inline.height;
+  var _cx;
+  var _cy;
   if (_w !== null && _h !== null) {
-    return { cx : Math.round(_w * EMU_PER_PX), cy : Math.round(_h * EMU_PER_PX) };
+    _cx = _w * EMU_PER_PX;
+    _cy = _h * EMU_PER_PX;
   }
-  if (_w !== null) {
-    return { cx : Math.round(_w * EMU_PER_PX), cy : Math.round(_w * EMU_PER_PX * image.height / image.width) };
+  else if (_w !== null) {
+    _cx = _w * EMU_PER_PX;
+    _cy = _cx * image.height / image.width;
   }
-  if (_h !== null) {
-    return { cx : Math.round(_h * EMU_PER_PX * image.width / image.height), cy : Math.round(_h * EMU_PER_PX) };
+  else if (_h !== null) {
+    _cy = _h * EMU_PER_PX;
+    _cx = _cy * image.width / image.height;
   }
-  return { cx : DEFAULT_IMAGE_WIDTH, cy : Math.round(DEFAULT_IMAGE_WIDTH * image.height / image.width) };
+  else {
+    _cx = DEFAULT_IMAGE_WIDTH;
+    _cy = DEFAULT_IMAGE_WIDTH * image.height / image.width;
+  }
+  var _scale = Math.min(1, MAX_IMAGE_EMU / _cx, MAX_IMAGE_EMU / _cy);
+  return { cx : Math.max(1, Math.round(_cx * _scale)), cy : Math.max(1, Math.round(_cy * _scale)) };
 }
 
 /** Следующий id картинки части (wp:docPr, pic:cNvPr): выше максимума исходной части */

@@ -1231,6 +1231,17 @@ describe('html: DOCX — таблицы', function () {
     assert.ok(!r.styles.includes('TableGrid'), r.styles);
   });
 
+  it('стиль по умолчанию «Normal Table» (любой styleId, без учёта регистра) — не берётся, TableGrid', async function () {
+    for (const style of ['<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/></w:style>',
+      '<w:style w:type="table" w:default="1" w:styleId="a1"><w:name w:val="normal table"/></w:style>']) {
+      const r = await renderHtml('<table><tr><td>a</td></tr></table>', null, {}, {
+        rels: '<Relationship Id="rId2" Type="' + STY_REL + '" Target="styles.xml"/>', files: { 'word/styles.xml': STYLES(style) }
+      });
+      assert.ok(r.body.startsWith('<w:tbl>' + tblPr('TableGrid')), r.body);
+      assert.ok(r.styles.includes(TABLE_GRID), r.styles);
+    }
+  });
+
   it('ширина столбцов — по w:pgSz и w:pgMar последнего w:sectPr документа', async function () {
     const sect = '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="1701"/></w:sectPr>';
     const first = '<w:p><w:pPr><w:sectPr><w:pgSz w:w="20000"/><w:pgMar w:left="0" w:right="0"/></w:sectPr></w:pPr></w:p>';
@@ -1404,6 +1415,17 @@ describe('html: DOCX — изображения', function () {
     assert.deepStrictEqual(extent(r.body), ['wp:extent 952500×476250', 'a:ext 952500×476250']);
     r = await renderHtml('<img src="' + src + '" width="10" height="20">');
     assert.deepStrictEqual(extent(r.body), ['wp:extent 95250×190500', 'a:ext 95250×190500']);
+  });
+
+  it('размер: не больше 20116800 EMU по каждой стороне с пропорциями, не меньше 1 EMU', async function () {
+    let r = await renderHtml('<img src="' + dataUri(png(200, 100)) + '" width="999999">');
+    assert.deepStrictEqual(extent(r.body), ['wp:extent 20116800×10058400', 'a:ext 20116800×10058400']);
+    r = await renderHtml('<img src="' + dataUri(png(200, 100)) + '" width="999999" height="5000000">');
+    assert.deepStrictEqual(extent(r.body), ['wp:extent 4023356×20116800', 'a:ext 4023356×20116800']);
+    r = await renderHtml('<img src="' + dataUri(png(1, 20000)) + '">');
+    assert.deepStrictEqual(extent(r.body), ['wp:extent 1006×20116800', 'a:ext 1006×20116800']);
+    r = await renderHtml('<img src="' + dataUri(png(20000, 1)) + '" width="1">');
+    assert.deepStrictEqual(extent(r.body), ['wp:extent 9525×1', 'a:ext 9525×1']);
   });
 
   it('одинаковый src — один media-файл; wp:docPr и pic:cNvPr — уникальные id выше максимума части', async function () {

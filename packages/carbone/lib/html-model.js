@@ -57,12 +57,16 @@ var htmlparser2 = require('htmlparser2');
 
 var MAX_BYTES = 1024 * 1024;
 var MAX_DEPTH = 32;
+// незакрытых тегов в стеке htmlparser2 (вместе с неявно закрытыми моделью): его стек — массив с unshift, разбор
+// квадратичен по глубине, а «<li><p>a» без закрывающих тегов растит стек на каждом пункте
+var MAX_PARSER_DEPTH = 4096;
 var MAX_COLSPAN = 1000;
 var MAX_ROWSPAN = 65534;
 
 var MSG = {
   tooBig  : 'html: значение больше 1 МБ.',
-  tooDeep : 'html: вложенность тегов больше 32.'
+  tooDeep : 'html: вложенность тегов больше 32.',
+  tooOpen : 'html: незакрытых тегов больше 4096.'
 };
 
 var templateError = require('./html-xml').templateError;
@@ -458,22 +462,28 @@ var INLINE_SPACE_TAGS = Object.assign({
   tr : true, td : true, th : true, thead : true, tbody : true, tfoot : true, br : true
 }, BOUNDARY_TAGS, HEADING_TAGS);
 
-/** Разбор потоком событий htmlparser2 с проверкой размера и вложенности */
+/**
+ * Разбор потоком событий htmlparser2 с проверкой размера и вложенности. Вложенность считает обработчик
+ * (handlers.depth): htmlparser2 закрывает неявно только тег на вершине своего стека, поэтому в «<li><p>a<li>» второй
+ * li для него вложен в p — считать события open/close нельзя, корректный HTML без </li>, </td> не проходил бы.
+ */
 function runParser (html, source, handlers) {
   if (Buffer.byteLength(html, 'utf8') > MAX_BYTES) {
     throw templateError(MSG.tooBig, source);
   }
-  var _depth = 0;
+  var _open = 0;
   var _parser = new htmlparser2.Parser({
     onopentag : function (name, attribs) {
-      _depth++;
-      if (_depth > MAX_DEPTH) {
-        throw templateError(MSG.tooDeep, source);
+      if (++_open > MAX_PARSER_DEPTH) {
+        throw templateError(MSG.tooOpen, source);
       }
       handlers.open(name, attribs);
+      if (handlers.depth() > MAX_DEPTH) {
+        throw templateError(MSG.tooDeep, source);
+      }
     },
     onclosetag : function (name) {
-      _depth--;
+      _open--;
       handlers.close(name);
     },
     ontext : function (text) {
@@ -509,11 +519,16 @@ function blockOf (type, fields, quote) {
 // Состояние — стек рамок (frames): «flow» — место для блоков (корень, пункт списка, ячейка; в нём открытый абзац
 // para или pre и счётчик quote), «list», «table» (с текущей строкой) и «caption». Каждый элемент запоминает
 // высоту стека при открытии и при закрытии снимает всё, что выше (так закрываются и неявные пункты и ячейки).
+//
+// Вложенность — длина стека live: открытые элементы без неявно закрытых. Рамка запоминает длину live при открытии
+// (mark); снятая рамка (popTo) закрывает и элементы, открытые в ней, — например, незакрытые li и p прежнего пункта
+// при новом li. Строка таблицы — не рамка: новый tr закрывает элементы прежней строки по table.rowMark.
 
 function Builder () {
-  this.root = { kind : 'flow', blocks : [], quote : 0, para : null, pre : null, pending : false, item : null };
+  this.root = { kind : 'flow', blocks : [], quote : 0, para : null, pre : null, pending : false, item : null, mark : 0 };
   this.frames = [this.root];
-  this.elements = []; // открытые элементы: { marks, close }
+  this.elements = []; // открытые элементы (события htmlparser2): { marks, close, live }
+  this.live = []; // открытые элементы без неявно закрытых — по ним считается вложенность
   this.marks = DEFAULT_MARKS;
   this.links = []; // href открытой ссылки (вложенные a — только текст)
   this.skip = 0;
@@ -525,8 +540,20 @@ Builder.prototype.top = function () {
 
 Builder.prototype.pushFlow = function (blocks, item) {
   var _flow = { kind : 'flow', blocks : blocks, quote : 0, para : null, pre : null, pending : false, item : item };
-  this.frames.push(_flow);
+  this.pushFrame(_flow);
   return _flow;
+};
+
+Builder.prototype.pushFrame = function (frame) {
+  frame.mark = this.live.length;
+  this.frames.push(frame);
+};
+
+/** Неявно закрыть элементы live выше длины length */
+Builder.prototype.cut = function (length) {
+  while (this.live.length > length) {
+    this.live.pop().live = false;
+  }
 };
 
 /** Рамка для содержимого: неявный пункт в списке, неявная строка и ячейка в таблице */
@@ -575,6 +602,7 @@ Builder.prototype.openCell = function (tableFrame, header, attribs) {
 Builder.prototype.popTo = function (length) {
   while (this.frames.length > length) {
     var _frame = this.frames.pop();
+    this.cut(_frame.mark);
     if (_frame.kind === 'flow') {
       this.flush(_frame);
     }
@@ -682,8 +710,13 @@ Builder.prototype.preNewLine = function (pre) {
 };
 
 Builder.prototype.open = function (name, attribs) {
-  var _element = { marks : this.marks, close : null };
+  var _element = { marks : this.marks, close : null, live : true };
   this.elements.push(_element);
+  this.openElement(_element, name, attribs);
+  this.live.push(_element); // после обработки: рамки, открытые элементом, помнят его место в live
+};
+
+Builder.prototype.openElement = function (_element, name, attribs) {
   if (this.skip > 0 || SKIP_TAGS[name] === true) {
     this.skip++;
     _element.close = function () {
@@ -844,14 +877,21 @@ Builder.prototype.openTablePart = function (element, name, attribs) {
   var _table = _top;
   var _length = this.frames.length;
   if (name === 'tr') {
+    if (_table.rowMark !== null) {
+      this.cut(_table.rowMark); // незакрытая прежняя строка
+    }
+    _table.rowMark = this.live.length;
     this.openRow(_table);
     element.close = function () {
       this.popTo(_length);
       _table.row = null;
+      if (element.live) {
+        _table.rowMark = null;
+      }
     };
   }
   else if (name === 'caption') {
-    this.frames.push({ kind : 'caption', buffer : new InlineBuffer(false), table : _table.block });
+    this.pushFrame({ kind : 'caption', buffer : new InlineBuffer(false), table : _table.block });
     element.close = function () {
       this.popTo(_length);
     };
@@ -912,7 +952,7 @@ Builder.prototype.openBlock = function (element, name, level, style) {
   else if (name === 'ul' || name === 'ol') {
     var _list = blockOf('list', { ordered : name === 'ol', items : [] }, 0);
     this.addBlock(_flow, _list);
-    this.frames.push({ kind : 'list', block : _list });
+    this.pushFrame({ kind : 'list', block : _list });
     _after = function () {
       if (_list.items.length === 0) {
         _flow.blocks.splice(_flow.blocks.indexOf(_list), 1);
@@ -922,7 +962,7 @@ Builder.prototype.openBlock = function (element, name, level, style) {
   else if (name === 'table') {
     var _table = blockOf('table', { rows : [], caption : null }, 0);
     this.addBlock(_flow, _table);
-    this.frames.push({ kind : 'table', block : _table, row : null });
+    this.pushFrame({ kind : 'table', block : _table, row : null, rowMark : null });
     _after = function () {
       _table.rows = _table.rows.filter(function (row) {
         return row.cells.length > 0;
@@ -967,6 +1007,11 @@ Builder.prototype.close = function () {
   if (_element.close !== null) {
     _element.close.call(this);
   }
+  if (_element.live) {
+    // элементы выше в live уже закрыты: htmlparser2 закрывает по порядку
+    this.live.pop();
+    _element.live = false;
+  }
   this.marks = _element.marks;
 };
 
@@ -987,13 +1032,25 @@ function parse (html, source) {
   runParser(html === null || html === undefined ? '' : String(html), source, {
     open  : _builder.open.bind(_builder),
     close : _builder.close.bind(_builder),
-    text  : _builder.text.bind(_builder)
+    text  : _builder.text.bind(_builder),
+    depth : function () {
+      return _builder.live.length;
+    }
   });
   return _builder.finish();
 }
 
 // ---------------------------------------------------------------------------------------------------------------
 // inlineOnly: Inline[]
+
+// inline: модель плоская, для вложенности новый li закрывает незакрытый пункт, td/th — ячейку, tr — строку
+// (ищется ближайший из closes или stops; закрывается, если это closes)
+var IMPLIED_CLOSE = {
+  li : { closes : { li : true }, stops : { ul : true, ol : true } },
+  td : { closes : { td : true, th : true }, stops : { tr : true, table : true } },
+  th : { closes : { td : true, th : true }, stops : { tr : true, table : true } },
+  tr : { closes : { tr : true }, stops : { table : true } }
+};
 
 /**
  * HTML → плоский Inline[] для параметра inline (a, b, strong, em, i, s, del, u; прочее — текст)
@@ -1005,12 +1062,29 @@ function inlineOnly (html, source) {
   var _buffer = new InlineBuffer(false);
   var _marks = DEFAULT_MARKS;
   var _stack = [];
+  var _live = []; // открытые элементы без неявно закрытых (не длиннее MAX_DEPTH + 1 — поиск ограничен)
   var _skip = 0;
   var _linkDepth = 0;
+  var _cut = function (name) {
+    var _rule = IMPLIED_CLOSE[name];
+    for (var i = _live.length - 1; _rule !== undefined && i >= 0; i--) {
+      if (_rule.closes[_live[i].name] === true) {
+        while (_live.length > i) {
+          _live.pop().live = false;
+        }
+        return;
+      }
+      if (_rule.stops[_live[i].name] === true) {
+        return;
+      }
+    }
+  };
   runParser(html === null || html === undefined ? '' : String(html), source, {
     open : function (name, attribs) {
-      _stack.push({ marks : _marks, skip : false, link : false });
+      _cut(name);
+      _stack.push({ marks : _marks, skip : false, link : false, name : name, live : true });
       var _entry = _stack[_stack.length - 1];
+      _live.push(_entry);
       if (_skip > 0 || SKIP_TAGS[name] === true) {
         _skip++;
         _entry.skip = true;
@@ -1030,6 +1104,10 @@ function inlineOnly (html, source) {
     },
     close : function (name) {
       var _entry = _stack.pop();
+      if (_entry.live) {
+        _live.pop();
+        _entry.live = false;
+      }
       if (_entry.skip) {
         _skip--;
         return;
@@ -1047,6 +1125,9 @@ function inlineOnly (html, source) {
       if (_skip === 0) {
         _buffer.text(text, _marks);
       }
+    },
+    depth : function () {
+      return _live.length;
     }
   });
   return _buffer.finish();

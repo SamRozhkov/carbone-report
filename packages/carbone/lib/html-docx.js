@@ -682,24 +682,61 @@ function paragraphOf (token, job) {
   return _p;
 }
 
+/** Начало содержимого абзаца (после w:pPr) */
+function contentStart (xml, p) {
+  var _pPr = childNamed(p, 'w:pPr');
+  return _pPr !== null ? _pPr.end : p.openEnd;
+}
+
 /**
- * Переписать абзац с жетонами (XML ровно одного w:p; вложенных абзацев с жетонами в нём уже нет)
+ * Заглушка окна абзаца (html-xml.paragraphWindow) для свёрнутого содержимого el: в w:t — только комментарий-метка
+ * (непустой текст до жетона), в w:r — его w:rPr (reopenTag, свойства метки) и элемент на месте прочих детей (пустой
+ * w:t, если они пустые: cut смотрит, первый ли w:t жетона после w:rPr), выше — w:r с текстом, если содержимое не
+ * пустое (emptyPart)
+ */
+function windowStub (content, el) {
+  if (el.name === 'w:t') {
+    return '';
+  }
+  if (el.name === 'w:r') {
+    var _rPr = '';
+    var _other = '';
+    xmltree.parse(content).root.children.forEach(function (child) {
+      if (child.name === 'w:rPr') {
+        _rPr = _rPr === '' ? content.slice(child.start, child.end) : _rPr;
+      }
+      else if (child.name === 'w:lastRenderedPageBreak' || (child.name === 'w:t' && child.closeStart === child.openEnd)) {
+        _other = _other === '' ? '<w:t></w:t>' : _other;
+      }
+      else {
+        _other = '<w:t>.</w:t>';
+      }
+    });
+    return _rPr + _other;
+  }
+  return emptyPart(content) === true ? '' : '<w:r><w:t>.</w:t></w:r>';
+}
+
+/**
+ * Переписать абзац с жетонами (XML ровно одного w:p; вложенных абзацев с жетонами в нём уже нет). Жетоны — по одному
+ * слева направо в окне абзаца (html-xml.paragraphWindow: шаг не зависит от длины остального абзаца)
  * @return {String} XML абзацев на его месте
  */
 function writeParagraph (pXml, job) {
   var _out = '';
-  var _xml = pXml;
+  var _window = common.paragraphWindow(pXml, job, contentStart, windowStub);
+  var _xml = _window.xml;
   for (;;) {
     var _parsed = common.parseTokens(_xml, job);
     if (_parsed.tokens.length === 0) {
-      return _out + _xml;
+      return _window.expand(_out + _xml);
     }
     var _token = _parsed.tokens[0];
     var _p = paragraphOf(_token, job);
     var _item = job.registry.items[_token.id];
     var _strip = _xml.slice(0, _token.pos) + _xml.slice(_token.pos + _token.len);
     if (_item.value === '') {
-      _xml = _strip;
+      _xml = _window.advance(_strip, _token.pos);
       continue;
     }
     var _ctx = paragraphCtx(_xml, _p, _token.el.parent, _item, job);
@@ -707,16 +744,16 @@ function writeParagraph (pXml, job) {
       _ctx.inHyperlink = xmltree.closest(_token.el, ['w:hyperlink']) !== null;
       var _runs = inlinesXml(model.content(_item), _ctx.rPr, _ctx);
       if (_runs === '') {
-        _xml = _strip;
+        _xml = _window.advance(_strip, _token.pos);
         continue;
       }
       var _parts = cut(_xml, _token, _token.el.parent.parent);
-      _xml = _parts.head + _runs + _parts.tail;
+      _xml = _window.advance(_parts.head + _runs + _parts.tail, _parts.head.length + _runs.length);
       continue;
     }
     var _body = blocksXml(model.content(_item), _ctx);
     if (_body === '') {
-      _xml = _strip;
+      _xml = _window.advance(_strip, _token.pos);
       continue;
     }
     var _split = splitParagraph(_xml, _p, _token);
@@ -726,10 +763,11 @@ function writeParagraph (pXml, job) {
       if (_body.slice(-8) === '</w:tbl>') {
         _body += spacerXml('', _ctx);
       }
-      return _out + appendSectPr(_body, _ctx.sectPr);
+      return _window.expand(_out) + appendSectPr(_body, _ctx.sectPr);
     }
     _out += _body;
-    _xml = _split.after;
+    _window.closer('</w:p>');
+    _xml = _window.advance(_split.after, null);
   }
 }
 

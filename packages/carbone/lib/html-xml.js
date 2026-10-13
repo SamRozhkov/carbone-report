@@ -119,6 +119,141 @@ function rewriteParagraphs (job, paragraphOf, writeParagraph) {
 }
 
 /**
+ * Окно абзаца с жетонами — линейная обработка многих жетонов в одном абзаце. writeParagraph (DOCX, ODT) переписывает
+ * жетоны по одному слева направо, и каждый шаг разбирает свой XML абзаца; раньше это был весь остаток абзаца
+ * (квадратично от числа жетонов). Окно — тот же абзац, в котором:
+ *   - обработанное слева от места разреза свёрнуто в заглушки: на каждом уровне открытых элементов содержимое до
+ *     разреза заменено комментарием-меткой и минимальным XML с теми же свойствами, что видят следующие шаги
+ *     (пустота части, последний символ, rPr — см. stub у писателей); открывающие теги открытых элементов — как есть;
+ *   - справа исходный XML абзаца — только до первого символа следующего жетона включительно, открытые там элементы
+ *     закрыты: шаг видит ровно один жетон, а все проверки «пусто ли после жетона» — то же, что в целом абзаце
+ *     (символ следующего жетона — непустой текст).
+ * Поэтому каждый шаг даёт тот же XML, что на целом абзаце, только со свёрнутыми заглушками; expand в конце
+ * разворачивает их (каждую один раз).
+ * @param  {String}   pXml          XML ровно одного абзаца
+ * @param  {Object}   job
+ * @param  {Function} contentStart  contentStart(xml, p) → начало содержимого абзаца (после свойств абзаца)
+ * @param  {Function} stub          stub(содержимое, элемент) → XML заглушки без комментария-метки (содержимое не пустое)
+ * @return {Object}                 { xml — окно с первым жетоном, advance(xml, cutAt), closer(тег), expand(xml) }
+ */
+function paragraphWindow (pXml, job, contentStart, stub) {
+  var _parsed = parseTokens(pXml, job);
+  var _p = _parsed.root.children[0];
+  var _tokens = _parsed.tokens;
+  var _stubs = [];
+  var _label = '<!--crhtml:' + job.registry.nonce + ':';
+  var _labelRegex = new RegExp(_label + '(\\d+)-->', 'g');
+  var _closer = pXml.slice(_p.closeStart);
+  // окно содержит жетон _next - 1 целиком и первый символ жетона _next; исходный XML — до _limit, затем _closers
+  var _next = 0;
+  var _limit = 0;
+  var _closers = '';
+
+  // закрывающие теги элементов абзаца, открытых на первом символе жетона k (изнутри наружу)
+  var _closersAt = function (k) {
+    var _tags = '';
+    if (k < _tokens.length) {
+      for (var _el = _tokens[k].el; _el !== _p; _el = _el.parent) {
+        _tags += '</' + _el.name + '>';
+      }
+    }
+    return _tags;
+  };
+
+  var _extend = function (xml) {
+    var _suffix = _closers + _closer;
+    if (xml.slice(xml.length - _suffix.length) !== _suffix) {
+      throw new Error('html: нарушен хвост окна абзаца');
+    }
+    _next++;
+    var _to = _next < _tokens.length ? _tokens[_next].pos + 1 : _p.closeStart;
+    var _tags = _closersAt(_next);
+    var _xml = xml.slice(0, xml.length - _suffix.length) + pXml.slice(_limit, _to) + _tags + _closer;
+    _limit = _to;
+    _closers = _tags;
+    return _xml;
+  };
+
+  var _stubOf = function (content, el) {
+    if (content === '') {
+      return '';
+    }
+    var _text = _label + _stubs.length + '-->' + stub(content, el);
+    _stubs.push({ text : _text, content : content });
+    return _text;
+  };
+
+  // элемент среди детей el, внутри содержимого которого стоит pos (пустой элемент <x/> — не контейнер)
+  var _childAt = function (el, pos) {
+    for (var i = 0; i < el.children.length; i++) {
+      var _child = el.children[i];
+      if (_child.openEnd <= pos && pos <= _child.closeStart && _child.closeStart < _child.end) {
+        return _child;
+      }
+    }
+    return null;
+  };
+
+  // свернуть содержимое окна левее cutAt (на каждом уровне открытых там элементов)
+  var _compact = function (xml, cutAt) {
+    var _el = xmltree.parse(xml).root.children[0];
+    var _from = contentStart(xml, _el);
+    var _out = xml.slice(0, _from);
+    for (;;) {
+      var _child = _childAt(_el, cutAt);
+      _out += _stubOf(xml.slice(_from, _child !== null ? _child.start : cutAt), _el);
+      if (_child === null) {
+        return _out + xml.slice(cutAt);
+      }
+      _out += xml.slice(_child.start, _child.openEnd);
+      _el = _child;
+      _from = _child.openEnd;
+    }
+  };
+
+  return {
+    xml : _extend(_closer),
+
+    /**
+     * Следующий шаг: xml — окно после обработки жетона, cutAt — место разреза в нём (всё левее обработано) или null
+     * (сворачивать нечего)
+     */
+    advance : function (xml, cutAt) {
+      return _extend(cutAt !== null ? _compact(xml, cutAt) : xml);
+    },
+
+    /** Закрывающий тег абзаца окна сменился (после разделения абзаца — копия) */
+    closer : function (tag) {
+      _closer = tag;
+    },
+
+    /** Развернуть заглушки (вложенные — тоже) */
+    expand : function (xml) {
+      var _out = [];
+      var _stack = [{ xml : xml, pos : 0 }];
+      while (_stack.length > 0) {
+        var _top = _stack[_stack.length - 1];
+        _labelRegex.lastIndex = _top.pos;
+        var _match = _labelRegex.exec(_top.xml);
+        if (_match === null) {
+          _out.push(_top.xml.slice(_top.pos));
+          _stack.pop();
+          continue;
+        }
+        var _stub = _stubs[parseInt(_match[1], 10)];
+        if (_stub === undefined || _top.xml.startsWith(_stub.text, _match.index) === false) {
+          throw new Error('html: заглушка окна абзаца изменена');
+        }
+        _out.push(_top.xml.slice(_top.pos, _match.index));
+        _top.pos = _match.index + _stub.text.length;
+        _stack.push({ xml : _stub.content, pos : 0 });
+      }
+      return _out.join('');
+    }
+  };
+}
+
+/**
  * Объявить на корне части пространства имён used (префикс → true), если их там нет. Открывающий тег корня берётся
  * по дереву root: правки части не должны сдвигать его (они идут после него)
  * @param  {String} xml
@@ -151,6 +286,7 @@ module.exports = {
   templateError,
   escapeText,
   parseTokens,
+  paragraphWindow,
   rewriteParagraphs,
   declareNs
 };

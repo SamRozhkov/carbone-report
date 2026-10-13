@@ -719,10 +719,28 @@ function writeParagraph (pXml, job) {
   return resolvePage(writeParts(_xml, job, _mark), _mark.page, job.odfStyles);
 }
 
-/** Абзац метки по жетонам: «до», блоки, «после» (mark — { pStyle, page } исходного абзаца) */
+function contentStart (xml, p) {
+  return p.openEnd;
+}
+
+/**
+ * Заглушка окна абзаца (html-xml.paragraphWindow) для свёрнутого содержимого: те же partInfo (пустота, закладки) и
+ * последний символ (пробел перед жетоном inline — ctx.space; «>» — тег)
+ */
+function windowStub (content) {
+  var _info = partInfo(content);
+  var _last = content[content.length - 1];
+  return (_info.empty === true ? _info.markers : '<crx/>') + (_last === '>' ? '' : /[ \t\r\n]/.test(_last) === true ? _last : '.');
+}
+
+/**
+ * Абзац метки по жетонам: «до», блоки, «после» (mark — { pStyle, page } исходного абзаца). Жетоны — по одному слева
+ * направо в окне абзаца (html-xml.paragraphWindow: шаг не зависит от длины остального абзаца)
+ */
 function writeParts (pXml, job, mark) {
   var _out = '';
-  var _xml = pXml;
+  var _window = common.paragraphWindow(pXml, job, contentStart, windowStub);
+  var _xml = _window.xml;
   // абзац — продолжение после блоков: пустой не остаётся
   var _continued = false;
   for (;;) {
@@ -735,7 +753,7 @@ function writeParts (pXml, job, mark) {
     var _item = job.registry.items[_token.id];
     var _strip = _xml.slice(0, _token.pos) + _xml.slice(_token.pos + _token.len);
     if (_item.value === '') {
-      _xml = _strip;
+      _xml = _window.advance(_strip, _token.pos);
       continue;
     }
     var _ctx = paragraphCtx(_xml, _p, _token, _item, job, mark);
@@ -744,30 +762,32 @@ function writeParts (pXml, job, mark) {
       var _prev = _xml[_token.pos - 1];
       _ctx.space = _prev === ' ' || _prev === '>';
       _ctx.inLink = xmltree.closest(_token.el, ['text:a']) !== null;
-      _xml = _xml.slice(0, _token.pos) + inlinesXml(model.content(_item), _ctx) + _xml.slice(_token.pos + _token.len);
+      var _inline = inlinesXml(model.content(_item), _ctx);
+      _xml = _window.advance(_xml.slice(0, _token.pos) + _inline + _xml.slice(_token.pos + _token.len), _token.pos + _inline.length);
       continue;
     }
     var _body = blocksXml(model.content(_item), _ctx);
     if (_body === '') {
-      _xml = _strip;
+      _xml = _window.advance(_strip, _token.pos);
       continue;
     }
     var _split = splitParagraph(_xml, _p, _token);
     _out += _split.before.empty === true ? prependMarkers(_body, _split.before.markers) : _split.before.xml + _body;
     _continued = true;
     if (_split.after.empty === true) {
-      return appendMarkers(_out, _split.after.markers);
+      return appendMarkers(_window.expand(_out), _split.after.markers);
     }
-    _xml = _split.after.xml;
+    _window.closer('</' + _p.name + '>');
+    _xml = _window.advance(_split.after.xml, null);
   }
   if (_continued === true) {
     var _p2 = xmltree.parse(_xml).root.children[0];
     var _rest = partInfo(_xml.slice(_p2.openEnd, _p2.closeStart));
     if (_rest.empty === true) {
-      return appendMarkers(_out, _rest.markers);
+      return appendMarkers(_window.expand(_out), _rest.markers);
     }
   }
-  return _out + _xml;
+  return _window.expand(_out + _xml);
 }
 
 /**

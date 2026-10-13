@@ -334,6 +334,63 @@ describe('html: модель', function () {
         parse('<b>x</b>'.repeat(100));
       });
     });
+
+    it('неявно закрытые пункты и ячейки (без </li>, </td>, </tr>) не увеличивают вложенность', function () {
+      const a = P([T('a')]);
+      const items = Array.from({ length: 40 }, () => LI([a]));
+      assert.deepStrictEqual(parse('<ul>' + '<li><p>a'.repeat(40)), [LIST(false, items)]);
+      assert.deepStrictEqual(parse('<ul>' + '<li><p>a'.repeat(40) + '</ul><p>b'), [LIST(false, items), P([T('b')])]);
+      assert.deepStrictEqual(parse('<table><tr>' + '<td><p>a'.repeat(40)),
+        [TABLE([ROW(Array.from({ length: 40 }, () => TD([a])))])]);
+      assert.deepStrictEqual(parse('<table>' + '<tr><td><p>a'.repeat(40)),
+        [TABLE(Array.from({ length: 40 }, () => ROW([TD([a])])))]);
+      assert.deepStrictEqual(parse('<ul>' + '<li><b>a'.repeat(40)),
+        [LIST(false, Array.from({ length: 40 }, () => LI([P([T('a', { bold: true })])])))]);
+      assert.deepStrictEqual(parse('<ol>' + '<li><p><b><i>a'.repeat(40) + '</ol>').length, 1);
+    });
+
+    it('настоящая вложенность глубже 32 — ошибка и в списках и таблицах', function () {
+      assert.doesNotThrow(function () {
+        parse('<ul><li>'.repeat(16) + 'x');
+      });
+      assert.throws(function () {
+        parse('<ul><li>'.repeat(16) + '<b>x');
+      }, /^Error: html: вложенность тегов больше 32\. Source: "\{d\.x:html\}"$/);
+      assert.throws(function () {
+        parse('<table><tr><td>'.repeat(11) + 'x');
+      }, /^Error: html: вложенность тегов больше 32\. Source: "\{d\.x:html\}"$/);
+      assert.throws(function () {
+        parse('<ul><li><div>'.repeat(11) + 'x');
+      }, /^Error: html: вложенность тегов больше 32\. Source: "\{d\.x:html\}"$/);
+    });
+
+    it('незакрытых тегов в разборе больше 4096 — ошибка шаблона сразу (стек htmlparser2 квадратичен по глубине)', function () {
+      assert.doesNotThrow(function () {
+        parse('<ul>' + '<li><p>a'.repeat(2047));
+      });
+      for (const fn of [parse, (html) => model.inlineOnly(html, SRC)]) {
+        assert.throws(function () {
+          fn('<ul>' + '<li><p>a'.repeat(2048));
+        }, /^Error: html: незакрытых тегов больше 4096\. Source: "\{d\.x:html\}"$/);
+        const start = Date.now();
+        assert.throws(function () {
+          fn('<ul>' + '<li><p>a'.repeat(120000));
+        }, /незакрытых тегов больше 4096/);
+        assert.ok(Date.now() - start < 1000, 'дольше 1 с: ' + (Date.now() - start));
+      }
+    });
+
+    it('inlineOnly: неявно закрытые пункты и ячейки не увеличивают вложенность', function () {
+      assert.deepStrictEqual(model.inlineOnly('<ul>' + '<li><p>a'.repeat(40), SRC), [T(Array(40).fill(' a').join('').slice(1))]);
+      assert.doesNotThrow(function () {
+        model.inlineOnly('<table>' + '<tr><td><p>a'.repeat(40), SRC);
+        model.inlineOnly('<table><tr>' + '<td><p>a'.repeat(40), SRC);
+        model.inlineOnly('<ul>' + '<li><b>a'.repeat(40), SRC);
+      });
+      assert.throws(function () {
+        model.inlineOnly('<ul><li>'.repeat(16) + '<b>x', SRC);
+      }, /вложенность тегов больше 32/);
+    });
   });
 
   describe('parse: регрессии ревью 1', function () {
@@ -762,6 +819,12 @@ describe('html: ошибки шаблона', function () {
     assert.strictEqual(await rejection(renderDocx([mp('{d.h:html}')], { h: '<span>'.repeat(33) + 'x' })),
       'html: вложенность тегов больше 32. Source: "{d.h:html}"');
   });
+
+  it('40 пунктов и ячеек без закрывающих тегов — не ошибка вложенности', async function () {
+    const body = await bodyOf([mp('{d.h:html}'), mp('{d.t:html}')], { h: '<ul>' + '<li><p>a'.repeat(40), t: '<table>' + '<tr><td><p>b'.repeat(40) });
+    assert.strictEqual((body.match(/<w:numPr>/g) || []).length, 40);
+    assert.strictEqual((body.match(/<w:tr>/g) || []).length, 40);
+  });
 });
 
 describe('html: доработка 1', function () {
@@ -1100,6 +1163,20 @@ describe('html: DOCX — части и производительность (Tas
     assert.strictEqual((numbering.match(/<w:abstractNum /g) || []).length, 2);
     assert.ok(ms < 3000, 'сборка ' + ms + ' мс');
   });
+
+  it('2000 меток :html в одном абзаце — линейно (inline и блоки)', async function () {
+    this.timeout(30000);
+    const items = Array.from({ length: 2000 }, (v, i) => ({ h: '<b>' + i + '</b>' }));
+    for (const opt of ['(inline)', '']) {
+      const raw = mp('{d.items[i].h:html' + opt + '} {d.items[i+1].h:html' + opt + '}');
+      const start = Date.now();
+      const xml = await readEntry(await renderDocx([raw], { items }), 'word/document.xml');
+      const ms = Date.now() - start;
+      assert.strictEqual((xml.match(/<w:b\/>/g) || []).length, 2000, opt);
+      assert.ok(xml.includes(wR('1999', '<w:b/>')), 'последняя метка ' + opt);
+      assert.ok(ms < 1500, opt + ' сборка ' + ms + ' мс');
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -1117,6 +1194,9 @@ const DOC_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006
 // ожидаемая таблица
 const TBL_LOOK = '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>';
 const tblPr = (style, more) => '<w:tblPr><w:tblStyle w:val="' + style + '"/><w:tblW w:w="5000" w:type="pct"/>' + (more || '') + TBL_LOOK + '</w:tblPr>';
+// таблица с отступом (пункт списка, цитата): ширина — ширина текста минус отступ, в twips
+const tblPrInd = (style, width, indent) => '<w:tblPr><w:tblStyle w:val="' + style + '"/><w:tblW w:w="' + width + '" w:type="dxa"/>'
+  + '<w:tblInd w:w="' + indent + '" w:type="dxa"/>' + TBL_LOOK + '</w:tblPr>';
 const grid = (n, w) => '<w:tblGrid>' + ('<w:gridCol w:w="' + w + '"/>').repeat(n) + '</w:tblGrid>';
 const tc = (inner, w, o) => '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>' + (o && o.span ? '<w:gridSpan w:val="' + o.span + '"/>' : '')
   + (o && o.merge ? (o.merge === 'restart' ? '<w:vMerge w:val="restart"/>' : '<w:vMerge/>') : '') + '</w:tcPr>' + inner + '</w:tc>';
@@ -1297,12 +1377,29 @@ describe('html: DOCX — таблицы', function () {
     assert.ok(/<w:numPr><w:ilvl w:val="0"\/><w:numId w:val="2"\/><\/w:numPr><w:ind w:left="720" w:hanging="360"\/><\/w:pPr><w:r><w:t xml:space="preserve">a</.test(r.body), r.body);
     assert.ok(r.body.includes(wP(wR('h'), '<w:pStyle w:val="Heading2"/>')), r.body);
     // таблица в пункте — с отступом пункта
-    assert.ok(r.body.includes(tblPr('TableGrid', '<w:tblInd w:w="720" w:type="dxa"/>')), r.body);
+    assert.ok(r.body.includes(tblPrInd('TableGrid', 9638 - 720, 720)), r.body);
   });
 
   it('таблица в цитате — отступ цитаты; разрыв страницы до таблицы — отдельным абзацем перед ней', async function () {
     const r = await renderHtml('<blockquote><table style="break-before: page"><tr><td>a</td></tr></table></blockquote>', '{d.h:html(nospace)}');
-    assert.ok(r.body.startsWith(wP('<w:r><w:br w:type="page"/></w:r>') + '<w:tbl>' + tblPr('TableGrid', '<w:tblInd w:w="600" w:type="dxa"/>')), r.body);
+    assert.ok(r.body.startsWith(wP('<w:r><w:br w:type="page"/></w:r>') + '<w:tbl>' + tblPrInd('TableGrid', 9638 - 600, 600)), r.body);
+  });
+
+  it('таблица с отступом (пункт, цитата, вложенные) не выходит за правое поле: ширина и сетка — ширина минус отступ', async function () {
+    let r = await renderHtml('<ul><li>x<table><tr><td>a</td><td>b</td></tr></table></li></ul>', '{d.h:html(nospace)}');
+    assert.ok(r.body.includes('<w:tbl>' + tblPrInd('TableGrid', 8918, 720) + grid(2, 4459) + tr([tc(wP(wR('a')), 4459), tc(wP(wR('b')), 4459)]) + '</w:tbl>'), r.body);
+    // второй уровень списка и цитата в пункте: 1440 и 720 + 600
+    r = await renderHtml('<ul><li>x<ul><li>y<table><tr><td>a</td></tr></table></li></ul></li></ul>', '{d.h:html(nospace)}');
+    assert.ok(r.body.includes('<w:tbl>' + tblPrInd('TableGrid', 8198, 1440) + grid(1, 8198)), r.body);
+    r = await renderHtml('<blockquote><blockquote><table><tr><td>a</td></tr></table></blockquote></blockquote>', '{d.h:html(nospace)}');
+    assert.ok(r.body.includes('<w:tbl>' + tblPrInd('TableGrid', 8438, 1200) + grid(1, 8438)), r.body);
+    // таблица в пункте списка внутри ячейки: от ширины ячейки (9638 / 2 = 4819) минус отступ пункта
+    r = await renderHtml('<table><tr><td><ul><li>x<table><tr><td>a</td><td>b</td></tr></table></li></ul></td><td>c</td></tr></table>', '{d.h:html(nospace)}');
+    assert.ok(r.body.startsWith('<w:tbl>' + tblPr('TableGrid') + grid(2, 4819)), r.body);
+    assert.ok(r.body.includes('<w:tbl>' + tblPrInd('TableGrid', 4099, 720) + grid(2, 2049) + tr([tc(wP(wR('a')), 2049), tc(wP(wR('b')), 2049)])), r.body);
+    // без отступа — по-прежнему 100 %
+    r = await renderHtml('<table><tr><td>a</td></tr></table>', '{d.h:html(nospace)}');
+    assert.ok(r.body.startsWith('<w:tbl>' + tblPr('TableGrid') + grid(1, 9638)), r.body);
   });
 
   it('Review Focus 3: в ячейке цикла список и таблица — свой numId, каждая ячейка заканчивается w:p', async function () {
@@ -1808,6 +1905,21 @@ describe('html: ODT — абзац метки', function () {
     }
   });
 
+  it('4000 меток :html в одном абзаце — линейно (inline и блоки, в тексте и в text:span)', async function () {
+    this.timeout(60000);
+    const items = Array.from({ length: 4000 }, (v, i) => ({ h: '<b>' + i + '</b>' }));
+    for (const opt of ['(inline)', '']) {
+      for (const wrap of [(t) => t, (t) => oS('T1', t)]) {
+        const start = Date.now();
+        const r = await renderOdt(oP(wrap('{d.items[i].h:html' + opt + '} {d.items[i+1].h:html' + opt + '}')), { items });
+        const ms = Date.now() - start;
+        assert.strictEqual((r.body.match(/>3999</g) || []).length, 1, opt);
+        assert.strictEqual((r.body.match(/text:style-name="CRh1">\d+</g) || []).length, 4000, opt);
+        assert.ok(ms < 1500, opt + ' сборка ' + ms + ' мс');
+      }
+    }
+  });
+
   it('5000 строк таблицы с :html — линейно', async function () {
     this.timeout(30000);
     const rows = Array.from({ length: 5000 }, (v, i) => ({ h: '<b>' + i + '</b>' }));
@@ -2142,6 +2254,14 @@ describe('html: ODT — таблицы', function () {
     // таблица в конце вложенного пункта: пустые продолжения списков не остаются
     r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<ul><li>x<ul><li>y<table><tr><td>a</td></tr></table></li></ul></li></ul>' });
     assert.strictEqual(r.body, oL('CRhl1', oLI(oP('x') + oL('CRhl1', oLI(oP('y'))))) + oTable(1, 'CRht1', oCols(1), [[oTD(oP('a'))]]));
+  });
+
+  it('таблица в пункте списка внутри ячейки и в пункте внутри цитаты — ширина минус отступ (M2)', async function () {
+    const r = await renderOdt(oP('{d.h:html(nospace)}'), { h: '<table><tr><td><ul><li>x<table><tr><td>a</td><td>b</td></tr></table></li></ul></td><td>c</td></tr></table>'
+      + '<blockquote><ul><li>y<table><tr><td>q</td></tr></table></li></ul></blockquote>' });
+    assert.ok(r.auto.includes(tableStyle('CRht1', 'style:width="17cm" table:align="margins"') + colStyle('CRhtc1', '8.5cm')), r.auto);
+    assert.ok(r.auto.includes(tableStyle('CRht2', 'style:width="7.23cm" fo:margin-left="1.27cm" table:align="left"') + colStyle('CRhtc2', '3.615cm')), r.auto);
+    assert.ok(r.auto.includes(tableStyle('CRht3', 'style:width="14.672cm" fo:margin-left="2.328cm" table:align="left"') + colStyle('CRhtc3', '14.672cm')), r.auto);
   });
 
   it('список в ячейке внутри пункта — свой список в ячейке; заголовок в ячейке — text:h', async function () {

@@ -3,7 +3,8 @@
 //
 // Стиль — tabletheme (создаётся простым при отсутствии), иначе стиль таблиц по умолчанию документа (w:default,
 // кроме «Normal Table»), иначе TableGrid (создаётся при отсутствии: сплошные границы). Ширина — 100 % (w:tblW pct
-// 5000), сетка — равные столбцы по ширине текста раздела (вложенная таблица — по ширине своей ячейки). colspan →
+// 5000), сетка — равные столбцы по ширине текста раздела (вложенная таблица — по ширине своей ячейки); с отступом —
+// w:tblW dxa и сетка по этой ширине минус отступ. colspan →
 // w:gridSpan, rowspan →
 // w:vMerge restart и w:vMerge в следующих строках (пустой w:p). Подпись — абзацем перед таблицей. Отступ таблицы —
 // отступ контейнера (пункт списка) и цитаты (600 twips на уровень).
@@ -132,14 +133,19 @@ function tableXml (block, ctx, api) {
     _out += api.writePara({ quote : 0 }, '', ctx, null);
   }
   var _grid = layout(block.rows);
+  var _indent = ctx.indent + QUOTE_INDENT * (block.quote > 0 ? block.quote : 0);
   var _total = ctx.width !== null ? ctx.width : ctx.job.parts.textWidth();
+  // с отступом таблица уже на отступ (иначе 100 % от поля, сдвинутые на w:tblInd, выходят за правое поле)
+  if (_indent > 0 && _total - _indent > 0) {
+    _total -= _indent;
+  }
   var _width = Math.max(1, Math.floor(_total / _grid.columns));
   var _style = ctx.options.tabletheme !== null ? ctx.styles.ensure(ctx.options.tabletheme, 'table') : ctx.styles.defaultTable();
   if (_style === null) {
     _style = ctx.styles.ensure('TableGrid', 'table');
   }
-  var _indent = ctx.indent + QUOTE_INDENT * (block.quote > 0 ? block.quote : 0);
-  var _xml = '<w:tbl><w:tblPr><w:tblStyle w:val="' + escapeAttr(_style) + '"/><w:tblW w:w="5000" w:type="pct"/>'
+  var _xml = '<w:tbl><w:tblPr><w:tblStyle w:val="' + escapeAttr(_style) + '"/>'
+    + (_indent > 0 ? '<w:tblW w:w="' + _total + '" w:type="dxa"/>' : '<w:tblW w:w="5000" w:type="pct"/>')
     + (_indent !== 0 ? '<w:tblInd w:w="' + _indent + '" w:type="dxa"/>' : '') + TBL_LOOK + '</w:tblPr>'
     + '<w:tblGrid>' + ('<w:gridCol w:w="' + _width + '"/>').repeat(_grid.columns) + '</w:tblGrid>';
   _grid.rows.forEach(function (entries) {

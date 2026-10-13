@@ -263,7 +263,8 @@ function QueryParamField({
   // «Выбрать все» — весь список вариантов (без учёта строки поиска), повторно — снять выбор.
   const renderPopup: SelectRenderPopup = ({ renderFilter, renderList }) => (
     <>
-      <div className="cr-select-all">
+      {/* mousedown без фокуса: поиск сохраняет фокус и навигацию стрелками. */}
+      <div className="cr-select-all" onMouseDown={(e) => e.preventDefault()}>
         <Checkbox
           checked={allSelected}
           indeterminate={!allSelected && selected.length > 0}

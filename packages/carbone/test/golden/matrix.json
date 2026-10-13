@@ -4629,6 +4629,10 @@
       "expect": {
         "error": "Formatter \"html\" is disabled in the Community Edition.",
         "errorSource": "{d.h:html}"
+      },
+      "deviation": {
+        "ours": "[\nжирный текст\n]",
+        "why": "платная функция EE, реализована в 2.5.0 (§34)"
       }
     },
     {

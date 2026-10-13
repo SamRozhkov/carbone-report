@@ -27,7 +27,8 @@ describe('EE: отключённые функции', function () {
   const cars = { cars: [{ brand: 'Лада', qty: 3 }, { brand: 'Тесла', qty: 2 }] };
   // агрегаторы (aggSum … cumCountD, count()), drop и keep реализованы в 2.2.0 — test/test.ee-paid.js
   // barcode реализован в 2.4.0 — test/test.ee-images.js, color — test/test.ee-colors.js, defaultURL — test/test.ee-links.js
-  for (const f of ['html', 'chart', 'formatR', 'autoOrient']) {
+  // html — в 2.5.0, test/test.ee-html.js
+  for (const f of ['chart', 'formatR', 'autoOrient']) {
     it(f, async function () {
       assert.strictEqual(await error('{d.v:' + f + '()}', { v: 'x' }), 'Formatter "' + f + '" is disabled in the Community Edition.');
     });
@@ -45,8 +46,8 @@ describe('EE: отключённые функции', function () {
     assert.strictEqual(await text('[{d.v:color(p)}цветной]', { v: '#FF0000' }), '[цветной]');
   });
   it('сообщение несёт суффикс Source с меткой, как в EE', async function () {
-    assert.ok((await rawError('{d.v:html()}', { v: 'x' })).endsWith(' Source: "{d.v:html()}"'));
-    assert.ok((await rawError('Итого: {d.v:mul(2):html:formatN(2)}', { v: 1 })).endsWith(' Source: "{d.v:mul(2):html:formatN(2)}"'));
+    assert.ok((await rawError('{d.v:chart()}', { v: 'x' })).endsWith(' Source: "{d.v:chart()}"'));
+    assert.ok((await rawError('Итого: {d.v:mul(2):chart:formatN(2)}', { v: 1 })).endsWith(' Source: "{d.v:mul(2):chart:formatN(2)}"'));
   });
   it('Source для count() показывает метку уже с cumCount, как в EE', async function () {
     const t = '| {d.cars[i].brand:count():nope} |\n| {d.cars[i+1].brand} |';
@@ -57,7 +58,9 @@ describe('EE: отключённые функции', function () {
   });
   it('disabledName: имя для сообщения или null', function () {
     const { disabledName } = require('../lib/community');
-    assert.strictEqual(disabledName('html'), 'html');
+    assert.strictEqual(disabledName('chart'), 'chart');
+    // html с 2.5.0 не отключён
+    assert.strictEqual(disabledName('html'), null);
     // агрегаторы, count() (= cumCount), drop и keep с 2.2.0 не отключены
     assert.strictEqual(disabledName('drop'), null);
     assert.strictEqual(disabledName('keep'), null);
@@ -75,9 +78,9 @@ describe('EE: отключённые функции', function () {
     const input = require('../lib/input');
     await new Promise(function (resolve, reject) {
       input.parseOptions({}, reject, function (options) {
-        builder.buildXML('<w:hdr><w:p><w:r><w:t>{d.n:html}</w:t></w:r></w:p></w:hdr>', { n: 1 }, options, function (err) {
+        builder.buildXML('<w:hdr><w:p><w:r><w:t>{d.n:chart}</w:t></w:r></w:p></w:hdr>', { n: 1 }, options, function (err) {
           try {
-            assert.match(String(err && err.message), /Formatter "html" is disabled in the Community Edition\./);
+            assert.match(String(err && err.message), /Formatter "chart" is disabled in the Community Edition\./);
             resolve();
           }
           catch (e) {
@@ -393,7 +396,7 @@ describe('EE: Task 7, доработка 1 (граничные случаи)', f
   it('ошибки меток :set не показывают служебный __set', async function () {
     const m1 = await rawError('{d.cars[].brand:nope:set(c.x)}', cars);
     assert.ok(/Source: "\{d\.cars\[\]\.brand:nope:set\(c\.x\)\}"$/.test(m1) && !/__set/.test(m1), m1);
-    const m2 = await rawError('{d.cars[].brand:html:set(c.x)}', cars);
+    const m2 = await rawError('{d.cars[].brand:chart:set(c.x)}', cars);
     assert.ok(!/__set/.test(m2), m2);
   });
   it('группировка: ключи 1 и \'1\' — одна группа, как в поиске по ключу', async function () {

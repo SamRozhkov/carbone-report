@@ -3,6 +3,7 @@ var helper = require('./helper');
 var parser = require('./parser');
 var media = require('./media');
 var links = require('./links');
+var charts = require('./charts');
 
 
 var preprocessor = {
@@ -121,12 +122,17 @@ var preprocessor = {
       }
     }
     preprocessor.removeOneFile(template, _sharedStringIndex, parentFilter);
+    // книга с диаграммами: строки и ячейки листов помечаются исходными номерами до удаления r (R1, lib/charts.js)
+    var _tagCharts = charts.hasCharts(template, parentFilter);
     // once shared string is found, convert files
     for (var f = 0; f < _filesToConvert.length; f++) {
       var _modifiedFile = _filesToConvert[f];
-      _modifiedFile.data = preprocessor.removeRowCounterInWorksheet(
-        preprocessor.convertToInlineString(_modifiedFile.data, _sharedStrings)
-      );
+      var _inlined = preprocessor.convertToInlineString(_modifiedFile.data, _sharedStrings);
+      if (_tagCharts === true) {
+        _inlined = charts.tagSheet(_inlined);
+        Object.defineProperty(_modifiedFile, 'chartsTagged', { value : true, enumerable : false, writable : true });
+      }
+      _modifiedFile.data = preprocessor.removeRowCounterInWorksheet(_inlined);
       // после сборки номера строк и ячеек восстанавливает finishXlsx (renderBuffer); свойство неперечисляемое —
       // разобранный шаблон сериализуется как в апстриме
       Object.defineProperty(_modifiedFile, 'rowCounterRemoved', { value : true, enumerable : false, writable : true });

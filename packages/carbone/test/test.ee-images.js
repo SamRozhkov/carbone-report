@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const zlib = require('zlib');
 const carbone = require('../lib/index');
 const { renderBuffer, renderBufferWithWarnings } = carbone;
-const { buildDocx, docxText, normalizeError, readEntry, entryNames } = require('./golden-lib');
+const { buildDocx, buildOdf: buildOdfPackage, docxText, normalizeError, readEntry, entryNames } = require('./golden-lib');
 
 const RU = { lang: 'ru', timezone: 'Europe/Moscow' };
 const IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
@@ -494,12 +494,6 @@ function buildXlsx (anchors) {
   });
 }
 
-const ODF_MIME = { odt: 'text', ods: 'spreadsheet', odp: 'presentation' };
-const ODF_NS = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
-  + ' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"'
-  + ' xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink"'
-  + ' xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0"';
-
 /** Рамка ODF с картинкой; title/desc — содержимое svg:title / svg:desc (null — нет элемента) */
 function odfFrame (opts) {
   const o = Object.assign({ name: 'Image1', w: '4cm', h: '4cm', title: null, desc: null, attrs: ' text:anchor-type="as-char"' }, opts);
@@ -509,20 +503,8 @@ function odfFrame (opts) {
     + '</draw:frame>';
 }
 
-/** ODT/ODS/ODP: body — содержимое office:text / office:spreadsheet / office:presentation */
-function buildOdf (ext, body) {
-  const kind = ODF_MIME[ext];
-  const mime = 'application/vnd.oasis.opendocument.' + kind;
-  return zip({
-    mimetype: mime,
-    'META-INF/manifest.xml': XML_HEAD + '<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">'
-      + '<manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="' + mime + '"/>'
-      + '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>'
-      + '<manifest:file-entry manifest:full-path="Pictures/p.png" manifest:media-type="image/png"/></manifest:manifest>',
-    'content.xml': XML_HEAD + '<office:document-content ' + ODF_NS + ' office:version="1.3"><office:body><office:' + kind + '>' + body + '</office:' + kind + '></office:body></office:document-content>',
-    'Pictures/p.png': png(1, 1)
-  });
-}
+/** ODT/ODS/ODP с картинкой Pictures/p.png (golden-lib.buildOdf) */
+const buildOdf = (ext, body) => buildOdfPackage(ext, body, { files: { 'Pictures/p.png': png(1, 1) } });
 
 const odsBody = (shapes, cell) => '<table:table table:name="S"><table:shapes>' + shapes + '</table:shapes><table:table-column/><table:table-row><table:table-cell office:value-type="string"><text:p>' + (cell || '') + '</text:p></table:table-cell></table:table-row></table:table>';
 const odpBody = (frames) => '<draw:page draw:name="p1">' + frames + '</draw:page>';

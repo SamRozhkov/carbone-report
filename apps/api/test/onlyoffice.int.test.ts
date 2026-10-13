@@ -127,6 +127,7 @@ describe('editor-config', () => {
       editorConfig: {
         callbackUrl: `http://api:3000/internal/onlyoffice/callback/${tplId}`,
         lang: 'ru',
+        coEditing: { mode: 'fast', change: false },
         customization: { forcesave: true },
         user: { id: adminId },
       },

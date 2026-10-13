@@ -883,7 +883,11 @@
    "expect": {
     "error": "Formatter \"html\" is disabled in the Community Edition."
    },
-   "apiMessage": "в шаблоне используется html — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»"
+   "apiMessage": "в шаблоне используется html — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»",
+   "deviation": {
+    "ours": "жирный текст",
+    "why": "платная функция EE, реализована в 2.5.0 (§34)"
+   }
   },
   {
    "id": "help/na-color",

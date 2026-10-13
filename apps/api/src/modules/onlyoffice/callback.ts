@@ -54,17 +54,22 @@ export async function handleCallback(
   templateId: string,
   body: unknown,
   authorization: string | undefined,
-  log?: { warn(o: unknown, msg?: string): void },
+  log?: { info(o: unknown, msg?: string): void; warn(o: unknown, msg?: string): void },
 ): Promise<void> {
   const parsed = Callback.safeParse(await verifiedPayload(deps, body, authorization));
   if (!parsed.success)
     throw new AppError('BAD_CALLBACK', 400, 'неверный формат callback OnlyOffice');
   const cb = parsed.data;
+  // Каждый callback — в журнал: без статуса не понять, почему сохранение не дошло до версии.
+  log?.info({ templateId, status: cb.status }, 'callback OnlyOffice');
   if (![2, 3, 6, 7].includes(cb.status)) return; // остальные статусы не требуют действий и блокировок
   const [current] = await deps.db.select().from(templates).where(eq(templates.id, templateId));
   if (!current) return; // шаблон удалён: подтверждаем, чтобы Document Server не повторял callback
   // Колбэк от закрытой сессии (ключ уже сменился) не должен затирать новую версию.
-  if (cb.key !== current.docKey) return;
+  if (cb.key !== current.docKey) {
+    log?.warn({ templateId, status: cb.status }, 'callback OnlyOffice от прежней сессии пропущен');
+    return;
+  }
 
   // Ошибка пишется, только если сессия всё ещё текущая. Метка строго растёт: повтор той же ошибки
   // в ту же миллисекунду (ISO хранит мс) всё равно отличим от прежней (§22.7).

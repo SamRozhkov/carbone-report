@@ -154,12 +154,199 @@ async function imagesDocx(): Promise<Buffer> {
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
+// диаграммы (2.5.0): гистограмма, теги — в листе данных строками цикла [i] и [i+1]
+const OFFICE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const SHEET_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+const CHART_NS = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+const CHART_CT = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
+const CHART_DATA = {
+  sales: [
+    { month: 'Янв', sum: 10 },
+    { month: 'Фев', sum: 25 },
+    { month: 'Мар', sum: 7 },
+  ],
+};
+/** Ячейка текстом; `r` — адрес. */
+const ic = (r: string, t: string) => `<c r="${r}" t="inlineStr"><is><t>${t}</t></is></c>`;
+/** Лист данных: имя ряда в B1 (A1 нет, как у Word), строки цикла 2–3. */
+const CHART_SHEET =
+  `<row r="1">${ic('B1', 'Сумма')}</row>` +
+  `<row r="2">${ic('A2', '{d.sales[i].month}')}${ic('B2', '{d.sales[i].sum}')}</row>` +
+  `<row r="3">${ic('A3', '{d.sales[i+1].month}')}${ic('B3', '{d.sales[i+1].sum}')}</row>`;
+
+/** Гистограмма по Лист1: подписи A2:A3, значения B2:B3, имя ряда B1; кэш пуст — его строит сборка. */
+function chartXml(external: boolean): string {
+  const ref = (kind: 'str' | 'num', f: string) =>
+    `<c:${kind}Ref><c:f>${f}</c:f><c:${kind}Cache>${kind === 'num' ? '<c:formatCode>General</c:formatCode>' : ''}<c:ptCount val="0"/></c:${kind}Cache></c:${kind}Ref>`;
+  return (
+    `${XML}<c:chartSpace xmlns:c="${CHART_NS}" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${OFFICE_REL}">` +
+    '<c:chart><c:autoTitleDeleted val="1"/><c:plotArea><c:layout/>' +
+    '<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>' +
+    '<c:ser><c:idx val="0"/><c:order val="0"/>' +
+    `<c:tx>${ref('str', 'Лист1!$B$1')}</c:tx>` +
+    `<c:cat>${ref('str', 'Лист1!$A$2:$A$3')}</c:cat>` +
+    `<c:val>${ref('num', 'Лист1!$B$2:$B$3')}</c:val>` +
+    '</c:ser><c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/></c:barChart>' +
+    '<c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/>' +
+    '<c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="out"/>' +
+    '<c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/><c:crosses val="autoZero"/>' +
+    '<c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/></c:catAx>' +
+    '<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/>' +
+    '<c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/>' +
+    '<c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/>' +
+    '<c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>' +
+    '</c:plotArea><c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/></c:chart>' +
+    (external ? '<c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData>' : '') +
+    '</c:chartSpace>'
+  );
+}
+
+/** Файлы книги с одним листом «Лист1»; `drawing` — диаграмма на листе (XLSX). */
+function workbook(zip: JSZip, sheetData: string, drawing: boolean): void {
+  zip.file(
+    '[Content_Types].xml',
+    `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+      (drawing
+        ? `<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/><Override PartName="/xl/charts/chart1.xml" ContentType="${CHART_CT}"/>`
+        : '') +
+      '</Types>',
+  );
+  zip.file(
+    '_rels/.rels',
+    `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rId1" Type="${OFFICE_REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+  );
+  zip.file(
+    'xl/workbook.xml',
+    `${XML}<workbook xmlns="${SHEET_NS}" xmlns:r="${OFFICE_REL}"><sheets><sheet name="Лист1" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+  );
+  zip.file(
+    'xl/_rels/workbook.xml.rels',
+    `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rId1" Type="${OFFICE_REL}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+  );
+  zip.file(
+    'xl/worksheets/sheet1.xml',
+    `${XML}<worksheet xmlns="${SHEET_NS}" xmlns:r="${OFFICE_REL}"><sheetData>${sheetData}</sheetData>${drawing ? '<drawing r:id="rId1"/>' : ''}</worksheet>`,
+  );
+}
+
+/** DOCX: абзац и гистограмма «в тексте» со встроенной книгой (Word: «Изменить данные»). */
+async function chartDocx(): Promise<Buffer> {
+  const embedded = new JSZip();
+  workbook(embedded, CHART_SHEET, false);
+  const zip = new JSZip();
+  zip.file(
+    '[Content_Types].xml',
+    `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/charts/chart1.xml" ContentType="${CHART_CT}"/></Types>`,
+  );
+  zip.file(
+    '_rels/.rels',
+    `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rId1" Type="${OFFICE_REL}/officeDocument" Target="word/document.xml"/></Relationships>`,
+  );
+  zip.file(
+    'word/_rels/document.xml.rels',
+    `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rId5" Type="${OFFICE_REL}/chart" Target="charts/chart1.xml"/></Relationships>`,
+  );
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const NS =
+    `xmlns:w="${W}" xmlns:r="${OFFICE_REL}"` +
+    ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"' +
+    ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
+  const chart =
+    '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="5486400" cy="3200400"/><wp:docPr id="1" name="Chart 1"/>' +
+    `<a:graphic><a:graphicData uri="${CHART_NS}"><c:chart xmlns:c="${CHART_NS}" r:id="rId5"/></a:graphicData></a:graphic>` +
+    '</wp:inline></w:drawing></w:r></w:p>';
+  zip.file(
+    'word/document.xml',
+    `${XML}<w:document ${NS}><w:body>${wp('Продажи по месяцам')}${chart}<w:sectPr/></w:body></w:document>`,
+  );
+  zip.file('word/charts/chart1.xml', chartXml(true));
+  zip.file(
+    'word/charts/_rels/chart1.xml.rels',
+    `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rId1" Type="${OFFICE_REL}/package" Target="../embeddings/Microsoft_Excel_Worksheet.xlsx"/></Relationships>`,
+  );
+  zip.file(
+    'word/embeddings/Microsoft_Excel_Worksheet.xlsx',
+    await embedded.generateAsync({ type: 'nodebuffer' }),
+  );
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+/** XLSX: данные в ячейках листа, гистограмма на том же листе. */
+async function chartXlsx(): Promise<Buffer> {
+  const zip = new JSZip();
+  workbook(zip, CHART_SHEET, true);
+  zip.file(
+    'xl/worksheets/_rels/sheet1.xml.rels',
+    `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rId1" Type="${OFFICE_REL}/drawing" Target="../drawings/drawing1.xml"/></Relationships>`,
+  );
+  zip.file(
+    'xl/drawings/drawing1.xml',
+    `${XML}<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">` +
+      '<xdr:oneCellAnchor><xdr:from><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="5400000" cy="2700000"/>' +
+      '<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>' +
+      '<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>' +
+      `<a:graphic><a:graphicData uri="${CHART_NS}"><c:chart xmlns:c="${CHART_NS}" xmlns:r="${OFFICE_REL}" r:id="rId1"/></a:graphicData></a:graphic>` +
+      '</xdr:graphicFrame><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>',
+  );
+  zip.file(
+    'xl/drawings/_rels/drawing1.xml.rels',
+    `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rId1" Type="${OFFICE_REL}/chart" Target="../charts/chart1.xml"/></Relationships>`,
+  );
+  zip.file('xl/charts/chart1.xml', chartXml(false));
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+// :html (2.5.0): абзац, список, таблица — DOCX; вложенный список с таблицей в пункте, объединённые ячейки,
+// изображение из data URI — ODT
+const HTML_DOCX =
+  '<p>Счёт <b>оплачен</b> полностью.</p>' +
+  '<ul><li>Доставка</li><li>Монтаж</li></ul>' +
+  '<table><tr><th>Товар</th><th>Количество</th></tr><tr><td>Кабель</td><td>10</td></tr></table>';
+const HTML_ODT =
+  '<p>Абзац из <i>HTML</i>.</p>' +
+  '<ol><li>Первый пункт<ul><li>Вложенный пункт<table><tr><td>Ячейка в пункте</td></tr></table>продолжение</li></ul></li>' +
+  '<li>Второй пункт</li></ol>' +
+  '<table><tr><td rowspan="2">Объединено</td><td colspan="2">Шапка</td></tr><tr><td>Левая</td><td>Правая</td></tr></table>' +
+  `<p><img src="data:image/png;base64,${PNG_1X1}" width="40" height="40"> подпись</p>`;
+
+/** ODT с одним абзацем; `text` — содержимое text:p. */
+async function odtTemplate(text: string): Promise<Buffer> {
+  const ns =
+    'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"' +
+    ' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"' +
+    ' xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink"' +
+    ' xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"';
+  const zip = new JSZip();
+  // mimetype — первым и без сжатия (ODF 1.2, 3.3)
+  zip.file('mimetype', 'application/vnd.oasis.opendocument.text', { compression: 'STORE' });
+  zip.file(
+    'META-INF/manifest.xml',
+    `${XML}<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">` +
+      '<manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/>' +
+      '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>' +
+      '</manifest:manifest>',
+  );
+  zip.file(
+    'content.xml',
+    `${XML}<office:document-content ${ns} office:version="1.2"><office:automatic-styles/><office:body><office:text>` +
+      `<text:p>${text}</text:p></office:text></office:body></office:document-content>`,
+  );
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
 const tpl = (ext: TemplateFileRef['ext'], file: Buffer): TemplateFileRef => ({
   id: `t-${ext}`,
   version: 1,
   ext,
   read: async () => file,
 });
+/** Весь текст XML-частей архива (документ, диаграммы, встроенные объекты) — для проверки результата конвертации. */
+async function zipText(buf: Buffer): Promise<string> {
+  const zip = await JSZip.loadAsync(buf);
+  const parts = Object.values(zip.files).filter((f) => !f.dir && f.name.endsWith('.xml'));
+  return (await Promise.all(parts.map((f) => f.async('string')))).join('\n');
+}
+
 const ro = (convertTo: string) =>
   ({
     convertTo,
@@ -468,6 +655,89 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
       const text = pdf.toString('latin1');
       expect(text).toMatch(/\/Image\b/);
       expect(text.match(/\/Subtype\s*\/Image\b/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    },
+    CONVERT_TIMEOUT,
+  );
+
+  it(
+    'диаграмма Word: docx → pdf без ошибки, подписи категорий читаются',
+    async () => {
+      const docx = await renderer.render(tpl('docx', await chartDocx()), CHART_DATA, ro('docx'));
+      const chart = await (
+        await JSZip.loadAsync(docx)
+      )
+        .file('word/charts/chart1.xml')!
+        .async('string');
+      expect(chart).toContain('<c:f>Лист1!$A$2:$A$4</c:f>');
+      const pdf = await diagnose('диаграмма docx→pdf', async () =>
+        renderer.render(tpl('docx', await chartDocx()), CHART_DATA, ro('pdf')),
+      );
+      expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+      // настоящий читатель: Document Server открывает диаграмму и видит подписи из данных
+      const odt = await diagnose('диаграмма docx→odt', async () =>
+        renderer.render(tpl('docx', await chartDocx()), CHART_DATA, ro('odt')),
+      );
+      expect(await zipText(odt)).toContain('Фев');
+    },
+    CONVERT_TIMEOUT,
+  );
+
+  it(
+    'диаграмма Excel: xlsx → pdf без ошибки',
+    async () => {
+      const pdf = await diagnose('диаграмма xlsx→pdf', async () =>
+        renderer.render(tpl('xlsx', await chartXlsx()), CHART_DATA, ro('pdf')),
+      );
+      expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    },
+    CONVERT_TIMEOUT,
+  );
+
+  it(
+    ':html в DOCX: абзац, список, таблица → pdf без ошибки, текст из HTML читается',
+    async () => {
+      const pdf = await diagnose(':html docx→pdf', async () =>
+        renderer.render(
+          tpl('docx', await docxTemplate(wp('{d.h:html}'))),
+          { h: HTML_DOCX },
+          ro('pdf'),
+        ),
+      );
+      expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+      const odt = await diagnose(':html docx→odt', async () =>
+        renderer.render(
+          tpl('docx', await docxTemplate(wp('{d.h:html}'))),
+          { h: HTML_DOCX },
+          ro('odt'),
+        ),
+      );
+      const text = await zipText(odt);
+      for (const word of ['оплачен', 'Монтаж', 'Кабель', 'Количество'])
+        expect(text).toContain(word);
+    },
+    CONVERT_TIMEOUT,
+  );
+
+  it(
+    ':html в ODT: вложенный список с таблицей, объединённые ячейки, изображение → pdf без ошибки, текст читается',
+    async () => {
+      const pdf = await diagnose(':html odt→pdf', async () =>
+        renderer.render(tpl('odt', await odtTemplate('{d.h:html}')), { h: HTML_ODT }, ro('pdf')),
+      );
+      expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+      const docx = await diagnose(':html odt→docx', async () =>
+        renderer.render(tpl('odt', await odtTemplate('{d.h:html}')), { h: HTML_ODT }, ro('docx')),
+      );
+      const text = await zipText(docx);
+      for (const word of [
+        'Вложенный пункт',
+        'Ячейка в пункте',
+        'продолжение',
+        'Второй пункт',
+        'Объединено',
+        'Правая',
+      ])
+        expect(text).toContain(word);
     },
     CONVERT_TIMEOUT,
   );

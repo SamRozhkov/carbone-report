@@ -65,7 +65,8 @@ function zipBuffer (files) {
     const zip = new yazl.ZipFile();
     const parts = [];
     zip.outputStream.on('data', (c) => parts.push(c)).on('error', reject).on('end', () => resolve(Buffer.concat(parts)));
-    for (const f of files) zip.addBuffer(Buffer.from(f.data), f.name);
+    // mimetype (OpenDocument) — первым и без сжатия
+    for (const f of files) zip.addBuffer(Buffer.from(f.data), f.name, { compress: f.name !== 'mimetype' });
     zip.end();
   });
 }
@@ -91,6 +92,72 @@ function buildDocx (template, raw, rels, files) {
     { name: 'word/_rels/document.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '">' + (rels || '') + '</Relationships>' },
     { name: 'word/document.xml', data: XML + '<w:document ' + NS + '><w:body>' + body(template, raw || []) + '<w:p/><w:sectPr/></w:body></w:document>' },
     ...extra
+  ]);
+}
+
+const CT_NS = 'http://schemas.openxmlformats.org/package/2006/content-types';
+const OFFICE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const SHEET_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+const CHART_CT = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
+const escAttr = (s) => esc(s).replace(/"/g, '&quot;');
+
+// файлы минимальной книги: workbook.xml с одним листом sheetName, связи, лист с содержимым sheetData = sheetXml
+function workbookFiles (sheetXml, sheetName, sheetExtra, extraTypes) {
+  return [
+    { name: '[Content_Types].xml', data: XML + '<Types xmlns="' + CT_NS + '"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'
+      + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+      + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' + (extraTypes || '') + '</Types>' },
+    { name: '_rels/.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+    { name: 'xl/workbook.xml', data: XML + '<workbook xmlns="' + SHEET_NS + '" xmlns:r="' + OFFICE_REL + '"><sheets><sheet name="' + escAttr(sheetName || 'Sheet1') + '" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+    { name: 'xl/_rels/workbook.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' },
+    { name: 'xl/worksheets/sheet1.xml', data: XML + '<worksheet xmlns="' + SHEET_NS + '" xmlns:r="' + OFFICE_REL + '"><sheetData>' + sheetXml + '</sheetData>' + (sheetExtra || '') + '</worksheet>' }
+  ];
+}
+
+/**
+ * Собрать XLSX с одним листом и (если chartXml задан) диаграммой на нём.
+ * sheetXml — содержимое sheetData (строки), chartXml — весь xl/charts/chart1.xml без пролога.
+ */
+function buildXlsxWithChart ({ sheetXml, chartXml, sheetName }) {
+  if (chartXml === undefined || chartXml === null) {
+    return zipBuffer(workbookFiles(sheetXml, sheetName));
+  }
+  const files = workbookFiles(sheetXml, sheetName, '<drawing r:id="rId1"/>',
+    '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>'
+    + '<Override PartName="/xl/charts/chart1.xml" ContentType="' + CHART_CT + '"/>');
+  return zipBuffer([
+    ...files,
+    { name: 'xl/worksheets/_rels/sheet1.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/drawing" Target="../drawings/drawing1.xml"/></Relationships>' },
+    { name: 'xl/drawings/drawing1.xml', data: XML + '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+      + '<xdr:oneCellAnchor><xdr:from><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="5400000" cy="2700000"/>'
+      + '<xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="1" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/>'
+      + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="' + OFFICE_REL + '" r:id="rId1"/></a:graphicData></a:graphic>'
+      + '</xdr:graphicFrame><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>' },
+    { name: 'xl/drawings/_rels/drawing1.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/chart" Target="../charts/chart1.xml"/></Relationships>' },
+    { name: 'xl/charts/chart1.xml', data: XML + chartXml }
+  ]);
+}
+
+/**
+ * Собрать DOCX с диаграммой word/charts/chart1.xml и встроенной книгой word/embeddings/Microsoft_Excel_Worksheet.xlsx.
+ * documentXml — содержимое w:body (по умолчанию абзац с диаграммой), embeddedSheetXml — содержимое sheetData книги.
+ */
+async function buildDocxWithChart ({ documentXml, chartXml, embeddedSheetXml, sheetName }) {
+  const embedded = await zipBuffer(workbookFiles(embeddedSheetXml, sheetName));
+  const drawing = '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="5486400" cy="3200400"/><wp:docPr id="1" name="Chart 1"/>'
+    + '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId5"/></a:graphicData></a:graphic>'
+    + '</wp:inline></w:drawing></w:r></w:p>';
+  return zipBuffer([
+    { name: '[Content_Types].xml', data: XML + '<Types xmlns="' + CT_NS + '"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'
+      + '<Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>'
+      + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+      + '<Override PartName="/word/charts/chart1.xml" ContentType="' + CHART_CT + '"/></Types>' },
+    { name: '_rels/.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/officeDocument" Target="word/document.xml"/></Relationships>' },
+    { name: 'word/_rels/document.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId5" Type="' + OFFICE_REL + '/chart" Target="charts/chart1.xml"/></Relationships>' },
+    { name: 'word/document.xml', data: XML + '<w:document ' + NS + '><w:body>' + (documentXml !== undefined ? documentXml : drawing) + '<w:sectPr/></w:body></w:document>' },
+    { name: 'word/charts/chart1.xml', data: XML + chartXml },
+    { name: 'word/charts/_rels/chart1.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/package" Target="../embeddings/Microsoft_Excel_Worksheet.xlsx"/></Relationships>' },
+    { name: 'word/embeddings/Microsoft_Excel_Worksheet.xlsx', data: embedded }
   ]);
 }
 
@@ -174,4 +241,39 @@ function normalizeError (message) {
     .replace(/ Source: [\s\S]*$/, '');
 }
 
-module.exports = { buildDocx, docxText, normalizeError, readEntry, entryNames };
+// OpenDocument: минимальный пакет ODT/ODS/ODP
+const ODF_MIME = { odt: 'text', ods: 'spreadsheet', odp: 'presentation' };
+const ODF_NS = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
+  + ' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"'
+  + ' xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink"'
+  + ' xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0"'
+  + ' xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"';
+const ODF_FILE_TYPES = { png: 'image/png', jpeg: 'image/jpeg', jpg: 'image/jpeg', gif: 'image/gif', xml: 'text/xml' };
+
+/**
+ * ODT/ODS/ODP: body — содержимое office:text / office:spreadsheet / office:presentation.
+ * opts: { fonts, automatic — содержимое office:font-face-decls / office:automatic-styles content.xml (не задано —
+ * элемента нет), files — { имя: данные } дополнительные файлы (styles.xml, Pictures/…; в manifest.xml по расширению) }
+ */
+function buildOdf (ext, body, opts) {
+  const o = opts || {};
+  const mime = 'application/vnd.oasis.opendocument.' + ODF_MIME[ext];
+  const extra = Object.entries(o.files || {}).map(([name, data]) => ({ name, data }));
+  const entries = extra.map((f) => '<manifest:file-entry manifest:full-path="' + f.name + '" manifest:media-type="'
+    + (ODF_FILE_TYPES[(/\.([a-z]+)$/i.exec(f.name) || [])[1]] || '') + '"/>').join('');
+  return zipBuffer([
+    { name: 'mimetype', data: mime },
+    { name: 'META-INF/manifest.xml', data: XML + '<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">'
+      + '<manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="' + mime + '"/>'
+      + '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>' + entries + '</manifest:manifest>' },
+    { name: 'content.xml', data: XML + '<office:document-content ' + ODF_NS + ' office:version="1.3">'
+      + (o.fonts !== undefined ? '<office:font-face-decls>' + o.fonts + '</office:font-face-decls>' : '')
+      + (o.automatic !== undefined ? '<office:automatic-styles>' + o.automatic + '</office:automatic-styles>' : '')
+      + '<office:body><office:' + ODF_MIME[ext] + '>' + body + '</office:' + ODF_MIME[ext] + '></office:body></office:document-content>' },
+    ...extra
+  ]);
+}
+
+const buildOdt = (body, opts) => buildOdf('odt', body, opts);
+
+module.exports = { ODF_NS, buildOdf, buildOdt, buildDocx, buildDocxWithChart, buildXlsxWithChart, docxText, entryNames, normalizeError, readEntry, zipBuffer };

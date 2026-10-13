@@ -4,6 +4,7 @@ import { DocumentEditor } from '@onlyoffice/document-editor-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../../api/endpoints';
+import { ApiRequestError } from '../../../api/client';
 import { errorMessage } from '../../../api/errors';
 import { ErrorAlert } from '../../../components/ErrorAlert';
 import { pickParams } from '../../../lib/params';
@@ -88,7 +89,14 @@ export function DocumentTab({
       try {
         await save.mutateAsync();
       } catch (e) {
-        if (mounted.current) {
+        if (mounted.current && e instanceof ApiRequestError && e.code === 'NO_CHANGES') {
+          add({
+            name: toastName('doc-save'),
+            title: 'Нет несохранённых изменений',
+            theme: 'info',
+            autoHiding: 3000,
+          });
+        } else if (mounted.current) {
           add({
             name: toastName('doc-save'),
             title: 'Не удалось сохранить',

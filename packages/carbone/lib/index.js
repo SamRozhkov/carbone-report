@@ -10,7 +10,9 @@ var input = require('./input');
 var translator = require('./translator');
 var preprocessor = require('./preprocessor');
 var media = require('./media');
+var html = require('./html');
 var links = require('./links');
+var charts = require('./charts');
 var dayjs = require('dayjs');
 var locales = require('../formatters/_locale');
 
@@ -143,6 +145,13 @@ var carbone = {
             if (err) {
               return callback(err, null);
             }
+            // диаграммы: препроцессор пометил листы книг с диаграммами — служебные атрибуты снимаются здесь
+            try {
+              charts.finish(report);
+            }
+            catch (e) {
+              return callback(e, null);
+            }
             // assemble all files and zip if necessary
             file.buildFile(report, function (err, result) {
               if (err) {
@@ -272,6 +281,8 @@ function renderBuffer (template, extension, data, options) {
       _options.extension = extension;
       // реестр изображений из данных этого рендера (lib/media.js)
       _options.__media = media.createRegistry();
+      // реестр :html этого рендера (lib/html.js)
+      _options.__html = html.createRegistry();
       file.openTemplateBuffer(template, extension, _guard(function (err, _template) {
         if (err) {
           return _fail(err);
@@ -288,8 +299,14 @@ function renderBuffer (template, extension, data, options) {
             // XLSX для OnlyOffice: текст ячеек — снова общими строками (со встроенными Document Server при
             // конвертации теряет все ячейки-строки, кроме первой), номера строк и ячеек, убранные препроцессором,
             // ставятся заново (после циклов и drop). Старый API render() (тесты апстрима) собирает XLSX как CE 3.8.2.
-            // изображения из данных: media-файлы, связи и типы — после сборки всех файлов, до finishXlsx
-            media.finish(_report, _options).then(_guard(function () {
+            // :html: разметка на месте жетонов (lib/html.js) — до диаграмм и изображений
+            // (исключение в шаге ниже пропускает следующий и уходит в _fail)
+            html.finish(_report, _options).then(function () {
+              // диаграммы DOCX/XLSX: диапазоны, кэши точек, числа (lib/charts.js) — до номеров строк finishXlsx
+              charts.finish(_report);
+              // изображения из данных: media-файлы, связи и типы — после сборки всех файлов, до finishXlsx
+              return media.finish(_report, _options);
+            }).then(_guard(function () {
               preprocessor.finishXlsx(_report);
               file.buildFile(_report, _guard(function (err, _result) {
                 if (err) {
@@ -335,6 +352,10 @@ carbone.addFormatters(require('./color').formatters);
 // в подсказку «Do you mean …» (lib/media.js)
 carbone.addFormatters({ imageFit : media.formatters.imageFit, barcode : media.formatters.barcode });
 Object.defineProperty(input.formatters, '__img', { enumerable : false, configurable : true, writable : true, value : media.formatters.__img });
+// :html (2.5.0): форматтер печатает жетон, разметку пишет html.finish после сборки (lib/html.js); служебный
+// __htmlUrl (defaultURL в метке с :html) неперечисляемый — как __img
+carbone.addFormatters({ html : html.formatters.html });
+Object.defineProperty(input.formatters, '__htmlUrl', { enumerable : false, configurable : true, writable : true, value : html.formatters.__htmlUrl });
 // ссылки (2.4.0): defaultURL — для шаблонов; служебный __url неперечисляемый, как __img (lib/links.js)
 carbone.addFormatters({ defaultURL : links.formatters.defaultURL });
 Object.defineProperty(input.formatters, '__url', { enumerable : false, configurable : true, writable : true, value : links.formatters.__url });

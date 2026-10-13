@@ -162,6 +162,21 @@ function isValidUrl (value) {
   return normalizeUrl(value) !== null;
 }
 
+/**
+ * Адрес ссылки из значения (a href в :html, §32.5): допустимый — нормализованный; иначе запасной адрес
+ * (:defaultURL метки, R4), проверенный так же; без него или при недопустимом запасном — «#»
+ * @param  {*} href
+ * @param  {*} [fallback]  запасной адрес (null/undefined/'' — нет)
+ * @return {String}
+ */
+function resolveLink (href, fallback) {
+  var _url = normalizeUrl(href);
+  if (_url !== null) {
+    return _url;
+  }
+  return (fallback !== null && fallback !== undefined && fallback !== '' ? normalizeUrl(fallback) : null) || '#';
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // 1. preprocess
 
@@ -390,5 +405,6 @@ module.exports = {
   apply,
   isValidUrl,
   normalizeUrl,
+  resolveLink,
   formatters : { __url, defaultURL }
 };

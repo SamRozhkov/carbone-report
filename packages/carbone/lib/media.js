@@ -99,8 +99,8 @@ function oneOf (list, upper) {
   };
 }
 
-// метки, которые не становятся метками изображения: удаление элемента, условные блоки, цвет, set
-var NOT_IMAGE_MARKER = /:\s*(?:__img|drop|keep|showBegin|showEnd|hideBegin|hideEnd|color|set)\b/;
+// метки, которые не становятся метками изображения: удаление элемента, условные блоки, цвет, set, html
+var NOT_IMAGE_MARKER = /:\s*(?:__img|drop|keep|showBegin|showEnd|hideBegin|hideEnd|color|set|html)\b/;
 // метка изображения и в смешанном замещающем тексте: штрихкод и imageFit
 var IMAGE_FORMATTER = /:\s*(?:barcode|imageFit)\b/;
 // замещающий текст — одна метка (пробелы вокруг не в счёт)
@@ -142,14 +142,27 @@ function templateError (message, source) {
   return new Error(message + ' Source: "' + source + '"');
 }
 
+/**
+ * Ошибка шаблона из-за лимита (10 МБ, 100 млн пикселей, 50 МБ на отчёт): err.limit = true. R5 (2.5.0): :html при
+ * прочих ошибках пропускает картинку с предупреждением, при лимитах — нет
+ */
+function limitError (message, source) {
+  var _error = templateError(message, source);
+  _error.limit = true;
+  return _error;
+}
+
 function unquote (arg) {
   var _match = /^\s*'([\s\S]*)'\s*$/.exec(arg);
   return _match !== null ? _match[1] : arg.trim();
 }
 
-/** Реестр рендера: создаётся в renderBuffer, общий для всех файлов документа */
+/**
+ * Реестр рендера: создаётся в renderBuffer, общий для всех файлов документа; total — байты изображений отчёта
+ * (общий счётчик media.finish и html.finish, лимит 50 МБ)
+ */
 function createRegistry () {
-  return { nonce : crypto.randomBytes(6).toString('hex'), items : [], sources : [] };
+  return { nonce : crypto.randomBytes(6).toString('hex'), items : [], sources : [], total : 0 };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -421,7 +434,7 @@ function __img (d, k) {
 function identify (buffer, source, origin) {
   var _where = origin !== undefined ? ' (адрес ' + origin + ')' : '';
   if (buffer.length > MAX_IMAGE) {
-    throw templateError(MSG.tooBig + _where, source);
+    throw limitError(MSG.tooBig + _where, source);
   }
   var _info;
   try {
@@ -438,7 +451,7 @@ function identify (buffer, source, origin) {
     throw templateError(MSG.corrupt + _where, source);
   }
   if (_info.width * _info.height > MAX_PIXELS) {
-    throw templateError(MSG.tooManyPixels + _where, source);
+    throw limitError(MSG.tooManyPixels + _where, source);
   }
   return { buffer : buffer, type : _type, width : _info.width, height : _info.height };
 }
@@ -468,7 +481,7 @@ function decodeDataUri (value, source) {
   }
   // размер — до декодирования
   if (Math.floor(_base64.replace(/=+$/, '').length * 3 / 4) > MAX_IMAGE) {
-    throw templateError(MSG.tooBig, source);
+    throw limitError(MSG.tooBig, source);
   }
   return identify(Buffer.from(_base64, 'base64'), source);
 }
@@ -502,9 +515,10 @@ function safeUrl (url) {
   return url.protocol + '//' + url.host + url.pathname;
 }
 
-/** Ошибка загрузки по сети: заглушка удаляется, отчёт строится (§32.1) */
-function NetworkFailure (reason) {
+/** Ошибка загрузки по сети: заглушка удаляется, отчёт строится (§32.1); limit — превышен размер 10 МБ */
+function NetworkFailure (reason, limit) {
   this.reason = reason;
+  this.limit = limit === true;
 }
 
 /**
@@ -515,7 +529,7 @@ function readLimited (response, limit) {
   var _length = Number(response.headers.get('content-length'));
   if (Number.isFinite(_length) && _length > limit) {
     return response.body.cancel().catch(function () {}).then(function () {
-      throw new NetworkFailure(MSG.tooBig);
+      throw new NetworkFailure(MSG.tooBig, true);
     });
   }
   var _reader = response.body.getReader();
@@ -529,7 +543,7 @@ function readLimited (response, limit) {
       _size += part.value.length;
       if (_size > limit) {
         return _reader.cancel().catch(function () {}).then(function () {
-          throw new NetworkFailure(MSG.tooBig);
+          throw new NetworkFailure(MSG.tooBig, true);
         });
       }
       _chunks.push(Buffer.from(part.value.buffer, part.value.byteOffset, part.value.length));
@@ -570,6 +584,7 @@ function checkUrl (value, item, options) {
  * options.imageUrlTimeoutMs на всю загрузку, до 10 МБ. Сбой сети, код ответа не 2xx, превышение размера —
  * предупреждение в options.warnings (адрес без query-строки) и null (заглушка удаляется). Не изображение в
  * ответе — ошибка шаблона с адресом. signal — общая отмена загрузок отчёта (finish): после неё предупреждений нет.
+ * item.strictLimits (изображения :html, R5 2.5.0) — превышение 10 МБ при загрузке — ошибка шаблона (err.limit).
  */
 function loadUrl (value, item, options, signal) {
   var _url = checkUrl(value, item, options);
@@ -591,6 +606,9 @@ function loadUrl (value, item, options, signal) {
   }, function (error) {
     if (signal !== undefined && signal.aborted === true) {
       return null; // отчёт уже завершается ошибкой
+    }
+    if (error instanceof NetworkFailure && error.limit === true && item.strictLimits === true) {
+      throw limitError(MSG.tooBig + ' (адрес ' + safeUrl(_url) + ')', item.source);
     }
     var _reason;
     if (error instanceof NetworkFailure) {
@@ -792,6 +810,23 @@ function loadAll (list, limit, fn) {
   });
 }
 
+/**
+ * Учесть изображение в общем лимите отчёта (options.__media.total, 50 МБ — вместе с изображениями :html)
+ * @param {Object}      options  опции рендера
+ * @param {Object|null} image    { buffer, … } или null (ничего)
+ * @param {String}      source   метка (для ошибки)
+ */
+function countTotal (options, image, source) {
+  var _registry = options !== null && options !== undefined ? options.__media : undefined;
+  if (image === null || image === undefined || _registry === undefined || _registry === null) {
+    return;
+  }
+  _registry.total = (_registry.total || 0) + image.buffer.length;
+  if (_registry.total > MAX_TOTAL) {
+    throw limitError(MSG.tooBigTotal, source);
+  }
+}
+
 function itemKey (item) {
   return item.kind + '\u0000' + (item.barcode !== undefined ? JSON.stringify(item.barcode) : '') + '\u0000' + String(item.value);
 }
@@ -833,15 +868,9 @@ function finish (template, options) {
       checkImage(item, options);
     });
     // суммарный лимит — по мере загрузки: превышение сразу останавливает остальные
-    var _total = 0;
     return loadAll(_unique, CONCURRENCY, function (item, i, signal) {
       return loadImage(item, options, signal).then(function (image) {
-        if (image !== null) {
-          _total += image.buffer.length;
-          if (_total > MAX_TOTAL) {
-            throw templateError(MSG.tooBigTotal, item.source);
-          }
-        }
+        countTotal(options, image, item.source);
         return image;
       });
     }).then(function (_images) {
@@ -886,25 +915,7 @@ function collect (template, registry, fmt) {
 
 /** Правки документа, связи, media-файлы и их регистрация в пакете (правила формата — lib/media-formats.js) */
 function write (template, registry, fmt, jobs, imageOf) {
-  var _names = new Set(template.files.map(function (f) {
-    return f.name;
-  }));
-  var _mediaOf = new Map(); // изображение → путь media-файла
-  var _media = []; // новые файлы [{ name, type }]
-  var _counter = 0;
-  var _mediaPath = function (image) {
-    if (_mediaOf.has(image) === false) {
-      var _name;
-      do {
-        _name = fmt.mediaDir + 'cr-img-' + (++_counter) + '.' + TYPES[image.type].ext;
-      } while (_names.has(_name) === true);
-      _names.add(_name);
-      _mediaOf.set(image, _name);
-      _media.push({ name : _name, type : image.type });
-      formats.addFile(template, { name : _name, data : image.buffer, isMarked : false, parent : '' });
-    }
-    return _mediaOf.get(image);
-  };
+  var _store = formats.storeMedia(template, fmt);
   var _stripTokens = function (str) {
     return str.replace(TOKEN_REGEX, function (all, nonce) {
       return nonce === registry.nonce ? '' : all;
@@ -936,7 +947,7 @@ function write (template, registry, fmt, jobs, imageOf) {
       if (_links === null) {
         _links = fmt.links(template, job.file.name);
       }
-      fmt.place(_xml, container, _image, _links.ref(_mediaPath(_image)), registry.items[id].fit).forEach(function (edit) {
+      fmt.place(_xml, container, _image, _links.ref(_store.path(_image)), registry.items[id].fit).forEach(function (edit) {
         if (edit.remove === true) {
           _edits.push({ start : edit.el.start, end : edit.el.end, rep : '' });
         }
@@ -961,9 +972,7 @@ function write (template, registry, fmt, jobs, imageOf) {
       _links.save();
     }
   });
-  if (_media.length > 0) {
-    fmt.register(template, _media);
-  }
+  _store.register();
 }
 
 module.exports = {
@@ -972,6 +981,9 @@ module.exports = {
   prepare,
   finish,
   loadImage,
+  loadAll,
+  countTotal,
+  CONCURRENCY,
   hostAllowed,
   formatters : { imageFit, barcode, __img },
   TOKEN_REGEX

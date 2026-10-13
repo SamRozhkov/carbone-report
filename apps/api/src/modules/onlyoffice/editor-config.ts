@@ -29,6 +29,9 @@ export async function buildEditorConfig(deps: AppDeps, row: TemplateRow, user: S
       user: { id: user.id, name: user.login },
       lang: 'ru',
       region: 'ru-RU',
+      // Быстрый режим без переключателя: правки сразу уходят на Document Server, и forcesave по кнопке
+      // «Сохранить» их видит. В строгом режиме (браузер запоминает выбор) forcesave отвечает «изменений нет».
+      coEditing: { mode: 'fast', change: false },
       customization: { forcesave: true, autosave: true },
     },
   };

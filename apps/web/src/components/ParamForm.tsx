@@ -7,7 +7,14 @@ import type {
 } from '@carbone-reports/shared';
 import { DatePicker } from '@gravity-ui/date-components';
 import { dateTimeParse } from '@gravity-ui/date-utils';
-import { Checkbox, NumberInput, Select, Text, TextInput } from '@gravity-ui/uikit';
+import {
+  Checkbox,
+  NumberInput,
+  Select,
+  Text,
+  TextInput,
+  type SelectRenderPopup,
+} from '@gravity-ui/uikit';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/endpoints';
@@ -251,6 +258,25 @@ function QueryParamField({
   const hint =
     waiting.length > 0 ? `сначала выберите: ${waiting.map(label).join(', ')}` : undefined;
   const shownError = error ?? (options.error ? errorMessage(options.error) : undefined);
+  const allValues = (data?.options ?? []).map((o) => String(o.value));
+  const allSelected = allValues.length > 0 && allValues.every((v) => selected.includes(v));
+  // «Выбрать все» — весь список вариантов (без учёта строки поиска), повторно — снять выбор.
+  const renderPopup: SelectRenderPopup = ({ renderFilter, renderList }) => (
+    <>
+      <div className="cr-select-all">
+        <Checkbox
+          checked={allSelected}
+          indeterminate={!allSelected && selected.length > 0}
+          disabled={allValues.length === 0 || loading}
+          onUpdate={() => onChange(allSelected ? null : allValues.map(toValue))}
+        >
+          {allSelected ? 'Снять все' : 'Выбрать все'}
+        </Checkbox>
+      </div>
+      {renderFilter()}
+      {renderList()}
+    </>
+  );
 
   return (
     <Field label={caption} error={shownError} hint={hint}>
@@ -258,6 +284,7 @@ function QueryParamField({
         aria-label={caption}
         value={selected}
         options={(data?.options ?? []).map((o) => ({ value: String(o.value), content: o.label }))}
+        renderPopup={param.multiple ? renderPopup : undefined}
         onUpdate={(vs) => {
           if (param.multiple) onChange(vs.length > 0 ? vs.map(toValue) : null);
           else onChange(vs[0] !== undefined ? toValue(vs[0]) : null);

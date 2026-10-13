@@ -29,6 +29,11 @@ body {
   gap: 6px;
 }
 
+.cr-select-all {
+  padding: 6px 12px 4px;
+  border-bottom: 1px solid var(--g-color-line-generic);
+}
+
 .cr-centered {
   display: flex;
   align-items: center;

@@ -33,11 +33,17 @@ describe('createOnlyOfficeCommands.forceSave', () => {
     const header = await verifyOnlyOffice(calls[0]!.auth!.replace('Bearer ', ''), secret);
     expect(header.payload).toMatchObject({ c: 'forcesave', key: 'k1' });
   });
-  it('error 4 (нет изменений) — не ошибка', async () => {
+  it('error 4 (нет изменений) → 409 NO_CHANGES: callback не придёт', async () => {
     const { fn } = fake({ error: 4 });
-    await expect(
-      createOnlyOfficeCommands({ baseUrl: 'http://oo', secret, fetch: fn }).forceSave('k'),
-    ).resolves.toBeUndefined();
+    const e = await createOnlyOfficeCommands({ baseUrl: 'http://oo', secret, fetch: fn })
+      .forceSave('k')
+      .catch((x) => x);
+    expect(e).toBeInstanceOf(AppError);
+    expect([e.code, e.status, e.message]).toEqual([
+      'NO_CHANGES',
+      409,
+      'нет несохранённых изменений',
+    ]);
   });
   it('error 1 (документ не открыт) → понятная ошибка 409', async () => {
     const { fn } = fake({ error: 1 });

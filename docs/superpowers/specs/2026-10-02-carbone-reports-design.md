@@ -150,6 +150,7 @@ report_runs       id uuid pk, template_id uuid fk (set null), template_version i
     "callbackUrl": "<API_INTERNAL_URL>/internal/onlyoffice/callback/:id",
     "user": { "id": "<userId>", "name": "<login>" },
     "lang": "ru",
+    "coEditing": { "mode": "fast", "change": false },
     "customization": { "forcesave": true },
   },
 }
@@ -160,12 +161,13 @@ report_runs       id uuid pk, template_id uuid fk (set null), template_version i
 ### 5.2 Сохранение
 
 - Кнопка «Сохранить» в UI вызывает `POST /api/templates/:id/save`. `api` отправляет `{"c":"forcesave","key":doc_key}` (с JWT) в Command Service Document Server.
+- Редактор всегда в быстром режиме совместного редактирования без переключателя (`coEditing`): в строгом режиме правки не уходят на Document Server до кнопки сохранения в самом редакторе, и forcesave отвечает «изменений нет». Ответ Command Service `error 4` (изменений нет) — `409 NO_CHANGES` «нет несохранённых изменений»: callback не придёт, UI сообщает об этом сразу.
 - `POST /internal/onlyoffice/callback/:id`:
   - JWT проверяется из `Authorization` или поля `token` тела. Если подпись неверна — `403`;
   - `status 2` (документ закрыт всеми) и `status 6` (forcesave): файл скачивается по `url`, записывается атомарно, `version++`, обновляются `updated_at` и `updated_by` (по `users[0]`);
   - только при `status 2` дополнительно генерируется новый `doc_key`. Во время активной сессии ключ не меняется;
   - `status 3`/`7` (ошибка сохранения): запись в лог, событие доступно фронту через `GET /api/templates/:id` (`lastSaveError`);
-  - остальные статусы: только подтверждение;
+  - остальные статусы: только подтверждение; статус каждого callback пишется в журнал API, callback прежней сессии (другой `doc_key`) со статусом сохранения — с предупреждением;
   - ответ всегда `{"error":0}`, кроме ошибки подписи.
 - `GET /internal/templates/:id/file?t=` отдаёт файл после проверки токена.
 - Маршруты `/internal/*` не проксируются через nginx `web`: они доступны только во внутренней сети.

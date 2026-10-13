@@ -91,6 +91,24 @@ describe('DocumentTab', () => {
     expect(await screen.findByText('документ не открыт в редакторе')).toBeInTheDocument();
   });
 
+  it('нет изменений → сообщение без ожидания версии', async () => {
+    mockApi([
+      { path: '/api/templates/t1/editor-config', body: config },
+      { path: '/api/templates/t1', body: t },
+      {
+        method: 'POST',
+        path: '/api/templates/t1/save',
+        status: 409,
+        body: { error: { code: 'NO_CHANGES', message: 'нет несохранённых изменений' } },
+      },
+    ]);
+    renderWithProviders(<DocumentTab {...base} />);
+    await screen.findByTestId('oo');
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(await screen.findByText('Нет несохранённых изменений')).toBeInTheDocument();
+    expect(screen.queryByText('Не удалось сохранить')).not.toBeInTheDocument();
+  });
+
   it('нет подтверждения за отведённое время → предупреждение', async () => {
     mockApi([
       { path: '/api/templates/t1/editor-config', body: config },

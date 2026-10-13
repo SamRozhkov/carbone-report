@@ -259,6 +259,78 @@ describe('ParamForm: SQL-список', () => {
     expect(onChange).toHaveBeenLastCalledWith({ region: 1, cities: [10, 11] });
   });
 
+  it('«Выбрать все» выделяет все варианты, повторно — снимает выбор', async () => {
+    const onChange = vi.fn();
+    mockApi([optionsRoute({ region: regions, cities: citiesOf })]);
+    const ps = [qParams[0]!, q('cities', 'Города', ['region'], { multiple: true })];
+    renderWithProviders(
+      <QHarness params={ps} initial={{ region: 1, cities: null }} onChange={onChange} />,
+    );
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Города' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('combobox', { name: 'Города' }));
+    await screen.findByRole('option', { name: 'Мурманск' });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Выбрать все' }));
+    expect(onChange).toHaveBeenLastCalledWith({ region: 1, cities: [10, 11] });
+    const all = screen.getByRole('checkbox', { name: 'Снять все' });
+    expect(all).toBeChecked();
+    await userEvent.click(all);
+    expect(onChange).toHaveBeenLastCalledWith({ region: 1, cities: null });
+  });
+
+  it('«Выбрать все» отмечает весь список, даже если в поиске что-то набрано', async () => {
+    const onChange = vi.fn();
+    mockApi([optionsRoute({ region: regions, cities: citiesOf })]);
+    const ps = [qParams[0]!, q('cities', 'Города', ['region'], { multiple: true })];
+    renderWithProviders(
+      <QHarness params={ps} initial={{ region: 1, cities: null }} onChange={onChange} />,
+    );
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Города' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('combobox', { name: 'Города' }));
+    await screen.findByRole('option', { name: 'Мурманск' });
+    await userEvent.keyboard('Мур');
+    await waitFor(() => expect(screen.queryByRole('option', { name: 'Архангельск' })).toBeNull());
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Выбрать все' }));
+    expect(onChange).toHaveBeenLastCalledWith({ region: 1, cities: [10, 11] });
+  });
+
+  it('без вариантов «Выбрать все» неактивен', async () => {
+    mockApi([optionsRoute({ region: regions, cities: () => ({ body: { options: [] } }) })]);
+    const ps = [qParams[0]!, q('cities', 'Города', ['region'], { multiple: true })];
+    renderWithProviders(
+      <QHarness params={ps} initial={{ region: 1, cities: null }} onChange={vi.fn()} />,
+    );
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Города' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('combobox', { name: 'Города' }));
+    expect(await screen.findByRole('checkbox', { name: 'Выбрать все' })).toBeDisabled();
+  });
+
+  it('при частичном выборе «Выбрать все» в промежуточном состоянии', async () => {
+    const onChange = vi.fn();
+    mockApi([optionsRoute({ region: regions, cities: citiesOf })]);
+    const ps = [qParams[0]!, q('cities', 'Города', ['region'], { multiple: true })];
+    renderWithProviders(
+      <QHarness params={ps} initial={{ region: 1, cities: [10] }} onChange={onChange} />,
+    );
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Города' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('combobox', { name: 'Города' }));
+    await screen.findByRole('option', { name: 'Мурманск' });
+    const all = screen.getByRole('checkbox', { name: 'Выбрать все' });
+    expect(all).toHaveProperty('indeterminate', true);
+    await userEvent.click(all);
+    expect(onChange).toHaveBeenLastCalledWith({ region: 1, cities: [10, 11] });
+  });
+
+  it('у одиночного выбора нет «Выбрать все»', async () => {
+    mockApi([optionsRoute({ region: regions, city: citiesOf })]);
+    renderWithProviders(
+      <QHarness params={qParams} initial={{ region: 1, city: null }} onChange={vi.fn()} />,
+    );
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Город' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('combobox', { name: 'Город' }));
+    await screen.findByRole('option', { name: 'Мурманск' });
+    expect(screen.queryByRole('checkbox', { name: /Выбрать все|Снять все/ })).toBeNull();
+  });
+
   it('ошибка запроса вариантов показывается у поля', async () => {
     mockApi([
       optionsRoute({

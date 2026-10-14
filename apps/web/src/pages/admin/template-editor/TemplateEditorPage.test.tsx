@@ -24,6 +24,9 @@ describe('TemplateEditorPage', () => {
     expect(screen.getByText('OnlyOffice не смог сохранить документ')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('tab', { name: 'Параметры' }));
     await waitFor(() => expect(router.state.location.search).toBe('?tab=params'));
+    await userEvent.click(screen.getByRole('tab', { name: 'Графики' }));
+    await waitFor(() => expect(router.state.location.search).toBe('?tab=charts'));
+    expect(await screen.findByRole('button', { name: 'Добавить график' })).toBeInTheDocument();
   });
 
   it('возврат на вкладку «Документ» посылает resize, редактор остаётся смонтированным', async () => {

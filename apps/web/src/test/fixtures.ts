@@ -1,3 +1,5 @@
+import type { TemplateChart } from '@carbone-reports/shared';
+
 export const adminTemplate = {
   id: 't1',
   name: 'Счёт',
@@ -9,6 +11,7 @@ export const adminTemplate = {
   datasourceId: 'd1',
   version: 3,
   queries: [{ key: 'company', mode: 'single', sql: 'select 1 as name' }],
+  charts: [] as TemplateChart[],
   params: [
     {
       name: 'from',

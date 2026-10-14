@@ -246,6 +246,7 @@ export function DocumentTab({
         {showTags && (
           <TagsPanel
             data={previewData}
+            charts={template.charts.map((c) => c.key)}
             onRefresh={() => refresh.mutate()}
             refreshing={refresh.isPending}
           />

@@ -22,6 +22,10 @@
 // Штрихкоды (§32.3): «{d.code:barcode(qrcode, scale:4)}» в замещающем тексте — та же метка изображения: форматтер
 // barcode передаёт тип и опции своему __img (как imageFit), запись реестра получает kind 'barcode', а LOADERS.barcode
 // строит PNG через bwip-js. Дальше — общий путь картинок (imageFit, лимиты 10/50 МБ, пустое значение — удаление).
+//
+// Графики ECharts (§35.1–35.2, 2.6.0): «{d.chart:chart}» в замещающем тексте — та же метка изображения: форматтер
+// chart передаёт вид своему __img, запись реестра получает kind 'chart' и рамку заглушки в px (framePx, в finish),
+// LOADERS.chart рисует PNG (lib/echarts-render.js). Дальше — общий путь картинок.
 
 var crypto = require('crypto');
 var bwipjs = require('bwip-js');
@@ -29,6 +33,7 @@ var imageSize = require('image-size').imageSize;
 var splitChain = require('./set').splitChain;
 var xmltree = require('./xmltree');
 var formats = require('./media-formats');
+var echartsRender = require('./echarts-render');
 
 var formatOf = formats.formatOf;
 var TYPES = formats.TYPES;
@@ -101,8 +106,8 @@ function oneOf (list, upper) {
 
 // метки, которые не становятся метками изображения: удаление элемента, условные блоки, цвет, set, html
 var NOT_IMAGE_MARKER = /:\s*(?:__img|drop|keep|showBegin|showEnd|hideBegin|hideEnd|color|set|html)\b/;
-// метка изображения и в смешанном замещающем тексте: штрихкод и imageFit
-var IMAGE_FORMATTER = /:\s*(?:barcode|imageFit)\b/;
+// метка изображения и в смешанном замещающем тексте: штрихкод, imageFit и график
+var IMAGE_FORMATTER = /:\s*(?:barcode|imageFit|chart)\b/;
 // замещающий текст — одна метка (пробелы вокруг не в счёт)
 var SOLE_MARKER = /^\s*\{[^{}]*\}\s*$/;
 var MAX_PIXELS = 100000000; // ширина × высота изображения: 100 млн пикселей
@@ -123,6 +128,9 @@ var MSG = {
   barcodeValue   : 'значение штрихкода должно быть строкой или числом',
   barcodeTooBig  : 'штрихкод больше 16 млн пикселей (уменьшите scale, width или height)',
   tooManyPixels  : 'изображение больше 100 млн пикселей (ширина × высота)',
+  chartOutside   : 'график ставится в замещающий текст картинки',
+  chartArgs      : 'chart пишется без аргументов: {d.x:chart}',
+  chartBarcode   : 'chart и barcode — в разных метках',
   outside     : 'метка изображения должна стоять в замещающем тексте (названии или описании) картинки'
 };
 
@@ -220,7 +228,7 @@ function prepare (markers, options) {
   var _registry = options !== null && options !== undefined ? options.__media : undefined;
   for (var i = 0; i < markers.length; i++) {
     var _marker = markers[i];
-    if (/:\s*(?:__img|imageFit|barcode)\b/.test(_marker.name) === false) {
+    if (/:\s*(?:__img|imageFit|barcode|chart)\b/.test(_marker.name) === false) {
       continue;
     }
     var _chain = splitChain(_marker.name);
@@ -233,6 +241,9 @@ function prepare (markers, options) {
     }
     if (_names.indexOf('imageFit', 1) !== -1 && _names.indexOf('__img', 1) === -1) {
       throw templateError(MSG.fitOutside, _source);
+    }
+    if (_names.indexOf('chart', 1) !== -1 && _names.indexOf('__img', 1) === -1) {
+      throw templateError(MSG.chartOutside, _source);
     }
     if (_registry === undefined || _names.indexOf('__img', 1) === -1) {
       continue;
@@ -263,6 +274,13 @@ function prepare (markers, options) {
           return /^\s*'/.test(arg) === false && /^\s*(?:\.|[dc]\.)/.test(arg) === true ? null : unquote(arg);
         }), _source);
         _chain[j] = 'barcode(' + (_bargs !== '' ? _bargs + ', ' : '') + _k + ')';
+      }
+      else if (_names[j] === 'chart') {
+        // R10: только chart или chart()
+        if (/^chart\s*(?:\(\s*\))?$/.test(_chain[j].trim()) === false) {
+          throw templateError(MSG.chartArgs, _source);
+        }
+        _chain[j] = 'chart(' + _k + ')';
       }
     }
     _marker.source = _source.slice(1, -1);
@@ -391,6 +409,24 @@ function barcode (d) {
 }
 
 /**
+ * График ECharts вместо картинки-заглушки: значение — { type?, width?, height?, theme?, option } или описание ECharts
+ * с series (строка — JSON). Значение не меняется — его забирает __img этой же метки.
+ *
+ * @version 2.6.0
+ * @param {Mixed}  d
+ * @param {String} k  внутренний номер метки (дописывается до сборки)
+ */
+function chart (d, k) {
+  var _registry = this.__media;
+  if (_registry === undefined || _registry === null || k === undefined) {
+    return d;
+  }
+  // вид передаётся __img этой же метки (номер k), чужой метке он не достанется
+  this.__mediaChart = { k : String(k) };
+  return d;
+}
+
+/**
  * Служебный: значение метки изображения — в реестр рендера, в документ — жетон
  *
  * @private
@@ -413,6 +449,14 @@ function __img (d, k) {
     _item.barcode = { type : this.__mediaBarcode.type, options : this.__mediaBarcode.options };
   }
   this.__mediaBarcode = null;
+  if (this.__mediaChart !== undefined && this.__mediaChart !== null && this.__mediaChart.k === String(k)) {
+    this.__mediaChart = null;
+    if (_item.kind === 'barcode') {
+      throw templateError(MSG.chartBarcode, _item.source);
+    }
+    _item.kind = 'chart';
+  }
+  this.__mediaChart = null;
   // обычный текст (не data: и не http(s)://) печатается в замещающем тексте, картинка остаётся — как в 2.3.0
   if (_item.kind === 'image' && plainText(d) === true) {
     return d;
@@ -675,6 +719,9 @@ var CHECKS = {
   },
   barcode : function (item) {
     barcodeText(item);
+  },
+  chart : function (item) {
+    chartOf(item);
   }
 };
 
@@ -724,9 +771,39 @@ function renderBarcode (item) {
   });
 }
 
+/** Описание графика записи реестра (разбирается один раз); ошибка — ошибка шаблона с меткой */
+function chartOf (item) {
+  if (item.chart === undefined) {
+    try {
+      item.chart = echartsRender.parse(item.value);
+    }
+    catch (e) {
+      throw templateError(e.message, item.source);
+    }
+  }
+  return item.chart;
+}
+
+/** PNG графика по рамке заглушки; пустое значение — null (заглушка удаляется). PNG проходит проверки изображения */
+function renderChart (item) {
+  var _chart = chartOf(item);
+  if (_chart === null) {
+    return null;
+  }
+  var _png;
+  try {
+    _png = echartsRender.render(_chart, item.frame === undefined ? null : item.frame);
+  }
+  catch (e) {
+    throw templateError(e.message, item.source);
+  }
+  return identify(_png.buffer, item.source);
+}
+
 /** Источники данных записи реестра по виду (kind) */
 var LOADERS = {
   barcode : renderBarcode,
+  chart   : renderChart,
   image : function (item, options, signal) {
     var _image = imageValue(item);
     if (_image.kind === 'data') {
@@ -827,8 +904,11 @@ function countTotal (options, image, source) {
   }
 }
 
+/** Ключ записи: значение-объект графика и рамка входят в ключ (одинаковые описания в рамках разного размера — разные PNG) */
 function itemKey (item) {
-  return item.kind + '\u0000' + (item.barcode !== undefined ? JSON.stringify(item.barcode) : '') + '\u0000' + String(item.value);
+  var _value = item.value !== null && typeof item.value === 'object' ? JSON.stringify(item.value) : String(item.value);
+  return item.kind + '\u0000' + (item.barcode !== undefined ? JSON.stringify(item.barcode) : '')
+    + '\u0000' + (item.frame !== undefined ? JSON.stringify(item.frame) : '') + '\u0000' + _value;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -855,11 +935,16 @@ function finish (template, options) {
     var _unique = [];
     var _keyOf = new Map();
     _jobs.forEach(function (job) {
-      job.containers.forEach(function (id) {
-        var _key = itemKey(_registry.items[id]);
+      job.containers.forEach(function (id, container) {
+        var _item = _registry.items[id];
+        // размер графика — рамка заглушки (§35.1)
+        if (_item.kind === 'chart' && _item.frame === undefined) {
+          _item.frame = _fmt.framePx(job.file.data, container);
+        }
+        var _key = itemKey(_item);
         if (_keyOf.has(_key) === false) {
           _keyOf.set(_key, _unique.length);
-          _unique.push(_registry.items[id]);
+          _unique.push(_item);
         }
       });
     });
@@ -985,6 +1070,6 @@ module.exports = {
   countTotal,
   CONCURRENCY,
   hostAllowed,
-  formatters : { imageFit, barcode, __img },
+  formatters : { imageFit, barcode, chart, __img },
   TOKEN_REGEX
 };

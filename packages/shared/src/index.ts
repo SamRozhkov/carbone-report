@@ -1,6 +1,9 @@
 import { z } from 'zod';
+import { TemplateChart } from './charts';
 
 z.config(z.locales.ru());
+
+export * from './charts';
 
 export const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const RESERVED_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
@@ -277,6 +280,8 @@ export const TemplateAdminDetails = TemplateDetails.extend({
   datasourceId: z.string(),
   version: z.number(),
   queries: z.array(TemplateQuery),
+  /** Графики конструктора (§35.3), по порядку добавления. */
+  charts: z.array(TemplateChart),
   lastSaveError: z.string().nullable(),
   /** Момент последней ошибки сохранения OnlyOffice (ISO); новая ошибка — новая метка. */
   lastSaveErrorAt: z.string().nullable(),

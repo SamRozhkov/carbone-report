@@ -13,6 +13,7 @@ import {
   categories,
   groups,
   reportRuns,
+  templateCharts,
   templateGroups,
   templateParams,
   templateQueries,
@@ -159,6 +160,22 @@ async function richTemplate(name: string): Promise<string> {
       },
     ],
   });
+  const charts = await a.app.inject({
+    method: 'PUT',
+    url: `/api/templates/${id}/charts`,
+    headers: { cookie: adminA },
+    payload: [
+      {
+        key: 'sales',
+        query: 'rows',
+        type: 'bar',
+        category: 'x',
+        series: [{ column: 'x', color: '#123456' }],
+        title: 'Продажи',
+      },
+    ],
+  });
+  if (charts.statusCode !== 200) throw new Error(charts.body);
   const [cat] = await a.deps.db
     .insert(categories)
     .values({ name: `Финансы ${randomUUID().slice(0, 4)}` })
@@ -232,6 +249,20 @@ describe('перенос шаблонов между средами', () => {
     const t1 = (m1.templates as { groups: string[] }[])[0]!;
     t1.groups = ['бухгалтерия'];
     expect(m2).toEqual(m1);
+    const g = await b.app.inject({
+      method: 'GET',
+      url: `/api/templates/${importedId}`,
+      headers: { cookie: adminB },
+    });
+    expect(g.json().charts).toEqual([
+      expect.objectContaining({
+        key: 'sales',
+        query: 'rows',
+        title: 'Продажи',
+        series: [{ column: 'x', color: '#123456' }],
+      }),
+    ]);
+    expect((m1.templates as { charts: unknown[] }[])[0]!.charts).toHaveLength(1);
   });
 
   it('create при существующем имени — 409; copy — «(2)», затем «(3)»; skip', async () => {
@@ -270,6 +301,10 @@ describe('перенос шаблонов между средами', () => {
     // Правки в среде B, которые архив перезапишет.
     await b.deps.db.delete(templateQueries).where(eq(templateQueries.templateId, importedId));
     await b.deps.db
+      .update(templateCharts)
+      .set({ key: 'local' })
+      .where(eq(templateCharts.templateId, importedId));
+    await b.deps.db
       .update(templates)
       .set({ description: 'местное', public: false, lastSaveError: 'x' })
       .where(eq(templates.id, importedId));
@@ -306,6 +341,11 @@ describe('перенос шаблонов между средами', () => {
       .from(templateParams)
       .where(eq(templateParams.templateId, importedId));
     expect(ps).toHaveLength(2);
+    const cs = await b.deps.db
+      .select()
+      .from(templateCharts)
+      .where(eq(templateCharts.templateId, importedId));
+    expect(cs.map((c) => c.key)).toEqual(['sales']);
     const runs = await b.deps.db
       .select()
       .from(reportRuns)
@@ -313,6 +353,52 @@ describe('перенос шаблонов между средами', () => {
     expect(runs).toHaveLength(1);
     expect(await b.deps.storage.exists(after!.filePath)).toBe(true);
     await expect.poll(() => b.deps.storage.exists(before!.filePath)).toBe(false);
+  });
+
+  it('update архивом без charts: графики шаблона удалены, запрос charts допустим', async () => {
+    const z = await JSZip.loadAsync(zip);
+    const m = JSON.parse(await z.file('manifest.json')!.async('string'));
+    delete m.templates[0].charts;
+    m.templates[0].queries[1].key = 'charts';
+    z.file('manifest.json', JSON.stringify(m));
+    const noCharts = await z.generateAsync({ type: 'nodebuffer' });
+    const before = await b.deps.db
+      .select()
+      .from(templateCharts)
+      .where(eq(templateCharts.templateId, importedId));
+    expect(before).toHaveLength(1);
+    const r = await apply(b, adminB, noCharts, [
+      {
+        index: 0,
+        action: 'update',
+        datasourceId: dsB,
+        targetId: importedId,
+        targetUpdatedAt: await stamp(noCharts, importedId),
+      },
+    ]);
+    expect(r.statusCode).toBe(200);
+    expect(
+      await b.deps.db
+        .select()
+        .from(templateCharts)
+        .where(eq(templateCharts.templateId, importedId)),
+    ).toEqual([]);
+    const qs = await b.deps.db
+      .select()
+      .from(templateQueries)
+      .where(eq(templateQueries.templateId, importedId));
+    expect(qs.map((q) => q.key).sort()).toEqual(['charts', 'rows']);
+    // Исходный архив возвращает график и запрос head.
+    const back = await apply(b, adminB, zip, [
+      {
+        index: 0,
+        action: 'update',
+        datasourceId: dsB,
+        targetId: importedId,
+        targetUpdatedAt: await stamp(zip, importedId),
+      },
+    ]);
+    expect(back.statusCode).toBe(200);
   });
 
   it('сбой посреди загрузки: ни одного нового/изменённого шаблона, файлы убраны', async () => {
@@ -499,7 +585,12 @@ describe('перенос шаблонов между средами', () => {
     const put = (url: string, payload: unknown) =>
       b.app.inject({ method: 'PUT', url, headers: { cookie: adminB }, payload: payload as object });
     if (what === 'queries') {
-      expect((await put(`/api/templates/${id}/queries`, [])).statusCode).toBe(200);
+      // Запрос графика удалить нельзя — меняем SQL.
+      const edited = [
+        { key: 'rows', sql: 'select 3 as x', mode: 'list' },
+        { key: 'head', sql: 'select 2 as y', mode: 'single' },
+      ];
+      expect((await put(`/api/templates/${id}/queries`, edited)).statusCode).toBe(200);
     } else if (what === 'params') {
       expect((await put(`/api/templates/${id}/params`, [])).statusCode).toBe(200);
     } else if (what === 'access') {

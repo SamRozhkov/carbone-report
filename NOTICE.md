@@ -17,6 +17,11 @@ Carbone Reports распространяется по лицензии PolyForm 
 Сторонние библиотеки, входящие в образы и сборку, используются на условиях своих лицензий. Лицензия проекта
 на них не распространяется.
 
+Графики ECharts (с 2.6.0) используют Apache ECharts (Apache-2.0), resvg-js (MPL-2.0) и шрифт Noto Sans
+(SIL Open Font License 1.1, текст — [`packages/carbone/assets/fonts/OFL.txt`](packages/carbone/assets/fonts/OFL.txt));
+подробности — в [`packages/carbone/NOTICE.md`](packages/carbone/NOTICE.md). Вкладка «Графики» в браузере использует
+Apache ECharts (Apache-2.0).
+
 ## ONLYOFFICE Document Server
 
 Document Server (контейнер `onlyoffice`) — отдельный продукт, который не входит в этот репозиторий и образы проекта

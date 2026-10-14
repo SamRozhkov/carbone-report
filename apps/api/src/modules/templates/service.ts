@@ -2,6 +2,7 @@ import {
   outputFormatsFor,
   type TemplateAdminDetails,
   type TemplateCategoryRef,
+  type TemplateChart,
   type TemplateDetails,
   type TemplateExt,
   type TemplateParam,
@@ -13,6 +14,7 @@ import { asc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import {
   categories,
+  templateCharts,
   templateParams,
   templateQueries,
   templates,
@@ -29,6 +31,7 @@ export interface TemplateFull {
   category: TemplateCategoryRef | null;
   queries: TemplateQuery[];
   params: TemplateParam[];
+  charts: TemplateChart[];
 }
 
 export const templateDir = (id: string) => `templates/${id}`;
@@ -73,25 +76,52 @@ export async function loadTemplate(db: Db, id: string): Promise<TemplateRow> {
   return row;
 }
 
+export type DbTx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/** Блокирует строку шаблона до конца транзакции: сохранения запросов и графиков идут по очереди. */
+export async function lockTemplate(tx: DbTx, id: string): Promise<void> {
+  const [row] = await tx
+    .select({ id: templates.id })
+    .from(templates)
+    .where(eq(templates.id, id))
+    .for('update');
+  if (!row) throw notFound('шаблон');
+}
+
+export async function loadTemplateQueries(db: Db | DbTx, id: string): Promise<TemplateQuery[]> {
+  const qs = await db
+    .select()
+    .from(templateQueries)
+    .where(eq(templateQueries.templateId, id))
+    .orderBy(asc(templateQueries.sortOrder));
+  return qs.map((q) => ({ key: q.key, sql: q.sql, mode: q.mode }));
+}
+
+export async function loadTemplateCharts(db: Db | DbTx, id: string): Promise<TemplateChart[]> {
+  const cs = await db
+    .select()
+    .from(templateCharts)
+    .where(eq(templateCharts.templateId, id))
+    .orderBy(asc(templateCharts.sortOrder));
+  return cs.map((c) => ({ ...c.config, key: c.key }));
+}
+
 export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull> {
   const row = await loadTemplate(db, id);
-  const [qs, ps, cat] = await Promise.all([
-    db
-      .select()
-      .from(templateQueries)
-      .where(eq(templateQueries.templateId, id))
-      .orderBy(asc(templateQueries.sortOrder)),
+  const [queries, ps, charts, cat] = await Promise.all([
+    loadTemplateQueries(db, id),
     db
       .select()
       .from(templateParams)
       .where(eq(templateParams.templateId, id))
       .orderBy(asc(templateParams.sortOrder)),
+    loadTemplateCharts(db, id),
     loadCategoryRef(db, row.categoryId),
   ]);
   return {
     row,
     category: cat,
-    queries: qs.map((q) => ({ key: q.key, sql: q.sql, mode: q.mode })),
+    queries,
     params: ps.map((p) => ({
       name: p.name,
       label: p.label,
@@ -102,6 +132,7 @@ export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull
       sql: p.sql,
       multiple: p.multiple,
     })),
+    charts,
   };
 }
 
@@ -152,6 +183,7 @@ export const toAdminDetails = (f: TemplateFull): TemplateAdminDetails => ({
   datasourceId: f.row.datasourceId,
   version: f.row.version,
   queries: f.queries,
+  charts: f.charts,
   lastSaveError: f.row.lastSaveError,
   lastSaveErrorAt: f.row.lastSaveErrorAt?.toISOString() ?? null,
 });

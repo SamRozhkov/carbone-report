@@ -8,6 +8,7 @@ import {
   TRANSFER_MANIFEST_FILE,
   transferFilePath,
   TransferManifest,
+  type TransferChart,
   type TransferParam,
   type TransferQuery,
   type TransferTemplate,
@@ -18,6 +19,7 @@ import {
   categories,
   datasources,
   groups,
+  templateCharts,
   templateGroups,
   templateParams,
   templateQueries,
@@ -162,7 +164,7 @@ async function runExport(deps: ExportDeps, ids: string[], now: Date): Promise<Ex
     throw new AppError('NOT_FOUND', 404, notFound('шаблон').message, { ids: missing });
   }
 
-  const [gs, qs, ps] = await Promise.all([
+  const [gs, qs, ps, cs] = await Promise.all([
     db
       .select({ templateId: templateGroups.templateId, name: groups.name })
       .from(templateGroups)
@@ -179,6 +181,11 @@ async function runExport(deps: ExportDeps, ids: string[], now: Date): Promise<Ex
       .from(templateParams)
       .where(inArray(templateParams.templateId, uniqueIds))
       .orderBy(asc(templateParams.sortOrder), asc(templateParams.name)),
+    db
+      .select()
+      .from(templateCharts)
+      .where(inArray(templateCharts.templateId, uniqueIds))
+      .orderBy(asc(templateCharts.sortOrder), asc(templateCharts.key)),
   ]);
 
   // Архив с одинаковыми названиями не загрузится (§33.2): сообщаем сразу.
@@ -241,6 +248,9 @@ async function runExport(deps: ExportDeps, ids: string[], now: Date): Promise<Ex
             multiple: p.multiple,
             sortOrder: p.sortOrder,
           })),
+        charts: cs
+          .filter((c) => c.templateId === id)
+          .map((c): TransferChart => ({ key: c.key, sortOrder: c.sortOrder, config: c.config })),
       },
     });
   }

@@ -23,6 +23,7 @@ import type {
   RunsQuery,
   TemplateAccess,
   TemplateAdminDetails,
+  TemplateChart,
   TemplateDetails,
   TemplateParam,
   TemplateQuery,
@@ -119,6 +120,8 @@ export const api = {
       apiJson<TemplateAdminDetails>(`/api/templates/${id}/queries`, put(queries)),
     saveParams: (id: string, params: TemplateParam[]) =>
       apiJson<TemplateAdminDetails>(`/api/templates/${id}/params`, put(params)),
+    saveCharts: (id: string, charts: TemplateChart[]) =>
+      apiJson<TemplateAdminDetails>(`/api/templates/${id}/charts`, put(charts)),
     runQuery: (id: string, body: RunQueryBody) =>
       apiJson<RunQueryResult>(`/api/templates/${id}/queries/run`, post(body)),
     paramOptions: (id: string, name: string, params: ParamsInput) =>

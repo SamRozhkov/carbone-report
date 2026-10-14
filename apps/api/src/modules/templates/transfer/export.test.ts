@@ -36,6 +36,7 @@ const meta = (name: string): ArchiveItem['meta'] => ({
   },
   queries: [{ key: 'rows', sql: 'select 1', mode: 'list', sortOrder: 0 }],
   params: [],
+  charts: [],
 });
 
 describe('exportFileName', () => {
@@ -162,6 +163,7 @@ describe('buildArchive', () => {
     expect(Object.keys(t).sort()).toEqual(
       [
         'category',
+        'charts',
         'datasource',
         'defaultOutput',
         'description',

@@ -82,6 +82,16 @@
   сохраняется внешним `text:span`, оформление HTML — внутренним с автоматическим стилем `CRh<n>` без свойств,
   заданных меткой; автоматические стили — в том же файле. Работает только через `renderBuffer`: старые `render()` и
   `renderXML` оставляют жетоны. `{o.preReleaseFeatureIn=…}` ни на что не влияет.
+- 2.6.0: графики ECharts `:chart` (спецификация §35.1–35.2) — `lib/echarts-render.js`, подключение к изображениям из
+  данных — `lib/media.js` (вид `chart`, как штрихкоды). Метка в замещающем тексте картинки-заглушки; значение —
+  `{ type, width, height, theme, option }` или описание ECharts с `series`, строка — JSON. ECharts 5 рисует SVG в режиме
+  SSR без анимации, resvg-js переводит его в PNG с масштабом 2 шрифтом Noto Sans из `assets/fonts` (шрифты сервера не
+  используются; любое семейство из описания рисуется Noto Sans). Размер — `width`/`height` или рамка заглушки в px при
+  96 dpi (100–4000), без рамки — 600×400; белый фон по умолчанию. Лимиты: описание до 1 МБ, до 20 рядов и 10 000 точек,
+  до 5 с на график (проверяется после каждого этапа: отрисовку прервать нельзя). Ошибки ECharts — «график: …».
+  Своё расширение: строка `cr:number:{"decimals":…,"thousands":…,"suffix":…}` в `formatter`/`valueFormatter`
+  заменяется функцией формата чисел (её пишет конструктор графиков carbone-reports; EE покажет строку как есть).
+  `chart` в обычном тексте — ошибка шаблона «график ставится в замещающий текст картинки».
 
 ## Зависимости, добавленные к апстриму
 
@@ -90,6 +100,15 @@
 - `htmlparser2` =10.1.0 — MIT, https://github.com/fb55/htmlparser2 (разбор HTML для `:html`). Транзитивные
   зависимости: `domhandler` 5.0.3, `domutils` 3.2.2, `domelementtype` 2.3.0, `entities` 7.0.1 и 4.5.0 —
   BSD-2-Clause (https://github.com/fb55); `dom-serializer` 2.0.0 — MIT (https://github.com/cheeriojs/dom-serializer).
+- `echarts` =5.6.0 — Apache-2.0, https://github.com/apache/echarts (графики `:chart`; уведомление Apache ECharts —
+  файл `NOTICE` пакета: «Apache ECharts. Copyright 2017-2024 The Apache Software Foundation. This product includes
+  software developed at The Apache Software Foundation»). Транзитивные: `zrender` 5.6.1 — BSD-3-Clause
+  (https://github.com/ecomfe/zrender), `tslib` 2.3.0 — 0BSD (https://github.com/microsoft/tslib).
+- `@resvg/resvg-js` =2.6.2 — MPL-2.0, https://github.com/thx/resvg-js (SVG → PNG), с готовыми сборками
+  `@resvg/resvg-js-<платформа>` 2.6.2 (MPL-2.0); исходный код библиотеки — по ссылке, файлы не изменялись.
+- Шрифт Noto Sans Regular и Bold v2.015 — SIL Open Font License 1.1, текст — `assets/fonts/OFL.txt`
+  (https://github.com/notofonts/latin-greek-cyrillic); файлы из https://github.com/notofonts/notofonts.github.io
+  (`fonts/NotoSans/hinted/ttf`, коммит `5c39130`), не изменялись.
 
 ## Правило чистой реализации
 

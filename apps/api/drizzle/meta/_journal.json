@@ -50,6 +50,13 @@
       "when": 1791439531998,
       "tag": "0006_run_files",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791967599241,
+      "tag": "0007_template_charts",
+      "breakpoints": true
     }
   ]
 }

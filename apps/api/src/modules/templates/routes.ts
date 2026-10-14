@@ -7,6 +7,8 @@ import {
   outputFormatsFor,
   ParamOptionsBody,
   type ParamOptionsResult,
+  type TemplateChart,
+  TemplateChartList,
   TemplateExt,
   TemplateParam,
   TemplateQuery,
@@ -26,6 +28,7 @@ import type { App } from '../../app';
 import {
   categories,
   datasources,
+  templateCharts,
   templateGroups,
   templateParams,
   templateQueries,
@@ -41,6 +44,7 @@ import { orderParams } from '../queries/param-deps';
 import { optionsForParam } from '../queries/param-options';
 import { checkParamDefaults } from '../queries/params';
 import { createBlankDocument } from './blank';
+import { assertNoIssues, chartIssues, queryIssuesForCharts } from './charts';
 import { importInvalid } from './transfer/archive';
 import { buildExport } from './transfer/export';
 import { applyImport, previewImport } from './transfer/import';
@@ -48,7 +52,10 @@ import {
   categoryRefColumns,
   discardUncommittedFile,
   loadTemplate,
+  loadTemplateCharts,
   loadTemplateFull,
+  loadTemplateQueries,
+  lockTemplate,
   templateDir,
   templateFileRef,
   templateFilePath,
@@ -132,6 +139,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       defaultOutput?: OutputFormat;
       queries?: TemplateQuery[];
       params?: TemplateParam[];
+      charts?: TemplateChart[];
       /** Настройки доступа; по умолчанию шаблон закрыт и без категории. */
       categoryId?: string | null;
       public?: boolean;
@@ -181,6 +189,16 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           await tx
             .insert(templateParams)
             .values(extra.params.map((p, i) => ({ ...p, templateId: id, sortOrder: i })));
+        }
+        if (extra?.charts?.length) {
+          await tx.insert(templateCharts).values(
+            extra.charts.map(({ key, ...config }, i) => ({
+              templateId: id,
+              key,
+              sortOrder: i,
+              config,
+            })),
+          );
         }
         return row!;
       });
@@ -389,6 +407,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           defaultOutput: src.row.defaultOutput,
           queries: src.queries,
           params: src.params,
+          charts: src.charts,
           categoryId: src.row.categoryId,
           public: src.row.public,
           copyGroupsFrom: src.row.id,
@@ -421,6 +440,9 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         'ключ запроса',
       );
       await db.transaction(async (tx) => {
+        // Проверка графиков — под блокировкой строки: параллельный PUT …/charts ждёт.
+        await lockTemplate(tx, row.id);
+        assertNoIssues(queryIssuesForCharts(req.body, await loadTemplateCharts(tx, row.id)));
         await tx.delete(templateQueries).where(eq(templateQueries.templateId, row.id));
         if (req.body.length) {
           await tx
@@ -453,6 +475,35 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           await tx
             .insert(templateParams)
             .values(req.body.map((p, i) => ({ ...p, templateId: row.id, sortOrder: i })));
+        }
+        await tx
+          .update(templates)
+          .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
+          .where(eq(templates.id, row.id));
+      });
+      return toAdminDetails(await loadTemplateFull(db, row.id));
+    },
+  );
+
+  app.put(
+    '/api/templates/:id/charts',
+    { ...admin, schema: { params: IdParams, body: TemplateChartList } },
+    async (req) => {
+      const row = await loadTemplate(db, req.params.id);
+      await db.transaction(async (tx) => {
+        // Проверка запросов — под блокировкой строки: параллельный PUT …/queries ждёт.
+        await lockTemplate(tx, row.id);
+        assertNoIssues(chartIssues(req.body, await loadTemplateQueries(tx, row.id)));
+        await tx.delete(templateCharts).where(eq(templateCharts.templateId, row.id));
+        if (req.body.length) {
+          await tx.insert(templateCharts).values(
+            req.body.map(({ key, ...config }, i) => ({
+              templateId: row.id,
+              key,
+              sortOrder: i,
+              config,
+            })),
+          );
         }
         await tx
           .update(templates)

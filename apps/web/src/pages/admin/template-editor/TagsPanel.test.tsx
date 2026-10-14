@@ -35,4 +35,33 @@ describe('TagsPanel', () => {
       await screen.findAllByText('Не удалось скопировать — выделите тег вручную'),
     ).toHaveLength(2);
   });
+
+  it('графики шаблона — теги {d.charts.<key>:chart}; charts из данных не разворачивается деревом', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderWithProviders(
+      <TagsPanel
+        data={{
+          orders: [{ total: 1 }],
+          charts: { sales: { type: 'echarts@v5', option: { series: [] } } },
+        }}
+        charts={['sales']}
+        onRefresh={() => {}}
+        refreshing={false}
+      />,
+    );
+    expect(await screen.findByText('{d.charts.sales:chart}')).toBeInTheDocument();
+    expect(screen.queryByText('{d.charts.sales.type}')).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Скопировать {d.charts.sales:chart}' }),
+    );
+    expect(writeText).toHaveBeenCalledWith('{d.charts.sales:chart}');
+  });
+
+  it('графики видны и без данных предпросмотра', async () => {
+    renderWithProviders(
+      <TagsPanel data={null} charts={['sales']} onRefresh={() => {}} refreshing={false} />,
+    );
+    expect(await screen.findByText('{d.charts.sales:chart}')).toBeInTheDocument();
+  });
 });

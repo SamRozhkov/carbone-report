@@ -350,7 +350,7 @@ carbone.addFormatters(require('./drop').formatters);
 carbone.addFormatters(require('./color').formatters);
 // изображения из данных (2.4.0): imageFit — для шаблонов; служебный __img неперечисляемый, чтобы не попасть
 // в подсказку «Do you mean …» (lib/media.js)
-carbone.addFormatters({ imageFit : media.formatters.imageFit, barcode : media.formatters.barcode });
+carbone.addFormatters({ imageFit : media.formatters.imageFit, barcode : media.formatters.barcode, chart : media.formatters.chart });
 Object.defineProperty(input.formatters, '__img', { enumerable : false, configurable : true, writable : true, value : media.formatters.__img });
 // :html (2.5.0): форматтер печатает жетон, разметку пишет html.finish после сборки (lib/html.js); служебный
 // __htmlUrl (defaultURL в метке с :html) неперечисляемый — как __img

@@ -16,6 +16,7 @@ import {
   categories,
   datasources,
   groups,
+  templateCharts,
   templateGroups,
   templateParams,
   templateQueries,
@@ -373,6 +374,8 @@ export async function applyImport(
             })
             .where(eq(templates.id, id));
           await tx.delete(templateGroups).where(eq(templateGroups.templateId, id));
+          // Графики заменяются вместе с запросами в одной транзакции: график не ссылается на чужой запрос.
+          await tx.delete(templateCharts).where(eq(templateCharts.templateId, id));
           await tx.delete(templateQueries).where(eq(templateQueries.templateId, id));
           await tx.delete(templateParams).where(eq(templateParams.templateId, id));
         } else {
@@ -402,6 +405,16 @@ export async function applyImport(
               ...toTemplateParam(p),
               sortOrder: p.sortOrder,
               templateId: id,
+            })),
+          );
+        }
+        if (t.charts?.length) {
+          await tx.insert(templateCharts).values(
+            t.charts.map((c) => ({
+              templateId: id,
+              key: c.key,
+              sortOrder: c.sortOrder,
+              config: c.config,
             })),
           );
         }

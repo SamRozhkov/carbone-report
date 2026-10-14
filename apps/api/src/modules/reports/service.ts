@@ -11,6 +11,7 @@ import { buildReportData } from '../queries/build-data';
 import { runQueries } from '../queries/executor';
 import { validateQueryParams } from '../queries/param-options';
 import { resolveParams } from '../queries/params';
+import { injectCharts } from '../templates/charts';
 import type { TemplateFull } from '../templates/service';
 
 /**
@@ -37,7 +38,8 @@ async function collect(
   try {
     // VALIDATION отсюда, как и от resolveParams, не создаёт запуск с ошибкой (см. reports/routes).
     await validateQueryParams(deps, full, params, deadline);
-    if (full.queries.length === 0) return { data: buildReportData([], params), params };
+    if (full.queries.length === 0)
+      return { data: injectCharts(buildReportData([], params), full.charts), params };
     deadline?.check();
     const { pool, name } = await deps.sources.get(full.row.datasourceId);
     deadline?.check();
@@ -46,7 +48,7 @@ async function collect(
       maxRows: deps.config.queryMaxRows,
       deadline,
     });
-    return { data: buildReportData(results, params), params };
+    return { data: injectCharts(buildReportData(results, params), full.charts), params };
   } catch (e) {
     // Ошибка SQL после истечения срока (statement_timeout, урезанный до остатка срока, и т. п.) —
     // это истечение срока отчёта, а не ошибка SQL. Настоящая VALIDATION остаётся VALIDATION.

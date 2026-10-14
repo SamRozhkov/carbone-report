@@ -6,6 +6,7 @@ import type {
   Role,
   SelectOption,
   SslMode,
+  TemplateChartConfig,
   TemplateExt,
 } from '@carbone-reports/shared';
 import { sql } from 'drizzle-orm';
@@ -174,6 +175,21 @@ export const templateParams = pgTable(
   (t) => [unique().on(t.templateId, t.name)],
 );
 
+/** Графики конструктора (§35.3): настройки без ключа — в config. */
+export const templateCharts = pgTable(
+  'template_charts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => templates.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    sortOrder: integer('sort_order').notNull(),
+    config: jsonb('config').$type<TemplateChartConfig>().notNull(),
+  },
+  (t) => [unique().on(t.templateId, t.key)],
+);
+
 export const reportRuns = pgTable('report_runs', {
   id: uuid('id').primaryKey().defaultRandom(),
   templateId: uuid('template_id').references(() => templates.id, { onDelete: 'set null' }),
@@ -215,6 +231,7 @@ export type DatasourceRow = typeof datasources.$inferSelect;
 export type TemplateRow = typeof templates.$inferSelect;
 export type TemplateQueryRow = typeof templateQueries.$inferSelect;
 export type TemplateParamRow = typeof templateParams.$inferSelect;
+export type TemplateChartRow = typeof templateCharts.$inferSelect;
 export type RunRow = typeof reportRuns.$inferSelect;
 export type RunFileRow = typeof reportRunFiles.$inferSelect;
 export type GroupRow = typeof groups.$inferSelect;

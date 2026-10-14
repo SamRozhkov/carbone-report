@@ -7,6 +7,8 @@ import {
   outputFormatsFor,
   ParamOptionsBody,
   type ParamOptionsResult,
+  type TemplateChart,
+  TemplateChartList,
   TemplateExt,
   TemplateParam,
   TemplateQuery,
@@ -26,6 +28,7 @@ import type { App } from '../../app';
 import {
   categories,
   datasources,
+  templateCharts,
   templateGroups,
   templateParams,
   templateQueries,
@@ -41,6 +44,7 @@ import { orderParams } from '../queries/param-deps';
 import { optionsForParam } from '../queries/param-options';
 import { checkParamDefaults } from '../queries/params';
 import { createBlankDocument } from './blank';
+import { assertNoIssues, chartIssues, queryIssuesForCharts } from './charts';
 import { importInvalid } from './transfer/archive';
 import { buildExport } from './transfer/export';
 import { applyImport, previewImport } from './transfer/import';
@@ -132,6 +136,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       defaultOutput?: OutputFormat;
       queries?: TemplateQuery[];
       params?: TemplateParam[];
+      charts?: TemplateChart[];
       /** Настройки доступа; по умолчанию шаблон закрыт и без категории. */
       categoryId?: string | null;
       public?: boolean;
@@ -181,6 +186,16 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           await tx
             .insert(templateParams)
             .values(extra.params.map((p, i) => ({ ...p, templateId: id, sortOrder: i })));
+        }
+        if (extra?.charts?.length) {
+          await tx.insert(templateCharts).values(
+            extra.charts.map(({ key, ...config }, i) => ({
+              templateId: id,
+              key,
+              sortOrder: i,
+              config,
+            })),
+          );
         }
         return row!;
       });
@@ -389,6 +404,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           defaultOutput: src.row.defaultOutput,
           queries: src.queries,
           params: src.params,
+          charts: src.charts,
           categoryId: src.row.categoryId,
           public: src.row.public,
           copyGroupsFrom: src.row.id,
@@ -415,11 +431,13 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     '/api/templates/:id/queries',
     { ...admin, schema: { params: IdParams, body: z.array(TemplateQuery) } },
     async (req) => {
-      const row = await loadTemplate(db, req.params.id);
+      const full = await loadTemplateFull(db, req.params.id);
+      const row = full.row;
       uniqueOrFail(
         req.body.map((q) => q.key),
         'ключ запроса',
       );
+      assertNoIssues(queryIssuesForCharts(req.body, full.charts));
       await db.transaction(async (tx) => {
         await tx.delete(templateQueries).where(eq(templateQueries.templateId, row.id));
         if (req.body.length) {
@@ -460,6 +478,33 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           .where(eq(templates.id, row.id));
       });
       return toAdminDetails(await loadTemplateFull(db, row.id));
+    },
+  );
+
+  app.put(
+    '/api/templates/:id/charts',
+    { ...admin, schema: { params: IdParams, body: TemplateChartList } },
+    async (req) => {
+      const full = await loadTemplateFull(db, req.params.id);
+      assertNoIssues(chartIssues(req.body, full.queries));
+      await db.transaction(async (tx) => {
+        await tx.delete(templateCharts).where(eq(templateCharts.templateId, full.row.id));
+        if (req.body.length) {
+          await tx.insert(templateCharts).values(
+            req.body.map(({ key, ...config }, i) => ({
+              templateId: full.row.id,
+              key,
+              sortOrder: i,
+              config,
+            })),
+          );
+        }
+        await tx
+          .update(templates)
+          .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
+          .where(eq(templates.id, full.row.id));
+      });
+      return toAdminDetails(await loadTemplateFull(db, full.row.id));
     },
   );
 }

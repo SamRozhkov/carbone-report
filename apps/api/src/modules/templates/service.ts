@@ -2,6 +2,7 @@ import {
   outputFormatsFor,
   type TemplateAdminDetails,
   type TemplateCategoryRef,
+  type TemplateChart,
   type TemplateDetails,
   type TemplateExt,
   type TemplateParam,
@@ -13,6 +14,7 @@ import { asc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import {
   categories,
+  templateCharts,
   templateParams,
   templateQueries,
   templates,
@@ -29,6 +31,7 @@ export interface TemplateFull {
   category: TemplateCategoryRef | null;
   queries: TemplateQuery[];
   params: TemplateParam[];
+  charts: TemplateChart[];
 }
 
 export const templateDir = (id: string) => `templates/${id}`;
@@ -75,7 +78,7 @@ export async function loadTemplate(db: Db, id: string): Promise<TemplateRow> {
 
 export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull> {
   const row = await loadTemplate(db, id);
-  const [qs, ps, cat] = await Promise.all([
+  const [qs, ps, cs, cat] = await Promise.all([
     db
       .select()
       .from(templateQueries)
@@ -86,6 +89,11 @@ export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull
       .from(templateParams)
       .where(eq(templateParams.templateId, id))
       .orderBy(asc(templateParams.sortOrder)),
+    db
+      .select()
+      .from(templateCharts)
+      .where(eq(templateCharts.templateId, id))
+      .orderBy(asc(templateCharts.sortOrder)),
     loadCategoryRef(db, row.categoryId),
   ]);
   return {
@@ -102,6 +110,7 @@ export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull
       sql: p.sql,
       multiple: p.multiple,
     })),
+    charts: cs.map((c) => ({ ...c.config, key: c.key })),
   };
 }
 
@@ -152,6 +161,7 @@ export const toAdminDetails = (f: TemplateFull): TemplateAdminDetails => ({
   datasourceId: f.row.datasourceId,
   version: f.row.version,
   queries: f.queries,
+  charts: f.charts,
   lastSaveError: f.row.lastSaveError,
   lastSaveErrorAt: f.row.lastSaveErrorAt?.toISOString() ?? null,
 });

@@ -127,6 +127,22 @@ describe('createEmbeddedRenderer', () => {
     }
   });
 
+  it('ошибка графика :chart (§35.2) — 400 CARBONE_TEMPLATE «ошибка шаблона: …»', async () => {
+    for (const message of [
+      'в графике больше 20 рядов Source: "{d.c:chart}"',
+      'график: xAxis "0" not found Source: "{d.c:chart}"',
+    ]) {
+      const { renderer } = setup(async () => {
+        throw new TemplateRenderError(message);
+      });
+      await expect(renderer.render(tpl(), {}, opts('docx'))).rejects.toMatchObject({
+        code: 'CARBONE_TEMPLATE',
+        status: 400,
+        message: `ошибка шаблона: ${message}`,
+      });
+    }
+  });
+
   it('отключённая функция с Source — по-прежнему CARBONE_COMMUNITY (проверяется первой)', async () => {
     const { renderer } = setup(async () => {
       throw new TemplateRenderError(

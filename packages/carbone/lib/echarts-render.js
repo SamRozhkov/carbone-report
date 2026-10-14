@@ -298,13 +298,20 @@ function buildOption (chart) {
   return _option;
 }
 
-function clampSize (px) {
+/** Сторона рамки в px, зажатая в 100–4000; не число (NaN, нет поля, ±Infinity) — сторона по умолчанию (R3) */
+function clampSize (px, fallback) {
+  if (typeof px !== 'number' || isFinite(px) === false) {
+    return fallback;
+  }
   return Math.min(LIMITS.maxSize, Math.max(LIMITS.minSize, Math.round(px)));
 }
 
 /** Логический размер: width/height значения, иначе рамка заглушки (зажата в 100–4000), иначе 600×400 (R3) */
 function sizeOf (chart, frame) {
-  var _frame = frame !== null && frame !== undefined ? { width : clampSize(frame.width), height : clampSize(frame.height) } : DEFAULT_SIZE;
+  var _frame = frame !== null && frame !== undefined ? {
+    width  : clampSize(frame.width, DEFAULT_SIZE.width),
+    height : clampSize(frame.height, DEFAULT_SIZE.height)
+  } : DEFAULT_SIZE;
   return {
     width  : chart.width !== null ? chart.width : _frame.width,
     height : chart.height !== null ? chart.height : _frame.height

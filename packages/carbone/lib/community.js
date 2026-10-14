@@ -3,10 +3,10 @@
  * Их нет в реестре форматтеров, чтобы подсказка «Do you mean» не предлагала их.
  * Агрегаторы (aggSum … cumCountD, count()) реализованы в 2.2.0 — lib/aggregate.js, drop/keep — lib/drop.js;
  * штрихкоды (barcode) — в 2.4.0, lib/media.js; цвета (color) — в 2.4.0, lib/color.js; defaultURL — в 2.4.0, lib/links.js;
- * html — в 2.5.0, lib/html.js.
+ * html — в 2.5.0, lib/html.js; графики ECharts (chart) — в 2.6.0, lib/media.js и lib/echarts-render.js.
  */
 const DISABLED = new Set([
-  'chart', 'formatR', 'autoOrient'
+  'formatR', 'autoOrient'
 ]);
 
 /** Имя для сообщения об ошибке или null, если функция не отключена. */

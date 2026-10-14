@@ -95,6 +95,11 @@ function setEmu (size) {
   };
 }
 
+/** Рамка { cx, cy } в EMU → { width, height } в px при 96 dpi (или null) */
+function emuToPx (frame) {
+  return frame === null ? null : { width : Math.round(frame.cx / EMU_PER_PX), height : Math.round(frame.cy / EMU_PER_PX) };
+}
+
 /** a:ext внутри a:xfrm (размер фигуры), не a:ext расширений a:extLst */
 function xfrmExts (container) {
   return descendants(container, ['a:ext']).filter(function (x) {
@@ -219,6 +224,30 @@ function setVmlSize (style, name, emu) {
   return _regex.test(style) === true ? style.replace(_regex, '$1' + _pt) : style;
 }
 
+/** Рамка картинки Word в EMU: первый wp:extent, иначе размер VML (style width/height) */
+function wordFrame (xml, container) {
+  var _frame = emuFrame(xml, descendants(container, ['wp:extent'])[0]);
+  if (_frame !== null) {
+    return _frame;
+  }
+  var _shape = descendants(container, ['v:imagedata']).map(function (x) {
+    return x.parent;
+  }).filter(function (x) {
+    return x !== null && attr(xml, x, 'style') !== null;
+  })[0];
+  if (_shape === undefined) {
+    return null;
+  }
+  var _style = attr(xml, _shape, 'style');
+  var _w = vmlSize(_style, 'width');
+  var _h = vmlSize(_style, 'height');
+  return _w !== null && _h !== null ? { cx : _w, cy : _h } : null;
+}
+
+function wordFramePx (xml, container) {
+  return emuToPx(wordFrame(xml, container));
+}
+
 /**
  * Правки картинки Word под изображение: рамка — первый wp:extent (или размер VML), размеры по imageFit,
  * ссылки a:blip r:embed / v:imagedata r:id — на новую связь
@@ -231,15 +260,7 @@ function wordPlace (xml, container, image, ref, fit) {
   }).filter(function (x) {
     return x !== null && attr(xml, x, 'style') !== null;
   });
-  var _frame = emuFrame(xml, _extents[0]);
-  if (_frame === null && _vmlShapes.length > 0) {
-    var _style = attr(xml, _vmlShapes[0], 'style');
-    var _w = vmlSize(_style, 'width');
-    var _h = vmlSize(_style, 'height');
-    if (_w !== null && _h !== null) {
-      _frame = { cx : _w, cy : _h };
-    }
-  }
+  var _frame = wordFrame(xml, container);
   var _size = fitEmu(_frame, image, fit);
   var _edits = _extents.concat(xfrmExts(container)).map(function (el) {
     return { el : el, tag : setEmu(_size) };
@@ -278,6 +299,10 @@ function slidePlace (xml, container, image, ref, fit) {
   }).concat(blipEdits(container, ref));
 }
 
+function slideFramePx (xml, container) {
+  return emuToPx(emuFrame(xml, xfrmExts(container)[0]));
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // XLSX
 
@@ -308,6 +333,15 @@ function sheetPlace (xml, container, image, ref, fit) {
   return _ext.concat(xfrmExts(container)).map(function (el) {
     return { el : el, tag : setEmu(_size) };
   }).concat(_edits);
+}
+
+/** Рамка листа: oneCellAnchor/absoluteAnchor — xdr:ext; twoCellAnchor и группа — a:xfrm/a:ext картинки (R3) */
+function sheetFramePx (xml, container) {
+  var _ext = container.children.filter(function (x) {
+    return x.name === 'xdr:ext';
+  })[0];
+  var _frame = _ext !== undefined ? emuFrame(xml, _ext) : null;
+  return emuToPx(_frame !== null ? _frame : emuFrame(xml, xfrmExts(container)[0]));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -382,6 +416,13 @@ function odfPlace (xml, frame, image, ref, fit) {
     });
   });
   return _edits;
+}
+
+/** Рамка ODF: svg:width/svg:height в px при 96 dpi или null */
+function odfFramePx (xml, frame) {
+  var _w = odfLength(attr(xml, frame, 'svg:width'));
+  var _h = odfLength(attr(xml, frame, 'svg:height'));
+  return _w !== null && _h !== null ? { width : Math.round(_w.mm / MM_PER_PX), height : Math.round(_h.mm / MM_PER_PX) } : null;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -601,6 +642,7 @@ function storeMedia (template, fmt) {
  *   altRanges(xml, root) → [{ start, end }] — где метка становится меткой изображения (решение R2);
  *   container(el)        → контейнер картинки вокруг элемента с жетоном или null (он же удаляется при пустом значении);
  *   place(xml, container, image, ref, fit) → правки внутри контейнера: [{ el, tag(startTag) }] или [{ el, remove }];
+ *   framePx(xml, container) → { width, height } | null — рамка в px при 96 dpi (размер графика :chart, §35.1);
  *   links(template, partName) → { ref(mediaPath) → ссылка для place, link(url) → ссылка гиперссылки, save() };
  *   register(template, media) — регистрация новых файлов [{ name, type }] в пакете;
  *   idTags               — элементы с id, уникальным в части (повторы после циклов перенумеровываются);
@@ -620,6 +662,7 @@ var FORMATS = {
     }, wordContainer),
     container : wordContainer,
     place     : wordPlace,
+    framePx   : wordFramePx,
     links     : ooxmlLinks,
     register  : addContentTypes,
     idTags    : ['wp:docPr'],
@@ -630,6 +673,7 @@ var FORMATS = {
     altRanges : attrAltRanges({ 'p:cNvPr' : ['descr', 'title'] }, slideContainer),
     container : slideContainer,
     place     : slidePlace,
+    framePx   : slideFramePx,
     links     : ooxmlLinks,
     register  : addContentTypes,
     idTags    : ['p:cNvPr'],
@@ -640,6 +684,7 @@ var FORMATS = {
     altRanges : attrAltRanges({ 'xdr:cNvPr' : ['descr', 'title'] }, sheetContainer),
     container : sheetContainer,
     place     : sheetPlace,
+    framePx   : sheetFramePx,
     links     : ooxmlLinks,
     register  : addContentTypes,
     idTags    : ['xdr:cNvPr'],
@@ -650,6 +695,7 @@ var FORMATS = {
     altRanges : textAltRanges(['svg:title', 'svg:desc'], odfContainer),
     container : odfContainer,
     place     : odfPlace,
+    framePx   : odfFramePx,
     links     : odfLinks,
     register  : addManifest,
     idTags    : null,

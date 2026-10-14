@@ -250,6 +250,11 @@ describe('echarts: :chart в документах (§35.1)', function () {
       assert.deepStrictEqual(pngSize(await docxPng(r)), { width: 1200, height: 800 });
     }
   });
+  it('chart() с пустыми скобками допустим (R10)', async function () {
+    const r = await one('{d.c:chart()}', { c: BAR_VALUE });
+    assert.deepStrictEqual(pngSize(await docxPng(r)), { width: 1200, height: 800 });
+    assert.ok(!r.doc.includes(':chart'), 'тег остался в документе');
+  });
   it('пустое значение (null, \'\', нет поля) — заглушка удаляется', async function () {
     for (const data of [{ c: null }, { c: '' }, {}]) {
       const r = await one('{d.c:chart}', data);
@@ -286,26 +291,28 @@ describe('echarts: :chart в документах (§35.1)', function () {
   });
 
   describe('прочие форматы (Review Focus 5)', function () {
+    // рамка не равна размеру по умолчанию 600×400: тест падает, если рамка формата не прочитана
+    const SMALL = { cx: 2857500, cy: 1905000 }; // 300×200 px
     it('PPTX: рамка a:xfrm/a:ext', async function () {
-      const r = await renderAny(await buildPptx([pptxPic('{d.c:chart}', W)]), 'pptx', { c: BAR_VALUE });
+      const r = await renderAny(await buildPptx([pptxPic('{d.c:chart}', SMALL)]), 'pptx', { c: BAR_VALUE });
       const slide = await r.read('ppt/slides/slide1.xml');
       const rels = await r.read('ppt/slides/_rels/slide1.xml.rels');
       const t = target(rels, attrOf(tags(slide, 'a:blip')[0], 'r:embed'));
-      assert.deepStrictEqual(pngSize(Buffer.from(await r.read('ppt/' + t.slice(3), true))), { width: 1200, height: 800 });
+      assert.deepStrictEqual(pngSize(Buffer.from(await r.read('ppt/' + t.slice(3), true))), { width: 600, height: 400 });
       assertWellFormed(slide);
     });
     it('XLSX oneCellAnchor: xdr:ext', async function () {
-      const r = await renderAny(await buildXlsx([xlsxPic('{d.c:chart}', W)]), 'xlsx', { c: BAR_VALUE, title: 'Отчёт' });
+      const r = await renderAny(await buildXlsx([xlsxPic('{d.c:chart}', SMALL)]), 'xlsx', { c: BAR_VALUE, title: 'Отчёт' });
       const drawingXml = await r.read('xl/drawings/drawing1.xml');
       const t = target(await r.read('xl/drawings/_rels/drawing1.xml.rels'), attrOf(tags(drawingXml, 'a:blip')[0], 'r:embed'));
-      assert.deepStrictEqual(pngSize(Buffer.from(await r.read('xl/' + t.slice(3), true))), { width: 1200, height: 800 });
-      assert.deepStrictEqual(tags(drawingXml, 'xdr:ext'), ['<xdr:ext cx="5715000" cy="3810000"/>']);
+      assert.deepStrictEqual(pngSize(Buffer.from(await r.read('xl/' + t.slice(3), true))), { width: 600, height: 400 });
+      assert.deepStrictEqual(tags(drawingXml, 'xdr:ext'), ['<xdr:ext cx="2857500" cy="1905000"/>']);
     });
     it('XLSX twoCellAnchor: размер — a:xfrm картинки, from/to не меняются', async function () {
-      const r = await renderAny(await buildXlsx([xlsxPic('{d.c:chart}', Object.assign({ anchor: 'twoCellAnchor' }, W))]), 'xlsx', { c: BAR_VALUE, title: 'Отчёт' });
+      const r = await renderAny(await buildXlsx([xlsxPic('{d.c:chart}', Object.assign({ anchor: 'twoCellAnchor' }, SMALL))]), 'xlsx', { c: BAR_VALUE, title: 'Отчёт' });
       const drawingXml = await r.read('xl/drawings/drawing1.xml');
       const t = target(await r.read('xl/drawings/_rels/drawing1.xml.rels'), attrOf(tags(drawingXml, 'a:blip')[0], 'r:embed'));
-      assert.deepStrictEqual(pngSize(Buffer.from(await r.read('xl/' + t.slice(3), true))), { width: 1200, height: 800 });
+      assert.deepStrictEqual(pngSize(Buffer.from(await r.read('xl/' + t.slice(3), true))), { width: 600, height: 400 });
       assert.ok(drawingXml.includes('<xdr:to><xdr:col>4</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>9</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>'), drawingXml);
     });
     it('ODT: рамка 6×4 см → 227×151 px, PNG 454×302, ширина рамки сохранена', async function () {

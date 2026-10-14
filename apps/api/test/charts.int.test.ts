@@ -141,6 +141,26 @@ describe('графики шаблона (§35.3)', () => {
     expect(c.statusCode).toBe(400);
     expect(c.json().error.details).toEqual([{ path: '', message: 'ключ charts занят графиками' }]);
   });
+  it('запрос графика нельзя перевести в «Одна строка» (R8)', async () => {
+    await putCharts(tplId, [SALES]);
+    const q = await putQueries(tplId, [{ ...QUERIES[0], mode: 'single' }, QUERIES[1]]);
+    expect(q.statusCode).toBe(400);
+    expect(q.json().error.details).toEqual([
+      {
+        path: '/0/mode',
+        message: 'запрос используется графиком «sales» — нужен режим «Список строк»',
+      },
+    ]);
+  });
+  it('одновременные PUT charts и PUT queries: проходит только один (блокировка строки)', async () => {
+    const id = await createTemplate(t, admin, dsId, { queries: QUERIES as never });
+    for (let i = 0; i < 5; i++) {
+      await putQueries(id, QUERIES);
+      await putCharts(id, []);
+      const [c, q] = await Promise.all([putCharts(id, [SALES]), putQueries(id, [QUERIES[1]])]);
+      expect([c.statusCode, q.statusCode].sort()).toEqual([200, 400]);
+    }
+  });
 });
 
 describe('d.charts в предпросмотре и отчёте (§35.4)', () => {
@@ -159,6 +179,15 @@ describe('d.charts в предпросмотре и отчёте (§35.4)', () =
   });
   it('без графиков ключа charts нет', async () => {
     const id = await createTemplate(t, admin, dsId, { queries: QUERIES as never });
+    expect(Object.keys((await previewData(id)).json())).toEqual(['orders', 'one', 'params']);
+  });
+  it('PUT charts [] очищает графики — ключа charts в данных нет', async () => {
+    const id = await createTemplate(t, admin, dsId, { queries: QUERIES as never });
+    await putCharts(id, [SALES]);
+    expect(Object.keys((await previewData(id)).json())).toContain('charts');
+    const r = await putCharts(id, []);
+    expect(r.statusCode).toBe(200);
+    expect(r.json().charts).toEqual([]);
     expect(Object.keys((await previewData(id)).json())).toEqual(['orders', 'one', 'params']);
   });
   it('нет колонки — 400 CARBONE_TEMPLATE с ключом графика (Review Focus 1)', async () => {

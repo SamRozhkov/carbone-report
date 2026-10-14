@@ -52,7 +52,10 @@ import {
   categoryRefColumns,
   discardUncommittedFile,
   loadTemplate,
+  loadTemplateCharts,
   loadTemplateFull,
+  loadTemplateQueries,
+  lockTemplate,
   templateDir,
   templateFileRef,
   templateFilePath,
@@ -431,14 +434,15 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     '/api/templates/:id/queries',
     { ...admin, schema: { params: IdParams, body: z.array(TemplateQuery) } },
     async (req) => {
-      const full = await loadTemplateFull(db, req.params.id);
-      const row = full.row;
+      const row = await loadTemplate(db, req.params.id);
       uniqueOrFail(
         req.body.map((q) => q.key),
         'ключ запроса',
       );
-      assertNoIssues(queryIssuesForCharts(req.body, full.charts));
       await db.transaction(async (tx) => {
+        // Проверка графиков — под блокировкой строки: параллельный PUT …/charts ждёт.
+        await lockTemplate(tx, row.id);
+        assertNoIssues(queryIssuesForCharts(req.body, await loadTemplateCharts(tx, row.id)));
         await tx.delete(templateQueries).where(eq(templateQueries.templateId, row.id));
         if (req.body.length) {
           await tx
@@ -485,14 +489,16 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     '/api/templates/:id/charts',
     { ...admin, schema: { params: IdParams, body: TemplateChartList } },
     async (req) => {
-      const full = await loadTemplateFull(db, req.params.id);
-      assertNoIssues(chartIssues(req.body, full.queries));
+      const row = await loadTemplate(db, req.params.id);
       await db.transaction(async (tx) => {
-        await tx.delete(templateCharts).where(eq(templateCharts.templateId, full.row.id));
+        // Проверка запросов — под блокировкой строки: параллельный PUT …/queries ждёт.
+        await lockTemplate(tx, row.id);
+        assertNoIssues(chartIssues(req.body, await loadTemplateQueries(tx, row.id)));
+        await tx.delete(templateCharts).where(eq(templateCharts.templateId, row.id));
         if (req.body.length) {
           await tx.insert(templateCharts).values(
             req.body.map(({ key, ...config }, i) => ({
-              templateId: full.row.id,
+              templateId: row.id,
               key,
               sortOrder: i,
               config,
@@ -502,9 +508,9 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         await tx
           .update(templates)
           .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
-          .where(eq(templates.id, full.row.id));
+          .where(eq(templates.id, row.id));
       });
-      return toAdminDetails(await loadTemplateFull(db, full.row.id));
+      return toAdminDetails(await loadTemplateFull(db, row.id));
     },
   );
 }

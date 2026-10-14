@@ -3,6 +3,7 @@ import { Button, Icon, Text } from '@gravity-ui/uikit';
 import { useCopy } from '../../../components/useCopy';
 import type { TagNode } from '../../../lib/tagTree';
 import { buildTagTree } from '../../../lib/tagTree';
+import { chartTag } from './ChartsTab';
 
 function TagRow({ tag, hint }: { tag: string; hint?: string }) {
   const copy = useCopy();
@@ -55,13 +56,24 @@ function NodeView({ node, depth }: { node: TagNode; depth: number }) {
 
 export function TagsPanel({
   data,
+  charts = [],
   onRefresh,
   refreshing,
 }: {
   data: Record<string, unknown> | null;
+  /** Ключи графиков шаблона (§35.5): `{d.charts.<key>:chart}`. */
+  charts?: string[];
   onRefresh: () => void;
   refreshing: boolean;
 }) {
+  // При графиках d.charts — их описания ECharts: деревом не показываем, теги — отдельным блоком.
+  const tree = data
+    ? buildTagTree(
+        charts.length > 0
+          ? Object.fromEntries(Object.entries(data).filter(([k]) => k !== 'charts'))
+          : data,
+      )
+    : null;
   return (
     <div
       className="cr-stack"
@@ -74,8 +86,16 @@ export function TagsPanel({
           Обновить данные
         </Button>
       </div>
-      {data ? (
-        buildTagTree(data).map((n) => <NodeView key={n.id} node={n} depth={0} />)
+      {charts.length > 0 && (
+        <div className="cr-stack">
+          <Text variant="subheader-1">Графики</Text>
+          {charts.map((key) => (
+            <TagRow key={key} tag={chartTag(key)} hint="в замещающий текст картинки" />
+          ))}
+        </div>
+      )}
+      {tree ? (
+        tree.map((n) => <NodeView key={n.id} node={n} depth={0} />)
       ) : (
         <Text color="secondary">
           Нет данных предпросмотра. Нажмите «Обновить данные» — запросы шаблона выполнятся с

@@ -14,7 +14,7 @@ const canonicalRow = (line: string) => {
 };
 
 describe('содержание справки', () => {
-  it('десять разделов в порядке §23.2 (+ §32, §34)', () => {
+  it('одиннадцать разделов в порядке §23.2 (+ §32, §34, §35)', () => {
     expect(HELP_SECTIONS.map((s) => [s.id, s.title])).toEqual([
       ['basics', 'Основы'],
       ['tables', 'Таблицы'],
@@ -24,6 +24,7 @@ describe('содержание справки', () => {
       ['totals', 'Итоги и группировка'],
       ['media', 'Изображения, штрихкоды, цвета, ссылки'],
       ['charts', 'Диаграммы'],
+      ['echarts', 'Графики ECharts'],
       ['html', 'HTML'],
       ['unavailable', 'Недоступно в бесплатной версии'],
     ]);
@@ -86,9 +87,12 @@ describe('содержание справки', () => {
       'media-image',
       'media-image-fit',
       'media-qrcode',
+      'echarts-builder',
+      'echarts-sql',
+      'echarts-size',
     ]);
     for (const [sid, e] of pictures) {
-      expect(sid, e.id).toBe('media');
+      expect(['media', 'echarts'], e.id).toContain(sid);
       expect(e.template, e.id).toMatch(/^\{d\.[^{}\n]+\}$/);
       expect(e.unavailable, e.id).toBeUndefined();
     }
@@ -108,14 +112,15 @@ describe('содержание справки', () => {
     }
   });
 
-  it('диаграммы: примеры — строки цикла [i] и [i+1]; chart остаётся недоступным с пояснением', () => {
+  it('диаграммы: примеры — строки цикла [i] и [i+1]; графики ECharts — :chart в картинке', () => {
     for (const e of HELP_SECTIONS.find((s) => s.id === 'charts')!.examples) {
       expect(e.template, e.id).toMatch(/\[i\]/);
       expect(e.template, e.id).toMatch(/\[i\+1\]/);
     }
-    const chart = examples.find((e) => e.id === 'na-chart')!;
-    expect(chart.unavailable).toBe(true);
-    expect(chart.note).toContain('«Диаграммы»');
+    for (const e of HELP_SECTIONS.find((s) => s.id === 'echarts')!.examples) {
+      expect(e.template, e.id).toMatch(/^\{d\.[^{}\n]+:chart\}$/);
+      expect(e.picture, e.id).toBe(true);
+    }
   });
 
   it('примеры, которые больше не «недоступны», убраны из последнего раздела', () => {
@@ -123,7 +128,14 @@ describe('содержание справки', () => {
       ...examples.map((e) => e.id),
       ...HELP_SECTIONS.flatMap((s) => (s.limits ?? []).map((l) => l.id)),
     ];
-    for (const gone of ['na-color', 'na-barcode', 'na-default-url', 'na-images', 'na-html']) {
+    for (const gone of [
+      'na-color',
+      'na-barcode',
+      'na-default-url',
+      'na-images',
+      'na-html',
+      'na-chart',
+    ]) {
       expect(ids).not.toContain(gone);
     }
   });

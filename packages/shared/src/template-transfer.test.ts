@@ -173,3 +173,70 @@ describe('ImportDecisions', () => {
     expect(ImportDecisions.safeParse([{ index: 0, action: 'skip', extra: 1 }]).success).toBe(false);
   });
 });
+
+describe('TransferTemplate: графики (§35.6)', () => {
+  const chart = (over: Record<string, unknown> = {}) => ({
+    key: 'sales',
+    sortOrder: 0,
+    config: { query: 'rows', type: 'bar', category: 'm', series: [{ column: 'v' }] },
+    ...over,
+  });
+  const manifest = (t: Partial<TransferTemplate>) => ({
+    format: 'carbone-reports/templates',
+    formatVersion: 1,
+    appVersion: '2.6.0',
+    exportedAt: '2026-10-14T09:00:00.000Z',
+    templates: [{ ...tpl(), ...t }],
+  });
+  const messages = (t: Record<string, unknown>) =>
+    (TransferManifest.safeParse(manifest(t as Partial<TransferTemplate>)).error?.issues ?? []).map(
+      (i) => i.message,
+    );
+  it('без charts — шаблон без графиков; с графиком — config с умолчаниями', () => {
+    expect(TransferManifest.parse(manifest({})).templates[0]!.charts).toBeUndefined();
+    const t = TransferManifest.parse(manifest({ charts: [chart()] } as never)).templates[0]!;
+    expect(t.charts![0]!.config).toMatchObject({ legend: 'bottom', splitBy: null });
+  });
+  it('config проверяется схемой; ключи уникальны; запрос — из архива и список; ключ charts занят', () => {
+    expect(
+      messages({
+        charts: [
+          chart({
+            config: {
+              query: 'rows',
+              type: 'pie',
+              category: 'm',
+              series: [{ column: 'a' }, { column: 'b' }],
+            },
+          }),
+        ],
+      }),
+    ).toContain('у круговой и кольцевой — ровно один ряд');
+    expect(messages({ charts: [chart(), chart()] })).toContain('ключ графика "sales" повторяется');
+    expect(
+      messages({
+        charts: [
+          chart({
+            config: { query: 'nope', type: 'bar', category: 'm', series: [{ column: 'v' }] },
+          }),
+        ],
+      }),
+    ).toContain('нет запроса "nope" в шаблоне архива');
+    expect(
+      messages({
+        queries: [{ key: 'rows', sql: 'select 1', mode: 'single', sortOrder: 0 }],
+        charts: [chart()],
+      }),
+    ).toContain('запрос "rows" должен возвращать список строк');
+    expect(
+      messages({
+        queries: [
+          { key: 'rows', sql: 'select 1', mode: 'list', sortOrder: 0 },
+          { key: 'charts', sql: 'select 1', mode: 'list', sortOrder: 1 },
+        ],
+        charts: [chart()],
+      }),
+    ).toContain('ключ charts занят графиками');
+    expect(messages({ charts: [chart({ extra: 1 })] }).length).toBeGreaterThan(0);
+  });
+});

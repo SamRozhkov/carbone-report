@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import {
+  ChartKey,
+  MAX_TEMPLATE_CHARTS,
+  TemplateChartConfig,
   outputFormatsFor,
   OutputFormat,
   QueryMode,
@@ -65,6 +68,14 @@ export const TransferParam = TemplateParamFields.extend({ sortOrder: SortOrder }
   .superRefine(refineTemplateParam);
 export type TransferParam = z.infer<typeof TransferParam>;
 
+/** График шаблона (§35.6): ключ, порядок и настройки конструктора без ключа. */
+export const TransferChart = z.strictObject({
+  key: ChartKey,
+  sortOrder: SortOrder,
+  config: TemplateChartConfig,
+});
+export type TransferChart = z.infer<typeof TransferChart>;
+
 const uniqueBy = <T>(items: T[], pick: (t: T) => string): string | null => {
   const seen = new Set<string>();
   for (const it of items) {
@@ -90,6 +101,7 @@ export const TransferTemplate = z
     datasource: TransferDatasource,
     queries: z.array(TransferQuery).max(1000),
     params: z.array(TransferParam).max(1000),
+    charts: z.array(TransferChart).max(MAX_TEMPLATE_CHARTS).optional(),
     /** Путь файла шаблона в архиве. */
     file: z.string().min(1).max(200),
     /** sha256 файла шаблона, hex в нижнем регистре. */
@@ -108,6 +120,21 @@ export const TransferTemplate = z
     if (dupKey !== null) issue(['queries'], `ключ запроса "${dupKey}" повторяется`);
     const dupParam = uniqueBy(t.params, (p) => p.name);
     if (dupParam !== null) issue(['params'], `параметр "${dupParam}" повторяется`);
+    const charts = t.charts ?? [];
+    const dupChart = uniqueBy(charts, (c) => c.key);
+    if (dupChart !== null) issue(['charts'], `ключ графика "${dupChart}" повторяется`);
+    charts.forEach((c, i) => {
+      const q = t.queries.find((x) => x.key === c.config.query);
+      if (!q)
+        issue(['charts', i, 'config', 'query'], `нет запроса "${c.config.query}" в шаблоне архива`);
+      else if (q.mode !== 'list')
+        issue(
+          ['charts', i, 'config', 'query'],
+          `запрос "${c.config.query}" должен возвращать список строк`,
+        );
+    });
+    if (charts.length > 0 && t.queries.some((q) => q.key === 'charts'))
+      issue(['queries'], 'ключ charts занят графиками');
   });
 export type TransferTemplate = z.infer<typeof TransferTemplate>;
 

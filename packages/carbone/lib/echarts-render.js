@@ -31,9 +31,13 @@ var TYPES = ['echarts@v5', 'echarts@v5a'];
 var DEFAULT_TYPE = 'echarts@v5';
 var SCALE = 2; // PNG в 2 раза больше логического размера: чёткость при печати
 var LARGE_SIDE = 2000; // сторона больше — масштаб 1: растр 8000×8000 слишком тяжёл
-// картинки в SVG — только data URI PNG, JPEG, GIF: иначе resvg читает файлы сервера (путь, file://, /dev/zero)
-var IMAGE_HREF = /(?:[A-Za-z_][\w.-]*:)?href\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
-var SAFE_IMAGE = /^data:image\/(?:png|jpeg|gif);base64,[A-Za-z0-9+\/=\s]*$/;
+// картинки — только data URI PNG, JPEG, GIF: иначе resvg читает файлы сервера (путь, file://, /dev/zero)
+var SAFE_IMAGE = /^(?:image:\/\/)?data:image\/(?:png|jpeg|gif);base64,[A-Za-z0-9+\/]+=*$/;
+var SAFE_HREF = /^data:image\/(?:png|jpeg|gif);base64,[A-Za-z0-9+\/]+=*$/;
+var IMAGE_PREFIX = /^\s*image:\/\//i;
+// атрибут href (с любым префиксом) в разметке тегов; слева — не часть другого имени
+var HREF_ATTR = /(?<![\w.:-])(?:[A-Za-z_][\w.-]*:)?href\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+var HREF_ANY = /href\s*=/i;
 var DEFAULT_SIZE = { width : 600, height : 400 }; // без width/height и без рамки (R3)
 var NUMBER_PREFIX = 'cr:number:';
 var NBSP = ' ';
@@ -50,7 +54,8 @@ var MSG = {
   tooBig    : 'описание графика больше 1 МБ',
   series    : 'в графике больше 20 рядов',
   points    : 'в графике больше 10 000 точек',
-  slow      : 'график рисуется дольше 5 с'
+  slow      : 'график рисуется дольше 5 с',
+  image     : 'график: картинки в описании — только data:image/png|jpeg|gif;base64'
 };
 
 function badType (type) {
@@ -202,6 +207,8 @@ function parse (value) {
   if (countPoints(_chart.option, _series) > LIMITS.points) {
     throw new Error(MSG.points);
   }
+  checkImages(_chart.option);
+  checkImages(_chart.theme);
   return _chart;
 }
 
@@ -323,14 +330,47 @@ function sizeOf (chart, frame) {
 }
 
 /**
- * Убирает из SVG атрибуты href и xlink:href (с любым префиксом, в любых кавычках), кроме data URI PNG, JPEG, GIF.
- * ECharts не экранирует кавычки в адресе картинки, поэтому проверяется весь текст SVG, а не только атрибуты <image>
+ * Картинки в описании и теме: строки «image://…» и значения ключей image — только data URI PNG, JPEG, GIF,
+ * иначе ошибка (не исправление). Обход без рекурсии: группы graphic вкладываются на любую глубину
  */
-function stripExternalImages (svg) {
-  return svg.replace(IMAGE_HREF, function (attr, double, single) {
-    var _value = double !== undefined ? double : single;
-    return SAFE_IMAGE.test(_value) === true ? attr : '';
+function checkImages (root) {
+  var _stack = [root];
+  var _seen = new Set();
+  while (_stack.length > 0) {
+    var _value = _stack.pop();
+    if (_value === null || typeof _value !== 'object' || _seen.has(_value) === true) {
+      if (typeof _value === 'string' && IMAGE_PREFIX.test(_value) === true && SAFE_IMAGE.test(_value) === false) {
+        throw new Error(MSG.image);
+      }
+      continue;
+    }
+    _seen.add(_value);
+    var _keys = Object.keys(_value);
+    for (var i = 0; i < _keys.length; i++) {
+      var _item = _value[_keys[i]];
+      if (_keys[i] === 'image' && Array.isArray(_value) === false && (typeof _item !== 'string' || SAFE_IMAGE.test(_item) === false)) {
+        throw new Error(MSG.image);
+      }
+      _stack.push(_item);
+    }
+  }
+}
+
+/**
+ * Вторая линия после SSR: в разметке тегов (текст узлов ECharts экранирует) каждый href — data URI PNG, JPEG, GIF,
+ * и других «href=» нет; иначе ошибка
+ */
+function checkSvgImages (svg) {
+  var _markup = svg.replace(/>[^<]*</g, '><');
+  var _rest = _markup.replace(HREF_ATTR, function (attr, double, single) {
+    if (SAFE_HREF.test(double !== undefined ? double : single) === false) {
+      throw new Error(MSG.image);
+    }
+    return '';
   });
+  if (HREF_ANY.test(_rest) === true) {
+    throw new Error(MSG.image);
+  }
 }
 
 function scaleOf (size) {
@@ -345,7 +385,7 @@ function checkTime (started) {
 
 /**
  * PNG графика: ECharts 5 SSR (SVG, без анимации) → resvg-js (масштаб 2, сторона больше 2000 px — 1; только Noto Sans;
- * внешние картинки убраны)
+ * картинки — только data URI, проверены в parse и в SVG)
  * @param  {Object}      chart  результат parse (не null)
  * @param  {Object|null} frame  рамка заглушки { width, height } в px при 96 dpi
  * @return {Object} { buffer, width, height } — размеры PNG в px
@@ -370,11 +410,12 @@ function render (chart, frame) {
     }
   }
   checkTime(_started);
+  checkSvgImages(_svg);
   var _scale = scaleOf(_size);
   var _png;
   try {
     var _Resvg = ResvgClass();
-    _png = new _Resvg(stripExternalImages(_svg), { fitTo : { mode : 'zoom', value : _scale }, font : FONT_OPTIONS }).render().asPng();
+    _png = new _Resvg(_svg, { fitTo : { mode : 'zoom', value : _scale }, font : FONT_OPTIONS }).render().asPng();
   }
   catch (e) {
     throw new Error('график: ' + reason(e));

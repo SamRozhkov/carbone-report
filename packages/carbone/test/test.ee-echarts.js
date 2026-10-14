@@ -152,11 +152,12 @@ describe('echarts: отрисовка (§35.2)', function () {
     assert.ok(echartsRender.render(echartsRender.parse({ theme: { color: ['#ff0000'], backgroundColor: '#eeeeee' }, option: BAR }), null).buffer.length > 0);
     assert.strictEqual({}.polluted, undefined);
   });
-  describe('картинки в описании: только data URI PNG, JPEG, GIF — файлы сервера не читаются', function () {
+  describe('картинки в описании: только data URI PNG, JPEG, GIF, иначе ошибка — файлы сервера не читаются', function () {
     const fs = require('fs');
     const os = require('os');
     const path = require('path');
     const { Resvg } = require('@resvg/resvg-js');
+    const IMAGE_ERROR = 'график: картинки в описании — только data:image/png|jpeg|gif;base64';
     let dir;
     let file;
     let dataUri;
@@ -170,40 +171,59 @@ describe('echarts: отрисовка (§35.2)', function () {
     after(function () {
       fs.rmSync(dir, { recursive: true, force: true });
     });
-    const missing = () => path.join(dir, 'missing.png');
-    const draw = (option) => echartsRender.render(echartsRender.parse({ option }), { width: 200, height: 200 }).buffer;
+    const FRAME = { width: 200, height: 200 };
+    const draw = (option) => echartsRender.render(echartsRender.parse({ option }), FRAME).buffer;
+    const error = (value) => renderError(value, FRAME);
     const graphic = (image) => ({ series: [], graphic: [{ type: 'image', left: 0, top: 0, style: { image, width: 200, height: 200 } }] });
     const symbol = (image) => ({ xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: {}, series: [{ type: 'line', symbol: 'image://' + image, symbolSize: 80, data: [1, 2] }] });
     const background = (image) => ({ series: [], backgroundColor: { image, repeat: 'repeat', imageWidth: 20, imageHeight: 20 } });
+    const barPattern = (image) => ({ xAxis: { type: 'category', data: ['a'] }, yAxis: {}, series: [{ type: 'bar', data: [1], itemStyle: { color: { image, repeat: 'repeat', imageWidth: 20, imageHeight: 20 } } }] });
+    // обход регулярки без левой границы: удаление href="x" и href="y" склеивало href="<путь>"
+    const bypass = (target) => ['x" hrhref="y"ef="' + target, 'x" xlink:hrhref="y"ef="' + target, 'x" xlink:href="' + target];
 
-    it('data URI PNG рисуется (контроль)', function () {
-      assert.ok(!draw(graphic(dataUri)).equals(draw(graphic(missing()))));
-      assert.ok(!draw(symbol(dataUri)).equals(draw(symbol(missing()))));
+    it('data URI PNG рисуется в graphic, symbol и узоре', function () {
+      const blank = draw({ series: [] });
+      assert.ok(!draw(graphic(dataUri)).equals(blank));
+      assert.ok(!draw(symbol(dataUri)).equals(draw({ xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: {}, series: [{ type: 'line', symbol: 'none', data: [1, 2] }] })));
+      assert.ok(!draw(background(dataUri)).equals(blank));
+      assert.ok(draw(barPattern(dataUri)).length > 0);
     });
-    it('graphic image: путь к файлу сервера не читается', function () {
-      assert.ok(draw(graphic(file)).equals(draw(graphic(missing()))));
-      assert.ok(draw(graphic('file://' + file)).equals(draw(graphic(missing()))));
-    });
-    it('symbol image://путь не читается', function () {
-      assert.ok(draw(symbol(file)).equals(draw(symbol(missing()))));
-    });
-    it('фон-узор (pattern) с путём не читается', function () {
-      assert.ok(draw(background(file)).equals(draw(background(missing()))));
-    });
-    it('data:image/svg+xml и подстановка атрибута в кавычках не проходят', function () {
-      const svg = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#ff0000"/></svg>').toString('base64');
-      assert.ok(draw(graphic(svg)).equals(draw(graphic(missing()))));
-      // ECharts не экранирует кавычки в href: второй атрибут xlink:href с путём
-      assert.ok(draw(graphic('x" xlink:href="' + file)).equals(draw(graphic('x" xlink:href="' + missing()))));
-      assert.ok(draw(graphic('x" xlink:href = \'' + file + '\' y="')).equals(draw(graphic('x" xlink:href = \'' + missing() + '\' y="'))));
-    });
-    it('/dev/zero не читается (быстро, без исчерпания памяти)', function () {
-      if (process.platform === 'win32') {
-        this.skip();
+    it('путь, file://, https, data:image/svg+xml — ошибка шаблона', function () {
+      const svg = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64');
+      for (const image of [file, 'file://' + file, 'https://example.com/a.png', svg, dataUri + '"', ' ' + dataUri]) {
+        for (const build of [graphic, symbol, background, barPattern]) {
+          assert.strictEqual(error({ option: build(image) }), IMAGE_ERROR, build.name + ' ' + image.slice(0, 40));
+        }
       }
+    });
+    it('подстановка кавычек (hrhref, xlink:hrhref, xlink:href) — ошибка в graphic, symbol и узоре', function () {
+      for (const image of bypass(file)) {
+        for (const build of [graphic, symbol, background, barPattern]) {
+          assert.strictEqual(error({ option: build(image) }), IMAGE_ERROR, build.name + ' ' + image);
+        }
+      }
+    });
+    it('/dev/zero через подстановку — ошибка сразу, файл не читается', function () {
       const started = Date.now();
-      assert.ok(draw(graphic('/dev/zero')).equals(draw(graphic(missing()))));
+      for (const image of bypass('/dev/zero')) {
+        assert.strictEqual(error({ option: graphic(image) }), IMAGE_ERROR);
+        assert.strictEqual(error({ option: symbol(image) }), IMAGE_ERROR);
+      }
       assert.ok(Date.now() - started < 3000);
+    });
+    it('image не строка, глубоко во вложенных группах graphic и в теме — ошибка', function () {
+      assert.strictEqual(error({ option: graphic({ src: file }) }), IMAGE_ERROR);
+      let group = { type: 'image', style: { image: file, width: 10, height: 10 } };
+      for (let i = 0; i < 200; i++) {
+        group = { type: 'group', children: [group] };
+      }
+      assert.strictEqual(error({ option: { series: [], graphic: [group] } }), IMAGE_ERROR);
+      assert.strictEqual(error({ theme: { backgroundColor: { image: file, imageWidth: 20, imageHeight: 20 } }, option: BAR }), IMAGE_ERROR);
+      assert.strictEqual(error({ option: Object.assign({}, BAR, { series: [{ type: 'bar', data: [{ value: 1, symbol: 'IMAGE://' + file }] }] }) }), IMAGE_ERROR);
+    });
+    it('слово href= в подписях — не ошибка (текст экранируется)', function () {
+      const option = Object.assign({}, BAR, { title: { text: 'a href="x" href=\'y\' href = z' }, graphic: [{ type: 'text', style: { text: 'xlink:href="/etc/passwd"' } }] });
+      assert.ok(draw(option).length > 0);
     });
   });
   it('buildOption: animation false, белый фон и Noto Sans по умолчанию; свои значения и тема не перекрываются', function () {

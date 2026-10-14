@@ -3,7 +3,7 @@
 //
 // Значение метки — { type?, width?, height?, theme?, option } или голое описание ECharts с series (удобно для SQL);
 // строка разбирается как JSON. parse проверяет значение и лимиты, render рисует ECharts 5 в режиме SSR (SVG) и
-// переводит SVG в PNG (resvg-js, масштаб 2) шрифтом Noto Sans из assets/fonts — шрифты сервера не используются.
+// переводит SVG в PNG (resvg-js, масштаб 2; сторона больше 2000 px — масштаб 1) шрифтом Noto Sans из assets/fonts — шрифты сервера не используются.
 // Ошибки — Error с текстом без метки: lib/media.js дописывает Source.
 //
 // Формат чисел конструктора (§35.4, решение R4 плана 2.6.0): в JSON нет функций, поэтому formatter/valueFormatter
@@ -30,6 +30,10 @@ var FONT_OPTIONS = {
 var TYPES = ['echarts@v5', 'echarts@v5a'];
 var DEFAULT_TYPE = 'echarts@v5';
 var SCALE = 2; // PNG в 2 раза больше логического размера: чёткость при печати
+var LARGE_SIDE = 2000; // сторона больше — масштаб 1: растр 8000×8000 слишком тяжёл
+// картинки в SVG — только data URI PNG, JPEG, GIF: иначе resvg читает файлы сервера (путь, file://, /dev/zero)
+var IMAGE_HREF = /(?:[A-Za-z_][\w.-]*:)?href\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+var SAFE_IMAGE = /^data:image\/(?:png|jpeg|gif);base64,[A-Za-z0-9+\/=\s]*$/;
 var DEFAULT_SIZE = { width : 600, height : 400 }; // без width/height и без рамки (R3)
 var NUMBER_PREFIX = 'cr:number:';
 var NBSP = ' ';
@@ -318,6 +322,21 @@ function sizeOf (chart, frame) {
   };
 }
 
+/**
+ * Убирает из SVG атрибуты href и xlink:href (с любым префиксом, в любых кавычках), кроме data URI PNG, JPEG, GIF.
+ * ECharts не экранирует кавычки в адресе картинки, поэтому проверяется весь текст SVG, а не только атрибуты <image>
+ */
+function stripExternalImages (svg) {
+  return svg.replace(IMAGE_HREF, function (attr, double, single) {
+    var _value = double !== undefined ? double : single;
+    return SAFE_IMAGE.test(_value) === true ? attr : '';
+  });
+}
+
+function scaleOf (size) {
+  return Math.max(size.width, size.height) > LARGE_SIDE ? 1 : SCALE;
+}
+
 function checkTime (started) {
   if (Date.now() - started > LIMITS.ms) {
     throw new Error(MSG.slow);
@@ -325,7 +344,8 @@ function checkTime (started) {
 }
 
 /**
- * PNG графика: ECharts 5 SSR (SVG, без анимации) → resvg-js (масштаб 2, только Noto Sans)
+ * PNG графика: ECharts 5 SSR (SVG, без анимации) → resvg-js (масштаб 2, сторона больше 2000 px — 1; только Noto Sans;
+ * внешние картинки убраны)
  * @param  {Object}      chart  результат parse (не null)
  * @param  {Object|null} frame  рамка заглушки { width, height } в px при 96 dpi
  * @return {Object} { buffer, width, height } — размеры PNG в px
@@ -350,16 +370,17 @@ function render (chart, frame) {
     }
   }
   checkTime(_started);
+  var _scale = scaleOf(_size);
   var _png;
   try {
     var _Resvg = ResvgClass();
-    _png = new _Resvg(_svg, { fitTo : { mode : 'zoom', value : SCALE }, font : FONT_OPTIONS }).render().asPng();
+    _png = new _Resvg(stripExternalImages(_svg), { fitTo : { mode : 'zoom', value : _scale }, font : FONT_OPTIONS }).render().asPng();
   }
   catch (e) {
     throw new Error('график: ' + reason(e));
   }
   checkTime(_started);
-  return { buffer : _png, width : _size.width * SCALE, height : _size.height * SCALE };
+  return { buffer : _png, width : _size.width * _scale, height : _size.height * _scale };
 }
 
 module.exports = {

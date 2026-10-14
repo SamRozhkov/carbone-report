@@ -90,9 +90,19 @@ describe('echarts: отрисовка (§35.2)', function () {
     assert.deepStrictEqual(pngSize(b.buffer), { width: 1600, height: 800 });
     const c = echartsRender.render(echartsRender.parse({ option: BAR }), null);
     assert.deepStrictEqual(pngSize(c.buffer), { width: 1200, height: 800 });
-    // рамка меньше 100 px или больше 4000 px зажимается (R3)
+    // рамка меньше 100 px или больше 4000 px зажимается (R3); сторона больше 2000 px — масштаб 1
     const d = echartsRender.render(echartsRender.parse({ option: BAR }), { width: 10, height: 5000 });
-    assert.deepStrictEqual(pngSize(d.buffer), { width: 200, height: 8000 });
+    assert.deepStrictEqual(pngSize(d.buffer), { width: 100, height: 4000 });
+  });
+  it('сторона больше 2000 px — масштаб 1, до 2000 px включительно — масштаб 2', function () {
+    const draw = (width, height) => echartsRender.render(echartsRender.parse({ width, height, option: BAR }), null);
+    const a = draw(2000, 100);
+    assert.deepStrictEqual([a.width, a.height], [4000, 200]);
+    assert.deepStrictEqual(pngSize(a.buffer), { width: 4000, height: 200 });
+    const b = draw(2001, 100);
+    assert.deepStrictEqual([b.width, b.height], [2001, 100]);
+    assert.deepStrictEqual(pngSize(b.buffer), { width: 2001, height: 100 });
+    assert.deepStrictEqual(pngSize(draw(100, 4000).buffer), { width: 100, height: 4000 });
   });
   it('нечисловая рамка (NaN, нет поля, Infinity) — размер по умолчанию 600×400 (R3)', function () {
     for (const frame of [{ width: NaN, height: NaN }, {}, { width: Infinity, height: -Infinity }, { width: '300', height: null }]) {
@@ -141,6 +151,60 @@ describe('echarts: отрисовка (§35.2)', function () {
     assert.ok(echartsRender.render(echartsRender.parse({ theme: 'dark', option: BAR }), null).buffer.length > 0);
     assert.ok(echartsRender.render(echartsRender.parse({ theme: { color: ['#ff0000'], backgroundColor: '#eeeeee' }, option: BAR }), null).buffer.length > 0);
     assert.strictEqual({}.polluted, undefined);
+  });
+  describe('картинки в описании: только data URI PNG, JPEG, GIF — файлы сервера не читаются', function () {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const { Resvg } = require('@resvg/resvg-js');
+    let dir;
+    let file;
+    let dataUri;
+    before(function () {
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cr-echarts-'));
+      file = path.join(dir, 'red.png');
+      const png = new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#ff0000"/></svg>').render().asPng();
+      fs.writeFileSync(file, png);
+      dataUri = 'data:image/png;base64,' + png.toString('base64');
+    });
+    after(function () {
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
+    const missing = () => path.join(dir, 'missing.png');
+    const draw = (option) => echartsRender.render(echartsRender.parse({ option }), { width: 200, height: 200 }).buffer;
+    const graphic = (image) => ({ series: [], graphic: [{ type: 'image', left: 0, top: 0, style: { image, width: 200, height: 200 } }] });
+    const symbol = (image) => ({ xAxis: { type: 'category', data: ['a', 'b'] }, yAxis: {}, series: [{ type: 'line', symbol: 'image://' + image, symbolSize: 80, data: [1, 2] }] });
+    const background = (image) => ({ series: [], backgroundColor: { image, repeat: 'repeat', imageWidth: 20, imageHeight: 20 } });
+
+    it('data URI PNG рисуется (контроль)', function () {
+      assert.ok(!draw(graphic(dataUri)).equals(draw(graphic(missing()))));
+      assert.ok(!draw(symbol(dataUri)).equals(draw(symbol(missing()))));
+    });
+    it('graphic image: путь к файлу сервера не читается', function () {
+      assert.ok(draw(graphic(file)).equals(draw(graphic(missing()))));
+      assert.ok(draw(graphic('file://' + file)).equals(draw(graphic(missing()))));
+    });
+    it('symbol image://путь не читается', function () {
+      assert.ok(draw(symbol(file)).equals(draw(symbol(missing()))));
+    });
+    it('фон-узор (pattern) с путём не читается', function () {
+      assert.ok(draw(background(file)).equals(draw(background(missing()))));
+    });
+    it('data:image/svg+xml и подстановка атрибута в кавычках не проходят', function () {
+      const svg = 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#ff0000"/></svg>').toString('base64');
+      assert.ok(draw(graphic(svg)).equals(draw(graphic(missing()))));
+      // ECharts не экранирует кавычки в href: второй атрибут xlink:href с путём
+      assert.ok(draw(graphic('x" xlink:href="' + file)).equals(draw(graphic('x" xlink:href="' + missing()))));
+      assert.ok(draw(graphic('x" xlink:href = \'' + file + '\' y="')).equals(draw(graphic('x" xlink:href = \'' + missing() + '\' y="'))));
+    });
+    it('/dev/zero не читается (быстро, без исчерпания памяти)', function () {
+      if (process.platform === 'win32') {
+        this.skip();
+      }
+      const started = Date.now();
+      assert.ok(draw(graphic('/dev/zero')).equals(draw(graphic(missing()))));
+      assert.ok(Date.now() - started < 3000);
+    });
   });
   it('buildOption: animation false, белый фон и Noto Sans по умолчанию; свои значения и тема не перекрываются', function () {
     const plain = echartsRender.buildOption(echartsRender.parse({ option: Object.assign({ animation: true }, BAR) }));

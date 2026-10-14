@@ -1,5 +1,6 @@
 import {
   buildChartOption,
+  chartLimitError,
   type ChartSeries,
   type ChartType,
   type ChartValue,
@@ -272,7 +273,11 @@ export function ChartsTab({ template, testParams }: TabProps) {
     if (!c.category || c.series.some((s) => !s.column))
       return { value: null, error: 'Выберите колонку подписей и колонки рядов' };
     try {
-      return { value: buildChartOption(c, result.rows), error: null };
+      const value = buildChartOption(c, result.rows);
+      // график, который движок отклонит (1 МБ, 20 рядов, 10 000 точек), не показываем
+      const limit = chartLimitError(value);
+      if (limit) return { value: null, error: `Отчёт с этим графиком не соберётся: ${limit}` };
+      return { value, error: null };
     } catch (e) {
       return { value: null, error: e instanceof Error ? e.message : String(e) };
     }

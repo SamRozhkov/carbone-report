@@ -70,6 +70,17 @@ describe('ChartsTab', () => {
     );
   });
 
+  it('график сверх лимитов движка — предупреждение вместо предпросмотра', async () => {
+    const rows = Array.from({ length: 10001 }, (_, i) => ({ month: `m${i}`, total: i }));
+    mockApi([{ ...RUN, body: { ...RUN.body, rows } }]);
+    renderWithProviders(<ChartsTab {...props} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Выполнить запрос' }));
+    expect(
+      await screen.findByText('Отчёт с этим графиком не соберётся: в графике больше 10 000 точек'),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('chart-option')).not.toBeInTheDocument();
+  });
+
   it('сохранённой колонки нет в результате — пометка', async () => {
     mockApi([RUN]);
     renderWithProviders(

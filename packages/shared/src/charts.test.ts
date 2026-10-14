@@ -3,6 +3,7 @@ import {
   buildChartOption,
   ChartDataError,
   chartLabel,
+  chartLimitError,
   chartNumberFormatter,
   chartValue,
   formatChartNumber,
@@ -368,5 +369,54 @@ describe('формат чисел (R4; те же примеры — packages/car
     expect(out.title.formatter).toBe('{b}');
     expect(out.x).toBeUndefined();
     expect(typeof option.yAxis.axisLabel.formatter).toBe('string');
+  });
+});
+
+describe('chartLimitError: лимиты движка (§35.2, R9; тексты — packages/carbone/lib/echarts-render.js)', () => {
+  const value = (option: Record<string, unknown>) => ({ type: 'echarts@v5' as const, option });
+  const series = (n: number, points: number) =>
+    Array.from({ length: n }, () => ({
+      type: 'line',
+      data: Array.from({ length: points }, (_, i) => i),
+    }));
+  it('в пределах лимитов — null', () => {
+    expect(chartLimitError(buildChartOption(base(), ROWS))).toBeNull();
+    expect(chartLimitError(value({ series: series(20, 500) }))).toBeNull();
+    expect(chartLimitError(value({ series: { type: 'bar', data: [1] } }))).toBeNull();
+  });
+  it('больше 20 рядов', () => {
+    expect(chartLimitError(value({ series: series(21, 1) }))).toBe('в графике больше 20 рядов');
+  });
+  it('больше 10 000 точек: series.data и dataset.source (массив и объект колонок)', () => {
+    expect(chartLimitError(value({ series: series(2, 5001) }))).toBe(
+      'в графике больше 10 000 точек',
+    );
+    expect(
+      chartLimitError(
+        value({
+          dataset: { source: Array.from({ length: 10001 }, (_, i) => [i]) },
+          series: [{ type: 'bar' }],
+        }),
+      ),
+    ).toBe('в графике больше 10 000 точек');
+    expect(
+      chartLimitError(
+        value({
+          dataset: [{ source: { x: Array(6000).fill(1), y: Array(5000).fill(1) } }],
+          series: { type: 'bar' },
+        }),
+      ),
+    ).toBe('в графике больше 10 000 точек');
+    expect(chartLimitError(value({ series: series(1, 10000) }))).toBeNull();
+  });
+  it('описание больше 1 МБ (байты UTF-8)', () => {
+    expect(chartLimitError(value({ series: [], pad: 'я'.repeat(600000) }))).toBe(
+      'описание графика больше 1 МБ',
+    );
+    expect(chartLimitError(value({ series: [], pad: 'x'.repeat(1024 * 1000) }))).toBeNull();
+  });
+  it('график конструктора по 10 001 строке — ошибка точек', () => {
+    const rows = Array.from({ length: 10001 }, (_, i) => ({ month: `m${i}`, total: i }));
+    expect(chartLimitError(buildChartOption(base(), rows))).toBe('в графике больше 10 000 точек');
   });
 });

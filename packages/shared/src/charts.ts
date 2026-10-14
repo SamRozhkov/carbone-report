@@ -447,3 +447,45 @@ export function buildChartOption(chart: TemplateChart, rows: readonly unknown[])
   }
   return { type: 'echarts@v5', option };
 }
+
+// ---- Лимиты движка (§35.2) ----
+
+const LIMIT_BYTES = 1024 * 1024;
+const LIMIT_POINTS = 10000;
+const LIMIT_SERIES = 20;
+
+/** Точки по R9: длины series[].data и строки dataset.source (массив — длина, объект колонок — сумма длин). */
+function countChartPoints(option: Record<string, unknown>, series: unknown[]): number {
+  let points = 0;
+  for (const s of series) if (isRecord(s) && Array.isArray(s.data)) points += s.data.length;
+  const datasets = Array.isArray(option.dataset)
+    ? option.dataset
+    : isRecord(option.dataset)
+      ? [option.dataset]
+      : [];
+  for (const d of datasets) {
+    if (!isRecord(d)) continue;
+    if (Array.isArray(d.source)) points += d.source.length;
+    else if (isRecord(d.source))
+      for (const col of Object.values(d.source)) if (Array.isArray(col)) points += col.length;
+  }
+  return points;
+}
+
+/**
+ * Ошибка, которую даст движок отчёта (packages/carbone/lib/echarts-render.js, parse) для этого описания, или null:
+ * описание больше 1 МБ, больше 20 рядов, больше 10 000 точек. Тексты совпадают с движком.
+ */
+export function chartLimitError(value: ChartValue): string | null {
+  if (new TextEncoder().encode(JSON.stringify(value)).length > LIMIT_BYTES)
+    return 'описание графика больше 1 МБ';
+  const { option } = value;
+  const series = Array.isArray(option.series)
+    ? option.series
+    : isRecord(option.series)
+      ? [option.series]
+      : [];
+  if (series.length > LIMIT_SERIES) return 'в графике больше 20 рядов';
+  if (countChartPoints(option, series) > LIMIT_POINTS) return 'в графике больше 10 000 точек';
+  return null;
+}

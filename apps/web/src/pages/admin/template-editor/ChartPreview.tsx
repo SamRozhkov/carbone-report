@@ -15,12 +15,13 @@ export function ChartPreview({ value }: { value: ChartValue }) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!ref.current) return;
-    const chart = echarts.init(ref.current, null, {
-      renderer: 'svg',
-      width: WIDTH,
-      height: HEIGHT,
-    });
+    let chart: echarts.ECharts | null = null;
     try {
+      chart = echarts.init(ref.current, null, {
+        renderer: 'svg',
+        width: WIDTH,
+        height: HEIGHT,
+      });
       chart.setOption({
         backgroundColor: '#ffffff',
         textStyle: { fontFamily: '"Noto Sans", sans-serif' },
@@ -31,7 +32,7 @@ export function ChartPreview({ value }: { value: ChartValue }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-    return () => chart.dispose();
+    return () => chart?.dispose();
   }, [value]);
   return (
     <div className="cr-stack">

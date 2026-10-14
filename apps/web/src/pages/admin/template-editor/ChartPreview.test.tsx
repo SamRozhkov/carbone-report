@@ -48,4 +48,11 @@ describe('ChartPreview', () => {
     render(<ChartPreview value={{ type: 'echarts@v5', option: {} }} />);
     expect(await screen.findByText('Ошибка ECharts: xAxis "0" not found')).toBeInTheDocument();
   });
+  it('ошибка echarts.init — тот же текст под графиком', async () => {
+    init.mockImplementationOnce(() => {
+      throw new Error('Renderer svg not exists');
+    });
+    render(<ChartPreview value={{ type: 'echarts@v5', option: {} }} />);
+    expect(await screen.findByText('Ошибка ECharts: Renderer svg not exists')).toBeInTheDocument();
+  });
 });

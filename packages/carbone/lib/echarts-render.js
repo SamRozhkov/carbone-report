@@ -33,8 +33,13 @@ var DEFAULT_TYPE = 'echarts@v5';
 var SCALE = 2; // PNG в 2 раза больше логического размера: чёткость при печати
 var LARGE_SIDE = 2000; // сторона больше — масштаб 1: растр 8000×8000 слишком тяжёл
 // картинки — только data URI PNG, JPEG, GIF: иначе resvg читает файлы сервера (путь, file://, /dev/zero)
-var SAFE_IMAGE = /^(?:image:\/\/)?data:image\/(?:png|jpeg|gif);base64,[A-Za-z0-9+\/]+=*$/;
-var SAFE_HREF = /^data:image\/(?:png|jpeg|gif);base64,[A-Za-z0-9+\/]+=*$/;
+var DATA_IMAGE = /^data:image\/(png|jpeg|gif);base64,([A-Za-z0-9+\/]+=*)$/;
+// тип в data URI должен совпадать с содержимым: иначе resvg мог бы распознать внутри, например, SVG
+var IMAGE_SIGNATURES = {
+  png  : [Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])],
+  jpeg : [Buffer.from([0xFF, 0xD8, 0xFF])],
+  gif  : [Buffer.from('GIF87a'), Buffer.from('GIF89a')]
+};
 var IMAGE_PREFIX = /^\s*image:\/\//i;
 // SVG от ECharts SSR (5.6.0) перед resvg: разбор, проверка, своя запись. ECharts не экранирует кавычки и < > в
 // значениях атрибутов (цвет, шрифт, адрес картинки), поэтому строка SSR не передаётся в resvg как есть
@@ -338,6 +343,23 @@ function sizeOf (chart, frame) {
   };
 }
 
+/** data URI картинки PNG, JPEG или GIF, у которой начало содержимого совпадает с заявленным типом */
+function isSafeDataImage (value) {
+  var _match = typeof value === 'string' ? DATA_IMAGE.exec(value) : null;
+  if (_match === null) {
+    return false;
+  }
+  var _head = Buffer.from(_match[2].slice(0, 16), 'base64');
+  return IMAGE_SIGNATURES[_match[1]].some(function (signature) {
+    return _head.subarray(0, signature.length).equals(signature);
+  });
+}
+
+/** Картинка в описании: data URI или «image://» + data URI */
+function isSafeImage (value) {
+  return typeof value === 'string' && isSafeDataImage(value.indexOf('image://') === 0 ? value.slice(8) : value);
+}
+
 /**
  * Картинки в описании и теме: строки «image://…» и значения ключей image — только data URI PNG, JPEG, GIF,
  * иначе ошибка (не исправление). Обход без рекурсии: группы graphic вкладываются на любую глубину
@@ -348,7 +370,7 @@ function checkImages (root) {
   while (_stack.length > 0) {
     var _value = _stack.pop();
     if (_value === null || typeof _value !== 'object' || _seen.has(_value) === true) {
-      if (typeof _value === 'string' && IMAGE_PREFIX.test(_value) === true && SAFE_IMAGE.test(_value) === false) {
+      if (typeof _value === 'string' && IMAGE_PREFIX.test(_value) === true && isSafeImage(_value) === false) {
         throw new Error(MSG.image);
       }
       continue;
@@ -357,7 +379,7 @@ function checkImages (root) {
     var _keys = Object.keys(_value);
     for (var i = 0; i < _keys.length; i++) {
       var _item = _value[_keys[i]];
-      if (_keys[i] === 'image' && Array.isArray(_value) === false && (typeof _item !== 'string' || SAFE_IMAGE.test(_item) === false)) {
+      if (_keys[i] === 'image' && Array.isArray(_value) === false && isSafeImage(_item) === false) {
         throw new Error(MSG.image);
       }
       _stack.push(_item);
@@ -373,7 +395,7 @@ function escapeXml (text) {
   });
 }
 
-/** Атрибуты элемента: имя, xmlns только у корня, href — data URI картинки, url() — только url(#id), без «\» */
+/** Атрибуты элемента: имя, xmlns только у корня, href — data URI картинки, нет xml:* (кроме xml:space) и src, url() — только url(#id), без «\» */
 function svgAttributes (node, isRoot) {
   var _out = '';
   Object.keys(node.attribs).forEach(function (name) {
@@ -386,7 +408,12 @@ function svgAttributes (node, isRoot) {
         throw new Error(MSG.svg);
       }
     }
-    if (name.slice(name.lastIndexOf(':') + 1).toLowerCase() === 'href' && SAFE_HREF.test(_value) === false) {
+    var _local = name.slice(name.lastIndexOf(':') + 1).toLowerCase();
+    // xml:base меняет базу адресов, src — второй путь к ресурсу; xml:space ECharts пишет в <text>
+    if ((name.toLowerCase().indexOf('xml:') === 0 && name !== 'xml:space') || _local === 'src') {
+      throw new Error(MSG.svg);
+    }
+    if (_local === 'href' && isSafeDataImage(_value) === false) {
       throw new Error(MSG.image);
     }
     if (/url/i.test(_value) === true && /url\s*\(/i.test(_value.replace(LOCAL_URL, '')) === true) {

@@ -221,6 +221,26 @@ describe('echarts: отрисовка (§35.2)', function () {
       assert.strictEqual(error({ theme: { backgroundColor: { image: file, imageWidth: 20, imageHeight: 20 } }, option: BAR }), IMAGE_ERROR);
       assert.strictEqual(error({ option: Object.assign({}, BAR, { series: [{ type: 'bar', data: [{ value: 1, symbol: 'IMAGE://' + file }] }] }) }), IMAGE_ERROR);
     });
+    it('тип data URI совпадает с содержимым: PNG, JPEG, GIF рисуются, подмена — ошибка', function () {
+      const blank = draw({ series: [] });
+      const jpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAACKADAAQAAAABAAAACAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgACAAIAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMADw8PDw8PGg8PGiQaGhokMSQkJCQxPjExMTExPks+Pj4+Pj5LS0tLS0tLS1paWlpaWmlpaWlpdnZ2dnZ2dnZ2dv/bAEMBEhMTHhweNBwcNHtURVR7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e3t7e//dAAQAAf/aAAwDAQACEQMRAD8Aw6KKK8w+4P/Z';
+      const gif = 'data:image/gif;base64,R0lGODlhAQABAIAAAP8AAP///yH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
+      for (const image of [dataUri, jpeg, gif]) {
+        assert.ok(!draw(graphic(image)).equals(blank), image.slice(0, 30));
+      }
+      // SVG под видом PNG со ссылкой на файл сервера; PNG под видом GIF; JPEG под видом PNG
+      const nested = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><image href="' + file + '" width="20" height="20"/></svg>';
+      for (const image of [
+        'data:image/png;base64,' + Buffer.from(nested).toString('base64'),
+        'data:image/gif;base64,' + dataUri.slice('data:image/png;base64,'.length),
+        'data:image/png;base64,' + jpeg.slice('data:image/jpeg;base64,'.length),
+        'data:image/png;base64,iVBO'
+      ]) {
+        for (const build of [graphic, symbol, background]) {
+          assert.strictEqual(error({ option: build(image) }), IMAGE_ERROR, build.name + ' ' + image.slice(0, 40));
+        }
+      }
+    });
     describe('разметка из строк описания (ECharts не экранирует кавычки и < > в атрибутах)', function () {
       const SVG_ERROR = 'график: недопустимое содержимое SVG';
       const bar = (extra, item) => Object.assign({ xAxis: { type: 'category', data: ['a'] }, yAxis: {}, series: [Object.assign({ type: 'bar', data: [1], label: { show: true } }, item)] }, extra);
@@ -247,7 +267,11 @@ describe('echarts: отрисовка (§35.2)', function () {
           'red"/><feImage/><path fill="red',
           'url(file:///etc/passwd)',
           'red" xmlns="http://example.com',
-          'red"/><!-- x --><path fill="red'
+          'red"/><!-- x --><path fill="red',
+          'red" xml:base="file:///etc/',
+          'red" XML:base="file:///etc/',
+          'red" src="/etc/passwd',
+          'red"/><image width="10" height="10" src="' + file + '"/><path fill="red'
         ]) {
           assert.strictEqual(error({ option: places(payload)[0] }), SVG_ERROR, payload);
         }

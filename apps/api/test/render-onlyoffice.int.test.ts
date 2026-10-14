@@ -107,20 +107,20 @@ const PNG_1X1 =
 const IMAGE_DATA = { photo: `data:image/png;base64,${PNG_1X1}`, code: 'INV-2026-0042' };
 
 /** Картинка «в тексте» 2,54 × 2,54 см с тегом в замещающем тексте; заглушка — word/media/p.png. */
-function placeholder(id: number, tag: string): string {
+function placeholder(id: number, tag: string, cx = 914400, cy = 914400): string {
   return (
-    '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="914400" cy="914400"/>' +
+    `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="${cx}" cy="${cy}"/>` +
     `<wp:docPr id="${id}" name="Picture ${id}" descr="${tag}"/>` +
     '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>' +
     `<pic:nvPicPr><pic:cNvPr id="${id}" name="p.png" descr="${tag}"/><pic:cNvPicPr/></pic:nvPicPr>` +
     '<pic:blipFill><a:blip r:embed="rIdImg"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
-    '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm>' +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
     '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>' +
     '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>'
   );
 }
 
-async function imagesDocx(): Promise<Buffer> {
+async function imagesDocx(body?: string): Promise<Buffer> {
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
   const NS =
     `xmlns:w="${W}"` +
@@ -142,14 +142,15 @@ async function imagesDocx(): Promise<Buffer> {
     `${XML}<Relationships xmlns="${RELS}"><Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/p.png"/></Relationships>`,
   );
   zip.file('word/media/p.png', Buffer.from(PNG_1X1, 'base64'));
-  const body =
+  const content =
+    body ??
     wp('Компания: {d.name}') +
-    placeholder(1, '{d.photo}') +
-    placeholder(2, '{d.code:barcode(qrcode)}') +
-    wp('конец');
+      placeholder(1, '{d.photo}') +
+      placeholder(2, '{d.code:barcode(qrcode)}') +
+      wp('конец');
   zip.file(
     'word/document.xml',
-    `${XML}<w:document ${NS}><w:body>${body}<w:sectPr/></w:body></w:document>`,
+    `${XML}<w:document ${NS}><w:body>${content}<w:sectPr/></w:body></w:document>`,
   );
   return zip.generateAsync({ type: 'nodebuffer' });
 }
@@ -655,6 +656,36 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
       const text = pdf.toString('latin1');
       expect(text).toMatch(/\/Image\b/);
       expect(text.match(/\/Subtype\s*\/Image\b/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    },
+    CONVERT_TIMEOUT,
+  );
+
+  it(
+    'график ECharts (:chart): docx → pdf без ошибки, в PDF есть изображение',
+    async () => {
+      const body =
+        wp('Продажи') + placeholder(1, '{d.chart:chart}', 5715000, 3810000) + wp('конец');
+      const data = {
+        chart: {
+          option: {
+            title: { text: 'Продажи по месяцам' },
+            xAxis: { type: 'category', data: ['Янв', 'Фев', 'Мар'] },
+            yAxis: { type: 'value' },
+            series: [{ type: 'bar', data: [10, 25, 7] }],
+          },
+        },
+      };
+      const docx = await renderer.render(tpl('docx', await imagesDocx(body)), data, ro('docx'));
+      const zip = await JSZip.loadAsync(docx);
+      const media = Object.keys(zip.files).filter((n) => /^word\/media\/cr-img-\d+\.png$/.test(n));
+      expect(media).toHaveLength(1);
+      const png = await zip.file(media[0]!)!.async('nodebuffer');
+      expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 800]);
+      const pdf = await diagnose('график docx→pdf', async () =>
+        renderer.render(tpl('docx', await imagesDocx(body)), data, ro('pdf')),
+      );
+      expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+      expect(pdf.toString('latin1')).toMatch(/\/Subtype\s*\/Image\b/);
     },
     CONVERT_TIMEOUT,
   );

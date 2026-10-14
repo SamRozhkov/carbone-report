@@ -11,6 +11,7 @@
 // packages/shared/src/charts.ts (formatChartNumber, chartNumberFormatter); примеры в тестах обеих сторон совпадают.
 
 var path = require('path');
+var htmlparser2 = require('htmlparser2');
 
 var FONT_FAMILY = 'Noto Sans';
 var FONT_FILES = ['NotoSans-Regular.ttf', 'NotoSans-Bold.ttf'].map(function (name) {
@@ -35,9 +36,16 @@ var LARGE_SIDE = 2000; // сторона больше — масштаб 1: ра
 var SAFE_IMAGE = /^(?:image:\/\/)?data:image\/(?:png|jpeg|gif);base64,[A-Za-z0-9+\/]+=*$/;
 var SAFE_HREF = /^data:image\/(?:png|jpeg|gif);base64,[A-Za-z0-9+\/]+=*$/;
 var IMAGE_PREFIX = /^\s*image:\/\//i;
-// атрибут href (с любым префиксом) в разметке тегов; слева — не часть другого имени
-var HREF_ATTR = /(?<![\w.:-])(?:[A-Za-z_][\w.-]*:)?href\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
-var HREF_ANY = /href\s*=/i;
+// SVG от ECharts SSR (5.6.0) перед resvg: разбор, проверка, своя запись. ECharts не экранирует кавычки и < > в
+// значениях атрибутов (цвет, шрифт, адрес картинки), поэтому строка SSR не передаётся в resvg как есть
+var SVG_ELEMENTS = new Set([
+  'svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text', 'tspan', 'image', 'defs',
+  'clipPath', 'linearGradient', 'radialGradient', 'stop', 'pattern', 'filter', 'feDropShadow', 'title'
+]);
+var SVG_DROPPED = new Set(['style']); // ECharts пишет в <style> только :hover — на картинке не виден
+var SVG_ROOT_XMLNS = { 'xmlns' : 'http://www.w3.org/2000/svg', 'xmlns:xlink' : 'http://www.w3.org/1999/xlink' };
+var ATTR_NAME = /^[A-Za-z_][\w.:-]*$/;
+var LOCAL_URL = /url\(\s*(['"]?)#[\w.:-]+\1\s*\)/gi;
 var DEFAULT_SIZE = { width : 600, height : 400 }; // без width/height и без рамки (R3)
 var NUMBER_PREFIX = 'cr:number:';
 var NBSP = ' ';
@@ -55,7 +63,8 @@ var MSG = {
   series    : 'в графике больше 20 рядов',
   points    : 'в графике больше 10 000 точек',
   slow      : 'график рисуется дольше 5 с',
-  image     : 'график: картинки в описании — только data:image/png|jpeg|gif;base64'
+  image     : 'график: картинки в описании — только data:image/png|jpeg|gif;base64',
+  svg       : 'график: недопустимое содержимое SVG'
 };
 
 function badType (type) {
@@ -356,21 +365,78 @@ function checkImages (root) {
   }
 }
 
-/**
- * Вторая линия после SSR: в разметке тегов (текст узлов ECharts экранирует) каждый href — data URI PNG, JPEG, GIF,
- * и других «href=» нет; иначе ошибка
- */
-function checkSvgImages (svg) {
-  var _markup = svg.replace(/>[^<]*</g, '><');
-  var _rest = _markup.replace(HREF_ATTR, function (attr, double, single) {
-    if (SAFE_HREF.test(double !== undefined ? double : single) === false) {
+var XML_ESCAPES = { '&' : '&amp;', '<' : '&lt;', '>' : '&gt;', '"' : '&quot;' };
+
+function escapeXml (text) {
+  return /[&<>"]/.test(text) === false ? text : text.replace(/[&<>"]/g, function (c) {
+    return XML_ESCAPES[c];
+  });
+}
+
+/** Атрибуты элемента: имя, xmlns только у корня, href — data URI картинки, url() — только url(#id), без «\» */
+function svgAttributes (node, isRoot) {
+  var _out = '';
+  Object.keys(node.attribs).forEach(function (name) {
+    var _value = node.attribs[name];
+    if (ATTR_NAME.test(name) === false || _value.indexOf('\\') !== -1) {
+      throw new Error(MSG.svg);
+    }
+    if (name === 'xmlns' || name.indexOf('xmlns:') === 0) {
+      if (isRoot === false || SVG_ROOT_XMLNS[name] !== _value) {
+        throw new Error(MSG.svg);
+      }
+    }
+    if (name.slice(name.lastIndexOf(':') + 1).toLowerCase() === 'href' && SAFE_HREF.test(_value) === false) {
       throw new Error(MSG.image);
     }
-    return '';
+    if (/url/i.test(_value) === true && /url\s*\(/i.test(_value.replace(LOCAL_URL, '')) === true) {
+      throw new Error(MSG.svg);
+    }
+    _out += ' ' + name + '="' + escapeXml(_value) + '"';
   });
-  if (HREF_ANY.test(_rest) === true) {
-    throw new Error(MSG.image);
+  return _out;
+}
+
+/** Узел дерева → SVG: только разрешённые элементы и текст; прочее (комментарии, CDATA, инструкции) — ошибка */
+function svgNode (node, isRoot) {
+  if (node.type === 'text') {
+    return escapeXml(node.data);
   }
+  if (node.type !== 'tag' && node.type !== 'style' && node.type !== 'script') {
+    throw new Error(MSG.svg);
+  }
+  if (SVG_DROPPED.has(node.name) === true && isRoot === false) {
+    return '';
+  }
+  if (SVG_ELEMENTS.has(node.name) === false || (isRoot === true) !== (node.name === 'svg')) {
+    throw new Error(MSG.svg);
+  }
+  var _children = svgChildren(node);
+  var _open = '<' + node.name + svgAttributes(node, isRoot);
+  return _children === '' ? _open + '/>' : _open + '>' + _children + '</' + node.name + '>';
+}
+
+function svgChildren (node) {
+  var _out = '';
+  for (var i = 0; i < node.children.length; i++) {
+    _out += svgNode(node.children[i], false);
+  }
+  return _out;
+}
+
+/**
+ * SVG ECharts для resvg: разбор (htmlparser2, XML), проверка элементов и атрибутов, запись из проверенного дерева —
+ * resvg получает ровно то, что проверено. Картинки — только data URI PNG, JPEG, GIF
+ */
+function safeSvg (svg) {
+  var _doc = htmlparser2.parseDocument(svg, { xmlMode : true, decodeEntities : true });
+  var _roots = _doc.children.filter(function (node) {
+    return node.type !== 'text' || node.data.trim() !== '';
+  });
+  if (_roots.length !== 1) {
+    throw new Error(MSG.svg);
+  }
+  return svgNode(_roots[0], true);
 }
 
 function scaleOf (size) {
@@ -385,7 +451,7 @@ function checkTime (started) {
 
 /**
  * PNG графика: ECharts 5 SSR (SVG, без анимации) → resvg-js (масштаб 2, сторона больше 2000 px — 1; только Noto Sans;
- * картинки — только data URI, проверены в parse и в SVG)
+ * картинки — только data URI; SVG разобран, проверен и записан заново — safeSvg)
  * @param  {Object}      chart  результат parse (не null)
  * @param  {Object|null} frame  рамка заглушки { width, height } в px при 96 dpi
  * @return {Object} { buffer, width, height } — размеры PNG в px
@@ -410,12 +476,19 @@ function render (chart, frame) {
     }
   }
   checkTime(_started);
-  checkSvgImages(_svg);
+  var _safe;
+  try {
+    _safe = safeSvg(_svg);
+  }
+  catch (e) {
+    // свои ошибки — как есть; прочее (например, переполнение стека на глубокой вложенности) — общая ошибка SVG
+    throw e instanceof Error && e.message.indexOf('график: ') === 0 ? e : new Error(MSG.svg);
+  }
   var _scale = scaleOf(_size);
   var _png;
   try {
     var _Resvg = ResvgClass();
-    _png = new _Resvg(_svg, { fitTo : { mode : 'zoom', value : _scale }, font : FONT_OPTIONS }).render().asPng();
+    _png = new _Resvg(_safe, { fitTo : { mode : 'zoom', value : _scale }, font : FONT_OPTIONS }).render().asPng();
   }
   catch (e) {
     throw new Error('график: ' + reason(e));

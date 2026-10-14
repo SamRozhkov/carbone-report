@@ -221,9 +221,59 @@ describe('echarts: отрисовка (§35.2)', function () {
       assert.strictEqual(error({ theme: { backgroundColor: { image: file, imageWidth: 20, imageHeight: 20 } }, option: BAR }), IMAGE_ERROR);
       assert.strictEqual(error({ option: Object.assign({}, BAR, { series: [{ type: 'bar', data: [{ value: 1, symbol: 'IMAGE://' + file }] }] }) }), IMAGE_ERROR);
     });
+    describe('разметка из строк описания (ECharts не экранирует кавычки и < > в атрибутах)', function () {
+      const SVG_ERROR = 'график: недопустимое содержимое SVG';
+      const bar = (extra, item) => Object.assign({ xAxis: { type: 'category', data: ['a'] }, yAxis: {}, series: [Object.assign({ type: 'bar', data: [1], label: { show: true } }, item)] }, extra);
+      const places = (payload) => [
+        bar({}, { itemStyle: { color: payload } }),
+        bar({ textStyle: { fontFamily: payload } }, {}),
+        bar({}, { label: { show: true, color: payload } })
+      ];
+      it('подстановка <image href="путь"> через цвет, шрифт и цвет подписи — ошибка, файл не рисуется', function () {
+        for (const payload of [
+          'red"/><image width="300" height="200" class=">" href="' + file + '"/><path fill="red',
+          'red"/><image width="300" height="200" href="' + file + '"/><path fill="red',
+          'red"/><image width="300" height="200" xlink:href="/dev/zero"/><path fill="red'
+        ]) {
+          for (const option of places(payload)) {
+            assert.strictEqual(error({ option }), IMAGE_ERROR, JSON.stringify(option).slice(0, 120));
+          }
+        }
+      });
+      it('чужие элементы, url() с адресом, xmlns, комментарий — ошибка', function () {
+        for (const payload of [
+          'red"/><use href="#x"/><path fill="red',
+          'red"/><foreignObject/><path fill="red',
+          'red"/><feImage/><path fill="red',
+          'url(file:///etc/passwd)',
+          'red" xmlns="http://example.com',
+          'red"/><!-- x --><path fill="red'
+        ]) {
+          assert.strictEqual(error({ option: places(payload)[0] }), SVG_ERROR, payload);
+        }
+      });
+    });
     it('слово href= в подписях — не ошибка (текст экранируется)', function () {
-      const option = Object.assign({}, BAR, { title: { text: 'a href="x" href=\'y\' href = z' }, graphic: [{ type: 'text', style: { text: 'xlink:href="/etc/passwd"' } }] });
-      assert.ok(draw(option).length > 0);
+      const option = Object.assign({}, BAR, { title: { text: 'Выручка a"<>&b href="x" href=\'y\' href = z' }, graphic: [{ type: 'text', style: { text: 'xlink:href="/etc/passwd"' } }] });
+      assert.ok(!draw(option).equals(draw(BAR)));
+    });
+    it('все типы и оформление рисуются после проверки SVG', function () {
+      const blank = draw({ series: [] });
+      const cat = { xAxis: { type: 'category', data: ['Янв', 'Фев', 'Мар'] }, yAxis: { type: 'value' } };
+      const gradient = (type) => Object.assign({ type, colorStops: [{ offset: 0, color: 'red' }, { offset: 1, color: 'blue' }] }, type === 'linear' ? { x: 0, y: 0, x2: 0, y2: 1 } : { x: 0.5, y: 0.5, r: 0.5 });
+      const options = [
+        Object.assign({ title: { text: 'Продажи' }, legend: { top: 'top' } }, cat, { series: [{ type: 'bar', name: 'a', data: [1, 2, 3], label: { show: true } }] }),
+        Object.assign({ legend: { bottom: 0 } }, cat, { series: [{ type: 'line', smooth: true, areaStyle: {}, stack: 's', data: [1, 2, 3] }, { type: 'line', stack: 's', data: [1, 2, 3] }] }),
+        { legend: { right: 0, orient: 'vertical' }, series: [{ type: 'pie', data: [{ name: 'a', value: 1 }, { name: 'b', value: 2 }], label: { formatter: '{b}: {c}' } }] },
+        { series: [{ type: 'pie', radius: ['40%', '70%'], data: [{ name: 'a', value: 1 }, { name: 'b', value: 2 }] }] },
+        { xAxis: { type: 'category', data: ['a'] }, yAxis: [{ type: 'value', name: 'L' }, { type: 'value', name: 'R', position: 'right' }], series: [{ type: 'bar', data: [1] }, { type: 'line', yAxisIndex: 1, data: [2] }] },
+        { yAxis: { type: 'category', inverse: true, data: ['a', 'b'] }, xAxis: { type: 'value' }, series: [{ type: 'bar', data: [1, 2] }] },
+        Object.assign({}, cat, { series: [{ type: 'bar', data: [1, 2, 3], label: { show: true, formatter: '{a|x}{b|y}', rich: { a: { color: 'red', backgroundColor: '#eee' }, b: { fontWeight: 'bold' } } } }] }),
+        Object.assign({}, cat, { series: [{ type: 'bar', data: [1, 2, 3], itemStyle: { color: gradient('linear'), shadowBlur: 5, shadowColor: '#000' } }, { type: 'bar', data: [1, 2, 3], itemStyle: { color: gradient('radial') } }] })
+      ];
+      for (const option of options) {
+        assert.ok(!draw(option).equals(blank), JSON.stringify(option).slice(0, 80));
+      }
     });
   });
   it('buildOption: animation false, белый фон и Noto Sans по умолчанию; свои значения и тема не перекрываются', function () {

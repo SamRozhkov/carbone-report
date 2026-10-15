@@ -6,6 +6,7 @@ import type { AppDeps, TemplateFileRef } from '../../deps';
 import { createBuildFlights } from '../../lib/build-flights';
 import type { Deadline } from '../../lib/deadline';
 import { AppError } from '../../lib/errors';
+import type { TemplatePdf } from '../pdf/finish';
 import { renderReport } from './service';
 
 /**
@@ -25,6 +26,8 @@ export function snapshotPaths(runId: string, ext: TemplateExt) {
     dir,
     data: `${dir}/data.json`,
     template: `${dir}/template.${ext}`,
+    /** Настройки PDF на момент запуска — для истории (§36.4). */
+    pdfOptions: `${dir}/pdf-options.json`,
     out: (format: OutputFormat) => `${dir}/out.${format}`,
   };
 }
@@ -124,6 +127,7 @@ export async function renderFromSnapshot(
   version: number,
   format: OutputFormat,
   deadline: Deadline,
+  pdf?: TemplatePdf,
 ): Promise<Buffer> {
   const p = snapshotPaths(runId, ext);
   const [data, template] = await Promise.all([
@@ -136,6 +140,7 @@ export async function renderFromSnapshot(
     JSON.parse(data.toString('utf8')) as unknown,
     format,
     deadline,
+    pdf,
   );
 }
 

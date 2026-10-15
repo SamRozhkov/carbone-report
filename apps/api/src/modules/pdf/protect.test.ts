@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { AppError } from '../../lib/errors';
 import { makePdf, pageTexts } from './test-pdf';
 import { createQpdfProtector, limiter, qpdfArgs, qpdfVersion, type PdfProtectJob } from './protect';
 
@@ -146,10 +147,51 @@ describe('createQpdfProtector — без настоящего qpdf', () => {
     expect(lines.slice(1, 5)).toEqual([
       '--encrypt',
       'секрет-42',
-      expect.stringMatching(/^[\w-]{43}$/),
+      expect.stringMatching(/^[0-9a-f]{64}$/),
       '256',
     ]);
     expect(JSON.stringify(err)).not.toContain('секрет-42');
+  });
+});
+
+describe('createQpdfProtector — пароли, срок и очередь', () => {
+  it('пароль владельца — hex, не начинается с «-»', async () => {
+    const bin = await fakeQpdf(`sed -n 4p "\${1#@}" >> '${join(root, 'owners')}'\nexit 9`);
+    const protect = createQpdfProtector({ bin, maxConcurrent: 1, tmpRoot: root });
+    for (let i = 0; i < 20; i++) await protect(await report(), job(), 5000).catch(() => undefined);
+    const owners = (await readFile(join(root, 'owners'), 'utf8')).trim().split('\n');
+    expect(owners).toHaveLength(20);
+    for (const o of owners) expect(o).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('пароли вырезаются из причины ошибки (qpdf повторяет аргументы в stderr)', async () => {
+    const bin = await fakeQpdf('cat "${1#@}" >&2\nexit 2');
+    const protect = createQpdfProtector({ bin, maxConcurrent: 1, tmpRoot: root });
+    const err = (await protect(await report(), job({ userPassword: 'секрет-42' }), 5000).catch(
+      (e: unknown) => e,
+    )) as AppError;
+    expect(err).toMatchObject({ code: 'PDF_ERROR', status: 502 });
+    const internal = String((err.internal as Error).message);
+    expect(internal).toContain('***');
+    expect(internal).not.toContain('секрет-42');
+    expect(internal).not.toMatch(/[0-9a-f]{64}/);
+  });
+
+  it('ожидание в очереди входит в срок: 504 без запуска qpdf', async () => {
+    const bin = await fakeQpdf(
+      `echo run >> '${join(root, 'runs')}'\nsleep 0.3\ncp "$(sed -n 1p "\${1#@}")" "$(sed -n 8p "\${1#@}")"`,
+    );
+    const protect = createQpdfProtector({ bin, maxConcurrent: 1, tmpRoot: root });
+    const pdf = await report();
+    const first = protect(pdf, job({ noPrint: true }), 5000);
+    const second = protect(pdf, job({ noPrint: true }), 100).catch((e: unknown) => e);
+    expect(await second).toMatchObject({ code: 'TIMEOUT', status: 504 });
+    await first;
+    expect((await readFile(join(root, 'runs'), 'utf8')).trim().split('\n')).toHaveLength(1);
+  });
+
+  it('limiter: max меньше 1 трактуется как 1', async () => {
+    expect(await limiter(0)(async () => 5)).toBe(5);
   });
 });
 
@@ -170,7 +212,7 @@ describe.skipIf(version === null)('createQpdfProtector — настоящий qp
     expect(info).toContain('R = 6');
     expect(info).toContain('file encryption method: AESv3');
     expect(info).toContain('print high resolution: allowed');
-    // qpdf 12.x печатает «Incorrect password supplied» и выходит с 0, 11.3 — «invalid password» с кодом 2.
+    // Без пароля qpdf 11.3 и 12.x выходят с 0 и печатают «Incorrect password supplied»; на всякий случай допускаем и ошибку.
     const noPw = await showEncryption(out).catch(
       (e: { stdout?: string; stderr?: string }) => `${e.stdout ?? ''}${e.stderr ?? ''}`,
     );

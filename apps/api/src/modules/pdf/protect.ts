@@ -41,6 +41,7 @@ export function qpdfArgs(
 
 /** Не больше `max` задач одновременно; освободившееся место передаётся следующему в очереди. */
 export function limiter(max: number) {
+  max = Math.max(1, max);
   let active = 0;
   const queue: (() => void)[] = [];
   return async <T>(fn: () => Promise<T>): Promise<T> => {
@@ -56,7 +57,21 @@ export function limiter(max: number) {
   };
 }
 
-function runQpdf(bin: string, argsFile: string, timeoutMs: number): Promise<void> {
+/** Вырезает пароли из текста: qpdf может повторить неверный аргумент в stderr. */
+function redact(text: string, secrets: string[]): string {
+  let out = text;
+  for (const s of [...secrets].filter(Boolean).sort((a, b) => b.length - a.length)) {
+    out = out.split(s).join('***');
+  }
+  return out;
+}
+
+function runQpdf(
+  bin: string,
+  argsFile: string,
+  timeoutMs: number,
+  secrets: string[],
+): Promise<void> {
   if (timeoutMs <= 0) return Promise.reject(timeout());
   return new Promise((resolve, reject) => {
     execFile(
@@ -70,8 +85,9 @@ function runQpdf(bin: string, argsFile: string, timeoutMs: number): Promise<void
         if (e.killed) return reject(timeout());
         // 3 — готово с предупреждениями: файл записан.
         if (e.code === 3) return resolve();
-        // В stderr qpdf — пути и описание ошибки, без аргументов из файла @args.
-        const cause = new Error(`qpdf: код ${String(e.code)}: ${String(stderr).slice(0, 2000)}`);
+        // qpdf повторяет в stderr неверные аргументы (в том числе пароли): вырезаем их до записи в лог.
+        const text = redact(String(stderr), secrets).slice(0, 2000);
+        const cause = new Error(`qpdf: код ${String(e.code)}: ${text}`);
         reject(new AppError('PDF_ERROR', 502, 'не удалось зашифровать PDF', undefined, cause));
       },
     );
@@ -80,7 +96,7 @@ function runQpdf(bin: string, argsFile: string, timeoutMs: number): Promise<void
 
 /**
  * Шифрование готового PDF программой qpdf (§37.2). Пароли — только в файле аргументов во временном
- * каталоге (0700, файлы 0600); каталог удаляется при любом исходе. Пароль владельца — случайный.
+ * каталоге (0700, файлы 0600); каталог удаляется при любом исходе. Пароль владельца — случайный hex (без «-» в начале: qpdf принял бы его за параметр).
  */
 export function createQpdfProtector(opts: {
   bin?: string;
@@ -89,25 +105,28 @@ export function createQpdfProtector(opts: {
 }): PdfProtector {
   const bin = opts.bin ?? 'qpdf';
   const limit = limiter(opts.maxConcurrent);
-  return (pdf, job, timeoutMs) =>
-    limit(async () => {
-      const started = Date.now();
+  return (pdf, job, timeoutMs) => {
+    // Срок считается с вызова: ожидание в очереди входит в него (R4).
+    const started = Date.now();
+    return limit(async () => {
+      if (timeoutMs - (Date.now() - started) <= 0) throw timeout();
       const dir = await mkdtemp(join(opts.tmpRoot ?? tmpdir(), 'cr-qpdf-'));
       try {
         const input = join(dir, 'in.pdf');
         const output = join(dir, 'out.pdf');
         const argsFile = join(dir, 'args');
         await writeFile(input, pdf, { mode: 0o600 });
-        const owner = randomBytes(32).toString('base64url');
+        const owner = randomBytes(32).toString('hex');
         await writeFile(argsFile, `${qpdfArgs(job, owner, input, output).join('\n')}\n`, {
           mode: 0o600,
         });
-        await runQpdf(bin, argsFile, timeoutMs - (Date.now() - started));
+        await runQpdf(bin, argsFile, timeoutMs - (Date.now() - started), [job.userPassword, owner]);
         return await readFile(output);
       } finally {
         await rm(dir, { recursive: true, force: true });
       }
     });
+  };
 }
 
 /** Версия qpdf или null, если программы нет: проверка при старте API (R8). */

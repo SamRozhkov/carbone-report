@@ -163,6 +163,15 @@ describe('защита PDF (§37.1)', () => {
     }
   });
 
+  it('PdfPassword: «-» в начале запрещён', () => {
+    for (const bad of ['-abcd', '--abcd']) {
+      expect(PdfPassword.safeParse(bad).error?.issues.map((i) => i.message)).toContain(
+        'пароль не может начинаться с «-»',
+      );
+    }
+    expect(PdfPassword.safeParse('a-bcd').success).toBe(true);
+  });
+
   it('SavePdfOptionsBody: password — не передан, строка или null; лишние ключи — ошибка', () => {
     expect(SavePdfOptionsBody.parse({}).password).toBeUndefined();
     expect(SavePdfOptionsBody.parse({ password: null }).password).toBeNull();

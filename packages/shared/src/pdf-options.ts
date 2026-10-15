@@ -78,7 +78,9 @@ export const PdfPassword = z
     const n = [...s].length;
     return n >= PDF_PASSWORD_MIN && n <= PDF_PASSWORD_MAX;
   }, `пароль — от ${PDF_PASSWORD_MIN} до ${PDF_PASSWORD_MAX} символов`)
-  .refine((s) => ![...s].some(isControl), 'пароль содержит недопустимые символы');
+  .refine((s) => ![...s].some(isControl), 'пароль содержит недопустимые символы')
+  // Ограничение qpdf 11.3: позиционный пароль с «-» в начале принимается за параметр.
+  .refine((s) => !s.startsWith('-'), 'пароль не может начинаться с «-»');
 
 /** Выключенный блок — отсутствующий ключ (R1). */
 export const PdfOptions = z.strictObject({

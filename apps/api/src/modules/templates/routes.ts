@@ -163,13 +163,13 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     await ensureDatasource(v.datasourceId);
     const id = randomUUID();
     const filePath = templateFilePath(id, v.ext, 1);
-    await storage.write(filePath, v.data);
     const attachmentFiles = (extra?.attachments ?? []).map((a) => ({
       ...a,
       filePath: templateAttachmentPath(id, randomUUID()),
     }));
-    for (const a of attachmentFiles) await storage.write(a.filePath, a.data);
     try {
+      await storage.write(filePath, v.data);
+      for (const a of attachmentFiles) await storage.write(a.filePath, a.data);
       return await db.transaction(async (tx) => {
         const [row] = await tx
           .insert(templates)

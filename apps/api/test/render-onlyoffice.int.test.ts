@@ -46,6 +46,32 @@ async function docxTemplate(
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
+/** docx с docProps/core.xml: пустые заголовок и тема, непустой автор (как у Word/OnlyOffice). */
+async function docxWithCore(body: string): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(await docxTemplate(body));
+  const types = await zip.file('[Content_Types].xml')!.async('string');
+  zip.file(
+    '[Content_Types].xml',
+    types.replace(
+      '</Types>',
+      '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>',
+    ),
+  );
+  const rels = await zip.file('_rels/.rels')!.async('string');
+  zip.file(
+    '_rels/.rels',
+    rels.replace(
+      '</Relationships>',
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>',
+    ),
+  );
+  zip.file(
+    'docProps/core.xml',
+    `${XML}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title></dc:title><dc:subject></dc:subject><dc:creator>Иванов И.</dc:creator></cp:coreProperties>`,
+  );
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
 async function xlsxTemplate(
   sheet = '<sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>{d.name}</t></is></c></row></sheetData>',
 ): Promise<Buffer> {
@@ -718,6 +744,33 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
       );
       expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
       expect(pdf.toString('latin1')).toMatch(/\/Subtype\s*\/Image\b/);
+    },
+    CONVERT_TIMEOUT,
+  );
+
+  it(
+    'PDF/A-2b: docx с пустыми dc:title/dc:subject и непустым dc:creator → veraPDF',
+    async () => {
+      const roA = { ...(ro('pdf') as object), pdfa: true } as never;
+      const report = await diagnose('pdfa core', async () =>
+        renderer.render(tpl('docx', await docxWithCore(wp('Счёт № 42'))), {}, roA),
+      );
+      const final = Buffer.from(
+        await postprocessPdf(report, {
+          pdfa: true,
+          watermark: { text: 'ЧЕРНОВИК', opacity: 20, color: 'red', angle: 'diagonal' },
+          pageNumbers: {
+            format: 'Стр. {page} из {pages}',
+            position: 'bottom-center',
+            skipFirst: false,
+          },
+          metadata: null,
+          attachments: [],
+          now: new Date().toISOString(),
+        }),
+      );
+      const checked = await verapdf(final);
+      expect(checked.compliant, `PDF/A после обработки:\n${checked.failed}`).toBe(true);
     },
     CONVERT_TIMEOUT,
   );

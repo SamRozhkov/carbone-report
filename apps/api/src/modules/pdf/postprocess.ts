@@ -5,7 +5,17 @@ import {
   type PdfPlacement,
   type PdfPosition,
 } from '@carbone-reports/shared';
-import { degrees, PDFDocument, PDFName, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import {
+  degrees,
+  PDFDict,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFString,
+  rgb,
+  type PDFFont,
+  type PDFPage,
+} from 'pdf-lib';
 import { pdfFontBytes, sanitizePdfText } from './font';
 
 export const PDF_PRODUCER = 'carbone-reports';
@@ -120,6 +130,11 @@ function drawPageNumber(page: PDFPage, font: PDFFont, text: string, position: Pd
   });
 }
 
+/** Словарь Info трейлера (getInfoDict в pdf-lib приватный). */
+export function infoDict(doc: PDFDocument): PDFDict | undefined {
+  return doc.context.lookupMaybe(doc.context.trailerInfo.Info, PDFDict);
+}
+
 function writeInfo(doc: PDFDocument, job: PdfPostJob): void {
   const m = job.metadata;
   if (m) {
@@ -127,6 +142,15 @@ function writeInfo(doc: PDFDocument, job: PdfPostJob): void {
     if (m.author) doc.setAuthor(sanitizePdfText(m.author));
     if (m.subject) doc.setSubject(sanitizePdfText(m.subject));
     if (m.keywords) doc.setKeywords([sanitizePdfText(m.keywords)]);
+  }
+  // Пустое значение в Info без пары в XMP нарушает эквивалентность Info/XMP (PDF/A-2, 6.6.2.3.1).
+  const info = infoDict(doc);
+  for (const key of ['Title', 'Author', 'Subject', 'Keywords', 'Creator', 'Producer']) {
+    if (!info) break;
+    const name = PDFName.of(key);
+    const v = info.lookup(name);
+    if ((v instanceof PDFString || v instanceof PDFHexString) && v.decodeText() === '')
+      info.delete(name);
   }
   const now = new Date(job.now);
   doc.setProducer(PDF_PRODUCER);

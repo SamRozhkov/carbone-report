@@ -112,6 +112,24 @@ describe('PdfTab', () => {
     expect(calls.find((c) => c.method === 'DELETE')!.path).toBe('/api/templates/t1/attachments/a1');
   });
 
+  it('ошибка удаления приложения: диалог закрывается, ошибка видна', async () => {
+    mockApi([
+      {
+        method: 'DELETE',
+        path: '/api/templates/t1/attachments/a1',
+        status: 500,
+        body: { error: { code: 'INTERNAL', message: 'сбой хранилища' } },
+      },
+    ]);
+    renderWithProviders(<PdfTab template={t} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Титул.pdf: удалить' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+    expect(await screen.findByText('сбой хранилища')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText('Удалить приложенный файл?')).not.toBeInTheDocument(),
+    );
+  });
+
   it('порядок строк — сначала начало, потом конец, независимо от порядка в массиве', async () => {
     mockApi([]);
     const shuffled = {

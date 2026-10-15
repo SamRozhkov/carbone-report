@@ -478,7 +478,10 @@ export async function applyImport(
           .select({ filePath: templateAttachments.filePath })
           .from(templateAttachments)
           .where(inArray(templateAttachments.filePath, writtenAttachments))
-          .catch(() => null);
+          .catch((e) => {
+            log?.warn({ err: e, files: writtenAttachments }, 'ошибка проверки приложений');
+            return null;
+          });
         if (!kept)
           return log?.warn(
             { files: writtenAttachments },

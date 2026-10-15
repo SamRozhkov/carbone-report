@@ -124,8 +124,9 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
     mutationFn: (op: () => Promise<TemplateAdminDetails>) => op(),
     onSuccess: (t) => {
       applyTemplate(queryClient, t);
-      setRemoving(null);
     },
+    // Диалог закрываем и при ошибке — иначе ErrorAlert остаётся под ним.
+    onSettled: () => setRemoving(null),
   });
 
   const errors = fieldErrors(save.error);

@@ -1,7 +1,14 @@
 import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFNumber } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { readXmp } from './inspect';
-import { PDF_PRODUCER, postprocessPdf, toPage, visualView, type PdfPostJob } from './postprocess';
+import {
+  infoDict,
+  PDF_PRODUCER,
+  postprocessPdf,
+  toPage,
+  visualView,
+  type PdfPostJob,
+} from './postprocess';
 import { makePdf, pageTexts } from './test-pdf';
 
 const NOW = '2026-10-15T09:30:00.000Z';
@@ -108,6 +115,38 @@ describe('postprocessPdf', () => {
       expect(t).toContain('КОПИЯ');
       expect(t).toContain(`Стр. ${i + 1} из 5`);
     });
+  });
+
+  it('PDF/A: пустые строки Info исходного PDF удаляются, остальное Info присутствует в XMP', async () => {
+    const base = await PDFDocument.load(await makePdf([{ label: 'R1' }]), {
+      updateMetadata: false,
+    });
+    const info = infoDict(base)!;
+    for (const k of ['Title', 'Author', 'Subject', 'Keywords'])
+      info.set(PDFName.of(k), PDFHexString.fromText(''));
+    info.set(PDFName.of('Creator'), PDFHexString.fromText('Word'));
+    const out = await postprocessPdf(
+      await base.save(),
+      job({
+        pdfa: true,
+        watermark: { text: 'КОПИЯ', opacity: 20, color: 'gray', angle: 'diagonal' },
+        metadata: null,
+      }),
+    );
+    const doc = await PDFDocument.load(out, { updateMetadata: false });
+    const keys = infoDict(doc)!
+      .keys()
+      .map((k) => k.decodeText());
+    for (const k of ['Title', 'Author', 'Subject', 'Keywords']) expect(keys).not.toContain(k);
+    const xmp = readXmp(doc)!;
+    expect(doc.getCreator()).toBe('Word');
+    expect(xmp).toContain('<xmp:CreatorTool>Word</xmp:CreatorTool>');
+    // Каждому текстовому ключу Info соответствует значение в XMP (PDF/A-2, 6.6.2.3.1).
+    const xmpOf: Record<string, string> = {
+      Creator: '<xmp:CreatorTool>',
+      Producer: '<pdf:Producer>',
+    };
+    for (const k of keys.filter((k) => !/Date$/.test(k))) expect(xmp).toContain(xmpOf[k]!);
   });
 
   it('метаданные: Info и XMP совпадают; PDF/A — pdfaid; ID и OutputIntents сохраняются', async () => {

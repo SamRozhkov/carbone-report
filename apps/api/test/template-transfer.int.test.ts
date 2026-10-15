@@ -13,6 +13,7 @@ import {
   categories,
   groups,
   reportRuns,
+  templateAttachments,
   templateCharts,
   templateGroups,
   templateParams,
@@ -29,6 +30,7 @@ import {
   type SourceConn,
   type TestApp,
 } from './helpers';
+import { makePdf } from '../src/modules/pdf/test-pdf';
 
 /** Две «среды» — два приложения со своими БД и хранилищами. */
 let a: TestApp;
@@ -635,5 +637,140 @@ describe('перенос шаблонов между средами', () => {
       },
     ]);
     expect(ok.statusCode).toBe(200);
+  });
+
+  it('настройки PDF и приложения: выгрузка → создание → обновление; подмена приложения — 400 (§36.6)', async () => {
+    const pdfName = `PDF ${randomUUID().slice(0, 6)}`;
+    const srcId = await createTemplate(a, adminA, dsA);
+    await a.app.inject({
+      method: 'PATCH',
+      url: `/api/templates/${srcId}`,
+      headers: { cookie: adminA },
+      payload: { name: pdfName },
+    });
+    const put = await a.app.inject({
+      method: 'PUT',
+      url: `/api/templates/${srcId}/pdf-options`,
+      headers: { cookie: adminA },
+      payload: { watermark: { text: 'КОПИЯ' }, pageNumbers: {} },
+    });
+    expect(put.statusCode).toBe(200);
+    const uploadTo = async (
+      t: TestApp,
+      cookie: string,
+      id: string,
+      name: string,
+      pages: number,
+      placement: string,
+    ) => {
+      const data = Buffer.from(
+        await makePdf(Array.from({ length: pages }, (_, i) => ({ label: `P${i}` }))),
+      );
+      const m = multipart({ placement }, { name, data });
+      const r = await t.app.inject({
+        method: 'POST',
+        url: `/api/templates/${id}/attachments`,
+        headers: { cookie, ...m.headers },
+        payload: m.payload,
+      });
+      expect(r.statusCode).toBe(201);
+    };
+    await uploadTo(a, adminA, srcId, 'Титул.pdf', 2, 'start');
+    await uploadTo(a, adminA, srcId, 'Условия.pdf', 1, 'end');
+
+    // 1. Выгрузка: манифест с настройками и путями приложений, файлы в архиве.
+    const z = await exportZip(a, adminA, [srcId]);
+    const m = await manifestOf(z);
+    const t0 = (m.templates as Record<string, unknown>[])[0]!;
+    expect(t0.pdfOptions).toMatchObject({ pdfa: false, watermark: { text: 'КОПИЯ' } });
+    expect(t0.attachments).toEqual([
+      expect.objectContaining({
+        file: 'templates/1/attachments/1.pdf',
+        name: 'Титул.pdf',
+        placement: 'start',
+      }),
+      expect.objectContaining({
+        file: 'templates/1/attachments/2.pdf',
+        name: 'Условия.pdf',
+        placement: 'end',
+      }),
+    ]);
+    const zz = await JSZip.loadAsync(z);
+    expect(zz.file('templates/1/attachments/1.pdf')).not.toBeNull();
+
+    // 2. Создание в среде B: те же настройки и приложения, файлы под новым id.
+    const created = await apply(b, adminB, z, [{ index: 0, action: 'create', datasourceId: dsB }]);
+    expect(created.statusCode).toBe(200);
+    const newId = (created.json() as ImportResult).templates[0]!.id!;
+    const card = (
+      await b.app.inject({ url: `/api/templates/${newId}`, headers: { cookie: adminB } })
+    ).json();
+    expect(card.pdfOptions.watermark.text).toBe('КОПИЯ');
+    expect(
+      card.attachments.map((x: { name: string; placement: string; pages: number }) => [
+        x.name,
+        x.placement,
+        x.pages,
+      ]),
+    ).toEqual([
+      ['Титул.pdf', 'start', 2],
+      ['Условия.pdf', 'end', 1],
+    ]);
+    const rows = await b.deps.db
+      .select()
+      .from(templateAttachments)
+      .where(eq(templateAttachments.templateId, newId));
+    for (const r of rows) {
+      expect(r.filePath.startsWith(`templates/${newId}/attachments/`)).toBe(true);
+      expect(await b.deps.storage.exists(r.filePath)).toBe(true);
+    }
+
+    // 3. Обновление шаблона с другим приложением: прежнее приложение и его файл удалены.
+    await b.app.inject({
+      method: 'DELETE',
+      url: `/api/templates/${newId}/attachments/${rows[0]!.id}`,
+      headers: { cookie: adminB },
+    });
+    await uploadTo(b, adminB, newId, 'Старое.pdf', 1, 'end');
+    const [old] = await b.deps.db
+      .select()
+      .from(templateAttachments)
+      .where(eq(templateAttachments.name, 'Старое.pdf'));
+    const updated = await apply(b, adminB, z, [
+      {
+        index: 0,
+        action: 'update',
+        datasourceId: dsB,
+        targetId: newId,
+        targetUpdatedAt: await stamp(z, newId),
+      },
+    ]);
+    expect(updated.statusCode).toBe(200);
+    const after = (
+      await b.app.inject({ url: `/api/templates/${newId}`, headers: { cookie: adminB } })
+    ).json();
+    expect(after.attachments.map((x: { name: string }) => x.name)).toEqual([
+      'Титул.pdf',
+      'Условия.pdf',
+    ]);
+    await expect.poll(() => b.deps.storage.exists(old!.filePath)).toBe(false);
+
+    // 4. Подменённое приложение (содержимое и sha256 согласованы, но это не PDF) — 400, без записи.
+    const bad = await JSZip.loadAsync(z);
+    const fake = Buffer.from('PK\x03\x04 подмена');
+    bad.file('templates/1/attachments/1.pdf', fake);
+    const bm = JSON.parse(await bad.file('manifest.json')!.async('string'));
+    const { createHash } = await import('node:crypto');
+    bm.templates[0].attachments[0].sha256 = createHash('sha256').update(fake).digest('hex');
+    bad.file('manifest.json', JSON.stringify(bm));
+    const badZip = await bad.generateAsync({ type: 'nodebuffer' });
+    const beforeIds = await dbTemplateIds(b);
+    const r = await apply(b, adminB, badZip, [{ index: 0, action: 'copy', datasourceId: dsB }]);
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error).toMatchObject({
+      code: 'IMPORT_INVALID',
+      message: `шаблон «${pdfName}»: файл «Титул.pdf»: файл не PDF`,
+    });
+    expect(await dbTemplateIds(b)).toEqual(beforeIds);
   });
 });

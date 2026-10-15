@@ -11,6 +11,7 @@ import { buildReportData } from '../queries/build-data';
 import { runQueries } from '../queries/executor';
 import { validateQueryParams } from '../queries/param-options';
 import { resolveParams } from '../queries/params';
+import { finishPdf, type TemplatePdf } from '../pdf/finish';
 import { injectCharts } from '../templates/charts';
 import type { TemplateFull } from '../templates/service';
 
@@ -60,7 +61,8 @@ async function collect(
 
 /**
  * Рендер в Carbone. С `deadline` таймаут Carbone — не дольше остатка срока, ожидание ограничено сроком.
- * `tpl` — живой файл шаблона (предпросмотр админа) или копия из снимка запуска.
+ * `tpl` — живой файл шаблона (предпросмотр админа) или копия из снимка запуска. `pdf` — настройки PDF
+ * шаблона (§36.4): действуют только для формата pdf.
  */
 export function renderReport(
   deps: AppDeps,
@@ -68,14 +70,23 @@ export function renderReport(
   data: unknown,
   format: OutputFormat,
   deadline?: Deadline,
+  pdf?: TemplatePdf,
 ): Promise<Buffer> {
   // Срок уже истёк — не нагружать Carbone заведомо прерванной задачей.
   if (deadline && deadline.remaining() <= 0) return Promise.reject(reportTimeout());
-  const work = deps.carbone.render(tpl, data, {
-    convertTo: format,
-    lang: CARBONE_LANG,
-    timezone: deps.config.tz,
-    timeoutMs: deadline ? deadline.cap(deps.config.renderTimeoutMs) : deps.config.renderTimeoutMs,
-  });
+  const timeoutMs = () =>
+    deadline ? deadline.cap(deps.config.renderTimeoutMs) : deps.config.renderTimeoutMs;
+  const pdfa = format === 'pdf' && pdf?.options.pdfa === true;
+  const work = (async () => {
+    const out = await deps.carbone.render(tpl, data, {
+      convertTo: format,
+      lang: CARBONE_LANG,
+      timezone: deps.config.tz,
+      timeoutMs: timeoutMs(),
+      ...(pdfa ? { pdfa: true } : {}),
+    });
+    if (format !== 'pdf' || !pdf) return out;
+    return finishPdf(deps, out, pdf, data, timeoutMs());
+  })();
   return deadline ? deadline.race(work) : work;
 }

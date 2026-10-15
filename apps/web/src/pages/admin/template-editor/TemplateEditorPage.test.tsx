@@ -27,6 +27,9 @@ describe('TemplateEditorPage', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Графики' }));
     await waitFor(() => expect(router.state.location.search).toBe('?tab=charts'));
     expect(await screen.findByRole('button', { name: 'Добавить график' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'PDF' }));
+    await waitFor(() => expect(router.state.location.search).toBe('?tab=pdf'));
+    expect(await screen.findByRole('button', { name: 'Загрузить PDF' })).toBeInTheDocument();
   });
 
   it('возврат на вкладку «Документ» посылает resize, редактор остаётся смонтированным', async () => {

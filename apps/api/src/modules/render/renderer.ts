@@ -99,7 +99,8 @@ export function createEmbeddedRenderer(opts: {
     try {
       return await opts.convert({
         filetype: tpl.ext,
-        outputtype: ro.convertTo,
+        // PDF/A-2b делает сам Document Server (§36.4).
+        outputtype: ro.convertTo === 'pdf' && ro.pdfa ? 'pdfa' : ro.convertTo,
         title: `report.${tpl.ext}`,
         url: `${selfUrl}/internal/render-files/${id}?t=${encodeURIComponent(token)}`,
         signal: AbortSignal.timeout(left),

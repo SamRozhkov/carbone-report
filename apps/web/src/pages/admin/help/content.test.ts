@@ -26,6 +26,7 @@ describe('содержание справки', () => {
       ['charts', 'Диаграммы'],
       ['echarts', 'Графики ECharts'],
       ['html', 'HTML'],
+      ['pdf', 'PDF: PDF/A, водяной знак, нумерация, приложения'],
       ['unavailable', 'Недоступно в бесплатной версии'],
     ]);
     for (const s of HELP_SECTIONS) expect(s.examples.length, s.id).toBeGreaterThan(0);

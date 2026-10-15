@@ -7,7 +7,7 @@ import { signOnlyOffice } from '../onlyoffice/jwt';
 
 export interface ConvertRequest {
   filetype: TemplateExt;
-  outputtype: OutputFormat;
+  outputtype: OutputFormat | 'pdfa';
   title: string;
   url: string;
   signal: AbortSignal;

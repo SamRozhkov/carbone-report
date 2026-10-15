@@ -11,8 +11,10 @@ import {
   TRANSFER_MANIFEST_FILE,
   TransferManifest,
 } from '@carbone-reports/shared/template-transfer';
+import { MAX_PDF_ATTACHMENT_BYTES, MAX_PDF_ATTACHMENT_PAGES } from '@carbone-reports/shared';
 import { AppError } from '../../../lib/errors';
 import { isZip } from '../../../lib/http';
+import { inspectPdf, PdfInputError } from '../../pdf/inspect';
 
 const inflateRawAsync = promisify(inflateRaw);
 
@@ -157,6 +159,8 @@ export interface TransferArchive {
   manifest: TransferManifest;
   /** Файлы шаблонов по порядку манифеста. */
   files: Buffer[];
+  /** Приложенные PDF по шаблонам манифеста, проверенные (§36.6). */
+  attachments: { data: Buffer; pages: number; pdfa: boolean }[][];
 }
 
 function parseManifest(raw: Buffer): TransferManifest {
@@ -242,8 +246,17 @@ async function readChecked(buf: Buffer, limits: ArchiveLimits): Promise<Transfer
   used += manifestRaw.length;
   const manifest = parseManifest(manifestRaw);
 
-  const expected = new Set([TRANSFER_MANIFEST_FILE, ...manifest.templates.map((t) => t.file)]);
-  const dirs = new Set(['templates/', ...manifest.templates.map((_, i) => `templates/${i + 1}/`)]);
+  const expected = new Set([
+    TRANSFER_MANIFEST_FILE,
+    ...manifest.templates.flatMap((t) => [t.file, ...(t.attachments ?? []).map((a) => a.file)]),
+  ]);
+  const dirs = new Set([
+    'templates/',
+    ...manifest.templates.flatMap((_, i) => [
+      `templates/${i + 1}/`,
+      `templates/${i + 1}/attachments/`,
+    ]),
+  ]);
   for (const e of entries) {
     const isDir = e.name.endsWith('/');
     const ok = isDir ? dirs.has(e.name) && e.size === 0 : expected.has(e.name);
@@ -261,5 +274,39 @@ async function readChecked(buf: Buffer, limits: ArchiveLimits): Promise<Transfer
     if (!isZip(data)) throw importInvalid(`файл ${t.file} не является документом Office`);
     files.push(data);
   }
-  return { manifest, files };
+
+  const attachments: TransferArchive['attachments'] = [];
+  for (const t of manifest.templates) {
+    const list: TransferArchive['attachments'][number] = [];
+    for (const a of t.attachments ?? []) {
+      const e = byName.get(a.file);
+      if (!e) throw importInvalid(`в архиве нет файла ${a.file}`);
+      const data = await take(e);
+      if (data.length > MAX_PDF_ATTACHMENT_BYTES)
+        throw importInvalid(`шаблон «${t.name}»: файл «${a.name}»: файл больше 20 МБ`);
+      if (createHash('sha256').update(data).digest('hex') !== a.sha256) {
+        throw importInvalid(`файл ${a.file} не совпадает с контрольной суммой из манифеста`);
+      }
+      try {
+        list.push({ data, ...(await inspectPdf(data)) });
+      } catch (err) {
+        if (err instanceof PdfInputError)
+          throw importInvalid(`шаблон «${t.name}»: файл «${a.name}»: ${err.message}`);
+        throw err;
+      }
+    }
+    if (list.reduce((s, x) => s + x.pages, 0) > MAX_PDF_ATTACHMENT_PAGES)
+      throw importInvalid(
+        `шаблон «${t.name}»: в приложенных файлах шаблона не больше ${MAX_PDF_ATTACHMENT_PAGES} страниц`,
+      );
+    if (t.pdfOptions?.pdfa) {
+      const bad = (t.attachments ?? []).find((_, n) => !list[n]!.pdfa);
+      if (bad)
+        throw importInvalid(
+          `шаблон «${t.name}»: PDF/A включён: файл «${bad.name}» не в формате PDF/A`,
+        );
+    }
+    attachments.push(list);
+  }
+  return { manifest, files, attachments };
 }

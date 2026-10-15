@@ -7,6 +7,7 @@ import {
   outputFormatsFor,
   ParamOptionsBody,
   type ParamOptionsResult,
+  type PdfOptions,
   type TemplateChart,
   TemplateChartList,
   TemplateExt,
@@ -28,6 +29,7 @@ import type { App } from '../../app';
 import {
   categories,
   datasources,
+  templateAttachments,
   templateCharts,
   templateGroups,
   templateParams,
@@ -56,6 +58,7 @@ import {
   loadTemplateFull,
   loadTemplateQueries,
   lockTemplate,
+  templateAttachmentPath,
   templateDir,
   templateFileRef,
   templateFilePath,
@@ -140,6 +143,16 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       queries?: TemplateQuery[];
       params?: TemplateParam[];
       charts?: TemplateChart[];
+      pdfOptions?: PdfOptions;
+      /** Приложенные файлы (копия шаблона): файлы пишутся под новый идентификатор. */
+      attachments?: {
+        name: string;
+        placement: 'start' | 'end';
+        sortOrder: number;
+        pages: number;
+        pdfa: boolean;
+        data: Buffer;
+      }[];
       /** Настройки доступа; по умолчанию шаблон закрыт и без категории. */
       categoryId?: string | null;
       public?: boolean;
@@ -150,8 +163,13 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     await ensureDatasource(v.datasourceId);
     const id = randomUUID();
     const filePath = templateFilePath(id, v.ext, 1);
-    await storage.write(filePath, v.data);
+    const attachmentFiles = (extra?.attachments ?? []).map((a) => ({
+      ...a,
+      filePath: templateAttachmentPath(id, randomUUID()),
+    }));
     try {
+      await storage.write(filePath, v.data);
+      for (const a of attachmentFiles) await storage.write(a.filePath, a.data);
       return await db.transaction(async (tx) => {
         const [row] = await tx
           .insert(templates)
@@ -166,6 +184,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
             updatedBy: v.userId,
             categoryId: extra?.categoryId ?? null,
             public: extra?.public ?? false,
+            ...(extra?.pdfOptions ? { pdfOptions: extra.pdfOptions } : {}),
             ...(extra?.defaultOutput ? { defaultOutput: extra.defaultOutput } : {}),
           })
           .returning();
@@ -197,6 +216,20 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
               key,
               sortOrder: i,
               config,
+            })),
+          );
+        }
+        if (attachmentFiles.length) {
+          await tx.insert(templateAttachments).values(
+            attachmentFiles.map((a) => ({
+              templateId: id,
+              placement: a.placement,
+              sortOrder: a.sortOrder,
+              name: a.name,
+              filePath: a.filePath,
+              size: a.data.length,
+              pages: a.pages,
+              pdfa: a.pdfa,
             })),
           );
         }
@@ -408,6 +441,17 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           queries: src.queries,
           params: src.params,
           charts: src.charts,
+          pdfOptions: src.pdfOptions,
+          attachments: await Promise.all(
+            src.attachments.map(async (a) => ({
+              name: a.name,
+              placement: a.placement,
+              sortOrder: a.sortOrder,
+              pages: a.pages,
+              pdfa: a.pdfa,
+              data: await storage.read(a.filePath),
+            })),
+          ),
           categoryId: src.row.categoryId,
           public: src.row.public,
           copyGroupsFrom: src.row.id,

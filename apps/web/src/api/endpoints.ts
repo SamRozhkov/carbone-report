@@ -12,10 +12,12 @@ import type {
   GroupDto,
   GroupPatch,
   LoginBody,
+  MoveAttachmentBody,
   MaintenanceStatus,
   OutputFormat,
   ParamOptionsResult,
   ParamsInput,
+  PdfOptions,
   RenderBody,
   RunQueryBody,
   RunQueryResult,
@@ -122,6 +124,17 @@ export const api = {
       apiJson<TemplateAdminDetails>(`/api/templates/${id}/params`, put(params)),
     saveCharts: (id: string, charts: TemplateChart[]) =>
       apiJson<TemplateAdminDetails>(`/api/templates/${id}/charts`, put(charts)),
+    savePdfOptions: (id: string, options: PdfOptions) =>
+      apiJson<TemplateAdminDetails>(`/api/templates/${id}/pdf-options`, put(options)),
+    uploadAttachment: (id: string, form: FormData) =>
+      apiJson<TemplateAdminDetails>(`/api/templates/${id}/attachments`, {
+        method: 'POST',
+        body: form,
+      }),
+    moveAttachment: (id: string, aid: string, body: MoveAttachmentBody) =>
+      apiJson<TemplateAdminDetails>(`/api/templates/${id}/attachments/${aid}`, patch(body)),
+    removeAttachment: (id: string, aid: string) =>
+      apiJson<TemplateAdminDetails>(`/api/templates/${id}/attachments/${aid}`, del),
     runQuery: (id: string, body: RunQueryBody) =>
       apiJson<RunQueryResult>(`/api/templates/${id}/queries/run`, post(body)),
     paramOptions: (id: string, name: string, params: ParamsInput) =>

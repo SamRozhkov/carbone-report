@@ -16,6 +16,7 @@ import { AppError, registerErrorHandler } from '../../../lib/errors';
 import { makeGuards } from '../../auth/guards';
 import { SESSION_COOKIE, signSession } from '../../auth/session';
 import { registerTemplateRoutes } from '../routes';
+import { makePdf } from '../../pdf/test-pdf';
 import { readTransferArchive, type ArchiveLimits } from './archive';
 import { buildArchive, type ArchiveItem } from './export';
 import { copyName, paramErrors, planImport, resolveDecisions, type ImportLookup } from './import';
@@ -57,11 +58,10 @@ function manifestFor(data: Buffer[], over: Partial<TransferManifest> = {}): Tran
     formatVersion: 1,
     appVersion: '2.3.0',
     exportedAt: now.toISOString(),
-    templates: data.map((d, i) => ({
-      ...meta(`T${i + 1}`),
-      file: `templates/${i + 1}/template.docx`,
-      sha256: sha(d),
-    })),
+    templates: data.map((d, i) => {
+      const { attachments: _, ...m } = meta(`T${i + 1}`);
+      return { ...m, file: `templates/${i + 1}/template.docx`, sha256: sha(d) };
+    }),
     ...over,
   };
 }
@@ -147,6 +147,66 @@ async function invalid(p: Promise<unknown>): Promise<string> {
 }
 
 describe('readTransferArchive', () => {
+  it('приложения: читаются и проверяются; лишний файл, не-PDF и правило PDF/A — ошибка', async () => {
+    const pdf = Buffer.from(await makePdf([{ label: 'A' }, { label: 'B' }]));
+    const item = (
+      over: Partial<ArchiveItem['meta']> = {},
+      files: Buffer[] = [pdf],
+    ): ArchiveItem => ({
+      meta: meta('Первый', {
+        attachments: files.map((_, n) => ({
+          name: `${n + 1}.pdf`,
+          placement: 'end',
+          sortOrder: n,
+          pdfa: false,
+        })),
+        ...over,
+      }),
+      data: DOC,
+      attachments: files,
+    });
+    const good = await readTransferArchive(
+      await buildArchive([item()], { appVersion: '2.7.0', now }),
+    );
+    expect(good.attachments).toEqual([[{ data: pdf, pages: 2, pdfa: false }]]);
+
+    const notPdf = await buildArchive([item({}, [Buffer.from('PK\x03\x04 не pdf')])], {
+      appVersion: '2.7.0',
+      now,
+    });
+    expect(await invalid(readTransferArchive(notPdf))).toBe(
+      'шаблон «Первый»: файл «1.pdf»: файл не PDF',
+    );
+
+    const pdfaOn = await buildArchive(
+      [
+        item({
+          pdfOptions: { pdfa: true },
+          attachments: [{ name: '1.pdf', placement: 'end', sortOrder: 0, pdfa: true }],
+        }),
+      ],
+      { appVersion: '2.7.0', now },
+    );
+    // Заявлено pdfa: true, а в самом файле признака PDF/A нет — проверка по содержимому.
+    expect(await invalid(readTransferArchive(pdfaOn))).toBe(
+      'шаблон «Первый»: PDF/A включён: файл «1.pdf» не в формате PDF/A',
+    );
+
+    const z = await JSZip.loadAsync(await buildArchive([item()], { appVersion: '2.7.0', now }));
+    z.file('templates/1/attachments/2.pdf', pdf);
+    const extra = await z.generateAsync({ type: 'nodebuffer' });
+    expect(await invalid(readTransferArchive(extra))).toBe(
+      'лишний файл в архиве: templates/1/attachments/2.pdf',
+    );
+
+    const big = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(20 * 1024 * 1024 + 1 - 9)]);
+    expect(big.length).toBe(20 * 1024 * 1024 + 1);
+    const tooBig = await buildArchive([item({}, [big])], { appVersion: '2.7.0', now });
+    expect(await invalid(readTransferArchive(tooBig))).toBe(
+      'шаблон «Первый»: файл «1.pdf»: файл больше 20 МБ',
+    );
+  });
+
   it('архив выгрузки читается: манифест и файлы по порядку', async () => {
     const a = await readTransferArchive(await archive('Первый', 'Второй'));
     expect(a.manifest.templates.map((t) => t.name)).toEqual(['Первый', 'Второй']);

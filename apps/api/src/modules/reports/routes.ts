@@ -25,6 +25,7 @@ import { currentUser, type Guards } from '../auth/guards';
 import { previewQuery } from '../queries/executor';
 import { resolveParams } from '../queries/params';
 import { loadTemplateFull, templateFileRef, type TemplateFull } from '../templates/service';
+import { templatePdf } from '../pdf/finish';
 import { collectReportData, renderReport } from './service';
 import {
   ensureRunFile,
@@ -81,8 +82,32 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         // Снимок (§24.2): данные и копия файла шаблона; любой формат запуска собирается только из него.
         snapshotStarted = true;
         await writeSnapshot(deps, runId, ext, data, await templateFileRef(deps, full.row).read());
-        const pdf = await renderFromSnapshot(deps, runId, ext, full.row.version, 'pdf', deadline);
-        await storage.write(snap.out('pdf'), pdf);
+        const pdf = templatePdf(full);
+        await storage.write(
+          snap.pdfOptions,
+          Buffer.from(
+            JSON.stringify({
+              options: pdf.options,
+              attachments: pdf.attachments.map(({ name, placement, sortOrder, pages, pdfa }) => ({
+                name,
+                placement,
+                sortOrder,
+                pages,
+                pdfa,
+              })),
+            }),
+          ),
+        );
+        const out = await renderFromSnapshot(
+          deps,
+          runId,
+          ext,
+          full.row.version,
+          'pdf',
+          deadline,
+          pdf,
+        );
+        await storage.write(snap.out('pdf'), out);
         await db.transaction(async (tx) => {
           await tx.insert(reportRuns).values({
             ...base,
@@ -251,7 +276,14 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
       const full = await loadTemplateFull(db, req.params.id);
       const { data } = await collectReportData(deps, full, req.body.params, deadline);
       if (req.body.mode === 'data') return data;
-      const pdf = await renderReport(deps, templateFileRef(deps, full.row), data, 'pdf', deadline);
+      const pdf = await renderReport(
+        deps,
+        templateFileRef(deps, full.row),
+        data,
+        'pdf',
+        deadline,
+        templatePdf(full),
+      );
       return reply
         .header('content-type', MIME.pdf)
         .header('content-disposition', contentDisposition(`${full.row.name}.pdf`, true))

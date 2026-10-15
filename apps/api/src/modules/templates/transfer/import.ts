@@ -10,12 +10,13 @@ import type {
   TransferParam,
   TransferTemplate,
 } from '@carbone-reports/shared/template-transfer';
-import type { TemplateParam } from '@carbone-reports/shared';
+import { normalizePdfOptions, type TemplateParam } from '@carbone-reports/shared';
 import { asc, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import {
   categories,
   datasources,
   groups,
+  templateAttachments,
   templateCharts,
   templateGroups,
   templateParams,
@@ -26,7 +27,12 @@ import type { AppDeps } from '../../../deps';
 import { AppError, badRequest, conflict } from '../../../lib/errors';
 import { orderParams } from '../../queries/param-deps';
 import { checkParamDefaults } from '../../queries/params';
-import { discardUncommittedFile, templateDir, templateFilePath } from '../service';
+import {
+  discardUncommittedFile,
+  templateAttachmentPath,
+  templateDir,
+  templateFilePath,
+} from '../service';
 import { importInvalid, readTransferArchive } from './archive';
 
 export type ImportDeps = Pick<AppDeps, 'db' | 'storage'>;
@@ -275,7 +281,7 @@ export async function applyImport(
   log?: Log,
 ): Promise<ImportResult> {
   const { db, storage } = deps;
-  const { manifest, files } = await readTransferArchive(zip);
+  const { manifest, files, attachments } = await readTransferArchive(zip);
   const lookup = await loadLookup(deps, manifest);
   const plan = planImport(manifest, lookup);
 
@@ -300,6 +306,7 @@ export async function applyImport(
   const updatedFiles: { id: string; path: string }[] = [];
   const previous: string[] = [];
   const ids = new Map<number, string>();
+  const writtenAttachments: string[] = [];
   try {
     await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${IMPORT_LOCK_KEY})`);
@@ -351,6 +358,7 @@ export async function applyImport(
           defaultOutput: t.defaultOutput,
           public: t.public,
           categoryId: t.category === null ? null : categoryIds.get(t.category.toLowerCase())!,
+          pdfOptions: normalizePdfOptions(t.pdfOptions ?? { pdfa: false }),
           docKey: randomUUID(),
           updatedAt: new Date(),
           updatedBy: userId,
@@ -378,6 +386,12 @@ export async function applyImport(
           await tx.delete(templateCharts).where(eq(templateCharts.templateId, id));
           await tx.delete(templateQueries).where(eq(templateQueries.templateId, id));
           await tx.delete(templateParams).where(eq(templateParams.templateId, id));
+          // Приложения заменяются целиком; прежние файлы удаляются после коммита.
+          const old = await tx
+            .delete(templateAttachments)
+            .where(eq(templateAttachments.templateId, id))
+            .returning({ filePath: templateAttachments.filePath });
+          previous.push(...old.map((o) => o.filePath));
         } else {
           id = randomUUID();
           const path = templateFilePath(id, t.fileExt, 1);
@@ -418,6 +432,23 @@ export async function applyImport(
             })),
           );
         }
+        const list = attachments[r.index] ?? [];
+        for (const [n, a] of (t.attachments ?? []).entries()) {
+          const file = list[n]!;
+          const path = templateAttachmentPath(id, randomUUID());
+          writtenAttachments.push(path);
+          await storage.write(path, file.data);
+          await tx.insert(templateAttachments).values({
+            templateId: id,
+            placement: a.placement,
+            sortOrder: a.sortOrder,
+            name: a.name,
+            filePath: path,
+            size: file.data.length,
+            pages: file.pages,
+            pdfa: file.pdfa,
+          });
+        }
       }
     });
   } catch (err) {
@@ -441,6 +472,34 @@ export async function applyImport(
           .remove(templateDir(id))
           .catch((e) => log?.warn({ err: e, id }, 'файлы несохранённого шаблона не удалены')),
       ),
+      (async () => {
+        if (!writtenAttachments.length) return;
+        const kept = await db
+          .select({ filePath: templateAttachments.filePath })
+          .from(templateAttachments)
+          .where(inArray(templateAttachments.filePath, writtenAttachments))
+          .catch((e) => {
+            log?.warn({ err: e, files: writtenAttachments }, 'ошибка проверки приложений');
+            return null;
+          });
+        if (!kept)
+          return log?.warn(
+            { files: writtenAttachments },
+            'не удалось проверить приложения — файлы оставлены',
+          );
+        const keep = new Set(kept.map((k) => k.filePath));
+        await Promise.all(
+          writtenAttachments
+            .filter((p) => !keep.has(p))
+            .map((p) =>
+              storage
+                .remove(p)
+                .catch((e) =>
+                  log?.warn({ err: e, filePath: p }, 'несохранённое приложение не удалено'),
+                ),
+            ),
+        );
+      })(),
       ...updatedFiles.map(({ id, path }) =>
         discardUncommittedFile(deps, id, path).catch((e) =>
           log?.warn({ err: e, filePath: path }, 'несохранённый файл шаблона не удалён'),

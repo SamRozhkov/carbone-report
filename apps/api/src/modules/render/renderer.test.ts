@@ -67,6 +67,14 @@ describe('createEmbeddedRenderer', () => {
     expect(r).toMatchObject({ filetype: 'docx', outputtype: 'pdf' });
   });
 
+  it('pdfa: конвертер получает outputtype pdfa только для PDF', async () => {
+    const { renderer, convert } = setup(async () => Buffer.from('OUT'));
+    await renderer.render(tpl(), {}, { ...(opts('pdf') as object), pdfa: true } as never);
+    expect(convert.mock.calls[0]![0]).toMatchObject({ filetype: 'docx', outputtype: 'pdfa' });
+    await renderer.render(tpl(), {}, { ...(opts('odt') as object), pdfa: true } as never);
+    expect(convert.mock.calls[1]![0]).toMatchObject({ outputtype: 'odt' });
+  });
+
   it('после конвертации файла в памяти не остаётся, даже при ошибке', async () => {
     const { renderer, handoff, convert } = setup(async () => Buffer.from('OUT'));
     const put = vi.spyOn(handoff, 'put');

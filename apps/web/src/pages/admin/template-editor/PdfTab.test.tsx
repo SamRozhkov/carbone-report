@@ -1,0 +1,146 @@
+import type { TemplateAdminDetails } from '@carbone-reports/shared';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it } from 'vitest';
+import { adminTemplate } from '../../../test/fixtures';
+import { mockApi, renderWithProviders } from '../../../test/utils';
+import { PdfTab } from './PdfTab';
+
+const att = (
+  id: string,
+  name: string,
+  placement: 'start' | 'end',
+  sortOrder: number,
+  pdfa = false,
+) => ({
+  id,
+  name,
+  placement,
+  sortOrder,
+  size: 1024,
+  pages: 2,
+  pdfa,
+});
+const t = {
+  ...adminTemplate,
+  pdfOptions: {
+    pdfa: false,
+    watermark: { text: 'КОПИЯ', opacity: 20, color: 'gray', angle: 'diagonal' },
+  },
+  attachments: [att('a1', 'Титул.pdf', 'start', 0), att('a2', 'Условия.pdf', 'end', 0, true)],
+} as TemplateAdminDetails;
+
+describe('PdfTab', () => {
+  it('показывает настройки и приложения в порядке документа', async () => {
+    mockApi([]);
+    renderWithProviders(<PdfTab template={t} />);
+    expect(await screen.findByRole('textbox', { name: 'Текст водяного знака' })).toHaveValue(
+      'КОПИЯ',
+    );
+    expect(screen.getByRole('checkbox', { name: 'Водяной знак' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Нумерация страниц' })).not.toBeChecked();
+    const rows = screen.getAllByTestId('pdf-attachment');
+    expect(rows.map((r) => r.textContent)).toEqual([
+      expect.stringContaining('Титул.pdf'),
+      expect.stringContaining('Условия.pdf'),
+    ]);
+    expect(rows[1]!.textContent).toContain('PDF/A');
+  });
+
+  it('сохранение: только включённые блоки, пустые метаданные не отправляются', async () => {
+    const { calls } = mockApi([{ method: 'PUT', path: '/api/templates/t1/pdf-options', body: t }]);
+    renderWithProviders(<PdfTab template={t} />);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Нумерация страниц' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Не нумеровать первую страницу' }));
+    expect(screen.getByText('Есть несохранённые изменения')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
+    await waitFor(() => expect(calls.at(-1)?.method).toBe('PUT'));
+    expect(calls.at(-1)!.body).toEqual({
+      pdfa: false,
+      watermark: { text: 'КОПИЯ', opacity: 20, color: 'gray', angle: 'diagonal' },
+      pageNumbers: { format: 'Стр. {page} из {pages}', position: 'bottom-center', skipFirst: true },
+    });
+  });
+
+  it('ошибка у поля из ответа сервера', async () => {
+    mockApi([
+      {
+        method: 'PUT',
+        path: '/api/templates/t1/pdf-options',
+        status: 400,
+        body: {
+          error: {
+            code: 'VALIDATION',
+            message: 'неверные данные запроса',
+            details: [
+              { path: '/watermark/text', message: 'символ «😀» не поддерживается шрифтом PDF' },
+            ],
+          },
+        },
+      },
+    ]);
+    renderWithProviders(<PdfTab template={t} />);
+    const input = await screen.findByRole('textbox', { name: 'Текст водяного знака' });
+    await userEvent.type(input, ' 😀');
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
+    expect(
+      await screen.findByText('символ «😀» не поддерживается шрифтом PDF'),
+    ).toBeInTheDocument();
+  });
+
+  it('загрузка приложения: FormData с файлом и местом; перемещение и удаление', async () => {
+    const { calls } = mockApi([
+      { method: 'POST', path: '/api/templates/t1/attachments', status: 201, body: t },
+      { method: 'PATCH', path: '/api/templates/t1/attachments/a2', body: t },
+      { method: 'DELETE', path: '/api/templates/t1/attachments/a1', body: t },
+    ]);
+    renderWithProviders(<PdfTab template={t} />);
+    const file = new File(['%PDF-1.7'], 'Акт.pdf', { type: 'application/pdf' });
+    await userEvent.upload(await screen.findByLabelText('Файл PDF для приложения'), file);
+    await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
+    const form = calls.find((c) => c.method === 'POST')!.body as FormData;
+    expect((form.get('file') as File).name).toBe('Акт.pdf');
+    expect(form.get('placement')).toBe('end');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Условия.pdf: в начало' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
+    expect(calls.find((c) => c.method === 'PATCH')!.body).toEqual({ placement: 'start' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Титул.pdf: удалить' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE')).toBe(true));
+    expect(calls.find((c) => c.method === 'DELETE')!.path).toBe('/api/templates/t1/attachments/a1');
+  });
+
+  it('ошибка удаления приложения: диалог закрывается, ошибка видна', async () => {
+    mockApi([
+      {
+        method: 'DELETE',
+        path: '/api/templates/t1/attachments/a1',
+        status: 500,
+        body: { error: { code: 'INTERNAL', message: 'сбой хранилища' } },
+      },
+    ]);
+    renderWithProviders(<PdfTab template={t} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Титул.pdf: удалить' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+    expect(await screen.findByText('сбой хранилища')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText('Удалить приложенный файл?')).not.toBeInTheDocument(),
+    );
+  });
+
+  it('порядок строк — сначала начало, потом конец, независимо от порядка в массиве', async () => {
+    mockApi([]);
+    const shuffled = {
+      ...t,
+      attachments: [att('e1', 'Конец.pdf', 'end', 0), att('s1', 'Начало.pdf', 'start', 0)],
+    } as TemplateAdminDetails;
+    renderWithProviders(<PdfTab template={shuffled} />);
+    const rows = await screen.findAllByTestId('pdf-attachment');
+    expect(rows.map((r) => r.textContent)).toEqual([
+      expect.stringContaining('Начало.pdf'),
+      expect.stringContaining('Конец.pdf'),
+    ]);
+  });
+});

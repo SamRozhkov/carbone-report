@@ -17,6 +17,7 @@ import { api, templateDownloadUrl } from '../../../api/endpoints';
 import { ErrorAlert } from '../../../components/ErrorAlert';
 import { ExportTemplatesButton } from '../ExportTemplatesButton';
 import { ChartsTab } from './ChartsTab';
+import { PdfTab } from './PdfTab';
 import { DataTab } from './DataTab';
 import { DocumentTab } from './DocumentTab';
 import { templateKey, usePreviewData, useTestParams } from './editorState';
@@ -24,7 +25,7 @@ import { ParamsTab } from './ParamsTab';
 import { PreviewTab } from './PreviewTab';
 import { SettingsTab } from './SettingsTab';
 
-const TABS = ['document', 'data', 'charts', 'params', 'preview', 'settings'] as const;
+const TABS = ['document', 'data', 'charts', 'pdf', 'params', 'preview', 'settings'] as const;
 type TabId = (typeof TABS)[number];
 
 export function TemplateEditorPage() {
@@ -98,6 +99,7 @@ export function TemplateEditorPage() {
           <Tab value="document">Документ</Tab>
           <Tab value="data">Данные</Tab>
           <Tab value="charts">Графики</Tab>
+          <Tab value="pdf">PDF</Tab>
           <Tab value="params">Параметры</Tab>
           <Tab value="preview">Предпросмотр</Tab>
           <Tab value="settings">Настройки</Tab>
@@ -112,6 +114,7 @@ export function TemplateEditorPage() {
         )}
         {tab === 'data' && <DataTab {...tabProps} />}
         {tab === 'charts' && <ChartsTab {...tabProps} />}
+        {tab === 'pdf' && <PdfTab template={t} />}
         {tab === 'params' && <ParamsTab template={t} />}
         {tab === 'preview' && <PreviewTab {...tabProps} />}
         {tab === 'settings' && <SettingsTab template={t} />}

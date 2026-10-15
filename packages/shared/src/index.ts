@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { TemplateChart } from './charts';
+import { PdfOptions, TemplateAttachment } from './pdf-options';
 
 z.config(z.locales.ru());
 
 export * from './charts';
+export * from './pdf-options';
 
 export const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const RESERVED_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
@@ -282,6 +284,10 @@ export const TemplateAdminDetails = TemplateDetails.extend({
   queries: z.array(TemplateQuery),
   /** Графики конструктора (§35.3), по порядку добавления. */
   charts: z.array(TemplateChart),
+  /** Настройки PDF (§36.1). */
+  pdfOptions: PdfOptions,
+  /** Приложенные PDF-файлы в порядке итогового документа (§36.3). */
+  attachments: z.array(TemplateAttachment),
   lastSaveError: z.string().nullable(),
   /** Момент последней ошибки сохранения OnlyOffice (ISO); новая ошибка — новая метка. */
   lastSaveErrorAt: z.string().nullable(),

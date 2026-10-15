@@ -57,6 +57,13 @@
       "when": 1791967599241,
       "tag": "0007_template_charts",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792037291455,
+      "tag": "0008_pdf_options",
+      "breakpoints": true
     }
   ]
 }

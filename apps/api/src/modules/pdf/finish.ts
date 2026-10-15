@@ -85,7 +85,8 @@ export async function finishPdf(
   pdf: Buffer,
   p: TemplatePdf,
   data: unknown,
-  timeoutMs: number,
+  /** Остаток срока отчёта в мс: считается заново перед каждым шагом (qpdf не должен выйти за срок). */
+  timeoutMs: () => number,
 ): Promise<Buffer> {
   const post = needsPostprocess(p);
   if (!post && !p.protection) return pdf;
@@ -106,9 +107,9 @@ export async function finishPdf(
         }
       }),
     );
-    out = await deps.pdf(out, buildPdfJob(p, data, new Date(), files), timeoutMs);
+    out = await deps.pdf(out, buildPdfJob(p, data, new Date(), files), timeoutMs());
   }
-  if (p.protection) out = await deps.pdfProtect(out, p.protection, timeoutMs);
+  if (p.protection) out = await deps.pdfProtect(out, p.protection, timeoutMs());
   if (out.length > MAX_PDF_RESULT_BYTES) throw badRequest('итоговый PDF больше 100 МБ');
   return out;
 }

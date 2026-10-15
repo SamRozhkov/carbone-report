@@ -91,7 +91,7 @@ describe('finishPdf', () => {
       input,
       tp({ pdfa: true }),
       {},
-      1000,
+      () => 1000,
     );
     expect(out).toBe(input);
     expect(pdf).not.toHaveBeenCalled();
@@ -103,7 +103,7 @@ describe('finishPdf', () => {
       Buffer.from('%PDF'),
       tp({}, [att('Условия.pdf', 'end')]),
       {},
-      1000,
+      () => 1000,
     ).catch((e: unknown) => e);
     expect(err).toMatchObject({
       code: 'STORAGE_ERROR',
@@ -119,7 +119,7 @@ describe('finishPdf', () => {
       Buffer.from('%PDF'),
       tp({ pageNumbers: {} }),
       {},
-      1000,
+      () => 1000,
     ).catch((e: unknown) => e);
     expect(err).toMatchObject({ status: 400, message: 'итоговый PDF больше 100 МБ' });
   });
@@ -172,11 +172,26 @@ describe('finishPdf — шифрование', () => {
       input,
       tp({}, [], job),
       {},
-      1000,
+      () => 1000,
     );
     expect(out.toString()).toBe('ENC');
     expect(pdf).not.toHaveBeenCalled();
     expect(pdfProtect).toHaveBeenCalledWith(input, job, 1000);
+  });
+
+  it('срок для шифрования пересчитывается после обработки', async () => {
+    const pdf = vi.fn(async (_b: Buffer, _j: unknown, _t: number) => Buffer.from('POST'));
+    const pdfProtect = vi.fn(async (b: Buffer, _j: unknown, _t: number) => b);
+    const left = vi.fn().mockReturnValueOnce(1000).mockReturnValueOnce(400);
+    await finishPdf(
+      { storage: storage as never, pdf, pdfProtect },
+      Buffer.from('%PDF'),
+      tp({ pageNumbers: {} }, [], job),
+      {},
+      left,
+    );
+    expect(pdf.mock.calls[0]![2]).toBe(1000);
+    expect(pdfProtect.mock.calls[0]![2]).toBe(400);
   });
 
   it('обработка и защита: шифруется результат обработки', async () => {
@@ -187,7 +202,7 @@ describe('finishPdf — шифрование', () => {
       Buffer.from('%PDF'),
       tp({ pageNumbers: {} }, [], job),
       {},
-      1000,
+      () => 1000,
     );
     expect(out.toString()).toBe('POST+ENC');
   });
@@ -199,7 +214,7 @@ describe('finishPdf — шифрование', () => {
       Buffer.from('%PDF'),
       tp({ pageNumbers: {} }),
       {},
-      1000,
+      () => 1000,
     );
     expect(pdfProtect).not.toHaveBeenCalled();
   });
@@ -211,7 +226,7 @@ describe('finishPdf — шифрование', () => {
       Buffer.from('%PDF'),
       tp({}, [], job),
       {},
-      1000,
+      () => 1000,
     ).catch((e: unknown) => e);
     expect(err).toMatchObject({ status: 400, message: 'итоговый PDF больше 100 МБ' });
   });

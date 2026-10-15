@@ -66,6 +66,11 @@ function redact(text: string, secrets: string[]): string {
   return out;
 }
 
+function failed(code: string | number | undefined, text: string): AppError {
+  const cause = new Error(`qpdf: код ${String(code)}: ${text}`);
+  return new AppError('PDF_ERROR', 502, 'не удалось зашифровать PDF', undefined, cause);
+}
+
 function runQpdf(
   bin: string,
   argsFile: string,
@@ -82,13 +87,14 @@ function runQpdf(
         if (!err) return resolve();
         const e = err as Error & { code?: string | number; killed?: boolean };
         if (e.code === 'ENOENT') return reject(unavailable());
+        const text = redact(String(stderr), secrets).slice(0, 2000);
+        // Вывод больше maxBuffer: Node убивает процесс, но это не таймаут.
+        if (e.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return reject(failed(e.code, text));
         if (e.killed) return reject(timeout());
         // 3 — готово с предупреждениями: файл записан.
         if (e.code === 3) return resolve();
         // qpdf повторяет в stderr неверные аргументы (в том числе пароли): вырезаем их до записи в лог.
-        const text = redact(String(stderr), secrets).slice(0, 2000);
-        const cause = new Error(`qpdf: код ${String(e.code)}: ${text}`);
-        reject(new AppError('PDF_ERROR', 502, 'не удалось зашифровать PDF', undefined, cause));
+        reject(failed(e.code, text));
       },
     );
   });

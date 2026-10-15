@@ -270,4 +270,45 @@ describe('пароль и запреты (§37.2)', () => {
     expect(docx.rawPayload.toString()).toBe('DOCX');
     expect(protect).not.toHaveBeenCalled();
   });
+
+  async function dropPdfRow(runId: string) {
+    const { reportRunFiles } = await import('../src/db/schema');
+    const { and, eq } = await import('drizzle-orm');
+    await t.deps.db
+      .delete(reportRunFiles)
+      .where(and(eq(reportRunFiles.runId, runId), eq(reportRunFiles.format, 'pdf')));
+    await t.deps.storage.remove(`reports/${runId}/out.pdf`);
+  }
+
+  it('у защищённого запуска нет out.pdf — 410, незашифрованный PDF не рендерится (§37)', async () => {
+    const id = await newTemplate();
+    await putOptions(id, { password: 'секрет1' });
+    const runId = (await render(id)).json().runId as string;
+    await dropPdfRow(runId);
+    protect.mockClear();
+    const before = seen.length;
+    const r = await t.app.inject({
+      url: `/api/runs/${runId}/file?format=pdf`,
+      headers: { cookie: admin },
+    });
+    expect(r.statusCode).toBe(410);
+    expect(protect).not.toHaveBeenCalled();
+    expect(seen.length).toBe(before);
+  });
+
+  it('у запуска без защиты нет out.pdf — собирается заново', async () => {
+    const id = await newTemplate();
+    await putOptions(id, { watermark: { text: 'КОПИЯ' } });
+    const runId = (await render(id)).json().runId as string;
+    await dropPdfRow(runId);
+    protect.mockClear();
+    const r = await t.app.inject({
+      url: `/api/runs/${runId}/file?format=pdf`,
+      headers: { cookie: admin },
+    });
+    expect(r.statusCode).toBe(200);
+    // Как и до 2.7.1 (R8): сборка из снимка без настроек PDF.
+    expect((await pageTexts(r.rawPayload))[0]!.trim()).toBe('REPORT');
+    expect(protect).not.toHaveBeenCalled();
+  });
 });

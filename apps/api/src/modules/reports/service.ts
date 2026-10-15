@@ -86,7 +86,7 @@ export function renderReport(
       ...(pdfa ? { pdfa: true } : {}),
     });
     if (format !== 'pdf' || !pdf) return out;
-    return finishPdf(deps, out, pdf, data, timeoutMs());
+    return finishPdf(deps, out, pdf, data, timeoutMs);
   })();
   return deadline ? deadline.race(work) : work;
 }

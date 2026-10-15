@@ -1,5 +1,11 @@
 import { posix } from 'node:path';
-import { outputFormatsFor, TemplateExt, type OutputFormat } from '@carbone-reports/shared';
+import {
+  hasPdfProtection,
+  outputFormatsFor,
+  TemplateExt,
+  type OutputFormat,
+  type PdfOptions,
+} from '@carbone-reports/shared';
 import { and, eq } from 'drizzle-orm';
 import { reportRunFiles, reportRuns, type RunRow } from '../../db/schema';
 import type { AppDeps, TemplateFileRef } from '../../deps';
@@ -162,6 +168,20 @@ export async function ensureRunFile(
   return inFlight(`${run.id}:${format}`, deadline, () => buildRunFile(deps, run, format, deadline));
 }
 
+async function assertNotProtected(deps: AppDeps, runId: string, ext: TemplateExt): Promise<void> {
+  const path = snapshotPaths(runId, ext).pdfOptions;
+  if (!(await deps.storage.exists(path))) return;
+  let saved: { options?: { protection?: PdfOptions['protection'] }; passwordSet?: boolean };
+  try {
+    saved = JSON.parse((await readSnapshotFile(deps, path)).toString('utf8')) as typeof saved;
+  } catch {
+    // Настройки не прочитать — не рискуем выдать незашифрованный файл.
+    throw snapshotGone();
+  }
+  if (hasPdfProtection({ protection: saved.options?.protection }, saved.passwordSet === true))
+    throw snapshotGone();
+}
+
 async function buildRunFile(
   deps: AppDeps,
   run: RunRow,
@@ -184,6 +204,9 @@ async function buildRunFile(
       .from(reportRunFiles)
       .where(and(eq(reportRunFiles.runId, run.id), eq(reportRunFiles.format, format)));
     if (done) return readSnapshotFile(deps, done.filePath);
+    // §37: незащищённый PDF при включённой защите не выдаётся никогда. Нет out.pdf у защищённого запуска —
+    // заново не рендерим (без шифрования), а отвечаем 410. Снимок до 2.7.0 без pdf-options.json — прежнее поведение (R8).
+    if (format === 'pdf') await assertNotProtected(deps, run.id, ext);
     const file = await renderFromSnapshot(deps, run.id, ext, run.templateVersion, format, deadline);
     const out = snapshotPaths(run.id, ext).out(format);
     await deps.storage.write(out, file);

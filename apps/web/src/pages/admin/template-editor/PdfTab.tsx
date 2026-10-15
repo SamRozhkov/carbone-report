@@ -326,7 +326,6 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
                 onUpdate={(value) => setPwState({ mode: 'set', value })}
                 controlProps={{
                   'aria-label': 'Пароль на открытие',
-                  maxLength: 64,
                   autoComplete: 'new-password',
                 }}
               />

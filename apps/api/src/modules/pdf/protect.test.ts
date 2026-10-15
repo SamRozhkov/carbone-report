@@ -154,6 +154,15 @@ describe('createQpdfProtector — без настоящего qpdf', () => {
   });
 });
 
+describe('createQpdfProtector — переполнение stderr', () => {
+  it('вывод больше maxBuffer — 502, а не 504 TIMEOUT', async () => {
+    const bin = await fakeQpdf('head -c 2000000 /dev/zero | tr "\\0" x >&2\nsleep 5');
+    const protect = createQpdfProtector({ bin, maxConcurrent: 1, tmpRoot: root });
+    const err = await protect(await report(), job(), 10000).catch((e: unknown) => e);
+    expect(err).toMatchObject({ code: 'PDF_ERROR', status: 502 });
+  });
+});
+
 describe('createQpdfProtector — пароли, срок и очередь', () => {
   it('пароль владельца — hex, не начинается с «-»', async () => {
     const bin = await fakeQpdf(`sed -n 4p "\${1#@}" >> '${join(root, 'owners')}'\nexit 9`);

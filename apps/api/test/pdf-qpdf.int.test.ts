@@ -11,6 +11,12 @@ const carbone: CarboneRenderer = {
   },
 };
 
+if (process.env.REQUIRE_QPDF === '1') {
+  it('REQUIRE_QPDF=1: qpdf установлен', () => {
+    expect(version).not.toBeNull();
+  });
+}
+
 describe.skipIf(version === null)('отчёт с паролем — настоящий qpdf (§37.2)', () => {
   let t: TestApp;
   let admin: string;

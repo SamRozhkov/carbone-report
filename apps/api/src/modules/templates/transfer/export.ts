@@ -6,19 +6,23 @@ import {
   TRANSFER_FORMAT,
   TRANSFER_FORMAT_VERSION,
   TRANSFER_MANIFEST_FILE,
+  transferAttachmentPath,
   transferFilePath,
   TransferManifest,
+  type TransferAttachment,
   type TransferChart,
   type TransferParam,
   type TransferQuery,
   type TransferTemplate,
 } from '@carbone-reports/shared/template-transfer';
+import { PdfOptions } from '@carbone-reports/shared';
 import { asc, eq, inArray } from 'drizzle-orm';
 import JSZip from 'jszip';
 import {
   categories,
   datasources,
   groups,
+  templateAttachments,
   templateCharts,
   templateGroups,
   templateParams,
@@ -68,8 +72,12 @@ export function localDate(now: Date, tz: string): string {
 }
 
 export interface ArchiveItem {
-  meta: Omit<TransferTemplate, 'file' | 'sha256'>;
+  meta: Omit<TransferTemplate, 'file' | 'sha256' | 'attachments'> & {
+    attachments?: Omit<TransferAttachment, 'file' | 'sha256'>[];
+  };
   data: Buffer;
+  /** Файлы приложений в порядке meta.attachments. */
+  attachments?: Buffer[];
 }
 
 /** Собирает zip: manifest.json и templates/<n>/template.<ext>. Чистая функция, без обращений к БД. */
@@ -83,10 +91,19 @@ export async function buildArchive(
     formatVersion: TRANSFER_FORMAT_VERSION,
     appVersion: info.appVersion,
     exportedAt: info.now.toISOString(),
-    templates: items.map((it, i) => ({
-      ...it.meta,
-      file: transferFilePath(i, it.meta.fileExt),
-      sha256: createHash('sha256').update(it.data).digest('hex'),
+    templates: items.map(({ meta: { attachments, ...meta }, data, attachments: files }, i) => ({
+      ...meta,
+      ...(attachments
+        ? {
+            attachments: attachments.map((a, n) => ({
+              ...a,
+              file: transferAttachmentPath(i, n),
+              sha256: createHash('sha256').update(files![n]!).digest('hex'),
+            })),
+          }
+        : {}),
+      file: transferFilePath(i, meta.fileExt),
+      sha256: createHash('sha256').update(data).digest('hex'),
     })),
   };
   // Архив должен загрузиться: та же схема, что при загрузке (длина имени, правила параметров
@@ -111,6 +128,11 @@ export async function buildArchive(
   zip.file(TRANSFER_MANIFEST_FILE, manifestJson);
   manifest.templates.forEach((t, i) =>
     zip.file(t.file, items[i]!.data, { createFolders: false, compression: 'STORE' }),
+  );
+  manifest.templates.forEach((t, i) =>
+    (t.attachments ?? []).forEach((a, n) =>
+      zip.file(a.file, items[i]!.attachments![n]!, { createFolders: false, compression: 'STORE' }),
+    ),
   );
   return zip.generateAsync({
     type: 'nodebuffer',
@@ -164,7 +186,7 @@ async function runExport(deps: ExportDeps, ids: string[], now: Date): Promise<Ex
     throw new AppError('NOT_FOUND', 404, notFound('шаблон').message, { ids: missing });
   }
 
-  const [gs, qs, ps, cs] = await Promise.all([
+  const [gs, qs, ps, cs, as] = await Promise.all([
     db
       .select({ templateId: templateGroups.templateId, name: groups.name })
       .from(templateGroups)
@@ -186,6 +208,11 @@ async function runExport(deps: ExportDeps, ids: string[], now: Date): Promise<Ex
       .from(templateCharts)
       .where(inArray(templateCharts.templateId, uniqueIds))
       .orderBy(asc(templateCharts.sortOrder), asc(templateCharts.key)),
+    db
+      .select()
+      .from(templateAttachments)
+      .where(inArray(templateAttachments.templateId, uniqueIds))
+      .orderBy(asc(templateAttachments.sortOrder), asc(templateAttachments.createdAt)),
   ]);
 
   // Архив с одинаковыми названиями не загрузится (§33.2): сообщаем сразу.
@@ -209,8 +236,26 @@ async function runExport(deps: ExportDeps, ids: string[], now: Date): Promise<Ex
         'файлы выбранных шаблонов не поместятся в архив 50 МБ — выгрузите их частями',
       );
     }
+    const rowsOf = as.filter((a) => a.templateId === id);
+    const ordered = [
+      ...rowsOf.filter((a) => a.placement === 'start'),
+      ...rowsOf.filter((a) => a.placement === 'end'),
+    ];
+    const attachmentData: Buffer[] = [];
+    for (const a of ordered) {
+      const buf = await deps.storage.read(a.filePath);
+      total += buf.length;
+      if (total > MAX_TRANSFER_ARCHIVE_BYTES) {
+        throw badRequest(
+          'файлы выбранных шаблонов не поместятся в архив 50 МБ — выгрузите их частями',
+        );
+      }
+      attachmentData.push(buf);
+    }
+
     items.push({
       data,
+      attachments: attachmentData,
       meta: {
         name: row.name,
         description: row.description,
@@ -251,6 +296,13 @@ async function runExport(deps: ExportDeps, ids: string[], now: Date): Promise<Ex
         charts: cs
           .filter((c) => c.templateId === id)
           .map((c): TransferChart => ({ key: c.key, sortOrder: c.sortOrder, config: c.config })),
+        pdfOptions: PdfOptions.parse(row.pdfOptions),
+        attachments: ordered.map((a) => ({
+          name: a.name,
+          placement: a.placement,
+          sortOrder: a.sortOrder,
+          pdfa: a.pdfa,
+        })),
       },
     });
   }

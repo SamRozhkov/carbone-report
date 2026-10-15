@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import {
   ChartKey,
+  MAX_PDF_ATTACHMENTS,
   MAX_TEMPLATE_CHARTS,
+  PdfOptions,
+  PdfPlacement,
   TemplateChartConfig,
   outputFormatsFor,
   OutputFormat,
@@ -31,6 +34,10 @@ export const MAX_TRANSFER_TEMPLATES = 200;
 /** Путь файла шаблона в архиве: нумерация с 1 по порядку в манифесте. */
 export const transferFilePath = (index: number, ext: TemplateExt) =>
   `templates/${index + 1}/template.${ext}`;
+
+/** Путь приложенного PDF в архиве: templates/<n>/attachments/<m>.pdf, нумерация с 1 (§36.6). */
+export const transferAttachmentPath = (index: number, n: number) =>
+  `templates/${index + 1}/attachments/${n + 1}.pdf`;
 
 export const ExportTemplatesBody = z.object({
   ids: z
@@ -76,6 +83,17 @@ export const TransferChart = z.strictObject({
 });
 export type TransferChart = z.infer<typeof TransferChart>;
 
+/** Приложенный PDF шаблона (§36.6): файл в архиве, порядок и заявленный PDF/A. */
+export const TransferAttachment = z.strictObject({
+  file: z.string().min(1).max(200),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/, 'ожидается sha256 в hex'),
+  name: z.string().min(1).max(200),
+  placement: PdfPlacement,
+  sortOrder: SortOrder,
+  pdfa: z.boolean(),
+});
+export type TransferAttachment = z.infer<typeof TransferAttachment>;
+
 const uniqueBy = <T>(items: T[], pick: (t: T) => string): string | null => {
   const seen = new Set<string>();
   for (const it of items) {
@@ -102,6 +120,8 @@ export const TransferTemplate = z
     queries: z.array(TransferQuery).max(1000),
     params: z.array(TransferParam).max(1000),
     charts: z.array(TransferChart).max(MAX_TEMPLATE_CHARTS).optional(),
+    pdfOptions: PdfOptions.optional(),
+    attachments: z.array(TransferAttachment).max(MAX_PDF_ATTACHMENTS).optional(),
     /** Путь файла шаблона в архиве. */
     file: z.string().min(1).max(200),
     /** sha256 файла шаблона, hex в нижнем регистре. */
@@ -135,6 +155,12 @@ export const TransferTemplate = z
     });
     if (charts.length > 0 && t.queries.some((q) => q.key === 'charts'))
       issue(['queries'], 'ключ charts занят графиками');
+    if (t.pdfOptions?.pdfa) {
+      (t.attachments ?? []).forEach((a, i) => {
+        if (!a.pdfa)
+          issue(['attachments', i, 'pdfa'], `PDF/A включён: файл «${a.name}» не в формате PDF/A`);
+      });
+    }
   });
 export type TransferTemplate = z.infer<typeof TransferTemplate>;
 
@@ -164,6 +190,14 @@ export const TransferManifest = z
           path: ['templates', i, 'file'],
           message: `ожидается путь ${transferFilePath(i, t.fileExt)}`,
         });
+      (t.attachments ?? []).forEach((a, n) => {
+        if (a.file !== transferAttachmentPath(i, n))
+          ctx.addIssue({
+            code: 'custom',
+            path: ['templates', i, 'attachments', n, 'file'],
+            message: `ожидается путь ${transferAttachmentPath(i, n)}`,
+          });
+      });
     });
   });
 export type TransferManifest = z.infer<typeof TransferManifest>;

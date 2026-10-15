@@ -3,6 +3,7 @@ import {
   ExportTemplatesBody,
   ImportDecisions,
   TransferManifest,
+  transferAttachmentPath,
   transferFilePath,
   type TransferTemplate,
 } from './template-transfer';
@@ -238,5 +239,57 @@ describe('TransferTemplate: графики (§35.6)', () => {
       }),
     ).toContain('ключ charts занят графиками');
     expect(messages({ charts: [chart({ extra: 1 })] }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('настройки PDF и приложения в архиве (§36.6)', () => {
+  const att = (n: number, over: object = {}) => ({
+    file: transferAttachmentPath(0, n),
+    sha256: SHA,
+    name: `${n}.pdf`,
+    placement: 'end' as const,
+    sortOrder: n,
+    pdfa: true,
+    ...over,
+  });
+
+  it('без полей — как раньше; с полями — проходит', () => {
+    expect(TransferManifest.safeParse(manifest([tpl()])).success).toBe(true);
+    const ok = TransferManifest.safeParse(
+      manifest([
+        tpl({
+          pdfOptions: { pdfa: true, watermark: { text: 'КОПИЯ' } },
+          attachments: [att(0), att(1)],
+        } as never),
+      ]),
+    );
+    expect(ok.success).toBe(true);
+    expect(ok.data!.templates[0]!.pdfOptions!.watermark!.opacity).toBe(20);
+  });
+
+  it('путь файла приложения, лимит 10, правило PDF/A', () => {
+    const wrongPath = TransferManifest.safeParse(
+      manifest([tpl({ attachments: [att(0, { file: 'x.pdf' })] } as never)]),
+    );
+    expect(wrongPath.success).toBe(false);
+    expect(wrongPath.error!.issues[0]!.message).toBe(
+      `ожидается путь ${transferAttachmentPath(0, 0)}`,
+    );
+    const many = TransferManifest.safeParse(
+      manifest([tpl({ attachments: Array.from({ length: 11 }, (_, i) => att(i)) } as never)]),
+    );
+    expect(many.success).toBe(false);
+    const rule = TransferManifest.safeParse(
+      manifest([
+        tpl({
+          pdfOptions: { pdfa: true },
+          attachments: [att(0, { pdfa: false, name: 'скан.pdf' })],
+        } as never),
+      ]),
+    );
+    expect(rule.success).toBe(false);
+    expect(rule.error!.issues.map((i) => i.message)).toContain(
+      'PDF/A включён: файл «скан.pdf» не в формате PDF/A',
+    );
   });
 });

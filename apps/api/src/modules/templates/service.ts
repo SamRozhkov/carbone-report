@@ -1,6 +1,8 @@
 import {
   outputFormatsFor,
+  PdfOptions,
   type TemplateAdminDetails,
+  type TemplateAttachment,
   type TemplateCategoryRef,
   type TemplateChart,
   type TemplateDetails,
@@ -14,10 +16,12 @@ import { asc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client';
 import {
   categories,
+  templateAttachments,
   templateCharts,
   templateParams,
   templateQueries,
   templates,
+  type TemplateAttachmentRow,
   type TemplateRow,
 } from '../../db/schema';
 import type { AppDeps, TemplateFileRef } from '../../deps';
@@ -32,12 +36,18 @@ export interface TemplateFull {
   queries: TemplateQuery[];
   params: TemplateParam[];
   charts: TemplateChart[];
+  pdfOptions: PdfOptions;
+  attachments: TemplateAttachmentRow[];
 }
 
 export const templateDir = (id: string) => `templates/${id}`;
 /** Каждая версия — отдельный файл: строка переключается на него атомарно в транзакции. */
 export const templateFilePath = (id: string, ext: TemplateExt, version: number) =>
   `${templateDir(id)}/v${version}.${ext}`;
+
+/** Приложенный PDF-файл шаблона (§36.3): удаляется вместе с каталогом шаблона. */
+export const templateAttachmentPath = (id: string, attachmentId: string) =>
+  `${templateDir(id)}/attachments/${attachmentId}.pdf`;
 
 /**
  * Убирает файл версии, которую не удалось зафиксировать. Под блокировкой строки и только если строка
@@ -106,9 +116,35 @@ export async function loadTemplateCharts(db: Db | DbTx, id: string): Promise<Tem
   return cs.map((c) => ({ ...c.config, key: c.key }));
 }
 
+/** Приложения в порядке итогового документа: start по порядку, затем end по порядку. */
+export async function loadTemplateAttachments(
+  db: Db | DbTx,
+  id: string,
+): Promise<TemplateAttachmentRow[]> {
+  const rows = await db
+    .select()
+    .from(templateAttachments)
+    .where(eq(templateAttachments.templateId, id))
+    .orderBy(asc(templateAttachments.sortOrder), asc(templateAttachments.createdAt));
+  return [
+    ...rows.filter((r) => r.placement === 'start'),
+    ...rows.filter((r) => r.placement === 'end'),
+  ];
+}
+
+export const toAttachmentDto = (r: TemplateAttachmentRow): TemplateAttachment => ({
+  id: r.id,
+  name: r.name,
+  placement: r.placement,
+  sortOrder: r.sortOrder,
+  size: r.size,
+  pages: r.pages,
+  pdfa: r.pdfa,
+});
+
 export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull> {
   const row = await loadTemplate(db, id);
-  const [queries, ps, charts, cat] = await Promise.all([
+  const [queries, ps, charts, cat, attachments] = await Promise.all([
     loadTemplateQueries(db, id),
     db
       .select()
@@ -117,6 +153,7 @@ export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull
       .orderBy(asc(templateParams.sortOrder)),
     loadTemplateCharts(db, id),
     loadCategoryRef(db, row.categoryId),
+    loadTemplateAttachments(db, id),
   ]);
   return {
     row,
@@ -133,6 +170,8 @@ export async function loadTemplateFull(db: Db, id: string): Promise<TemplateFull
       multiple: p.multiple,
     })),
     charts,
+    pdfOptions: PdfOptions.parse(row.pdfOptions),
+    attachments,
   };
 }
 
@@ -184,6 +223,8 @@ export const toAdminDetails = (f: TemplateFull): TemplateAdminDetails => ({
   version: f.row.version,
   queries: f.queries,
   charts: f.charts,
+  pdfOptions: f.pdfOptions,
+  attachments: f.attachments.map(toAttachmentDto),
   lastSaveError: f.row.lastSaveError,
   lastSaveErrorAt: f.row.lastSaveErrorAt?.toISOString() ?? null,
 });

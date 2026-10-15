@@ -1,4 +1,4 @@
-import type { TemplateChart } from '@carbone-reports/shared';
+import type { PdfOptions, TemplateAttachment, TemplateChart } from '@carbone-reports/shared';
 
 export const adminTemplate = {
   id: 't1',
@@ -12,6 +12,8 @@ export const adminTemplate = {
   version: 3,
   queries: [{ key: 'company', mode: 'single', sql: 'select 1 as name' }],
   charts: [] as TemplateChart[],
+  pdfOptions: { pdfa: false } as PdfOptions,
+  attachments: [] as TemplateAttachment[],
   params: [
     {
       name: 'from',

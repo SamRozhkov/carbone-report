@@ -2,6 +2,8 @@ import type {
   OutputFormat,
   ParamType,
   ParamValue,
+  PdfOptions,
+  PdfPlacement,
   QueryMode,
   Role,
   SelectOption,
@@ -122,6 +124,8 @@ export const templates = pgTable('templates', {
   updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
   categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
   public: boolean('public').notNull().default(false),
+  /** Настройки PDF (§36.1); {} — без настроек. */
+  pdfOptions: jsonb('pdf_options').$type<Partial<PdfOptions>>().notNull().default({}),
 });
 
 export const templateGroups = pgTable(
@@ -189,6 +193,22 @@ export const templateCharts = pgTable(
   },
   (t) => [unique().on(t.templateId, t.key)],
 );
+
+export const templateAttachments = pgTable('template_attachments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  templateId: uuid('template_id')
+    .notNull()
+    .references(() => templates.id, { onDelete: 'cascade' }),
+  placement: text('placement').$type<PdfPlacement>().notNull(),
+  sortOrder: integer('sort_order').notNull(),
+  name: text('name').notNull(),
+  filePath: text('file_path').notNull(),
+  size: integer('size').notNull(),
+  pages: integer('pages').notNull(),
+  pdfa: boolean('pdfa').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+export type TemplateAttachmentRow = typeof templateAttachments.$inferSelect;
 
 export const reportRuns = pgTable('report_runs', {
   id: uuid('id').primaryKey().defaultRandom(),

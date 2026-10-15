@@ -19,6 +19,7 @@ import { registerMaintenance } from './modules/maintenance/routes';
 import { registerOnlyOfficeRoutes } from './modules/onlyoffice/routes';
 import { registerRenderRoutes } from './modules/render/routes';
 import { registerReportRoutes } from './modules/reports/routes';
+import { registerTemplatePdfRoutes } from './modules/templates/pdf-routes';
 import { registerTemplateRoutes } from './modules/templates/routes';
 import { registerUserRoutes } from './modules/users/routes';
 import { registerVersionRoutes } from './modules/version/routes';
@@ -121,6 +122,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   registerAccessRoutes(app, deps, guards);
   registerDatasourceRoutes(app, deps, guards);
   registerTemplateRoutes(app, deps, guards);
+  registerTemplatePdfRoutes(app, deps, guards);
   registerReportRoutes(app, deps, guards);
   registerOnlyOfficeRoutes(app, deps, guards);
   registerRenderRoutes(app, deps.renderFiles);

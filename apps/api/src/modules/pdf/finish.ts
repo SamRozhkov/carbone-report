@@ -1,10 +1,17 @@
-import { fillPdfText, MAX_PDF_RESULT_BYTES, type PdfOptions } from '@carbone-reports/shared';
+import {
+  fillPdfText,
+  hasPdfProtection,
+  MAX_PDF_RESULT_BYTES,
+  type PdfOptions,
+} from '@carbone-reports/shared';
 import type { TemplateAttachmentRow } from '../../db/schema';
 import type { AppDeps } from '../../deps';
+import { decryptSecret } from '../../lib/crypto';
 import { AppError, badRequest } from '../../lib/errors';
 import type { TemplateFull } from '../templates/service';
 import { sanitizePdfText } from './font';
 import type { PdfPostJob } from './postprocess';
+import type { PdfProtectJob } from './protect';
 
 /** Настройки PDF шаблона для сборки отчёта (§36.4). */
 export interface TemplatePdf {
@@ -15,13 +22,29 @@ export interface TemplatePdf {
     'name' | 'placement' | 'sortOrder' | 'filePath' | 'pages' | 'pdfa'
   >[];
   templateName: string;
+  /** Шифрование (§37.2); null — без пароля и запретов или предпросмотр. */
+  protection: PdfProtectJob | null;
 }
 
-export const templatePdf = (full: TemplateFull): TemplatePdf => ({
-  options: full.pdfOptions,
-  attachments: full.attachments,
-  templateName: full.row.name,
-});
+/** `key` — ключ секретов (config.encryptionKey); null — без защиты: предпросмотр администратора (§37.2). */
+export function templatePdf(full: TemplateFull, key: Buffer | null): TemplatePdf {
+  const o = full.pdfOptions;
+  const enc = full.row.pdfPasswordEnc;
+  return {
+    options: o,
+    attachments: full.attachments,
+    templateName: full.row.name,
+    protection:
+      key && hasPdfProtection(o, enc !== null)
+        ? {
+            userPassword: enc === null ? '' : decryptSecret(enc, key),
+            noPrint: o.protection?.noPrint ?? false,
+            noCopy: o.protection?.noCopy ?? false,
+            noModify: o.protection?.noModify ?? false,
+          }
+        : null,
+  };
+}
 
 /** Без водяного знака, нумерации, метаданных и приложений PDF не обрабатывается (только PDF/A — тоже). */
 export function needsPostprocess(p: TemplatePdf): boolean {
@@ -56,31 +79,36 @@ export function buildPdfJob(
   };
 }
 
-/** Итоговый PDF: приложения из хранилища, обработка в пуле, лимит 100 МБ (§36.4). */
+/** Итоговый PDF: приложения из хранилища, обработка в пуле, шифрование последним шагом, лимит 100 МБ (§36.4, §37.2). */
 export async function finishPdf(
-  deps: Pick<AppDeps, 'storage' | 'pdf'>,
+  deps: Pick<AppDeps, 'storage' | 'pdf' | 'pdfProtect'>,
   pdf: Buffer,
   p: TemplatePdf,
   data: unknown,
   timeoutMs: number,
 ): Promise<Buffer> {
-  if (!needsPostprocess(p)) return pdf;
-  const files = await Promise.all(
-    p.attachments.map(async (a) => {
-      try {
-        return await deps.storage.read(a.filePath);
-      } catch (e) {
-        throw new AppError(
-          'STORAGE_ERROR',
-          502,
-          `приложенный файл «${a.name}» недоступен`,
-          undefined,
-          e,
-        );
-      }
-    }),
-  );
-  const out = await deps.pdf(pdf, buildPdfJob(p, data, new Date(), files), timeoutMs);
+  const post = needsPostprocess(p);
+  if (!post && !p.protection) return pdf;
+  let out = pdf;
+  if (post) {
+    const files = await Promise.all(
+      p.attachments.map(async (a) => {
+        try {
+          return await deps.storage.read(a.filePath);
+        } catch (e) {
+          throw new AppError(
+            'STORAGE_ERROR',
+            502,
+            `приложенный файл «${a.name}» недоступен`,
+            undefined,
+            e,
+          );
+        }
+      }),
+    );
+    out = await deps.pdf(out, buildPdfJob(p, data, new Date(), files), timeoutMs);
+  }
+  if (p.protection) out = await deps.pdfProtect(out, p.protection, timeoutMs);
   if (out.length > MAX_PDF_RESULT_BYTES) throw badRequest('итоговый PDF больше 100 МБ');
   return out;
 }

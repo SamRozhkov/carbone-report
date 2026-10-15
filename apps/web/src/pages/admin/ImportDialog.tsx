@@ -251,6 +251,12 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
               Нет групп: {t.missingGroups.join(', ')} — доступ не будет выдан
             </Text>
           )}
+          {t.pdfPasswordSet && (
+            <Text as="div" variant="caption-2" color="warning">
+              Пароль PDF не переносится: новый шаблон будет без пароля, при обновлении останется
+              пароль текущего шаблона
+            </Text>
+          )}
           {!t.categoryExists && t.category && (
             <Text as="div" variant="caption-2" color="warning">
               Будет создана категория «{t.category}»

@@ -225,7 +225,7 @@ describe('перенос шаблонов между средами', () => {
       errors: [],
       datasource: { name: 'Учёт', database: src.database },
     });
-    expect(JSON.stringify(p)).not.toMatch(/password/i);
+    expect(JSON.stringify(p)).not.toMatch(/password(?!Set)/i);
     expect(await dbTemplateIds(b)).toEqual(before);
   });
 
@@ -772,5 +772,78 @@ describe('перенос шаблонов между средами', () => {
       message: `шаблон «${pdfName}»: файл «Титул.pdf»: файл не PDF`,
     });
     expect(await dbTemplateIds(b)).toEqual(beforeIds);
+  });
+
+  it('пароль PDF не переносится: признак в архиве, предупреждение, update сохраняет пароль цели (§37.4)', async () => {
+    const { templates } = await import('../src/db/schema');
+    const { eq } = await import('drizzle-orm');
+    const name = `PDFPW ${randomUUID().slice(0, 6)}`;
+    const srcId = await createTemplate(a, adminA, dsA);
+    await a.app.inject({
+      method: 'PATCH',
+      url: `/api/templates/${srcId}`,
+      headers: { cookie: adminA },
+      payload: { name },
+    });
+    const putPw = (t: TestApp, cookie: string, id: string, body: object) =>
+      t.app.inject({
+        method: 'PUT',
+        url: `/api/templates/${id}/pdf-options`,
+        headers: { cookie },
+        payload: body,
+      });
+    await putPw(a, adminA, srcId, { protection: { noCopy: true }, password: 'секрет-A' });
+
+    // Выгрузка: признак и запреты есть, пароля нет нигде в манифесте.
+    const z = await exportZip(a, adminA, [srcId]);
+    const m = await manifestOf(z);
+    const t0 = (m.templates as Record<string, unknown>[])[0]!;
+    expect(t0.pdfPasswordSet).toBe(true);
+    expect(t0.pdfOptions).toMatchObject({ protection: { noCopy: true } });
+    expect(JSON.stringify(m)).not.toContain('секрет-A');
+
+    // Предпросмотр: признак для предупреждения.
+    const p = (await preview(b, adminB, z)).json() as ImportPreview;
+    expect(p.templates[0]!.pdfPasswordSet).toBe(true);
+
+    // Создание: без пароля, запреты на месте.
+    const created = await apply(b, adminB, z, [{ index: 0, action: 'create', datasourceId: dsB }]);
+    const newId = (created.json() as ImportResult).templates[0]!.id!;
+    const row = async (id: string) =>
+      (await b.deps.db.select().from(templates).where(eq(templates.id, id)))[0]!;
+    expect((await row(newId)).pdfPasswordEnc).toBeNull();
+    expect((await row(newId)).pdfOptions).toMatchObject({ protection: { noCopy: true } });
+
+    // Обновление шаблона с паролем архивом с признаком — пароль цели остаётся.
+    await putPw(b, adminB, newId, { password: 'секрет-B' });
+    const encB = (await row(newId)).pdfPasswordEnc;
+    const upd = await apply(b, adminB, z, [
+      {
+        index: 0,
+        action: 'update',
+        datasourceId: dsB,
+        targetId: newId,
+        targetUpdatedAt: await stamp(z, newId),
+      },
+    ]);
+    expect(upd.statusCode).toBe(200);
+    expect((await row(newId)).pdfPasswordEnc).toBe(encB);
+
+    // Обновление архивом без пароля — пароль снят.
+    await putPw(a, adminA, srcId, { password: null });
+    const z2 = await exportZip(a, adminA, [srcId]);
+    expect((await manifestOf(z2)).templates).toEqual([
+      expect.not.objectContaining({ pdfPasswordSet: expect.anything() }),
+    ]);
+    await apply(b, adminB, z2, [
+      {
+        index: 0,
+        action: 'update',
+        datasourceId: dsB,
+        targetId: newId,
+        targetUpdatedAt: await stamp(z2, newId),
+      },
+    ]);
+    expect((await row(newId)).pdfPasswordEnc).toBeNull();
   });
 });

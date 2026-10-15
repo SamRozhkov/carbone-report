@@ -38,6 +38,7 @@ const item = (over: Record<string, unknown>) => ({
   categoryExists: true,
   groups: [],
   missingGroups: [],
+  pdfPasswordSet: false,
   errors: [],
   ...over,
 });
@@ -62,6 +63,23 @@ async function openDialog(file = new File(['PK'], 'a.crt.zip')) {
 }
 
 describe('ImportDialog', () => {
+  it('пароль PDF в архиве → предупреждение (§37.4)', async () => {
+    mockApi([
+      ...base,
+      {
+        method: 'POST',
+        path: '/api/templates/import/preview',
+        body: preview([item({ pdfPasswordSet: true })]),
+      },
+    ]);
+    const dialog = await openDialog();
+    expect(
+      await within(dialog).findByText(
+        'Пароль PDF не переносится: новый шаблон будет без пароля, при обновлении останется пароль текущего шаблона',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('нет совпадения → «создать», источник подставлен по имени; загрузка и итог', async () => {
     const { calls } = mockApi([
       ...base,

@@ -293,3 +293,27 @@ describe('настройки PDF и приложения в архиве (§36.6
     );
   });
 });
+
+describe('пароль PDF в архиве (§37.4)', () => {
+  it('pdfPasswordSet — необязательный признак', () => {
+    expect(
+      TransferManifest.safeParse(manifest([tpl({ pdfPasswordSet: true } as never)])).success,
+    ).toBe(true);
+  });
+
+  it('PDF/A вместе с паролем или запретами — ошибка у pdfOptions.pdfa', () => {
+    for (const extra of [
+      { pdfOptions: { pdfa: true }, pdfPasswordSet: true },
+      { pdfOptions: { pdfa: true, protection: { noPrint: true } } },
+    ]) {
+      const r = TransferManifest.safeParse(manifest([tpl(extra as never)]));
+      expect(r.success).toBe(false);
+      expect(r.error!.issues).toContainEqual(
+        expect.objectContaining({
+          path: ['templates', 0, 'pdfOptions', 'pdfa'],
+          message: 'PDF/A несовместим с паролем и ограничениями',
+        }),
+      );
+    }
+  });
+});

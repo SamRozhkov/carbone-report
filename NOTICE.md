@@ -22,6 +22,9 @@ Carbone Reports распространяется по лицензии PolyForm 
 подробности — в [`packages/carbone/NOTICE.md`](packages/carbone/NOTICE.md). Вкладка «Графики» в браузере использует
 Apache ECharts (Apache-2.0).
 
+Обработка PDF (с 2.7.0) использует `pdf-lib` 1.17.1 — MIT, https://github.com/Hopding/pdf-lib;
+`@pdf-lib/fontkit` 1.1.1 — MIT, https://github.com/Hopding/fontkit.
+
 ## ONLYOFFICE Document Server
 
 Document Server (контейнер `onlyoffice`) — отдельный продукт, который не входит в этот репозиторий и образы проекта

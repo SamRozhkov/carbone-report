@@ -288,6 +288,8 @@ export const TemplateAdminDetails = TemplateDetails.extend({
   pdfOptions: PdfOptions,
   /** Приложенные PDF-файлы в порядке итогового документа (§36.3). */
   attachments: z.array(TemplateAttachment),
+  /** Задан пароль на открытие PDF (§37.1); сам пароль API не возвращает. */
+  pdfPasswordSet: z.boolean(),
   lastSaveError: z.string().nullable(),
   /** Момент последней ошибки сохранения OnlyOffice (ISO); новая ошибка — новая метка. */
   lastSaveErrorAt: z.string().nullable(),

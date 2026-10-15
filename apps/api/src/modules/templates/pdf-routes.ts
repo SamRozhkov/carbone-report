@@ -1,14 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import {
+  hasPdfProtection,
   IdParams,
   MAX_PDF_ATTACHMENT_BYTES,
   MAX_PDF_ATTACHMENT_PAGES,
   MAX_PDF_ATTACHMENTS,
   MoveAttachmentBody,
   normalizePdfOptions,
+  PDF_PROTECTION_PDFA_MESSAGE,
   PdfOptions,
   PdfPlacement,
+  SavePdfOptionsBody,
 } from '@carbone-reports/shared';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
@@ -16,6 +19,7 @@ import { z } from 'zod';
 import type { App } from '../../app';
 import { templateAttachments, templates } from '../../db/schema';
 import type { AppDeps } from '../../deps';
+import { encryptSecret } from '../../lib/crypto';
 import { badRequest, notFound } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
 import { inspectPdf, PdfInputError } from '../pdf/inspect';
@@ -86,19 +90,39 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
 
   app.put(
     '/api/templates/:id/pdf-options',
-    { ...admin, schema: { params: IdParams, body: PdfOptions } },
+    { ...admin, schema: { params: IdParams, body: SavePdfOptionsBody } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
-      const options = normalizePdfOptions(req.body);
+      const { password, ...rest } = req.body;
+      const options = normalizePdfOptions(rest);
       assertNoIssues(pdfOptionIssues(options));
       await db.transaction(async (tx) => {
-        // Правило PDF/A — под блокировкой строки: параллельная загрузка приложения ждёт.
+        // Правила PDF/A — под блокировкой строки: параллельная загрузка приложения ждёт.
         await lockTemplate(tx, row.id);
         if (options.pdfa) {
           const bad = (await loadTemplateAttachments(tx, row.id)).find((a) => !a.pdfa);
           if (bad) assertNoIssues([{ path: '/pdfa', message: pdfaMessage(bad.name) }]);
+          const [cur] = await tx
+            .select({ enc: templates.pdfPasswordEnc })
+            .from(templates)
+            .where(eq(templates.id, row.id));
+          // Итоговое состояние пароля (R3): не передан — сохранённый.
+          const passwordSet = password === undefined ? cur!.enc !== null : password !== null;
+          if (hasPdfProtection(options, passwordSet))
+            assertNoIssues([{ path: '/pdfa', message: PDF_PROTECTION_PDFA_MESSAGE }]);
         }
-        await tx.update(templates).set({ pdfOptions: options }).where(eq(templates.id, row.id));
+        await tx
+          .update(templates)
+          .set({
+            pdfOptions: options,
+            ...(password === undefined
+              ? {}
+              : {
+                  pdfPasswordEnc:
+                    password === null ? null : encryptSecret(password, deps.config.encryptionKey),
+                }),
+          })
+          .where(eq(templates.id, row.id));
         await touch(tx, row.id, currentUser(req).id);
       });
       return toAdminDetails(await loadTemplateFull(db, row.id));

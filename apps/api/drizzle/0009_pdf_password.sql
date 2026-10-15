@@ -1,0 +1,1 @@
+ALTER TABLE "templates" ADD COLUMN "pdf_password_enc" text;

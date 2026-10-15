@@ -4,6 +4,7 @@ import { TemplateChart } from './charts';
 z.config(z.locales.ru());
 
 export * from './charts';
+export * from './pdf-options';
 
 export const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const RESERVED_NAMES = new Set(['__proto__', 'constructor', 'prototype']);

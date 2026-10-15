@@ -144,3 +144,101 @@ describe('PdfTab', () => {
     ]);
   });
 });
+
+describe('PdfTab — защита (§37.3)', () => {
+  const base = { ...adminTemplate, pdfOptions: { pdfa: false } } as TemplateAdminDetails;
+
+  it('пароль не задан: поле; ввод и запрет — отправляются password и protection', async () => {
+    const { calls } = mockApi([
+      {
+        method: 'PUT',
+        path: '/api/templates/t1/pdf-options',
+        body: { ...base, pdfPasswordSet: true },
+      },
+    ]);
+    renderWithProviders(<PdfTab template={base} />);
+    await userEvent.type(await screen.findByLabelText('Пароль на открытие'), 'секрет1');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Запретить печать' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
+    await waitFor(() => expect(calls.at(-1)?.method).toBe('PUT'));
+    expect(calls.at(-1)!.body).toEqual({
+      pdfa: false,
+      protection: { noPrint: true, noCopy: false, noModify: false },
+      password: 'секрет1',
+    });
+  });
+
+  it('«Показать» меняет тип поля', async () => {
+    mockApi([]);
+    renderWithProviders(<PdfTab template={base} />);
+    const input = await screen.findByLabelText('Пароль на открытие');
+    expect(input).toHaveAttribute('type', 'password');
+    await userEvent.click(screen.getByRole('button', { name: 'Показать' }));
+    expect(input).toHaveAttribute('type', 'text');
+  });
+
+  it('пароль задан: «Пароль задан»; «Убрать» отправляет null; без правок password не отправляется', async () => {
+    const withPw = { ...base, pdfPasswordSet: true } as TemplateAdminDetails;
+    // mockApi отдаёт первый подходящий маршрут: оба сохранения получают withPw.
+    const { calls } = mockApi([
+      { method: 'PUT', path: '/api/templates/t1/pdf-options', body: withPw },
+    ]);
+    renderWithProviders(<PdfTab template={withPw} />);
+    expect(await screen.findByText('Пароль задан')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Пароль на открытие')).toBeNull();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Запретить изменение' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
+    await waitFor(() => expect(calls.at(-1)?.method).toBe('PUT'));
+    expect(calls.at(-1)!.body).not.toHaveProperty('password');
+    await userEvent.click(screen.getByRole('button', { name: 'Убрать' }));
+    expect(screen.getByText('Пароль будет снят при сохранении')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls.at(-1)!.body).toMatchObject({ password: null });
+  });
+
+  it('«Сменить» показывает поле, «Отмена» возвращает «Пароль задан»', async () => {
+    mockApi([]);
+    renderWithProviders(
+      <PdfTab template={{ ...base, pdfPasswordSet: true } as TemplateAdminDetails} />,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Сменить' }));
+    expect(screen.getByLabelText('Пароль на открытие')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Отмена' }));
+    expect(screen.getByText('Пароль задан')).toBeInTheDocument();
+  });
+
+  it('PDF/A выключает блок «Защита», защита выключает PDF/A', async () => {
+    mockApi([]);
+    renderWithProviders(<PdfTab template={base} />);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'PDF/A-2b' }));
+    expect(screen.getByText('Недоступно при PDF/A')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Запретить печать' })).toBeDisabled();
+    expect(screen.getByLabelText('Пароль на открытие')).toBeDisabled();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'PDF/A-2b' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Запретить копирование текста' }));
+    expect(screen.getByRole('checkbox', { name: 'PDF/A-2b' })).toBeDisabled();
+    expect(screen.getByText('Недоступно при пароле или запретах')).toBeInTheDocument();
+  });
+
+  it('ошибка пароля — у поля', async () => {
+    mockApi([
+      {
+        method: 'PUT',
+        path: '/api/templates/t1/pdf-options',
+        status: 400,
+        body: {
+          error: {
+            code: 'VALIDATION',
+            message: 'неверные данные запроса',
+            details: [{ path: '/password', message: 'пароль — от 4 до 64 символов' }],
+          },
+        },
+      },
+    ]);
+    renderWithProviders(<PdfTab template={base} />);
+    await userEvent.type(await screen.findByLabelText('Пароль на открытие'), 'abc');
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
+    expect(await screen.findByText('пароль — от 4 до 64 символов')).toBeInTheDocument();
+  });
+});

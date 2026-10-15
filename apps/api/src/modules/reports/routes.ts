@@ -82,12 +82,13 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         // Снимок (§24.2): данные и копия файла шаблона; любой формат запуска собирается только из него.
         snapshotStarted = true;
         await writeSnapshot(deps, runId, ext, data, await templateFileRef(deps, full.row).read());
-        const pdf = templatePdf(full);
+        const pdf = templatePdf(full, deps.config.encryptionKey);
         await storage.write(
           snap.pdfOptions,
           Buffer.from(
             JSON.stringify({
               options: pdf.options,
+              passwordSet: full.row.pdfPasswordEnc !== null,
               attachments: pdf.attachments.map(({ name, placement, sortOrder, pages, pdfa }) => ({
                 name,
                 placement,
@@ -282,7 +283,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         data,
         'pdf',
         deadline,
-        templatePdf(full),
+        templatePdf(full, null),
       );
       return reply
         .header('content-type', MIME.pdf)

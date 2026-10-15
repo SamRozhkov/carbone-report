@@ -52,21 +52,70 @@ export const PdfMetadata = z.strictObject({
 });
 export type PdfMetadata = z.infer<typeof PdfMetadata>;
 
+// ---- Пароль и ограничения (§37) ----
+
+export const PDF_PASSWORD_MIN = 4;
+export const PDF_PASSWORD_MAX = 64;
+export const PDF_PROTECTION_PDFA_MESSAGE = 'PDF/A несовместим с паролем и ограничениями';
+
+/** Запреты для программ просмотра; `true` — действие запрещено. */
+export const PdfProtection = z.strictObject({
+  noPrint: z.boolean().default(false),
+  noCopy: z.boolean().default(false),
+  noModify: z.boolean().default(false),
+});
+export type PdfProtection = z.infer<typeof PdfProtection>;
+
+const isControl = (c: string) => {
+  const n = c.codePointAt(0)!;
+  return n < 0x20 || (n >= 0x7f && n <= 0x9f);
+};
+
+/** Пароль на открытие: длина — в символах, пробелы по краям — часть пароля. */
+export const PdfPassword = z
+  .string()
+  .refine((s) => {
+    const n = [...s].length;
+    return n >= PDF_PASSWORD_MIN && n <= PDF_PASSWORD_MAX;
+  }, `пароль — от ${PDF_PASSWORD_MIN} до ${PDF_PASSWORD_MAX} символов`)
+  .refine((s) => ![...s].some(isControl), 'пароль содержит недопустимые символы')
+  // Ограничение qpdf 11.3: позиционный пароль с «-» в начале принимается за параметр.
+  .refine((s) => !s.startsWith('-'), 'пароль не может начинаться с «-»');
+
 /** Выключенный блок — отсутствующий ключ (R1). */
 export const PdfOptions = z.strictObject({
   pdfa: z.boolean().default(false),
   watermark: PdfWatermark.optional(),
   pageNumbers: PdfPageNumbers.optional(),
   metadata: PdfMetadata.optional(),
+  protection: PdfProtection.optional(),
 });
 export type PdfOptions = z.infer<typeof PdfOptions>;
 
-/** Метаданные без единого значения не хранятся (R1). */
+/** Метаданные без единого значения и запреты без единого `true` не хранятся (R1). */
 export function normalizePdfOptions(o: PdfOptions): PdfOptions {
-  const { metadata, ...rest } = o;
-  if (!metadata || Object.values(metadata).every((v) => v === '')) return rest;
-  return { ...rest, metadata };
+  const { metadata, protection, ...rest } = o;
+  return {
+    ...rest,
+    ...(metadata && Object.values(metadata).some((v) => v !== '') ? { metadata } : {}),
+    ...(protection && Object.values(protection).some(Boolean) ? { protection } : {}),
+  };
 }
+
+/** Защита включена: задан пароль на открытие или отмечен хотя бы один запрет (§37.1). */
+export function hasPdfProtection(o: Pick<PdfOptions, 'protection'>, passwordSet: boolean): boolean {
+  return passwordSet || Boolean(o.protection && Object.values(o.protection).some(Boolean));
+}
+
+/**
+ * Тело `PUT …/pdf-options`: настройки и пароль. `password` не передан — пароль не меняется,
+ * строка — новый пароль, `null` — пароль снимается.
+ */
+export const SavePdfOptionsBody = z.strictObject({
+  ...PdfOptions.shape,
+  password: PdfPassword.nullable().optional(),
+});
+export type SavePdfOptionsBody = z.infer<typeof SavePdfOptionsBody>;
 
 export const PdfPlacement = z.enum(['start', 'end']);
 export type PdfPlacement = z.infer<typeof PdfPlacement>;

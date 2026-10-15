@@ -126,6 +126,8 @@ export const templates = pgTable('templates', {
   public: boolean('public').notNull().default(false),
   /** Настройки PDF (§36.1); {} — без настроек. */
   pdfOptions: jsonb('pdf_options').$type<Partial<PdfOptions>>().notNull().default({}),
+  /** Пароль на открытие PDF (§37.1), encryptSecret; null — без пароля. */
+  pdfPasswordEnc: text('pdf_password_enc'),
 });
 
 export const templateGroups = pgTable(

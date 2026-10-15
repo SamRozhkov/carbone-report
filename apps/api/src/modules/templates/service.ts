@@ -225,6 +225,7 @@ export const toAdminDetails = (f: TemplateFull): TemplateAdminDetails => ({
   charts: f.charts,
   pdfOptions: f.pdfOptions,
   attachments: f.attachments.map(toAttachmentDto),
+  pdfPasswordSet: f.row.pdfPasswordEnc !== null,
   lastSaveError: f.row.lastSaveError,
   lastSaveErrorAt: f.row.lastSaveErrorAt?.toISOString() ?? null,
 });

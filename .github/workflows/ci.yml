@@ -33,10 +33,14 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: qpdf для тестов шифрования PDF
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qpdf
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm exec prettier --check .
       - run: pnpm test
+        env:
+          REQUIRE_QPDF: '1'
       - run: pnpm test:scripts
       # Выпуск без записи в CHANGELOG не публикуется: образы и чарт ждут это задание.
       - name: Раздел CHANGELOG
@@ -60,9 +64,12 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: qpdf для тестов шифрования PDF
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qpdf
       - run: pnpm test:int
         env:
           TEST_ONLYOFFICE: '1'
+          REQUIRE_QPDF: '1'
 
   chart:
     name: Чарт Helm

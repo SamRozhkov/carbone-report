@@ -1,10 +1,13 @@
 import {
+  hasPdfProtection,
   normalizePdfOptions,
   PDF_PAGE_FORMAT_DEFAULT,
   type PdfMetadata,
   type PdfOptions,
   type PdfPageNumbers,
+  type PdfProtection,
   type PdfWatermark,
+  type SavePdfOptionsBody,
   type TemplateAdminDetails,
   type TemplateAttachment,
 } from '@carbone-reports/shared';
@@ -56,6 +59,13 @@ const META: { key: keyof PdfMetadata; label: string }[] = [
   { key: 'subject', label: 'Тема' },
   { key: 'keywords', label: 'Ключевые слова' },
 ];
+const NO_PROTECTION: PdfProtection = { noPrint: false, noCopy: false, noModify: false };
+const PROTECTION: { key: keyof PdfProtection; label: string }[] = [
+  { key: 'noPrint', label: 'Запретить печать' },
+  { key: 'noCopy', label: 'Запретить копирование текста' },
+  { key: 'noModify', label: 'Запретить изменение' },
+];
+type PwState = { mode: 'keep' | 'set' | 'remove'; value: string };
 const TAG_HINT = 'Можно {d.поле} — без форматтеров.';
 
 /** Черновик хранит выключенные блоки, чтобы флажок не стирал введённый текст. */
@@ -66,6 +76,7 @@ interface Draft {
   pnOn: boolean;
   pn: PdfPageNumbers;
   meta: PdfMetadata;
+  prot: PdfProtection;
 }
 
 function toDraft(o: PdfOptions): Draft {
@@ -80,6 +91,7 @@ function toDraft(o: PdfOptions): Draft {
       skipFirst: false,
     },
     meta: o.metadata ?? { title: '', author: '', subject: '', keywords: '' },
+    prot: o.protection ?? NO_PROTECTION,
   };
 }
 
@@ -89,6 +101,7 @@ function fromDraft(d: Draft): PdfOptions {
     ...(d.wmOn ? { watermark: d.wm } : {}),
     ...(d.pnOn ? { pageNumbers: d.pn } : {}),
     metadata: d.meta,
+    protection: d.prot,
   });
 }
 
@@ -103,7 +116,26 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(template.pdfOptions));
   const [placement, setPlacement] = useState<'start' | 'end'>('end');
   const [removing, setRemoving] = useState<TemplateAttachment | null>(null);
-  const dirty = JSON.stringify(fromDraft(draft)) !== canon(baseline);
+  const [pw, setPw] = useState<PwState>(() => ({
+    mode: template.pdfPasswordSet ? 'keep' : 'set',
+    value: '',
+  }));
+  const [showPw, setShowPw] = useState(false);
+  const pwBody: Pick<SavePdfOptionsBody, 'password'> =
+    pw.mode === 'remove'
+      ? { password: null }
+      : pw.mode === 'set' && pw.value
+        ? { password: pw.value }
+        : {};
+  const pwDirty = 'password' in pwBody;
+  const passwordSet =
+    pw.mode === 'remove'
+      ? false
+      : pw.mode === 'set' && pw.value !== ''
+        ? true
+        : template.pdfPasswordSet;
+  const protectionOn = hasPdfProtection({ protection: draft.prot }, passwordSet);
+  const dirty = JSON.stringify(fromDraft(draft)) !== canon(baseline) || pwDirty;
   // Настройки изменились на сервере: без несохранённых правок подхватываем, иначе — предупреждение.
   const stale = canon(template.pdfOptions) !== canon(baseline);
   const reseed = (t: TemplateAdminDetails) => {
@@ -112,11 +144,18 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
   };
   if (stale && !dirty) reseed(template);
 
+  const setPwState = (next: PwState) => {
+    save.reset();
+    setPw(next);
+  };
+
   const save = useMutation({
-    mutationFn: () => api.templates.savePdfOptions(template.id, fromDraft(draft)),
+    mutationFn: () => api.templates.savePdfOptions(template.id, { ...fromDraft(draft), ...pwBody }),
     onSuccess: (t) => {
       applyTemplate(queryClient, t);
       reseed(t);
+      setPw({ mode: t.pdfPasswordSet ? 'keep' : 'set', value: '' });
+      setShowPw(false);
       add({ name: `tpl-pdf-${Date.now()}`, title: 'Настройки PDF сохранены', theme: 'success' });
     },
   });
@@ -154,13 +193,14 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
   return (
     <div className="cr-stack" style={{ maxWidth: 760 }}>
       <Card view="outlined" style={{ padding: 16 }} className="cr-stack">
-        <Checkbox checked={draft.pdfa} onUpdate={(pdfa) => set({ pdfa })}>
+        <Checkbox checked={draft.pdfa} disabled={protectionOn} onUpdate={(pdfa) => set({ pdfa })}>
           PDF/A-2b
         </Checkbox>
         <Text color="secondary">
           Формат для архива и электронного документооборота: шрифты встроены, документ не зависит от
           внешних ресурсов. Все приложенные файлы тоже должны быть в PDF/A.
         </Text>
+        {protectionOn && <Text color="secondary">Недоступно при пароле или запретах</Text>}
         {errorOf('pdfa') && <Text color="danger">{errors.pdfa}</Text>}
       </Card>
 
@@ -258,6 +298,65 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
         ))}
       </Card>
 
+      <Card view="outlined" style={{ padding: 16 }} className="cr-stack">
+        <Text variant="subheader-2">Защита</Text>
+        {draft.pdfa && <Text color="secondary">Недоступно при PDF/A</Text>}
+        {pw.mode === 'keep' ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Text>Пароль задан</Text>
+            <Button disabled={draft.pdfa} onClick={() => setPwState({ mode: 'set', value: '' })}>
+              Сменить
+            </Button>
+            <Button disabled={draft.pdfa} onClick={() => setPwState({ mode: 'remove', value: '' })}>
+              Убрать
+            </Button>
+          </div>
+        ) : pw.mode === 'remove' ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Text>Пароль будет снят при сохранении</Text>
+            <Button onClick={() => setPwState({ mode: 'keep', value: '' })}>Отмена</Button>
+          </div>
+        ) : (
+          <Field label="Пароль на открытие" error={errorOf('password')}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <TextInput
+                type={showPw ? 'text' : 'password'}
+                value={pw.value}
+                disabled={draft.pdfa}
+                onUpdate={(value) => setPwState({ mode: 'set', value })}
+                controlProps={{
+                  'aria-label': 'Пароль на открытие',
+                  autoComplete: 'new-password',
+                }}
+              />
+              <Button disabled={draft.pdfa} onClick={() => setShowPw((s) => !s)}>
+                {showPw ? 'Скрыть' : 'Показать'}
+              </Button>
+              {template.pdfPasswordSet && (
+                <Button onClick={() => setPwState({ mode: 'keep', value: '' })}>Отмена</Button>
+              )}
+            </div>
+          </Field>
+        )}
+        {PROTECTION.map(({ key, label }) => (
+          <Checkbox
+            key={key}
+            checked={draft.prot[key]}
+            disabled={draft.pdfa}
+            onUpdate={(v) => set({ prot: { ...draft.prot, [key]: v } })}
+          >
+            {label}
+          </Checkbox>
+        ))}
+        <Text color="secondary">
+          Запреты выполняют программы просмотра PDF; это не криптографическая защита. Без пароля на
+          открытие документ откроет любой.
+        </Text>
+        <Text color="secondary">
+          Защита применяется к сформированным отчётам; предпросмотр показывается без неё.
+        </Text>
+      </Card>
+
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <Button
           view="action"
@@ -275,7 +374,14 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
         {dirty && (
           <>
             <Text color="warning">Есть несохранённые изменения</Text>
-            <Button view="flat" onClick={() => (save.reset(), reseed(template))}>
+            <Button
+              view="flat"
+              onClick={() => (
+                save.reset(),
+                reseed(template),
+                setPw({ mode: template.pdfPasswordSet ? 'keep' : 'set', value: '' })
+              )}
+            >
               Отменить
             </Button>
           </>

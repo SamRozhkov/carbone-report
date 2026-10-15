@@ -144,6 +144,8 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       params?: TemplateParam[];
       charts?: TemplateChart[];
       pdfOptions?: PdfOptions;
+      /** Пароль PDF в виде encryptSecret (копия шаблона в той же среде, §37 R7). */
+      pdfPasswordEnc?: string | null;
       /** Приложенные файлы (копия шаблона): файлы пишутся под новый идентификатор. */
       attachments?: {
         name: string;
@@ -185,6 +187,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
             categoryId: extra?.categoryId ?? null,
             public: extra?.public ?? false,
             ...(extra?.pdfOptions ? { pdfOptions: extra.pdfOptions } : {}),
+            ...(extra?.pdfPasswordEnc ? { pdfPasswordEnc: extra.pdfPasswordEnc } : {}),
             ...(extra?.defaultOutput ? { defaultOutput: extra.defaultOutput } : {}),
           })
           .returning();
@@ -442,6 +445,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           params: src.params,
           charts: src.charts,
           pdfOptions: src.pdfOptions,
+          pdfPasswordEnc: src.row.pdfPasswordEnc,
           attachments: await Promise.all(
             src.attachments.map(async (a) => ({
               name: a.name,

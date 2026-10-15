@@ -98,6 +98,7 @@ export function planImport(manifest: TransferManifest, lookup: ImportLookup): Im
       groups: t.groups,
       missingGroups: t.groups.filter((g) => !lookup.groupsByLower.has(g.toLowerCase())),
       errors: paramErrors(t.params),
+      pdfPasswordSet: t.pdfPasswordSet ?? false,
     };
   });
 }
@@ -379,6 +380,8 @@ export async function applyImport(
               filePath: path,
               lastSaveError: null,
               lastSaveErrorAt: null,
+              // Пароль не переносится (§37.4): с признаком в архиве остаётся пароль цели, без — снимается.
+              ...(t.pdfPasswordSet ? {} : { pdfPasswordEnc: null }),
             })
             .where(eq(templates.id, id));
           await tx.delete(templateGroups).where(eq(templateGroups.templateId, id));

@@ -64,6 +64,13 @@
       "when": 1792037291455,
       "tag": "0008_pdf_options",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792069812763,
+      "tag": "0009_pdf_password",
+      "breakpoints": true
     }
   ]
 }

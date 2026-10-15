@@ -550,6 +550,12 @@ const lookup = (over: Partial<ImportLookup> = {}): ImportLookup => ({
 });
 
 describe('planImport', () => {
+  it('pdfPasswordSet из архива; без признака — false (§37.4)', () => {
+    const mm = manifestFor([DOC, DOC]);
+    mm.templates[0] = { ...mm.templates[0]!, pdfPasswordSet: true };
+    expect(planImport(mm, lookup()).map((i) => i.pdfPasswordSet)).toEqual([true, false]);
+  });
+
   const m = manifestFor([DOC, DOC]);
   m.templates[0] = { ...m.templates[0]!, category: 'Финансы', groups: ['Бухгалтерия', 'Склад'] };
 

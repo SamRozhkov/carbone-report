@@ -14,6 +14,7 @@ export const adminTemplate = {
   charts: [] as TemplateChart[],
   pdfOptions: { pdfa: false } as PdfOptions,
   attachments: [] as TemplateAttachment[],
+  pdfPasswordSet: false,
   params: [
     {
       name: 'from',

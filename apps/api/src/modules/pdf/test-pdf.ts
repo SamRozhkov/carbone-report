@@ -23,9 +23,9 @@ export async function makePdf(pages: TestPage[]): Promise<Uint8Array> {
   return doc.save();
 }
 
-/** Текст каждой страницы. */
-export async function pageTexts(pdf: Uint8Array): Promise<string[]> {
-  const proxy = await getDocumentProxy(new Uint8Array(pdf));
+/** Текст каждой страницы; `password` — для зашифрованного PDF. */
+export async function pageTexts(pdf: Uint8Array, password?: string): Promise<string[]> {
+  const proxy = await getDocumentProxy(new Uint8Array(pdf), password ? { password } : undefined);
   const { text } = await extractText(proxy, { mergePages: false });
   return text as string[];
 }

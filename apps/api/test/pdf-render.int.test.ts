@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { CarboneRenderer, PdfPostprocessor, RenderOptions } from '../src/deps';
+import type { CarboneRenderer, PdfPostprocessor, PdfProtector, RenderOptions } from '../src/deps';
+import { AppError } from '../src/lib/errors';
 import { inProcessPdfPostprocessor } from '../src/modules/pdf/postprocessor';
 import { makePdf, pageTexts } from '../src/modules/pdf/test-pdf';
 import { createTemplate, createTestApp, loginAs, multipart, type TestApp } from './helpers';
@@ -18,6 +19,8 @@ const carbone: CarboneRenderer = {
   },
 };
 const pdf = vi.fn<PdfPostprocessor>(inProcessPdfPostprocessor);
+// Поддельное шифрование: дописывает метку, чтобы было видно, что файл прошёл через него.
+const protect = vi.fn<PdfProtector>(async (b) => Buffer.concat([b, Buffer.from('\n%ENC')]));
 const STATUS = {
   name: 'status',
   label: 'Статус',
@@ -58,7 +61,7 @@ async function upload(id: string, label: string, placement: string) {
 const newTemplate = () => createTemplate(t, admin, dsId, { params: [STATUS as never] });
 
 beforeAll(async () => {
-  t = await createTestApp({ carbone, pdf });
+  t = await createTestApp({ carbone, pdf, pdfProtect: protect });
   admin = (await loginAs(t, 'admin')).cookie;
   const ds = await t.app.inject({
     method: 'POST',
@@ -184,5 +187,128 @@ describe('итоговый PDF (§36.4)', () => {
     expect(seen.at(-1)).toMatchObject({ convertTo: 'docx' });
     expect(seen.at(-1)!.pdfa).toBeUndefined();
     expect(pdf).not.toHaveBeenCalled();
+  });
+});
+
+describe('пароль и запреты (§37.2)', () => {
+  const render = (id: string) =>
+    t.app.inject({
+      method: 'POST',
+      url: `/api/reports/${id}/render`,
+      headers: { cookie: admin },
+      payload: { params: { status: 'x' } },
+    });
+
+  it('запуск: out.pdf зашифрован, в снимке — passwordSet без пароля; предпросмотр — без защиты', async () => {
+    const id = await newTemplate();
+    await putOptions(id, { protection: { noCopy: true }, password: 'секрет1' });
+    protect.mockClear();
+    const run = await render(id);
+    expect(run.statusCode).toBe(201);
+    expect(protect).toHaveBeenCalledTimes(1);
+    expect(protect.mock.calls[0]![1]).toEqual({
+      userPassword: 'секрет1',
+      noPrint: false,
+      noCopy: true,
+      noModify: false,
+    });
+    const runId = run.json().runId as string;
+    const file = await t.app.inject({
+      url: `/api/runs/${runId}/file?format=pdf`,
+      headers: { cookie: admin },
+    });
+    expect(file.rawPayload.toString('latin1').endsWith('%ENC')).toBe(true);
+    const saved = (await t.deps.storage.read(`reports/${runId}/pdf-options.json`)).toString();
+    expect(JSON.parse(saved)).toMatchObject({
+      passwordSet: true,
+      options: { protection: { noCopy: true } },
+    });
+    expect(saved).not.toContain('секрет1');
+    protect.mockClear();
+    expect((await preview(id)).statusCode).toBe(200);
+    expect(protect).not.toHaveBeenCalled();
+  });
+
+  it('смена пароля не меняет PDF прошлого запуска; скачивание не шифрует повторно', async () => {
+    const id = await newTemplate();
+    await putOptions(id, { password: 'первый1' });
+    const runId = (await render(id)).json().runId as string;
+    const file = () =>
+      t.app.inject({ url: `/api/runs/${runId}/file?format=pdf`, headers: { cookie: admin } });
+    const first = (await file()).rawPayload;
+    await putOptions(id, { password: 'второй2' });
+    protect.mockClear();
+    expect(Buffer.compare((await file()).rawPayload, first)).toBe(0);
+    expect(protect).not.toHaveBeenCalled();
+  });
+
+  it('шифрование недоступно — 503, запуск с ошибкой, out.pdf не записан', async () => {
+    const id = await newTemplate();
+    await putOptions(id, { protection: { noPrint: true } });
+    protect.mockRejectedValueOnce(
+      new AppError('PDF_PROTECT_UNAVAILABLE', 503, 'шифрование PDF недоступно: не установлен qpdf'),
+    );
+    const r = await render(id);
+    expect(r.statusCode).toBe(503);
+    expect(r.json().error.message).toBe('шифрование PDF недоступно: не установлен qpdf');
+    const { reportRuns } = await import('../src/db/schema');
+    const { eq } = await import('drizzle-orm');
+    const runs = await t.deps.db.select().from(reportRuns).where(eq(reportRuns.templateId, id));
+    expect(runs.map((x) => x.status)).toEqual(['error']);
+    expect(await t.deps.storage.exists(`reports/${runs[0]!.id}/out.pdf`)).toBe(false);
+  });
+
+  it('другие форматы запуска с защитой — без шифрования', async () => {
+    const id = await newTemplate();
+    await putOptions(id, { password: 'секрет1' });
+    const runId = (await render(id)).json().runId as string;
+    protect.mockClear();
+    const docx = await t.app.inject({
+      url: `/api/runs/${runId}/file?format=docx`,
+      headers: { cookie: admin },
+    });
+    expect(docx.rawPayload.toString()).toBe('DOCX');
+    expect(protect).not.toHaveBeenCalled();
+  });
+
+  async function dropPdfRow(runId: string) {
+    const { reportRunFiles } = await import('../src/db/schema');
+    const { and, eq } = await import('drizzle-orm');
+    await t.deps.db
+      .delete(reportRunFiles)
+      .where(and(eq(reportRunFiles.runId, runId), eq(reportRunFiles.format, 'pdf')));
+    await t.deps.storage.remove(`reports/${runId}/out.pdf`);
+  }
+
+  it('у защищённого запуска нет out.pdf — 410, незашифрованный PDF не рендерится (§37)', async () => {
+    const id = await newTemplate();
+    await putOptions(id, { password: 'секрет1' });
+    const runId = (await render(id)).json().runId as string;
+    await dropPdfRow(runId);
+    protect.mockClear();
+    const before = seen.length;
+    const r = await t.app.inject({
+      url: `/api/runs/${runId}/file?format=pdf`,
+      headers: { cookie: admin },
+    });
+    expect(r.statusCode).toBe(410);
+    expect(protect).not.toHaveBeenCalled();
+    expect(seen.length).toBe(before);
+  });
+
+  it('у запуска без защиты нет out.pdf — собирается заново', async () => {
+    const id = await newTemplate();
+    await putOptions(id, { watermark: { text: 'КОПИЯ' } });
+    const runId = (await render(id)).json().runId as string;
+    await dropPdfRow(runId);
+    protect.mockClear();
+    const r = await t.app.inject({
+      url: `/api/runs/${runId}/file?format=pdf`,
+      headers: { cookie: admin },
+    });
+    expect(r.statusCode).toBe(200);
+    // Как и до 2.7.1 (R8): сборка из снимка без настроек PDF.
+    expect((await pageTexts(r.rawPayload))[0]!.trim()).toBe('REPORT');
+    expect(protect).not.toHaveBeenCalled();
   });
 });

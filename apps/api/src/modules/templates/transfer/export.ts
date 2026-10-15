@@ -297,6 +297,7 @@ async function runExport(deps: ExportDeps, ids: string[], now: Date): Promise<Ex
           .filter((c) => c.templateId === id)
           .map((c): TransferChart => ({ key: c.key, sortOrder: c.sortOrder, config: c.config })),
         pdfOptions: PdfOptions.parse(row.pdfOptions),
+        ...(row.pdfPasswordEnc !== null ? { pdfPasswordSet: true } : {}),
         attachments: ordered.map((a) => ({
           name: a.name,
           placement: a.placement,

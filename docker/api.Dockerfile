@@ -10,6 +10,10 @@ RUN pnpm config set store-dir /pnpm/store
 # --- Разработка: исходники монтируются томом, зависимости ставятся при старте контейнера ---
 FROM base AS dev
 WORKDIR /repo
+# qpdf — шифрование PDF: пароль и запреты (§37.2).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends qpdf \
+ && rm -rf /var/lib/apt/lists/*
 EXPOSE 3000
 CMD ["sh", "-c", "pnpm install --frozen-lockfile --filter @carbone-reports/api... && pnpm --filter @carbone-reports/api dev"]
 
@@ -36,6 +40,10 @@ RUN rm -rf /out/src /out/test
 FROM node:22-bookworm-slim AS prod
 ENV NODE_ENV=production
 WORKDIR /app
+# qpdf — шифрование PDF: пароль и запреты (§37.2).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends qpdf \
+ && rm -rf /var/lib/apt/lists/*
 COPY --from=build --chown=node:node /out ./
 RUN mkdir -p /data && chown node:node /data
 COPY LICENSE.md NOTICE.md /app/

@@ -1,4 +1,5 @@
 import type { PdfPostJob } from './modules/pdf/postprocess';
+import type { PdfProtectJob } from './modules/pdf/protect';
 import type { Inflight } from './lib/inflight';
 import type { OutputFormat, TemplateExt } from '@carbone-reports/shared';
 import type { Redis } from 'ioredis';
@@ -34,6 +35,9 @@ export interface CarboneRenderer {
 /** Обработка готового PDF (§36.4): приложения, водяной знак, нумерация, метаданные — в пределах timeoutMs. */
 export type PdfPostprocessor = (pdf: Buffer, job: PdfPostJob, timeoutMs: number) => Promise<Buffer>;
 
+/** Шифрование готового PDF (§37.2): пароль и запреты — в пределах timeoutMs. */
+export type PdfProtector = (pdf: Buffer, job: PdfProtectJob, timeoutMs: number) => Promise<Buffer>;
+
 export interface OnlyOfficeCommands {
   forceSave(key: string): Promise<void>;
 }
@@ -56,6 +60,8 @@ export interface AppDeps {
   carbone: CarboneRenderer;
   /** Обработка готового PDF в пуле рендера (тестам — в этом потоке). */
   pdf: PdfPostprocessor;
+  /** Шифрование PDF программой qpdf (§37.2). */
+  pdfProtect: PdfProtector;
   onlyoffice: OnlyOfficeCommands;
   fetchFile: FileFetcher;
   /** Общий Redis (лимит входа, режим обслуживания); null — лимиты считаются в памяти экземпляра. */

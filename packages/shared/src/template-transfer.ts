@@ -3,6 +3,7 @@ import {
   ChartKey,
   MAX_PDF_ATTACHMENTS,
   MAX_TEMPLATE_CHARTS,
+  PDF_PROTECTION_PDFA_MESSAGE,
   PdfOptions,
   PdfPlacement,
   TemplateChartConfig,
@@ -14,6 +15,7 @@ import {
   refineTemplateParam,
   TemplateParamFields,
   TemplateQuery,
+  hasPdfProtection,
 } from './index';
 
 // ---- Перенос шаблонов между средами (§33) ----
@@ -121,6 +123,8 @@ export const TransferTemplate = z
     params: z.array(TransferParam).max(1000),
     charts: z.array(TransferChart).max(MAX_TEMPLATE_CHARTS).optional(),
     pdfOptions: PdfOptions.optional(),
+    /** В исходной среде был пароль PDF (§37.4); сам пароль не переносится. Без пароля ключа нет. */
+    pdfPasswordSet: z.boolean().optional(),
     attachments: z.array(TransferAttachment).max(MAX_PDF_ATTACHMENTS).optional(),
     /** Путь файла шаблона в архиве. */
     file: z.string().min(1).max(200),
@@ -161,6 +165,8 @@ export const TransferTemplate = z
           issue(['attachments', i, 'pdfa'], `PDF/A включён: файл «${a.name}» не в формате PDF/A`);
       });
     }
+    if (t.pdfOptions?.pdfa && hasPdfProtection(t.pdfOptions, t.pdfPasswordSet ?? false))
+      issue(['pdfOptions', 'pdfa'], PDF_PROTECTION_PDFA_MESSAGE);
   });
 export type TransferTemplate = z.infer<typeof TransferTemplate>;
 
@@ -280,6 +286,8 @@ export interface ImportPreviewItem {
   missingGroups: string[];
   /** Ошибки проверки шаблона; такой шаблон можно только пропустить. */
   errors: string[];
+  /** В архиве у шаблона был пароль PDF: он не переносится (§37.4). */
+  pdfPasswordSet: boolean;
 }
 
 /** Ответ `POST /api/templates/import/preview`. */

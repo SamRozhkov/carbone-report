@@ -17,6 +17,7 @@ import { createAgentClient } from './modules/backups/agent-client';
 import { createSourcePools } from './modules/datasources/pools';
 import { createOnlyOfficeCommands } from './modules/onlyoffice/commands';
 import { createPoolPdfPostprocessor } from './modules/pdf/postprocessor';
+import { createQpdfProtector, qpdfVersion } from './modules/pdf/protect';
 import { createRenderHandoff } from './modules/render/handoff';
 import { createOnlyOfficeConverter } from './modules/render/onlyoffice-convert';
 import { RenderPool } from './modules/render/pool';
@@ -99,6 +100,7 @@ const deps: AppDeps = {
   sources: createSourcePools({ db, config }),
   carbone,
   pdf: createPoolPdfPostprocessor(renderPool),
+  pdfProtect: createQpdfProtector({ maxConcurrent: config.renderWorkers }),
   onlyoffice: createOnlyOfficeCommands({
     baseUrl: config.onlyofficeInternalUrl,
     secret: config.onlyofficeJwtSecret,
@@ -126,6 +128,9 @@ app.log.info(
   },
   'потоки рендера Carbone',
 );
+const qpdf = await qpdfVersion();
+if (qpdf) app.log.info({ qpdf }, 'шифрование PDF: qpdf найден');
+else app.log.warn('qpdf не найден: отчёты с паролем или запретами PDF не формируются (503)');
 // До listen: к первому запросу все строки уже указывают на пути с версией.
 await withStartupLock(pool, () =>
   migrateTemplateFiles({ db, storage: deps.storage, log: app.log }),

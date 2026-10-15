@@ -251,6 +251,7 @@ export async function createTestApp(
     sources: createSourcePools({ db, config: cfg }),
     carbone: { render: notConfigured('carbone') },
     pdf: inProcessPdfPostprocessor,
+    pdfProtect: notConfigured('pdfProtect'),
     onlyoffice: { forceSave: notConfigured('onlyoffice') },
     fetchFile: notConfigured('fetchFile'),
     redis: ownRedis,

@@ -16,6 +16,7 @@ import { createLdapAuthenticator } from './modules/auth/ldap';
 import { createAgentClient } from './modules/backups/agent-client';
 import { createSourcePools } from './modules/datasources/pools';
 import { createOnlyOfficeCommands } from './modules/onlyoffice/commands';
+import { createPoolPdfPostprocessor } from './modules/pdf/postprocessor';
 import { createRenderHandoff } from './modules/render/handoff';
 import { createOnlyOfficeConverter } from './modules/render/onlyoffice-convert';
 import { RenderPool } from './modules/render/pool';
@@ -97,6 +98,7 @@ const deps: AppDeps = {
   runFileGate: createRunFileGate(runFilePool),
   sources: createSourcePools({ db, config }),
   carbone,
+  pdf: createPoolPdfPostprocessor(renderPool),
   onlyoffice: createOnlyOfficeCommands({
     baseUrl: config.onlyofficeInternalUrl,
     secret: config.onlyofficeJwtSecret,

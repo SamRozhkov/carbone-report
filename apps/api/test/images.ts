@@ -21,3 +21,9 @@ export const LDAP_IMAGE = 'ghcr.io/ldapjs/docker-test-openldap/openldap:2023-10-
  * в CI (TEST_ONLYOFFICE=1).
  */
 export const ONLYOFFICE_IMAGE = 'onlyoffice/documentserver:9.4.0.1';
+
+/**
+ * Валидатор PDF/A veraPDF (официальный образ, только amd64, ~54 МБ): проверка итогового PDF/A
+ * в render-onlyoffice.int.test.ts (только в CI, TEST_ONLYOFFICE=1). В образ API не входит.
+ */
+export const VERAPDF_IMAGE = 'verapdf/cli:v1.30.3';

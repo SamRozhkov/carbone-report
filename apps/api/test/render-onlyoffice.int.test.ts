@@ -6,13 +6,16 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createFastify, type App } from '../src/app';
 import type { CarboneRenderer, TemplateFileRef } from '../src/deps';
 import { registerErrorHandler } from '../src/lib/errors';
+import { inspectPdf } from '../src/modules/pdf/inspect';
+import { postprocessPdf } from '../src/modules/pdf/postprocess';
+import { pageTexts } from '../src/modules/pdf/test-pdf';
 import { createRenderHandoff, type RenderHandoff } from '../src/modules/render/handoff';
 import { createOnlyOfficeConverter } from '../src/modules/render/onlyoffice-convert';
 import { RenderPool } from '../src/modules/render/pool';
 import { createEmbeddedRenderer } from '../src/modules/render/renderer';
 import { registerRenderRoutes } from '../src/modules/render/routes';
 import { renderWorkerUrl } from '../src/modules/render/worker-url';
-import { ONLYOFFICE_IMAGE } from './images';
+import { ONLYOFFICE_IMAGE, VERAPDF_IMAGE } from './images';
 
 // Настоящий Document Server весит около 3,4 ГБ: тест идёт только в CI (TEST_ONLYOFFICE=1).
 const enabled = Boolean(process.env.TEST_ONLYOFFICE);
@@ -366,6 +369,35 @@ function describeError(e: unknown): string {
   return parts.join(' <- ');
 }
 
+/** Аргументы CLI veraPDF: профиль PDF/A-2B, отчёт XML (Task 3 Step 6 — проверено по образу). */
+const VERAPDF_ARGS = ['--flavour', '2b', '--format', 'xml'];
+
+/** veraPDF в контейнере: соответствие PDF/A-2B и нарушенные правила (для журнала CI). */
+async function verapdf(pdf: Buffer): Promise<{ compliant: boolean; failed: string }> {
+  const c = await new GenericContainer(VERAPDF_IMAGE)
+    .withPlatform('linux/amd64')
+    .withCopyContentToContainer([{ content: pdf, target: '/data/out.pdf' }])
+    .withCommand([...VERAPDF_ARGS, '/data/out.pdf'])
+    .withWaitStrategy(Wait.forOneShotStartup())
+    .withStartupTimeout(180_000)
+    .start();
+  const chunks: string[] = [];
+  const stream = await c.logs();
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 10_000);
+    const done = () => (clearTimeout(timer), resolve());
+    stream.on('data', (ch: Buffer | string) => chunks.push(String(ch)));
+    stream.on('end', done);
+    stream.on('error', done);
+  });
+  await c.stop().catch(() => undefined);
+  const xml = chunks.join('');
+  const failed = [...xml.matchAll(/<rule [^>]*status="failed"[\s\S]*?<\/rule>/g)]
+    .map((m) => m[0].replace(/<check [\s\S]*?<\/check>/g, '').slice(0, 600))
+    .join('\n');
+  return { compliant: /isCompliant="true"/.test(xml), failed: failed || xml.slice(-4000) };
+}
+
 describe.skipIf(!enabled)('встроенный рендер + настоящий Document Server', () => {
   let app: App;
   let port: number;
@@ -688,6 +720,75 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
       expect(pdf.toString('latin1')).toMatch(/\/Subtype\s*\/Image\b/);
     },
     CONVERT_TIMEOUT,
+  );
+
+  it(
+    'PDF/A-2b: docx и xlsx → pdfa, водяной знак, нумерация, метаданные, приложение PDF/A → veraPDF',
+    async () => {
+      const roA = { ...(ro('pdf') as object), pdfa: true } as never;
+      const report = await diagnose('pdfa docx', async () =>
+        renderer.render(
+          tpl('docx', await docxTemplate(wp('Компания: {d.name}') + wp('Счёт № 42'))),
+          { name: NAME },
+          roA,
+        ),
+      );
+      const raw = await verapdf(report);
+      expect(raw.compliant, `PDF/A от OnlyOffice:\n${raw.failed}`).toBe(true);
+
+      const attachment = await diagnose('pdfa приложение', async () =>
+        renderer.render(tpl('docx', await docxTemplate(wp('Приложение 1'))), {}, roA),
+      );
+      expect((await inspectPdf(attachment)).pdfa).toBe(true);
+
+      const final = Buffer.from(
+        await postprocessPdf(report, {
+          pdfa: true,
+          watermark: { text: 'ЧЕРНОВИК', opacity: 20, color: 'red', angle: 'diagonal' },
+          pageNumbers: {
+            format: 'Стр. {page} из {pages}',
+            position: 'bottom-center',
+            skipFirst: false,
+          },
+          metadata: {
+            title: 'Счёт № 42',
+            author: 'Отдел продаж',
+            subject: 'Оплата',
+            keywords: 'счёт',
+          },
+          attachments: [{ placement: 'end', data: attachment }],
+          now: new Date().toISOString(),
+        }),
+      );
+      const checked = await verapdf(final);
+      expect(checked.compliant, `PDF/A после обработки:\n${checked.failed}`).toBe(true);
+      const texts = await pageTexts(final);
+      expect(texts).toHaveLength(2);
+      expect(texts[0]).toContain(NAME);
+      expect(texts[0]).toContain('ЧЕРНОВИК');
+      expect(texts[0]).toContain('Стр. 1 из 2');
+      expect(texts[1]).toContain('Приложение 1');
+      expect(texts[1]).toContain('Стр. 2 из 2');
+
+      const sheet = await diagnose('pdfa xlsx', async () =>
+        renderer.render(tpl('xlsx', await xlsxTemplate()), { name: NAME }, roA),
+      );
+      const xlsxFinal = Buffer.from(
+        await postprocessPdf(sheet, {
+          pdfa: true,
+          watermark: { text: 'КОПИЯ', opacity: 20, color: 'gray', angle: 'horizontal' },
+          pageNumbers: null,
+          metadata: null,
+          attachments: [],
+          now: new Date().toISOString(),
+        }),
+      );
+      const xlsxChecked = await verapdf(xlsxFinal);
+      expect(xlsxChecked.compliant, `PDF/A xlsx после обработки:\n${xlsxChecked.failed}`).toBe(
+        true,
+      );
+    },
+    CONVERT_TIMEOUT * 3,
   );
 
   it(

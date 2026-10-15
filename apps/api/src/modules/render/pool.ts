@@ -11,10 +11,14 @@ export interface RenderOptions {
 }
 
 export interface RenderJob {
+  /** carbone (по умолчанию) — сборка отчёта; pdf — обработка готового PDF (§36.4), template — сам PDF. */
+  kind?: 'carbone' | 'pdf';
   template: Buffer;
   ext: string;
   data: unknown;
   options: RenderOptions;
+  /** Дополнительные файлы задачи: для pdf — приложенные файлы в порядке data.attachments. */
+  extra?: Uint8Array[];
 }
 
 /** Готовый отчёт и предупреждения рендера (например, изображение по адресу не загрузилось). */
@@ -195,9 +199,18 @@ export class RenderPool {
     slot.task = task;
     // Всегда копия: шаблон вызывающего (в том числе из общего пула Node) не должен отсоединяться.
     const template = new Uint8Array(task.job.template);
+    const extra = (task.job.extra ?? []).map((b) => new Uint8Array(b));
     worker.postMessage(
-      { id: task.id, template, ext: task.job.ext, data: task.data, options: task.job.options },
-      [template.buffer],
+      {
+        id: task.id,
+        kind: task.job.kind ?? 'carbone',
+        template,
+        ext: task.job.ext,
+        data: task.data,
+        options: task.job.options,
+        extra,
+      },
+      [template.buffer, ...extra.map((e) => e.buffer as ArrayBuffer)],
     );
     task.timer = setTimeout(
       () => this.timeout(slot, task),

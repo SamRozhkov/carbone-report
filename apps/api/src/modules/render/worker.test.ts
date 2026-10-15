@@ -126,3 +126,53 @@ describe('worker.ts: изображения по адресу', () => {
     );
   }, 40_000);
 });
+
+describe('worker.ts: обработка PDF (§36.4)', () => {
+  it('задача pdf: приложения из extra, водяной знак — в настоящем потоке', async () => {
+    const { makePdf, pageTexts } = await import('../pdf/test-pdf');
+    const r = await pool.run(
+      {
+        kind: 'pdf',
+        template: Buffer.from(await makePdf([{ label: 'R1' }])),
+        ext: 'pdf',
+        data: {
+          pdfa: false,
+          watermark: { text: 'КОПИЯ', opacity: 20, color: 'gray', angle: 'diagonal' },
+          pageNumbers: null,
+          metadata: null,
+          attachments: [{ placement: 'end' }],
+          now: '2026-10-15T09:30:00.000Z',
+        },
+        options: { lang: '', timezone: '' },
+        extra: [await makePdf([{ label: 'A1' }])],
+      },
+      Date.now() + 30_000,
+    );
+    const texts = await pageTexts(r.out);
+    expect(texts).toHaveLength(2);
+    expect(texts[0]).toContain('R1');
+    expect(texts[1]).toContain('A1');
+    for (const t of texts) expect(t).toContain('КОПИЯ');
+  }, 40_000);
+
+  it('задача pdf с битым файлом — TemplateRenderError, поток жив', async () => {
+    const run = pool.run(
+      {
+        kind: 'pdf',
+        template: Buffer.from('%PDF-1.7 мусор'),
+        ext: 'pdf',
+        data: {
+          pdfa: false,
+          watermark: null,
+          pageNumbers: null,
+          metadata: null,
+          attachments: [],
+          now: '2026-10-15T09:30:00.000Z',
+        },
+        options: { lang: '', timezone: '' },
+      },
+      Date.now() + 30_000,
+    );
+    await expect(run).rejects.toThrow(TemplateRenderError);
+  }, 40_000);
+});

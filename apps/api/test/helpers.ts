@@ -25,6 +25,7 @@ import { createS3Client } from '../src/lib/s3-storage';
 import { createRunFileGate } from '../src/lib/run-file-gate';
 import { createRemoveGate } from '../src/lib/storage-gate';
 import { createSourcePools } from '../src/modules/datasources/pools';
+import { inProcessPdfPostprocessor } from '../src/modules/pdf/postprocessor';
 import { createRenderHandoff } from '../src/modules/render/handoff';
 import { hashPassword } from '../src/modules/auth/password';
 
@@ -249,6 +250,7 @@ export async function createTestApp(
     runFileGate: createRunFileGate(runFilePool),
     sources: createSourcePools({ db, config: cfg }),
     carbone: { render: notConfigured('carbone') },
+    pdf: inProcessPdfPostprocessor,
     onlyoffice: { forceSave: notConfigured('onlyoffice') },
     fetchFile: notConfigured('fetchFile'),
     redis: ownRedis,

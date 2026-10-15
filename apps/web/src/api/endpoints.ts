@@ -17,12 +17,12 @@ import type {
   OutputFormat,
   ParamOptionsResult,
   ParamsInput,
-  PdfOptions,
   RenderBody,
   RunQueryBody,
   RunQueryResult,
   RunsPage,
   RunsQuery,
+  SavePdfOptionsBody,
   TemplateAccess,
   TemplateAdminDetails,
   TemplateChart,
@@ -124,7 +124,7 @@ export const api = {
       apiJson<TemplateAdminDetails>(`/api/templates/${id}/params`, put(params)),
     saveCharts: (id: string, charts: TemplateChart[]) =>
       apiJson<TemplateAdminDetails>(`/api/templates/${id}/charts`, put(charts)),
-    savePdfOptions: (id: string, options: PdfOptions) =>
+    savePdfOptions: (id: string, options: SavePdfOptionsBody) =>
       apiJson<TemplateAdminDetails>(`/api/templates/${id}/pdf-options`, put(options)),
     uploadAttachment: (id: string, form: FormData) =>
       apiJson<TemplateAdminDetails>(`/api/templates/${id}/attachments`, {

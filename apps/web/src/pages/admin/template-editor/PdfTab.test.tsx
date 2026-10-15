@@ -109,5 +109,20 @@ describe('PdfTab', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Титул.pdf: удалить' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
     await waitFor(() => expect(calls.some((c) => c.method === 'DELETE')).toBe(true));
+    expect(calls.find((c) => c.method === 'DELETE')!.path).toBe('/api/templates/t1/attachments/a1');
+  });
+
+  it('порядок строк — сначала начало, потом конец, независимо от порядка в массиве', async () => {
+    mockApi([]);
+    const shuffled = {
+      ...t,
+      attachments: [att('e1', 'Конец.pdf', 'end', 0), att('s1', 'Начало.pdf', 'start', 0)],
+    } as TemplateAdminDetails;
+    renderWithProviders(<PdfTab template={shuffled} />);
+    const rows = await screen.findAllByTestId('pdf-attachment');
+    expect(rows.map((r) => r.textContent)).toEqual([
+      expect.stringContaining('Начало.pdf'),
+      expect.stringContaining('Конец.pdf'),
+    ]);
   });
 });

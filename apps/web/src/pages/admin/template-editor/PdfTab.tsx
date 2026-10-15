@@ -289,7 +289,7 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
           10 файлов по 20 МБ, всего до 500 страниц. Водяной знак и нумерация действуют и на них.
         </Text>
         {template.attachments.length === 0 && <Text color="secondary">Файлов нет.</Text>}
-        {template.attachments.map((a) => {
+        {[...groups.start, ...groups.end].map((a) => {
           const group = groups[a.placement];
           const i = group.findIndex((x) => x.id === a.id);
           const move = (body: { placement?: 'start' | 'end'; sortOrder?: number }) =>

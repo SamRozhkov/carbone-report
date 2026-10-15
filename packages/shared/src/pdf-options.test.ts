@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   fillPdfText,
+  hasPdfProtection,
   MoveAttachmentBody,
   normalizePdfOptions,
   PDF_PAGE_FORMAT_DEFAULT,
   PdfOptions,
+  PdfPassword,
   pdfStaticText,
   pdfTextIssues,
+  SavePdfOptionsBody,
 } from './pdf-options';
 
 describe('PdfOptions', () => {
@@ -111,5 +114,61 @@ describe('pdfTextIssues и pdfStaticText', () => {
   });
   it('статическая часть', () => {
     expect(pdfStaticText('Счёт № {d.number} 😀')).toBe('Счёт №  😀');
+  });
+});
+
+describe('защита PDF (§37.1)', () => {
+  it('protection: флажки по умолчанию false, лишние ключи — ошибка', () => {
+    expect(PdfOptions.parse({ protection: { noCopy: true } }).protection).toEqual({
+      noPrint: false,
+      noCopy: true,
+      noModify: false,
+    });
+    expect(PdfOptions.safeParse({ protection: { noSave: true } }).success).toBe(false);
+  });
+
+  it('normalizePdfOptions убирает protection без запретов (R1)', () => {
+    expect(normalizePdfOptions(PdfOptions.parse({ protection: {} }))).toEqual({ pdfa: false });
+    expect(
+      normalizePdfOptions(PdfOptions.parse({ protection: { noPrint: true } })).protection,
+    ).toEqual({ noPrint: true, noCopy: false, noModify: false });
+  });
+
+  it('hasPdfProtection: пароль или хоть один запрет', () => {
+    expect(hasPdfProtection({}, false)).toBe(false);
+    expect(hasPdfProtection({}, true)).toBe(true);
+    expect(
+      hasPdfProtection({ protection: { noPrint: false, noCopy: false, noModify: false } }, false),
+    ).toBe(false);
+    expect(
+      hasPdfProtection({ protection: { noPrint: false, noCopy: false, noModify: true } }, false),
+    ).toBe(true);
+  });
+
+  it('PdfPassword: 4–64 символа по символам, пробелы сохраняются', () => {
+    expect(PdfPassword.safeParse('abc').error?.issues[0]?.message).toBe(
+      'пароль — от 4 до 64 символов',
+    );
+    expect(PdfPassword.parse(' пар ')).toBe(' пар ');
+    expect(PdfPassword.safeParse('😀😀😀😀').success).toBe(true);
+    expect(PdfPassword.safeParse('я'.repeat(64)).success).toBe(true);
+    expect(PdfPassword.safeParse('я'.repeat(65)).success).toBe(false);
+  });
+
+  it('PdfPassword: управляющие символы запрещены', () => {
+    for (const bad of ['abcd\n', 'ab\tcd', 'abc\u0000d', 'abc\u007fd', 'abc\u0085d']) {
+      expect(PdfPassword.safeParse(bad).error?.issues.map((i) => i.message)).toContain(
+        'пароль содержит недопустимые символы',
+      );
+    }
+  });
+
+  it('SavePdfOptionsBody: password — не передан, строка или null; лишние ключи — ошибка', () => {
+    expect(SavePdfOptionsBody.parse({}).password).toBeUndefined();
+    expect(SavePdfOptionsBody.parse({ password: null }).password).toBeNull();
+    expect(SavePdfOptionsBody.parse({ password: 'секрет1' }).password).toBe('секрет1');
+    expect(SavePdfOptionsBody.safeParse({ password: '' }).success).toBe(false);
+    expect(SavePdfOptionsBody.safeParse({ passwd: 'x' }).success).toBe(false);
+    expect(SavePdfOptionsBody.parse({ pdfa: true }).pdfa).toBe(true);
   });
 });

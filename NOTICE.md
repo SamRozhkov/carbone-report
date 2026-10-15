@@ -25,6 +25,9 @@ Apache ECharts (Apache-2.0).
 Обработка PDF (с 2.7.0) использует `pdf-lib` 1.17.1 — MIT, https://github.com/Hopding/pdf-lib;
 `@pdf-lib/fontkit` 1.1.1 — MIT, https://github.com/Hopding/fontkit.
 
+Шифрование PDF (с 2.7.1) выполняет программа `qpdf` — Apache-2.0, https://github.com/qpdf/qpdf; ставится
+в образ API пакетом Debian и вызывается отдельным процессом.
+
 ## ONLYOFFICE Document Server
 
 Document Server (контейнер `onlyoffice`) — отдельный продукт, который не входит в этот репозиторий и образы проекта

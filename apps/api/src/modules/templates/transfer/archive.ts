@@ -11,7 +11,7 @@ import {
   TRANSFER_MANIFEST_FILE,
   TransferManifest,
 } from '@carbone-reports/shared/template-transfer';
-import { MAX_PDF_ATTACHMENT_PAGES } from '@carbone-reports/shared';
+import { MAX_PDF_ATTACHMENT_BYTES, MAX_PDF_ATTACHMENT_PAGES } from '@carbone-reports/shared';
 import { AppError } from '../../../lib/errors';
 import { isZip } from '../../../lib/http';
 import { inspectPdf, PdfInputError } from '../../pdf/inspect';
@@ -282,6 +282,8 @@ async function readChecked(buf: Buffer, limits: ArchiveLimits): Promise<Transfer
       const e = byName.get(a.file);
       if (!e) throw importInvalid(`в архиве нет файла ${a.file}`);
       const data = await take(e);
+      if (data.length > MAX_PDF_ATTACHMENT_BYTES)
+        throw importInvalid(`шаблон «${t.name}»: файл «${a.name}»: файл больше 20 МБ`);
       if (createHash('sha256').update(data).digest('hex') !== a.sha256) {
         throw importInvalid(`файл ${a.file} не совпадает с контрольной суммой из манифеста`);
       }

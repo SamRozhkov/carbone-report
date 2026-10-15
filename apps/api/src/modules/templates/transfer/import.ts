@@ -10,7 +10,7 @@ import type {
   TransferParam,
   TransferTemplate,
 } from '@carbone-reports/shared/template-transfer';
-import type { TemplateParam } from '@carbone-reports/shared';
+import { normalizePdfOptions, type TemplateParam } from '@carbone-reports/shared';
 import { asc, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import {
   categories,
@@ -358,7 +358,7 @@ export async function applyImport(
           defaultOutput: t.defaultOutput,
           public: t.public,
           categoryId: t.category === null ? null : categoryIds.get(t.category.toLowerCase())!,
-          pdfOptions: t.pdfOptions ?? { pdfa: false },
+          pdfOptions: normalizePdfOptions(t.pdfOptions ?? { pdfa: false }),
           docKey: randomUUID(),
           updatedAt: new Date(),
           updatedBy: userId,

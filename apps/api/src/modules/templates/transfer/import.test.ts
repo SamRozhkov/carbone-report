@@ -198,6 +198,13 @@ describe('readTransferArchive', () => {
     expect(await invalid(readTransferArchive(extra))).toBe(
       'лишний файл в архиве: templates/1/attachments/2.pdf',
     );
+
+    const big = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(20 * 1024 * 1024 + 1 - 9)]);
+    expect(big.length).toBe(20 * 1024 * 1024 + 1);
+    const tooBig = await buildArchive([item({}, [big])], { appVersion: '2.7.0', now });
+    expect(await invalid(readTransferArchive(tooBig))).toBe(
+      'шаблон «Первый»: файл «1.pdf»: файл больше 20 МБ',
+    );
   });
 
   it('архив выгрузки читается: манифест и файлы по порядку', async () => {

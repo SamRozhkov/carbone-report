@@ -117,6 +117,26 @@ describe('DocumentTab', () => {
     expect(mounts.count).toBe(1);
   });
 
+  it('Esc в окне «Забрать редактирование» закрывает окно, развёрнутый режим остаётся', async () => {
+    mockApi([
+      { method: 'POST', path: '/api/templates/t1/edit-lock', body: other() },
+      { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+      { path: '/api/templates/t1/editor-config', body: config },
+    ]);
+    function Host() {
+      const [full, setFull] = useState(true);
+      return <DocumentTab {...base} full={full} onFull={setFull} />;
+    }
+    const { container } = renderWithProviders(<Host />);
+    const btn = await screen.findByRole('button', { name: 'Забрать редактирование' });
+    await waitFor(() => expect(btn).toBeEnabled());
+    await userEvent.click(btn);
+    expect(screen.getByRole('button', { name: 'Забрать' })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Забрать' })).toBeNull());
+    expect(container.querySelector('.cr-doc-full')).not.toBeNull();
+  });
+
   it('ссылка «Справка по синтаксису» открывает /admin/help в новой вкладке', async () => {
     mockApi([...lock, { path: '/api/templates/t1/editor-config', body: config }]);
     renderWithProviders(<DocumentTab {...base} />);

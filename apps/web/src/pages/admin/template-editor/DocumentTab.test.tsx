@@ -1,19 +1,62 @@
 import type { TemplateAdminDetails } from '@carbone-reports/shared';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminTemplate } from '../../../test/fixtures';
 import { mockApi, renderWithProviders } from '../../../test/utils';
-import { DocumentTab } from './DocumentTab';
+import { DocumentTab as DocumentTabView } from './DocumentTab';
+import { useEditLock } from './useEditLock';
+
+/** В странице блокировку создаёт TemplateEditorPage; здесь — тот же хук над вкладкой. */
+function DocumentTab(props: Omit<ComponentProps<typeof DocumentTabView>, 'lock'>) {
+  const lock = useEditLock(props.template.id);
+  return <DocumentTabView {...props} lock={lock} />;
+}
 
 const mounts = vi.hoisted(() => ({ count: 0 }));
+/** Управление загрузкой api.js в моке: пока hold, редактор не построен (как до загрузки скрипта). */
+const loader = vi.hoisted(() => ({ hold: false, finish: [] as Array<() => void> }));
+type EditorProps = {
+  documentServerUrl: string;
+  config: { document: { key: string }; editorConfig?: { mode?: string } };
+  document_title?: string;
+  events_onAppReady?: (e: object) => void;
+};
+// Повторяет поведение @onlyoffice/document-editor-react 2.2.0: редактор строится ОДИН раз из конфига рендера,
+// в котором загрузился api.js; позже — пересборка при изменении содержимого config / document_title.
 vi.mock('@onlyoffice/document-editor-react', () => ({
-  DocumentEditor: (p: { documentServerUrl: string; config: { document: { key: string } } }) => {
+  DocumentEditor: (p: EditorProps) => {
+    const first = useRef(p);
+    const built = useRef(false);
+    const [mode, setMode] = useState<string | null>(null);
+    const build = (from: EditorProps) => {
+      built.current = true;
+      setMode(from.config.editorConfig?.mode ?? 'edit');
+      from.events_onAppReady?.({});
+    };
     useEffect(() => {
       mounts.count++;
+      if (loader.hold) loader.finish.push(() => build(first.current));
+      else build(first.current);
     }, []);
-    return <div data-testid="oo" data-url={p.documentServerUrl} data-key={p.config.document.key} />;
+    const json = JSON.stringify(p.config);
+    const firstRun = useRef(true);
+    useEffect(() => {
+      if (firstRun.current) {
+        firstRun.current = false;
+        return;
+      }
+      if (built.current) build(p);
+    }, [json, p.document_title]);
+    return (
+      <div
+        data-testid="oo"
+        data-url={p.documentServerUrl}
+        data-key={p.config.document.key}
+        data-built-mode={mode ?? ''}
+      />
+    );
   },
 }));
 
@@ -394,6 +437,95 @@ describe('DocumentTab', () => {
     expect(screen.getByText('сбой сервера')).toBeInTheDocument();
   });
 
+  /** editor-config: у режима просмотра в editorConfig есть mode: 'view', у правки — нет (как на сервере). */
+  const modal = (mode: () => 'view' | 'edit') => ({
+    path: '/api/templates/t1/editor-config',
+    handler: () => ({
+      body: { ...config, editorConfig: mode() === 'view' ? { mode: 'view' } : {} },
+    }),
+  });
+
+  it('«Забрать редактирование» недоступна, пока редактор не построен', async () => {
+    loader.hold = true;
+    loader.finish = [];
+    try {
+      mockApi([
+        { method: 'POST', path: '/api/templates/t1/edit-lock', body: other() },
+        { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+        modal(() => 'view'),
+      ]);
+      renderWithProviders(<DocumentTab {...base} />);
+      const btn = await screen.findByRole('button', { name: 'Забрать редактирование' });
+      await screen.findByTestId('oo');
+      expect(btn).toBeDisabled();
+      await act(async () => loader.finish.forEach((f) => f()));
+      await waitFor(() => expect(btn).toBeEnabled());
+    } finally {
+      loader.hold = false;
+    }
+  });
+
+  it('забрали правку: редактор получает конфиг правки; потеряли — конфиг просмотра', async () => {
+    mounts.count = 0;
+    let mode: 'view' | 'edit' = 'view';
+    mockApi([
+      { method: 'POST', path: '/api/templates/t1/edit-lock', body: other(true) },
+      {
+        method: 'POST',
+        path: '/api/templates/t1/edit-lock/takeover',
+        handler: () => {
+          mode = 'edit';
+          return { body: { state: 'mine' } };
+        },
+      },
+      { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+      modal(() => mode),
+    ]);
+    renderWithProviders(<DocumentTab {...base} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('oo')).toHaveAttribute('data-built-mode', 'view'),
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Редактировать здесь' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('oo')).toHaveAttribute('data-built-mode', 'edit'),
+    );
+    expect(mounts.count).toBe(1);
+  });
+
+  it('«Редактировать здесь» на время перехвата блокируется: повторный клик не шлёт второй запрос', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    mockApi([
+      { method: 'POST', path: '/api/templates/t1/edit-lock', body: other(true) },
+      { method: 'POST', path: '/api/templates/t1/edit-lock/takeover', body: { state: 'mine' } },
+      { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+      { path: '/api/templates/t1/editor-config', body: config },
+    ]);
+    // Перехват «долгий» (forcesave до 10 с): задерживаем только его запрос.
+    const orig = globalThis.fetch;
+    let takeovers = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/edit-lock/takeover')) {
+        takeovers++;
+        await gate;
+      }
+      return orig(input, init);
+    }) as typeof fetch;
+    try {
+      renderWithProviders(<DocumentTab {...base} />);
+      const btn = await screen.findByRole('button', { name: 'Редактировать здесь' });
+      await waitFor(() => expect(btn).toBeEnabled());
+      await userEvent.click(btn);
+      await userEvent.click(btn);
+      expect(takeovers).toBe(1);
+      expect(btn).toBeDisabled();
+      await act(async () => release());
+      expect(await screen.findByText('Вы редактируете')).toBeInTheDocument();
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+
   /** Ответы POST …/edit-lock по очереди; последний повторяется. */
   const queue = (...states: unknown[]) => ({
     method: 'POST',
@@ -430,6 +562,31 @@ describe('DocumentTab', () => {
       await act(() => vi.advanceTimersByTimeAsync(20_000));
       expect(await screen.findByText('Редактирование забрал petrov')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull();
+    });
+
+    it('правку забрали, пока грузился api.js: после готовности редактор пересобирается в просмотр', async () => {
+      loader.hold = true;
+      loader.finish = [];
+      let mode: 'view' | 'edit' = 'edit';
+      try {
+        mockApi([
+          queue({ state: 'mine' }, other()),
+          { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+          modal(() => mode),
+        ]);
+        renderWithProviders(<DocumentTab {...base} />);
+        await screen.findByTestId('oo');
+        mode = 'view';
+        await act(() => vi.advanceTimersByTimeAsync(20_000));
+        await screen.findByText('Редактирование забрал petrov');
+        // api.js загрузился: библиотека строит редактор из конфига первого рендера (правка).
+        await act(async () => loader.finish.forEach((f) => f()));
+        await waitFor(() =>
+          expect(screen.getByTestId('oo')).toHaveAttribute('data-built-mode', 'view'),
+        );
+      } finally {
+        loader.hold = false;
+      }
     });
 
     it('три ошибки продления — предупреждение о связи', async () => {

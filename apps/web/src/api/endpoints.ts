@@ -108,8 +108,11 @@ export const api = {
     create: (body: CreateTemplateBody) => apiJson<TemplateSummary>('/api/templates', post(body)),
     upload: (form: FormData) =>
       apiJson<TemplateSummary>('/api/templates/upload', { method: 'POST', body: form }),
-    replaceFile: (id: string, form: FormData) =>
-      apiJson<TemplateAdminDetails>(`/api/templates/${id}/file`, { method: 'PUT', body: form }),
+    replaceFile: (id: string, form: FormData, holder?: string) =>
+      apiJson<TemplateAdminDetails>(
+        `/api/templates/${id}/file${holder ? `?holder=${encodeURIComponent(holder)}` : ''}`,
+        { method: 'PUT', body: form },
+      ),
     update: (id: string, body: UpdateTemplateBody) =>
       apiJson<TemplateAdminDetails>(`/api/templates/${id}`, patch(body)),
     remove: (id: string) => apiJson<void>(`/api/templates/${id}`, del),

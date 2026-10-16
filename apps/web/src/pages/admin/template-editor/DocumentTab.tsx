@@ -12,7 +12,7 @@ import { pickParams } from '../../../lib/params';
 import type { TabProps } from './editorState';
 import { templateKey } from './editorState';
 import { TagsPanel } from './TagsPanel';
-import { useEditLock, type EditLock } from './useEditLock';
+import type { EditLock } from './useEditLock';
 
 let toastSeq = 0;
 const toastName = (prefix: string) => `${prefix}-${++toastSeq}`;
@@ -26,7 +26,10 @@ export function DocumentTab({
   pollTimeoutMs = 20_000,
   full,
   onFull,
+  lock,
 }: TabProps & {
+  /** Блокировка страницы (живёт в TemplateEditorPage): её держит эта вкладка, пока открыта страница шаблона. */
+  lock: EditLock;
   pollMs?: number;
   pollTimeoutMs?: number;
   full: boolean;
@@ -38,7 +41,9 @@ export function DocumentTab({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
   const [confirmTakeover, setConfirmTakeover] = useState(false);
-  const lock = useEditLock(template.id);
+  const [busy, setBusy] = useState(false);
+  const [readyId, setReadyId] = useState<string | null>(null);
+  const [rebuild, setRebuild] = useState(false);
   const mode = lock.state === null ? null : lock.editing ? 'edit' : 'view';
   const polling = useRef(false);
   const mounted = useRef(true);
@@ -60,7 +65,9 @@ export function DocumentTab({
     gcTime: 0,
     refetchOnMount: 'always',
   });
-  // Редактор пересоздаётся при любом изменении config — держим ссылку стабильной, пока не сменились ключ документа или режим.
+  // Библиотека пересоздаёт редактор, когда СОДЕРЖИМОЕ config меняется (сравнивает JSON), поэтому держим конфиг неизменным,
+  // пока не сменились ключ документа или режим (иначе каждый новый токен JWT перезагружал бы документ).
+  // React key на DocumentEditor ставить нельзя: перемонтирование ломает DocsAPI («removeChild»).
   const key = config.data?.document?.key;
   const stableId = `${mode}:${key}`;
   const stable = useRef<{ id: string | undefined; config: typeof config.data }>({
@@ -71,6 +78,20 @@ export function DocumentTab({
     stable.current = { id: stableId, config: config.data };
   }
   const stableConfig = stable.current.config;
+
+  // Библиотека строит редактор из конфига того рендера, где загрузился api.js; смена режима за время загрузки
+  // её не затрагивает. Поэтому готовность помним по id конфига, с которым редактор построен (колбэк замыкает id своего
+  // рендера), а «Забрать»/«Начать» разрешаем только когда редактор построен под актуальный режим.
+  const currentId = useRef(stableId);
+  currentId.current = stableId;
+  const onAppReady = () => {
+    setReadyId(stableId);
+    // Построен по устаревшему конфигу — принудительная пересборка: смена незначимого пропа заставляет библиотеку
+    // уничтожить редактор и построить его заново из актуального конфига.
+    if (stableId !== currentId.current) setRebuild((v) => !v);
+  };
+  const editorReady = config.data !== undefined && readyId === stableId;
+  const canSwitch = editorReady || loadError !== null || config.isError;
 
   /** Пауза, которую размонтирование прерывает сразу. */
   const pause = (ms: number) =>
@@ -193,14 +214,28 @@ export function DocumentTab({
 
   const onSave = () => void runSave();
   const doTakeover = () => {
-    lock.takeover().catch((e) => {
-      if (!mounted.current) return;
-      add({
-        name: toastName('doc-takeover'),
-        title: 'Не удалось забрать редактирование',
-        content: errorMessage(e),
-        theme: 'danger',
+    if (busy) return;
+    setBusy(true);
+    lock
+      .takeover()
+      .catch((e) => {
+        if (!mounted.current) return;
+        add({
+          name: toastName('doc-takeover'),
+          title: 'Не удалось забрать редактирование',
+          content: errorMessage(e),
+          theme: 'danger',
+        });
+      })
+      .finally(() => {
+        if (mounted.current) setBusy(false);
       });
+  };
+  const doStart = () => {
+    if (busy) return;
+    setBusy(true);
+    void lock.start().finally(() => {
+      if (mounted.current) setBusy(false);
     });
   };
   const holderLogin = lock.state?.state === 'other' ? lock.state.user.login : '';
@@ -237,6 +272,9 @@ export function DocumentTab({
           lock={lock}
           onTakeover={() => setConfirmTakeover(true)}
           onTakeoverHere={doTakeover}
+          onStart={doStart}
+          disabled={!canSwitch}
+          busy={busy}
         />
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           {lock.editing && (
@@ -293,6 +331,8 @@ export function DocumentTab({
               config={stableConfig}
               height="100%"
               width="100%"
+              document_title={rebuild ? template.name : undefined}
+              events_onAppReady={onAppReady}
               onLoadComponentError={(code, description) =>
                 setLoadError(`${description} (код ${code})`)
               }
@@ -330,10 +370,18 @@ function LockBar({
   lock,
   onTakeover,
   onTakeoverHere,
+  onStart,
+  disabled,
+  busy,
 }: {
   lock: EditLock;
   onTakeover: () => void;
   onTakeoverHere: () => void;
+  onStart: () => void;
+  /** Редактор ещё не построен под текущий режим. */
+  disabled: boolean;
+  /** Идёт перехват или захват. */
+  busy: boolean;
 }) {
   const s = lock.state;
   if (!s) return null;
@@ -347,7 +395,7 @@ function LockBar({
           <Text color="warning">
             Только просмотр — редактирует {s.user.login} с {time(s.since)}
           </Text>
-          <Button size="s" onClick={onTakeover}>
+          <Button size="s" onClick={onTakeover} disabled={disabled} loading={busy}>
             Забрать редактирование
           </Button>
         </>
@@ -355,7 +403,7 @@ function LockBar({
       {s.state === 'other' && s.sameUser && (
         <>
           <Text color="warning">Шаблон открыт у вас в другой вкладке</Text>
-          <Button size="s" onClick={onTakeoverHere}>
+          <Button size="s" onClick={onTakeoverHere} disabled={disabled} loading={busy}>
             Редактировать здесь
           </Button>
         </>
@@ -363,7 +411,7 @@ function LockBar({
       {s.state === 'free' && (
         <>
           <Text color="secondary">Документ свободен</Text>
-          <Button size="s" view="action" onClick={() => void lock.start()}>
+          <Button size="s" view="action" onClick={onStart} disabled={disabled} loading={busy}>
             Начать редактирование
           </Button>
         </>

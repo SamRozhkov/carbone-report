@@ -23,6 +23,7 @@ import { DocumentTab } from './DocumentTab';
 import { templateKey, usePreviewData, useTestParams } from './editorState';
 import { ParamsTab } from './ParamsTab';
 import { PreviewTab } from './PreviewTab';
+import { useEditLock } from './useEditLock';
 import { SettingsTab } from './SettingsTab';
 
 const TABS = ['document', 'data', 'charts', 'pdf', 'params', 'preview', 'settings'] as const;
@@ -50,6 +51,10 @@ export function TemplateEditorPage() {
   const t = template.data;
   const [testParams, setTestParams] = useTestParams(id, t?.params ?? []);
   const [previewData, setPreviewData] = usePreviewData(id);
+
+  // Блокировка живёт на уровне страницы: переключение вкладок её не снимает, уход со страницы снимает.
+  // Берём только после первого захода на «Документ» и когда шаблон загружен.
+  const lock = useEditLock(id, documentVisited && !!t);
 
   if (template.isPending) return <Loader />;
   if (!t) return <ErrorAlert error={template.error} title="Не удалось открыть шаблон" />;
@@ -117,7 +122,7 @@ export function TemplateEditorPage() {
         {/* Документ не размонтируется при переключении вкладок: сессия OnlyOffice не прерывается. */}
         {(documentVisited || tab === 'document') && (
           <div hidden={tab !== 'document'}>
-            <DocumentTab {...tabProps} full={full} onFull={setFull} />
+            <DocumentTab {...tabProps} full={full} onFull={setFull} lock={lock} />
           </div>
         )}
         {tab === 'data' && <DataTab {...tabProps} />}
@@ -125,7 +130,9 @@ export function TemplateEditorPage() {
         {tab === 'pdf' && <PdfTab template={t} />}
         {tab === 'params' && <ParamsTab template={t} />}
         {tab === 'preview' && <PreviewTab {...tabProps} />}
-        {tab === 'settings' && <SettingsTab template={t} />}
+        {tab === 'settings' && (
+          <SettingsTab template={t} holder={documentVisited ? lock.holder : undefined} />
+        )}
       </div>
     </>
   );

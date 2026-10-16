@@ -17,8 +17,11 @@ export interface EditLock {
 
 const FAILS_BEFORE_OFFLINE = 3;
 
-/** Блокировка редактирования для вкладки «Документ» (§38.3). */
-export function useEditLock(templateId: string): EditLock {
+/**
+ * Блокировка редактирования для вкладки «Документ» (§38.3).
+ * enabled=false — блокировку не берём (страница шаблона открыта не на «Документе» и она ещё не посещалась).
+ */
+export function useEditLock(templateId: string, enabled = true): EditLock {
   const [holder] = useState(() => crypto.randomUUID());
   const [state, setState] = useState<EditLockState | null>(null);
   const [lostTo, setLostTo] = useState<string | null>(null);
@@ -52,12 +55,15 @@ export function useEditLock(templateId: string): EditLock {
   );
 
   useEffect(() => {
+    if (!enabled) return;
     alive.current = true;
     void call(true);
-    const timer = setInterval(
-      () => void call(stateRef.current?.state === 'mine'),
-      EDIT_LOCK_HEARTBEAT_MS,
-    );
+    // Пока первый ответ не получен (state === null), продление тоже пытается захватить: иначе после сбоя первого вызова
+    // вкладка вечно слала бы acquire: false и никогда не получила блокировку.
+    const timer = setInterval(() => {
+      const s = stateRef.current?.state;
+      void call(s === undefined || s === 'mine');
+    }, EDIT_LOCK_HEARTBEAT_MS);
     const onHide = () => releaseEditLock(templateId, holder);
     window.addEventListener('pagehide', onHide);
     return () => {
@@ -66,7 +72,7 @@ export function useEditLock(templateId: string): EditLock {
       window.removeEventListener('pagehide', onHide);
       releaseEditLock(templateId, holder);
     };
-  }, [call, templateId, holder]);
+  }, [call, templateId, holder, enabled]);
 
   return {
     holder,

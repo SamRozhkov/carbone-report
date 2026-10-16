@@ -48,6 +48,38 @@ describe('useEditLock', () => {
     expect(calls.at(-1)!.body).toMatchObject({ acquire: false });
   });
 
+  it('первый вызов не удался: продление идёт с acquire: true, пока нет ответа', async () => {
+    let n = 0;
+    const { calls } = mockApi([
+      {
+        method: 'POST',
+        path: '/api/templates/t1/edit-lock',
+        handler: () =>
+          n++ === 0
+            ? { status: 500, body: { error: { code: 'X', message: 'x' } } }
+            : { body: { state: 'mine' } },
+      },
+      { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+    ]);
+    const { result } = renderHook(() => useEditLock('t1'), { wrapper });
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(result.current.state).toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(20_000));
+    expect(calls[1]!.body).toEqual({ holder: result.current.holder, acquire: true });
+    await waitFor(() => expect(result.current.editing).toBe(true));
+  });
+
+  it('enabled=false: блокировка не берётся', async () => {
+    const { calls } = mockApi([
+      { method: 'POST', path: '/api/templates/t1/edit-lock', body: { state: 'mine' } },
+      { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+    ]);
+    const { result } = renderHook(() => useEditLock('t1', false), { wrapper });
+    await act(() => vi.advanceTimersByTimeAsync(20_000));
+    expect(calls).toHaveLength(0);
+    expect(result.current.state).toBeNull();
+  });
+
   it('три ошибки подряд — offline; успех снимает', async () => {
     let fail = false;
     mockApi([

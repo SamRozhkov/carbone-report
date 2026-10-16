@@ -66,15 +66,23 @@ export function useEditLock(templateId: string, enabled = true): EditLock {
     void call(true);
     // Пока первый ответ не получен (state === null), продление тоже пытается захватить: иначе после сбоя первого вызова
     // вкладка вечно слала бы acquire: false и никогда не получила блокировку.
-    const timer = setInterval(() => {
+    const beat = () => {
       const s = stateRef.current?.state;
       void call(s === undefined || s === 'mine');
-    }, EDIT_LOCK_HEARTBEAT_MS);
+    };
+    const timer = setInterval(beat, EDIT_LOCK_HEARTBEAT_MS);
+    // Фоновую вкладку браузер будит редко (Chrome — раз в минуту, как срок блокировки): при возврате продлеваем сразу,
+    // чтобы вернуть истёкшую блокировку или сразу показать, что её забрали.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') beat();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     const onHide = () => releaseEditLock(templateId, holder);
     window.addEventListener('pagehide', onHide);
     return () => {
       alive.current = false;
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('pagehide', onHide);
       releaseEditLock(templateId, holder);
     };

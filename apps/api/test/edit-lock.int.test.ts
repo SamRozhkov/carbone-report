@@ -276,23 +276,37 @@ describe('где блокировка обязательна', () => {
     expect((await save(a.cookie, 'x')).statusCode).toBe(400);
   });
 
-  it('замена файла и удаление: 409 при любой действующей блокировке (в т.ч. своей вкладки), можно после истечения', async () => {
-    await lock(a.cookie, randomUUID());
-    const put = async (cookie: string) => {
+  it('замена файла: своя блокировка (holder) не мешает, чужая и отсутствие holder — 409, не UUID — 400', async () => {
+    const mine = randomUUID();
+    await lock(a.cookie, mine);
+    const put = async (cookie: string, holder?: string) => {
       const mp = multipart({}, { name: 'x.docx', data: await createBlankDocument('docx') });
       return t.app.inject({
         method: 'PUT',
-        url: `/api/templates/${tplId}/file`,
+        url: `/api/templates/${tplId}/file${holder === undefined ? '' : `?holder=${holder}`}`,
         headers: { cookie, ...mp.headers },
         payload: mp.payload,
       });
     };
+    for (const r of [
+      await put(a.cookie),
+      await put(a.cookie, randomUUID()),
+      await put(b.cookie, randomUUID()),
+    ]) {
+      expect(r.statusCode).toBe(409);
+      expect(r.json().error.code).toBe('TEMPLATE_LOCKED');
+    }
+    expect((await put(a.cookie, 'x')).statusCode).toBe(400);
+    const own = await put(a.cookie, mine);
+    expect(own.statusCode).toBe(200);
+    expect(own.json().version).toBeGreaterThan(1);
+  });
+
+  it('удаление: 409 при любой действующей блокировке (в т.ч. своей вкладки), можно после истечения', async () => {
+    await lock(a.cookie, randomUUID());
     const del = (cookie: string) =>
       t.app.inject({ method: 'DELETE', url: `/api/templates/${tplId}`, headers: { cookie } });
     for (const who of [b, a]) {
-      const r = await put(who.cookie);
-      expect(r.statusCode).toBe(409);
-      expect(r.json().error.code).toBe('TEMPLATE_LOCKED');
       expect((await del(who.cookie)).statusCode).toBe(409);
     }
     await expire();

@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import { TemplateChart } from './charts';
 import { PdfOptions, TemplateAttachment } from './pdf-options';
+import { TemplateEditingBy } from './edit-lock';
 
 z.config(z.locales.ru());
 
 export * from './charts';
 export * from './pdf-options';
+export * from './edit-lock';
 
 export const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const RESERVED_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
@@ -269,6 +271,8 @@ export const TemplateSummary = z.object({
   defaultOutput: OutputFormat,
   updatedAt: z.string(),
   category: TemplateCategoryRef.nullable(),
+  /** Кто редактирует шаблон (§38.3): только в списке для администратора, иначе null. */
+  editingBy: TemplateEditingBy.nullable(),
 });
 export type TemplateSummary = z.infer<typeof TemplateSummary>;
 

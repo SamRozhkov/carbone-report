@@ -78,10 +78,7 @@ export function TagsPanel({
       )
     : null;
   return (
-    <div
-      className="cr-stack"
-      style={{ width: 320, flexShrink: 0, overflow: 'auto', maxHeight: 'calc(100vh - 260px)' }}
-    >
+    <div className="cr-stack cr-tags-panel" style={{ width: 320, flexShrink: 0, overflow: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="subheader-2">Теги</Text>
         <Button size="s" onClick={onRefresh} loading={refreshing}>

@@ -34,13 +34,14 @@ export function TemplateEditorPage() {
   const [sp, setSp] = useSearchParams();
   const raw = sp.get('tab');
   const tab: TabId = (TABS as readonly string[]).includes(raw ?? '') ? (raw as TabId) : 'document';
+  const full = tab === 'document' && sp.get('full') === '1';
   const [documentVisited, setDocumentVisited] = useState(tab === 'document');
   if (tab === 'document' && !documentVisited) setDocumentVisited(true);
 
   // После display:none iframe OnlyOffice не знает свой размер: просим пересчитать раскладку, когда вкладка снова видна.
   useEffect(() => {
     if (tab === 'document') window.dispatchEvent(new Event('resize'));
-  }, [tab]);
+  }, [tab, full]);
 
   const template = useQuery({
     queryKey: templateKey(id),
@@ -56,6 +57,13 @@ export function TemplateEditorPage() {
   const selectTab = (value: string) => {
     const next = new URLSearchParams(sp);
     next.set('tab', value);
+    next.delete('full');
+    setSp(next, { replace: true });
+  };
+  const setFull = (v: boolean) => {
+    const next = new URLSearchParams(sp);
+    if (v) next.set('full', '1');
+    else next.delete('full');
     setSp(next, { replace: true });
   };
   const tabProps = {
@@ -109,7 +117,7 @@ export function TemplateEditorPage() {
         {/* Документ не размонтируется при переключении вкладок: сессия OnlyOffice не прерывается. */}
         {(documentVisited || tab === 'document') && (
           <div hidden={tab !== 'document'}>
-            <DocumentTab {...tabProps} />
+            <DocumentTab {...tabProps} full={full} onFull={setFull} />
           </div>
         )}
         {tab === 'data' && <DataTab {...tabProps} />}

@@ -1,4 +1,4 @@
-import { FloppyDisk, Tag } from '@gravity-ui/icons';
+import { ChevronsCollapseUpRight, ChevronsExpandUpRight, FloppyDisk, Tag } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Link, Loader, Text, useToaster } from '@gravity-ui/uikit';
 import { DocumentEditor } from '@onlyoffice/document-editor-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -24,7 +24,14 @@ export function DocumentTab({
   onPreviewData,
   pollMs = 1500,
   pollTimeoutMs = 20_000,
-}: TabProps & { pollMs?: number; pollTimeoutMs?: number }) {
+  full,
+  onFull,
+}: TabProps & {
+  pollMs?: number;
+  pollTimeoutMs?: number;
+  full: boolean;
+  onFull: (v: boolean) => void;
+}) {
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const [showTags, setShowTags] = useState(true);
@@ -208,37 +215,62 @@ export function DocumentTab({
     void refetch();
   }, [template.version, refetch]);
 
+  // Esc из iframe OnlyOffice сюда не доходит — это и нужно (в редакторе Esc принадлежит ему).
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onFull(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [full, onFull]);
+
   return (
-    <div className="cr-stack">
-      <LockBar
-        lock={lock}
-        onTakeover={() => setConfirmTakeover(true)}
-        onTakeoverHere={doTakeover}
-      />
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        {lock.editing && (
-          <Button view="action" onClick={onSave} loading={waiting}>
-            <Icon data={FloppyDisk} />
-            Сохранить
-          </Button>
+    <div className={full ? 'cr-stack cr-doc-full' : 'cr-stack'}>
+      <div className="cr-doc-bar">
+        {full && (
+          <Text variant="subheader-2" ellipsis>
+            {template.name}
+          </Text>
         )}
-        <Button
-          view={showTags ? 'normal' : 'flat'}
-          aria-pressed={showTags}
-          onClick={() => setShowTags((v) => !v)}
-        >
-          <Icon data={Tag} />
-          Теги
-        </Button>
-        {/* Новая вкладка: документ OnlyOffice в этой вкладке остаётся открытым (§23.1). */}
-        <Link href="/admin/help" target="_blank" rel="noopener">
-          Справка по синтаксису
-        </Link>
-        <Text color="secondary" variant="caption-2">
-          Изменения попадают в шаблон по кнопке «Сохранить» или автоматически после закрытия
-          редактора.
-        </Text>
+        <LockBar
+          lock={lock}
+          onTakeover={() => setConfirmTakeover(true)}
+          onTakeoverHere={doTakeover}
+        />
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          {lock.editing && (
+            <Button view="action" onClick={onSave} loading={waiting}>
+              <Icon data={FloppyDisk} />
+              Сохранить
+            </Button>
+          )}
+          <Button
+            view={showTags ? 'normal' : 'flat'}
+            aria-pressed={showTags}
+            onClick={() => setShowTags((v) => !v)}
+          >
+            <Icon data={Tag} />
+            Теги
+          </Button>
+          <Button onClick={() => onFull(!full)}>
+            <Icon data={full ? ChevronsCollapseUpRight : ChevronsExpandUpRight} />
+            {full ? 'Свернуть' : 'Развернуть'}
+          </Button>
+        </div>
       </div>
+      {!full && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Новая вкладка: документ OnlyOffice в этой вкладке остаётся открытым (§23.1). */}
+          <Link href="/admin/help" target="_blank" rel="noopener">
+            Справка по синтаксису
+          </Link>
+          <Text color="secondary" variant="caption-2">
+            Изменения попадают в шаблон по кнопке «Сохранить» или автоматически после закрытия
+            редактора.
+          </Text>
+        </div>
+      )}
       {loadError && (
         <Alert
           theme="danger"
@@ -252,8 +284,8 @@ export function DocumentTab({
           <Button onClick={() => void config.refetch()}>Повторить</Button>
         </div>
       )}
-      <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
-        <div style={{ flex: 1, height: 'calc(100vh - 260px)', minHeight: 480 }}>
+      <div className="cr-doc-body">
+        <div className="cr-doc-editor">
           {stableConfig ? (
             <DocumentEditor
               key={stable.current.id}

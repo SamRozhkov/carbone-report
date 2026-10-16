@@ -30,6 +30,8 @@ const base = {
   onTestParams: () => {},
   previewData: null,
   onPreviewData: () => {},
+  full: false,
+  onFull: () => {},
 };
 const lock = [
   { method: 'POST', path: '/api/templates/t1/edit-lock', body: { state: 'mine' } },
@@ -47,6 +49,27 @@ describe('DocumentTab', () => {
     expect(editor).toHaveAttribute('data-key', 'k1');
     await userEvent.click(screen.getByRole('button', { name: 'Теги' }));
     await userEvent.click(screen.getByRole('button', { name: 'Теги' }));
+    expect(mounts.count).toBe(1);
+  });
+
+  it('развёрнутый режим: класс на контейнере, редактор не пересоздаётся, Esc сворачивает', async () => {
+    mounts.count = 0;
+    mockApi([...lock, { path: '/api/templates/t1/editor-config', body: config }]);
+    function Host() {
+      const [full, setFull] = useState(false);
+      return <DocumentTab {...base} full={full} onFull={setFull} />;
+    }
+    const { container } = renderWithProviders(<Host />);
+    await screen.findByTestId('oo');
+    await userEvent.click(screen.getByRole('button', { name: 'Развернуть' }));
+    expect(container.querySelector('.cr-doc-full')).not.toBeNull();
+    expect(screen.getByText(t.name)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Свернуть' }));
+    expect(container.querySelector('.cr-doc-full')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Развернуть' }));
+    expect(container.querySelector('.cr-doc-full')).not.toBeNull();
+    await userEvent.keyboard('{Escape}');
+    expect(container.querySelector('.cr-doc-full')).toBeNull();
     expect(mounts.count).toBe(1);
   });
 

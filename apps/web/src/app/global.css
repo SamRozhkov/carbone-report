@@ -240,3 +240,44 @@ body {
   width: 100%;
   text-align: left;
 }
+
+/* Вкладка «Документ» во весь окно (§38.4): тот же узел DOM — iframe OnlyOffice не перезагружается. */
+.cr-doc-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.cr-doc-body {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+.cr-doc-editor {
+  flex: 1;
+  height: calc(100vh - 260px);
+  min-height: 480px;
+}
+.cr-tags-panel {
+  max-height: calc(100vh - 260px);
+}
+.cr-doc-full {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--g-color-base-background);
+  padding: 8px 16px 12px;
+  display: flex;
+  flex-direction: column;
+}
+.cr-doc-full .cr-doc-body {
+  flex: 1;
+  min-height: 0;
+}
+.cr-doc-full .cr-doc-editor {
+  height: auto;
+  min-height: 0;
+}
+.cr-doc-full .cr-tags-panel {
+  max-height: none;
+}

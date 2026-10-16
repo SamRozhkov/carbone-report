@@ -351,6 +351,24 @@ describe('DocumentTab', () => {
     expect(await screen.findByText('Вы редактируете')).toBeInTheDocument();
   });
 
+  it('«Редактировать здесь»: ошибка перехвата показывается тостом', async () => {
+    mockApi([
+      { method: 'POST', path: '/api/templates/t1/edit-lock', body: other(true) },
+      {
+        method: 'POST',
+        path: '/api/templates/t1/edit-lock/takeover',
+        status: 500,
+        body: { error: { code: 'X', message: 'сбой сервера' } },
+      },
+      { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+      { path: '/api/templates/t1/editor-config', body: config },
+    ]);
+    renderWithProviders(<DocumentTab {...base} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Редактировать здесь' }));
+    expect(await screen.findByText('Не удалось забрать редактирование')).toBeInTheDocument();
+    expect(screen.getByText('сбой сервера')).toBeInTheDocument();
+  });
+
   /** Ответы POST …/edit-lock по очереди; последний повторяется. */
   const queue = (...states: unknown[]) => ({
     method: 'POST',

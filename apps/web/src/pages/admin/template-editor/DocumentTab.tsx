@@ -185,6 +185,17 @@ export function DocumentTab({
   });
 
   const onSave = () => void runSave();
+  const doTakeover = () => {
+    lock.takeover().catch((e) => {
+      if (!mounted.current) return;
+      add({
+        name: toastName('doc-takeover'),
+        title: 'Не удалось забрать редактирование',
+        content: errorMessage(e),
+        theme: 'danger',
+      });
+    });
+  };
   const holderLogin = lock.state?.state === 'other' ? lock.state.user.login : '';
 
   // Версия шаблона изменилась (сохранение, замена файла в «Настройках»): ключ документа мог смениться.
@@ -199,7 +210,11 @@ export function DocumentTab({
 
   return (
     <div className="cr-stack">
-      <LockBar lock={lock} onTakeover={() => setConfirmTakeover(true)} />
+      <LockBar
+        lock={lock}
+        onTakeover={() => setConfirmTakeover(true)}
+        onTakeoverHere={doTakeover}
+      />
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         {lock.editing && (
           <Button view="action" onClick={onSave} loading={waiting}>
@@ -273,22 +288,22 @@ export function DocumentTab({
         onCancel={() => setConfirmTakeover(false)}
         onConfirm={() => {
           setConfirmTakeover(false);
-          lock.takeover().catch((e) => {
-            if (!mounted.current) return;
-            add({
-              name: toastName('doc-takeover'),
-              title: 'Не удалось забрать редактирование',
-              content: errorMessage(e),
-              theme: 'danger',
-            });
-          });
+          doTakeover();
         }}
       />
     </div>
   );
 }
 
-function LockBar({ lock, onTakeover }: { lock: EditLock; onTakeover: () => void }) {
+function LockBar({
+  lock,
+  onTakeover,
+  onTakeoverHere,
+}: {
+  lock: EditLock;
+  onTakeover: () => void;
+  onTakeoverHere: () => void;
+}) {
   const s = lock.state;
   if (!s) return null;
   const time = (iso: string) =>
@@ -309,7 +324,7 @@ function LockBar({ lock, onTakeover }: { lock: EditLock; onTakeover: () => void 
       {s.state === 'other' && s.sameUser && (
         <>
           <Text color="warning">Шаблон открыт у вас в другой вкладке</Text>
-          <Button size="s" onClick={() => void lock.takeover()}>
+          <Button size="s" onClick={onTakeoverHere}>
             Редактировать здесь
           </Button>
         </>

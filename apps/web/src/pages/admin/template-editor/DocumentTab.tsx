@@ -70,6 +70,8 @@ export function DocumentTab({
   // Библиотека пересоздаёт редактор, когда СОДЕРЖИМОЕ config меняется (сравнивает JSON), поэтому держим конфиг неизменным,
   // пока не сменились ключ документа или режим (иначе каждый новый токен JWT перезагружал бы документ).
   // React key на DocumentEditor ставить нельзя: перемонтирование ломает DocsAPI («removeChild»).
+  // На этом поведении держится смена режима, поэтому версия @onlyoffice/document-editor-react закреплена точно
+  // (2.2.0); обновлять — только с прогоном e2e editor-lock.
   const key = config.data?.document?.key;
   const stableId = `${mode}:${key}`;
   const stable = useRef<{ id: string | undefined; config: typeof config.data }>({

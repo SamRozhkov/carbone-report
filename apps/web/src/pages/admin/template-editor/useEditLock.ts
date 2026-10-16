@@ -29,8 +29,13 @@ export function useEditLock(templateId: string, enabled = true): EditLock {
   const stateRef = useRef<EditLockState | null>(null);
   const fails = useRef(0);
   const alive = useRef(true);
+  // Номер запроса: ответ, отправленный раньше уже применённого, устарел (продление в полёте во время перехвата).
+  const seq = useRef(0);
+  const appliedSeq = useRef(0);
 
-  const apply = useCallback((next: EditLockState) => {
+  const apply = useCallback((next: EditLockState, n: number) => {
+    if (n < appliedSeq.current) return;
+    appliedSeq.current = n;
     const prev = stateRef.current;
     if (prev?.state === 'mine' && next.state === 'other') setLostTo(next.user.login);
     if (next.state === 'mine') setLostTo(null);
@@ -40,12 +45,13 @@ export function useEditLock(templateId: string, enabled = true): EditLock {
 
   const call = useCallback(
     async (acquire: boolean) => {
+      const n = ++seq.current;
       try {
         const next = await api.templates.editLock(templateId, { holder, acquire });
         fails.current = 0;
         if (!alive.current) return;
         setOffline(false);
-        apply(next);
+        apply(next, n);
       } catch {
         fails.current += 1;
         if (alive.current && fails.current >= FAILS_BEFORE_OFFLINE) setOffline(true);
@@ -82,7 +88,8 @@ export function useEditLock(templateId: string, enabled = true): EditLock {
     editing: state?.state === 'mine',
     start: () => call(true),
     takeover: async () => {
-      apply(await api.templates.takeoverEditLock(templateId, holder));
+      const n = ++seq.current;
+      apply(await api.templates.takeoverEditLock(templateId, holder), n);
     },
   };
 }

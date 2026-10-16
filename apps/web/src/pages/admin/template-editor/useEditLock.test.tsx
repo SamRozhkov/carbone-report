@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../../../api/endpoints';
 import { mockApi, wrapper } from '../../../test/utils';
 import { useEditLock } from './useEditLock';
 
@@ -121,5 +122,26 @@ describe('useEditLock', () => {
     const dels = calls.filter((c) => c.method === 'DELETE');
     expect(dels.length).toBeGreaterThanOrEqual(1);
     expect(dels[0]!.path).toBe(`/api/templates/t1/edit-lock?holder=${result.current.holder}`);
+  });
+
+  it('устаревший ответ продления после перехвата не сбрасывает правку', async () => {
+    mockApi([
+      { method: 'POST', path: '/api/templates/t1/edit-lock/takeover', body: { state: 'mine' } },
+      { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+    ]);
+    let resolveLate!: (v: typeof other) => void;
+    const spy = vi
+      .spyOn(api.templates, 'editLock')
+      .mockResolvedValueOnce(other as never)
+      .mockImplementationOnce(() => new Promise((r) => (resolveLate = r as never)) as never);
+    const { result } = renderHook(() => useEditLock('t1'), { wrapper });
+    await waitFor(() => expect(result.current.state).toEqual(other));
+    await act(() => vi.advanceTimersByTimeAsync(20_000)); // продление ушло, ответ задержан
+    expect(spy).toHaveBeenCalledTimes(2);
+    await act(() => result.current.takeover());
+    expect(result.current.editing).toBe(true);
+    await act(async () => resolveLate(other));
+    expect(result.current.editing).toBe(true);
+    expect(result.current.lostTo).toBeNull();
   });
 });

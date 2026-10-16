@@ -259,7 +259,19 @@ body {
   min-height: 480px;
 }
 .cr-tags-panel {
+  width: 320px;
+  flex-shrink: 0;
+  overflow: auto;
   max-height: calc(100vh - 260px);
+}
+.cr-tag-tile {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--g-color-base-generic);
+}
+.cr-tag-tile[draggable='true']:active {
+  cursor: grabbing;
 }
 .cr-doc-full {
   position: fixed;

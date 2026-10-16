@@ -8,6 +8,8 @@ import type {
   CreateUserBody,
   DatasourceBody,
   DatasourceDto,
+  EditLockBody,
+  EditLockState,
   GroupBody,
   GroupDto,
   GroupPatch,
@@ -149,8 +151,14 @@ export const api = {
       ),
     previewPdf: (id: string, params: ParamsInput) =>
       apiBlob(`/api/templates/${id}/preview`, post({ params, mode: 'pdf' })),
-    editorConfig: (id: string) => apiJson<Config>(`/api/templates/${id}/editor-config`),
-    save: (id: string) => apiJson<void>(`/api/templates/${id}/save`, post()),
+    editorConfig: (id: string, holder: string) =>
+      apiJson<Config>(`/api/templates/${id}/editor-config?holder=${encodeURIComponent(holder)}`),
+    save: (id: string, holder: string) =>
+      apiJson<void>(`/api/templates/${id}/save`, post({ holder })),
+    editLock: (id: string, body: EditLockBody) =>
+      apiJson<EditLockState>(`/api/templates/${id}/edit-lock`, post(body)),
+    takeoverEditLock: (id: string, holder: string) =>
+      apiJson<EditLockState>(`/api/templates/${id}/edit-lock/takeover`, post({ holder })),
     getAccess: (id: string) => apiJson<TemplateAccess>(`/api/templates/${id}/access`),
     access: (id: string, body: TemplateAccess) =>
       apiJson<TemplateAccess>(`/api/templates/${id}/access`, put(body)),
@@ -200,4 +208,13 @@ export const runFileUrl = (
   const qs = sp.toString();
   return `/api/runs/${runId}/file${qs ? `?${qs}` : ''}`;
 };
+/** Освобождение блокировки при уходе со страницы: запрос переживает закрытие вкладки (§38.1). */
+export function releaseEditLock(id: string, holder: string): void {
+  void fetch(`/api/templates/${id}/edit-lock?holder=${encodeURIComponent(holder)}`, {
+    method: 'DELETE',
+    keepalive: true,
+    credentials: 'same-origin',
+  }).catch(() => undefined);
+}
+
 export const templateDownloadUrl = (id: string) => `/api/templates/${id}/download`;

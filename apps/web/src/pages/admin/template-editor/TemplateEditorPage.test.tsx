@@ -33,9 +33,11 @@ describe('TemplateEditorPage', () => {
   });
 
   it('возврат на вкладку «Документ» посылает resize, редактор остаётся смонтированным', async () => {
-    mockApi([
+    const { calls } = mockApi([
       adminMe,
       { path: '/api/templates/t1', body: adminTemplate },
+      { method: 'POST', path: '/api/templates/t1/edit-lock', body: { state: 'mine' } },
+      { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
       {
         path: '/api/templates/t1/editor-config',
         body: {
@@ -59,5 +61,7 @@ describe('TemplateEditorPage', () => {
       window.removeEventListener('resize', onResize);
     }
     expect(screen.getByTestId('oo')).toBe(editor);
+    // Переключение вкладок блокировку не снимает: DocumentTab остаётся смонтированным.
+    expect(calls.filter((c) => c.method === 'DELETE')).toHaveLength(0);
   });
 });

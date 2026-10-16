@@ -27,4 +27,5 @@ export const adminTemplate = {
   ],
   lastSaveError: null,
   lastSaveErrorAt: null,
+  editingBy: null,
 };

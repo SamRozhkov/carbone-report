@@ -2,7 +2,7 @@ import { ThemeProvider, Toaster, ToasterComponent, ToasterProvider } from '@grav
 import type { QueryClient } from '@tanstack/react-query';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
-import type { ReactElement, ReactNode } from 'react';
+import { useState, type ReactElement, type ReactNode } from 'react';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { vi } from 'vitest';
@@ -92,6 +92,12 @@ function testClient(): QueryClient {
     mutations: { retry: false },
   });
   return client;
+}
+
+/** Провайдеры для renderHook (QueryClient без повторов, тостер). */
+export function wrapper({ children }: { children: ReactNode }) {
+  const [client] = useState(testClient);
+  return <Providers client={client}>{children}</Providers>;
 }
 
 /** Рендер отдельного компонента (внутри MemoryRouter на `route`). */

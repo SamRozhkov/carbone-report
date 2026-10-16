@@ -140,8 +140,8 @@ describe('ImportDialog', () => {
         body: preview([
           item({
             existing: [
-              { id: T1, name: 'Счёт', updatedAt: '2026-10-09T10:00:00Z' },
-              { id: T2, name: 'Счёт', updatedAt: '2026-10-01T10:00:00Z' },
+              { id: T1, name: 'Счёт', updatedAt: '2026-10-09T10:00:00Z', lockedBy: null },
+              { id: T2, name: 'Счёт', updatedAt: '2026-10-01T10:00:00Z', lockedBy: null },
             ],
           }),
         ]),
@@ -238,14 +238,16 @@ describe('ImportDialog', () => {
       index: 0,
       name: 'Акт',
       existing: [
-        { id: T1, name: 'Акт', updatedAt: '2026-10-09T10:00:00.000001Z' },
-        { id: T2, name: 'Акт', updatedAt: '2026-10-01T10:00:00.000001Z' },
+        { id: T1, name: 'Акт', updatedAt: '2026-10-09T10:00:00.000001Z', lockedBy: null },
+        { id: T2, name: 'Акт', updatedAt: '2026-10-01T10:00:00.000001Z', lockedBy: null },
       ],
     });
     const B = item({
       index: 1,
       name: 'Счёт',
-      existing: [{ id: T1, name: 'Счёт', updatedAt: '2026-10-09T10:00:00.000001Z' }],
+      existing: [
+        { id: T1, name: 'Счёт', updatedAt: '2026-10-09T10:00:00.000001Z', lockedBy: null },
+      ],
     });
     const C = item({ index: 2, name: 'Накладная', datasourceMatch: null });
     let previews = 0;

@@ -1,8 +1,8 @@
 import type { TemplateAdminDetails } from '@carbone-reports/shared';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminTemplate } from '../../../test/fixtures';
 import { mockApi, renderWithProviders } from '../../../test/utils';
 import { DocumentTab } from './DocumentTab';
@@ -31,12 +31,16 @@ const base = {
   previewData: null,
   onPreviewData: () => {},
 };
+const lock = [
+  { method: 'POST', path: '/api/templates/t1/edit-lock', body: { state: 'mine' } },
+  { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+];
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe('DocumentTab', () => {
   it('редактор с конфигом сервера; переключение панели тегов не пересоздаёт редактор', async () => {
     mounts.count = 0;
-    mockApi([{ path: '/api/templates/t1/editor-config', body: config }]);
+    mockApi([...lock, { path: '/api/templates/t1/editor-config', body: config }]);
     renderWithProviders(<DocumentTab {...base} />);
     const editor = await screen.findByTestId('oo');
     expect(editor).toHaveAttribute('data-url', '/onlyoffice/');
@@ -47,7 +51,7 @@ describe('DocumentTab', () => {
   });
 
   it('ссылка «Справка по синтаксису» открывает /admin/help в новой вкладке', async () => {
-    mockApi([{ path: '/api/templates/t1/editor-config', body: config }]);
+    mockApi([...lock, { path: '/api/templates/t1/editor-config', body: config }]);
     renderWithProviders(<DocumentTab {...base} />);
     const link = await screen.findByRole('link', { name: 'Справка по синтаксису' });
     expect(link).toHaveAttribute('href', '/admin/help');
@@ -58,6 +62,8 @@ describe('DocumentTab', () => {
   it('сохранение: forcesave и ожидание новой версии', async () => {
     let gets = 0;
     const { calls } = mockApi([
+      ...lock,
+      ...lock,
       { path: '/api/templates/t1/editor-config', body: config },
       { method: 'POST', path: '/api/templates/t1/save', status: 204 },
       {
@@ -69,13 +75,13 @@ describe('DocumentTab', () => {
     await screen.findByTestId('oo');
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
     expect(await screen.findByText('Сохранено, версия 4')).toBeInTheDocument();
-    expect(calls.some((c) => c.method === 'POST' && c.path === '/api/templates/t1/save')).toBe(
-      true,
-    );
+    const saveCall = calls.find((c) => c.method === 'POST' && c.path === '/api/templates/t1/save');
+    expect(saveCall!.body).toEqual({ holder: expect.stringMatching(/^[0-9a-f-]{36}$/) });
   });
 
   it('документ не открыт → понятное сообщение', async () => {
     mockApi([
+      ...lock,
       { path: '/api/templates/t1/editor-config', body: config },
       { path: '/api/templates/t1', body: t },
       {
@@ -93,6 +99,7 @@ describe('DocumentTab', () => {
 
   it('нет изменений → сообщение без ожидания версии', async () => {
     mockApi([
+      ...lock,
       { path: '/api/templates/t1/editor-config', body: config },
       { path: '/api/templates/t1', body: t },
       {
@@ -111,6 +118,7 @@ describe('DocumentTab', () => {
 
   it('нет подтверждения за отведённое время → предупреждение', async () => {
     mockApi([
+      ...lock,
       { path: '/api/templates/t1/editor-config', body: config },
       { method: 'POST', path: '/api/templates/t1/save', status: 204 },
       { path: '/api/templates/t1', body: t },
@@ -125,6 +133,7 @@ describe('DocumentTab', () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     let gets = 0;
     mockApi([
+      ...lock,
       { path: '/api/templates/t1/editor-config', body: config },
       { method: 'POST', path: '/api/templates/t1/save', status: 204 },
       {
@@ -149,6 +158,8 @@ describe('DocumentTab', () => {
 
   it('повторный клик «Сохранить» во время ожидания не запускает второй опрос', async () => {
     const { calls } = mockApi([
+      ...lock,
+      ...lock,
       { path: '/api/templates/t1/editor-config', body: config },
       { method: 'POST', path: '/api/templates/t1/save', status: 204 },
       { path: '/api/templates/t1', body: t },
@@ -167,6 +178,7 @@ describe('DocumentTab', () => {
   it('устаревшая lastSaveError не считается провалом нового сохранения', async () => {
     let gets = 0;
     mockApi([
+      ...lock,
       { path: '/api/templates/t1/editor-config', body: config },
       { method: 'POST', path: '/api/templates/t1/save', status: 204 },
       {
@@ -191,6 +203,7 @@ describe('DocumentTab', () => {
   it('повтор той же ошибки с новой меткой времени → «Сохранение не удалось», а не таймаут', async () => {
     let gets = 0;
     mockApi([
+      ...lock,
       { path: '/api/templates/t1/editor-config', body: config },
       { method: 'POST', path: '/api/templates/t1/save', status: 204 },
       {
@@ -215,6 +228,7 @@ describe('DocumentTab', () => {
   it('другой текст ошибки при прежней метке — не новая ошибка', async () => {
     let gets = 0;
     mockApi([
+      ...lock,
       { path: '/api/templates/t1/editor-config', body: config },
       { method: 'POST', path: '/api/templates/t1/save', status: 204 },
       {
@@ -250,6 +264,7 @@ describe('DocumentTab', () => {
   it('версия выросла и ключ документа сменился → редактор получает новый ключ', async () => {
     let key = 'k1';
     mockApi([
+      ...lock,
       {
         path: '/api/templates/t1/editor-config',
         handler: () => ({ body: { ...config, document: { ...config.document, key } } }),
@@ -265,19 +280,20 @@ describe('DocumentTab', () => {
 
   it('версия выросла, ключ тот же → редактор не пересоздаётся', async () => {
     mounts.count = 0;
-    const { calls } = mockApi([{ path: '/api/templates/t1/editor-config', body: config }]);
+    const { calls } = mockApi([...lock, { path: '/api/templates/t1/editor-config', body: config }]);
     const H = bumpHarness();
     renderWithProviders(<H />);
     await screen.findByTestId('oo');
     await userEvent.click(screen.getByRole('button', { name: 'bump' }));
     await waitFor(() =>
-      expect(calls.filter((c) => c.path.endsWith('editor-config'))).toHaveLength(2),
+      expect(calls.filter((c) => c.path.includes('/editor-config'))).toHaveLength(2),
     );
     expect(mounts.count).toBe(1);
   });
 
   it('ошибка editor-config → кнопка «Повторить»', async () => {
     mockApi([
+      ...lock,
       {
         path: '/api/templates/t1/editor-config',
         status: 500,
@@ -286,5 +302,113 @@ describe('DocumentTab', () => {
     ]);
     renderWithProviders(<DocumentTab {...base} />);
     expect(await screen.findByRole('button', { name: 'Повторить' })).toBeInTheDocument();
+  });
+
+  const other = (sameUser = false) => ({
+    state: 'other',
+    user: { id: 'u2', login: 'petrov' },
+    since: '2026-10-15T10:05:00.000Z',
+    sameUser,
+  });
+
+  it('чужая блокировка: просмотр, «Забрать редактирование» с подтверждением, затем правка', async () => {
+    mounts.count = 0;
+    const { calls } = mockApi([
+      { method: 'POST', path: '/api/templates/t1/edit-lock', body: other() },
+      { method: 'POST', path: '/api/templates/t1/edit-lock/takeover', body: { state: 'mine' } },
+      { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+      { path: '/api/templates/t1/editor-config', body: config },
+    ]);
+    renderWithProviders(<DocumentTab {...base} />);
+    expect(
+      await screen.findByText(/Только просмотр — редактирует petrov с \d\d:\d\d/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Забрать редактирование' }));
+    expect(
+      screen.getByText(
+        'Шаблон сейчас редактирует petrov. Забрать редактирование? Сделанные правки будут сохранены, а у petrov редактор переключится в просмотр',
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Забрать' }));
+    expect(await screen.findByText('Вы редактируете')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Сохранить' })).toBeInTheDocument();
+    const configs = calls.filter((c) => c.path.startsWith('/api/templates/t1/editor-config'));
+    expect(configs.at(-1)!.path).toMatch(/holder=[0-9a-f-]{36}/);
+    await waitFor(() => expect(mounts.count).toBe(2)); // редактор пересоздан: просмотр → правка
+  });
+
+  it('своя другая вкладка: «Редактировать здесь» без подтверждения', async () => {
+    mockApi([
+      { method: 'POST', path: '/api/templates/t1/edit-lock', body: other(true) },
+      { method: 'POST', path: '/api/templates/t1/edit-lock/takeover', body: { state: 'mine' } },
+      { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+      { path: '/api/templates/t1/editor-config', body: config },
+    ]);
+    renderWithProviders(<DocumentTab {...base} />);
+    expect(await screen.findByText('Шаблон открыт у вас в другой вкладке')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Редактировать здесь' }));
+    expect(await screen.findByText('Вы редактируете')).toBeInTheDocument();
+  });
+
+  /** Ответы POST …/edit-lock по очереди; последний повторяется. */
+  const queue = (...states: unknown[]) => ({
+    method: 'POST',
+    path: '/api/templates/t1/edit-lock',
+    handler: () => ({ body: states.length > 1 ? states.shift() : states[0] }),
+  });
+
+  describe('с таймерами', () => {
+    beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+    afterEach(() => vi.useRealTimers());
+
+    it('документ свободен: «Начать редактирование»', async () => {
+      mockApi([
+        queue(other(), { state: 'free' }, { state: 'mine' }),
+        { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+        { path: '/api/templates/t1/editor-config', body: config },
+      ]);
+      renderWithProviders(<DocumentTab {...base} />);
+      await screen.findByText(/Только просмотр/);
+      await act(() => vi.advanceTimersByTimeAsync(20_000));
+      expect(await screen.findByText('Документ свободен')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Начать редактирование' }));
+      expect(await screen.findByText('Вы редактируете')).toBeInTheDocument();
+    });
+
+    it('правку забрали: «Редактирование забрал», нет «Сохранить»', async () => {
+      mockApi([
+        queue({ state: 'mine' }, other()),
+        { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+        { path: '/api/templates/t1/editor-config', body: config },
+      ]);
+      renderWithProviders(<DocumentTab {...base} />);
+      await screen.findByText('Вы редактируете');
+      await act(() => vi.advanceTimersByTimeAsync(20_000));
+      expect(await screen.findByText('Редактирование забрал petrov')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull();
+    });
+
+    it('три ошибки продления — предупреждение о связи', async () => {
+      let n = 0;
+      mockApi([
+        {
+          method: 'POST',
+          path: '/api/templates/t1/edit-lock',
+          handler: () =>
+            n++ === 0
+              ? { body: { state: 'mine' } }
+              : { status: 500, body: { error: { code: 'X', message: 'x' } } },
+        },
+        { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+        { path: '/api/templates/t1/editor-config', body: config },
+      ]);
+      renderWithProviders(<DocumentTab {...base} />);
+      await screen.findByText('Вы редактируете');
+      for (let i = 0; i < 3; i++) await act(() => vi.advanceTimersByTimeAsync(20_000));
+      expect(
+        await screen.findByText('Связь с сервером потеряна, изменения могут не сохраниться'),
+      ).toBeInTheDocument();
+    });
   });
 });

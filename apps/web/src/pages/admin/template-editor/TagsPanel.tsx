@@ -59,12 +59,15 @@ export function TagsPanel({
   charts = [],
   onRefresh,
   refreshing,
+  editing: _editing,
 }: {
   data: Record<string, unknown> | null;
   /** Ключи графиков шаблона (§35.5): `{d.charts.<key>:chart}`. */
   charts?: string[];
   onRefresh: () => void;
   refreshing: boolean;
+  /** Документ редактируется здесь (Task 6: перетаскивание тегов). */
+  editing?: boolean;
 }) {
   // При графиках d.charts — их описания ECharts: деревом не показываем, теги — отдельным блоком.
   const tree = data

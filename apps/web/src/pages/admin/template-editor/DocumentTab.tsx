@@ -6,11 +6,13 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../../api/endpoints';
 import { ApiRequestError } from '../../../api/client';
 import { errorMessage } from '../../../api/errors';
+import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { ErrorAlert } from '../../../components/ErrorAlert';
 import { pickParams } from '../../../lib/params';
 import type { TabProps } from './editorState';
 import { templateKey } from './editorState';
 import { TagsPanel } from './TagsPanel';
+import { useEditLock, type EditLock } from './useEditLock';
 
 let toastSeq = 0;
 const toastName = (prefix: string) => `${prefix}-${++toastSeq}`;
@@ -28,6 +30,9 @@ export function DocumentTab({
   const [showTags, setShowTags] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
+  const [confirmTakeover, setConfirmTakeover] = useState(false);
+  const lock = useEditLock(template.id);
+  const mode = lock.state === null ? null : lock.editing ? 'edit' : 'view';
   const polling = useRef(false);
   const mounted = useRef(true);
   const wake = useRef<(() => void) | null>(null);
@@ -41,20 +46,22 @@ export function DocumentTab({
   }, []);
 
   const config = useQuery({
-    queryKey: ['editor-config', template.id],
-    queryFn: () => api.templates.editorConfig(template.id),
+    queryKey: ['editor-config', template.id, lock.holder, mode],
+    queryFn: () => api.templates.editorConfig(template.id, lock.holder),
+    enabled: mode !== null,
     staleTime: Infinity,
     gcTime: 0,
     refetchOnMount: 'always',
   });
-  // Редактор пересоздаётся при любом изменении config — держим ссылку стабильной, пока не сменился ключ документа.
+  // Редактор пересоздаётся при любом изменении config — держим ссылку стабильной, пока не сменились ключ документа или режим.
   const key = config.data?.document?.key;
-  const stable = useRef<{ key: string | undefined; config: typeof config.data }>({
-    key: undefined,
+  const stableId = `${mode}:${key}`;
+  const stable = useRef<{ id: string | undefined; config: typeof config.data }>({
+    id: undefined,
     config: undefined,
   });
-  if (stable.current.key !== key || (stable.current.config === undefined && config.data)) {
-    stable.current = { key, config: config.data };
+  if (config.data && stable.current.id !== stableId) {
+    stable.current = { id: stableId, config: config.data };
   }
   const stableConfig = stable.current.config;
 
@@ -160,7 +167,7 @@ export function DocumentTab({
     }
   };
 
-  const save = useMutation({ mutationFn: () => api.templates.save(template.id) });
+  const save = useMutation({ mutationFn: () => api.templates.save(template.id, lock.holder) });
 
   const refresh = useMutation({
     mutationFn: () =>
@@ -178,6 +185,7 @@ export function DocumentTab({
   });
 
   const onSave = () => void runSave();
+  const holderLogin = lock.state?.state === 'other' ? lock.state.user.login : '';
 
   // Версия шаблона изменилась (сохранение, замена файла в «Настройках»): ключ документа мог смениться.
   // Если ключ тот же, ссылка на конфиг не меняется и редактор не пересоздаётся.
@@ -191,11 +199,14 @@ export function DocumentTab({
 
   return (
     <div className="cr-stack">
+      <LockBar lock={lock} onTakeover={() => setConfirmTakeover(true)} />
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <Button view="action" onClick={onSave} loading={waiting}>
-          <Icon data={FloppyDisk} />
-          Сохранить
-        </Button>
+        {lock.editing && (
+          <Button view="action" onClick={onSave} loading={waiting}>
+            <Icon data={FloppyDisk} />
+            Сохранить
+          </Button>
+        )}
         <Button
           view={showTags ? 'normal' : 'flat'}
           aria-pressed={showTags}
@@ -230,6 +241,7 @@ export function DocumentTab({
         <div style={{ flex: 1, height: 'calc(100vh - 260px)', minHeight: 480 }}>
           {stableConfig ? (
             <DocumentEditor
+              key={stable.current.id}
               id="cr-doc-editor"
               documentServerUrl="/onlyoffice/"
               config={stableConfig}
@@ -249,9 +261,73 @@ export function DocumentTab({
             charts={template.charts.map((c) => c.key)}
             onRefresh={() => refresh.mutate()}
             refreshing={refresh.isPending}
+            editing={lock.editing}
           />
         )}
       </div>
+      <ConfirmDialog
+        open={confirmTakeover}
+        title="Забрать редактирование"
+        text={`Шаблон сейчас редактирует ${holderLogin}. Забрать редактирование? Сделанные правки будут сохранены, а у ${holderLogin} редактор переключится в просмотр`}
+        confirmText="Забрать"
+        onCancel={() => setConfirmTakeover(false)}
+        onConfirm={() => {
+          setConfirmTakeover(false);
+          lock.takeover().catch((e) => {
+            if (!mounted.current) return;
+            add({
+              name: toastName('doc-takeover'),
+              title: 'Не удалось забрать редактирование',
+              content: errorMessage(e),
+              theme: 'danger',
+            });
+          });
+        }}
+      />
+    </div>
+  );
+}
+
+function LockBar({ lock, onTakeover }: { lock: EditLock; onTakeover: () => void }) {
+  const s = lock.state;
+  if (!s) return null;
+  const time = (iso: string) =>
+    new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      {s.state === 'mine' && <Text color="positive">Вы редактируете</Text>}
+      {s.state === 'other' && !s.sameUser && (
+        <>
+          <Text color="warning">
+            Только просмотр — редактирует {s.user.login} с {time(s.since)}
+          </Text>
+          <Button size="s" onClick={onTakeover}>
+            Забрать редактирование
+          </Button>
+        </>
+      )}
+      {s.state === 'other' && s.sameUser && (
+        <>
+          <Text color="warning">Шаблон открыт у вас в другой вкладке</Text>
+          <Button size="s" onClick={() => void lock.takeover()}>
+            Редактировать здесь
+          </Button>
+        </>
+      )}
+      {s.state === 'free' && (
+        <>
+          <Text color="secondary">Документ свободен</Text>
+          <Button size="s" view="action" onClick={() => void lock.start()}>
+            Начать редактирование
+          </Button>
+        </>
+      )}
+      {lock.lostTo && s.state !== 'mine' && (
+        <Text color="danger">Редактирование забрал {lock.lostTo}</Text>
+      )}
+      {lock.offline && (
+        <Text color="danger">Связь с сервером потеряна, изменения могут не сохраниться</Text>
+      )}
     </div>
   );
 }

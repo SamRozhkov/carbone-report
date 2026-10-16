@@ -43,7 +43,9 @@ export function DocumentTab({
   const [confirmTakeover, setConfirmTakeover] = useState(false);
   const [busy, setBusy] = useState(false);
   const [readyId, setReadyId] = useState<string | null>(null);
-  const [rebuild, setRebuild] = useState(false);
+  // Незначимый проп для принудительной пересборки: название фиксируем в момент пересборки, иначе переименование
+  // шаблона меняло бы проп и ещё раз пересоздавало редактор, теряя несохранённые правки.
+  const [rebuildTitle, setRebuildTitle] = useState<string | undefined>(undefined);
   const mode = lock.state === null ? null : lock.editing ? 'edit' : 'view';
   const polling = useRef(false);
   const mounted = useRef(true);
@@ -68,6 +70,8 @@ export function DocumentTab({
   // Библиотека пересоздаёт редактор, когда СОДЕРЖИМОЕ config меняется (сравнивает JSON), поэтому держим конфиг неизменным,
   // пока не сменились ключ документа или режим (иначе каждый новый токен JWT перезагружал бы документ).
   // React key на DocumentEditor ставить нельзя: перемонтирование ломает DocsAPI («removeChild»).
+  // На этом поведении держится смена режима, поэтому версия @onlyoffice/document-editor-react закреплена точно
+  // (2.2.0); обновлять — только с прогоном e2e editor-lock.
   const key = config.data?.document?.key;
   const stableId = `${mode}:${key}`;
   const stable = useRef<{ id: string | undefined; config: typeof config.data }>({
@@ -88,7 +92,8 @@ export function DocumentTab({
     setReadyId(stableId);
     // Построен по устаревшему конфигу — принудительная пересборка: смена незначимого пропа заставляет библиотеку
     // уничтожить редактор и построить его заново из актуального конфига.
-    if (stableId !== currentId.current) setRebuild((v) => !v);
+    if (stableId !== currentId.current)
+      setRebuildTitle((v) => (v === undefined ? template.name : undefined));
   };
   const editorReady = config.data !== undefined && readyId === stableId;
   const canSwitch = editorReady || loadError !== null || config.isError;
@@ -331,7 +336,7 @@ export function DocumentTab({
               config={stableConfig}
               height="100%"
               width="100%"
-              document_title={rebuild ? template.name : undefined}
+              document_title={rebuildTitle}
               events_onAppReady={onAppReady}
               onLoadComponentError={(code, description) =>
                 setLoadError(`${description} (код ${code})`)

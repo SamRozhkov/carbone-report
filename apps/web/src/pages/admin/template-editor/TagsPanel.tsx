@@ -83,7 +83,8 @@ function NodeView({
   return (
     <div style={{ paddingLeft: depth * 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        {hasChildren && (
+        {/* Во время поиска всё раскрыто принудительно — кнопка ничего бы не делала. */}
+        {hasChildren && !forceOpen && (
           <Button
             view="flat"
             size="xs"

@@ -212,7 +212,7 @@ importers:
         specifier: ^9.4.3
         version: 9.4.3
       '@onlyoffice/document-editor-react':
-        specifier: ^2.2.0
+        specifier: 2.2.0
         version: 2.2.0(@onlyoffice/doceditor-types@9.4.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@tanstack/react-query':
         specifier: ^5.104.1

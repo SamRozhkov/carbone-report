@@ -96,6 +96,8 @@ describe('TagsPanel: поиск, сворачивание, перетаскив�
     expect(screen.getByText('{d.company.inn}')).toBeInTheDocument();
     expect(screen.queryByText('{d.company.name}')).toBeNull();
     expect(screen.getByText('company')).toBeInTheDocument();
+    // Во время поиска всё раскрыто — кнопок сворачивания нет.
+    expect(screen.queryByRole('button', { name: /^(Свернуть|Развернуть) / })).toBeNull();
     await userEvent.clear(box);
     await userEvent.type(box, 'zzz');
     expect(screen.getByText('Ничего не найдено')).toBeInTheDocument();

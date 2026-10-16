@@ -144,4 +144,27 @@ describe('useEditLock', () => {
     expect(result.current.editing).toBe(true);
     expect(result.current.lostTo).toBeNull();
   });
+
+  it('возврат на вкладку — продление сразу, скрытие — без запроса', async () => {
+    const { calls } = mockApi([
+      { method: 'POST', path: '/api/templates/t1/edit-lock', body: { state: 'mine' } },
+      { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+    ]);
+    const { result } = renderHook(() => useEditLock('t1'), { wrapper });
+    await waitFor(() => expect(result.current.editing).toBe(true));
+    const posts = () => calls.filter((c) => c.method === 'POST').length;
+    const setVisibility = (v: DocumentVisibilityState) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => v });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    try {
+      setVisibility('hidden');
+      expect(posts()).toBe(1);
+      setVisibility('visible');
+      await waitFor(() => expect(posts()).toBe(2));
+      expect(calls.at(-1)!.body).toEqual({ holder: result.current.holder, acquire: true });
+    } finally {
+      delete (document as { visibilityState?: unknown }).visibilityState;
+    }
+  });
 });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { EditLockBody, EditLockHolderQuery, EditLockState, EditLockTakeoverBody } from './edit-lock';
+import {
+  EditLockBody,
+  EditLockHolderQuery,
+  EditLockState,
+  EditLockTakeoverBody,
+} from './edit-lock';
 
 const holder = '0b6c6f0e-2b4c-4a51-9a39-1f4b2a3c4d5e';
 

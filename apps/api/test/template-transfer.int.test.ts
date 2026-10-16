@@ -390,9 +390,7 @@ describe('перенос шаблонов между средами', () => {
         `шаблон «${name}» редактирует ${other.user.login} — повторите позже`,
       );
     } finally {
-      await b.deps.db
-        .delete(templateEditLocks)
-        .where(eq(templateEditLocks.templateId, importedId));
+      await b.deps.db.delete(templateEditLocks).where(eq(templateEditLocks.templateId, importedId));
     }
   });
 

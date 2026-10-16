@@ -139,3 +139,24 @@ describe('TagsPanel: поиск, сворачивание, перетаскив�
       expect(screen.getByText(tag).closest('[draggable]')).toHaveAttribute('draggable', 'true');
   });
 });
+
+describe('TagsPanel: Конструкции', () => {
+  it('свёрнуты по умолчанию; плитка перетаскивается, «Подробнее» ведёт в справку', async () => {
+    const { container } = renderWithProviders(
+      <TagsPanel data={null} onRefresh={() => {}} refreshing={false} editing />,
+    );
+    const details = container.querySelector('details.cr-snippets') as HTMLDetailsElement;
+    expect(details).not.toBeNull();
+    expect(details.open).toBe(false);
+    await userEvent.click(screen.getByText('Конструкции'));
+    expect(details.open).toBe(true);
+    const tile = screen.getByText('{d.поле:formatN(2)}').closest('.cr-tag-tile') as HTMLElement;
+    expect(tile).toHaveAttribute('draggable', 'true');
+    const setData = vi.fn();
+    fireEvent.dragStart(tile, { dataTransfer: { setData, effectAllowed: '' } });
+    expect(setData).toHaveBeenCalledWith('text/plain', '{d.поле:formatN(2)}');
+    const link = screen.getAllByRole('link', { name: 'Подробнее' })[4];
+    expect(link).toHaveAttribute('href', '/admin/help#fmt-number');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+});

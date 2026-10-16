@@ -1,10 +1,11 @@
 import { ArrowsRotateRight, ChevronDown, ChevronRight, Copy } from '@gravity-ui/icons';
-import { Button, Icon, Text, TextInput } from '@gravity-ui/uikit';
+import { Button, Icon, Link, Text, TextInput } from '@gravity-ui/uikit';
 import { useEffect, useMemo, useState } from 'react';
 import { useCopy } from '../../../components/useCopy';
 import type { TagNode } from '../../../lib/tagTree';
 import { buildTagTree } from '../../../lib/tagTree';
 import { chartTag } from './ChartsTab';
+import { SNIPPETS, SNIPPET_GROUPS, snippetText } from './snippets';
 
 export function filterTree(nodes: TagNode[], query: string): TagNode[] {
   const q = query.trim().toLowerCase();
@@ -197,6 +198,27 @@ export function TagsPanel({
           ))}
         </div>
       )}
+      <details className="cr-snippets">
+        <summary>
+          <Text variant="subheader-1">Конструкции</Text>
+        </summary>
+        {SNIPPET_GROUPS.map((g) => (
+          <div key={g} className="cr-stack" style={{ gap: 4 }}>
+            <Text variant="caption-2" color="secondary">
+              {g}
+            </Text>
+            {SNIPPETS.filter((s) => s.group === g).map((s) => (
+              <div key={s.title}>
+                <Text variant="caption-2">{s.title} </Text>
+                <Link href={`/admin/help#${s.helpId}`} target="_blank" rel="noopener">
+                  Подробнее
+                </Link>
+                <TagTile text={snippetText(s)} editing={editing} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </details>
       {tree && (
         <TextInput
           type="search"

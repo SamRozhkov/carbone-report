@@ -1,10 +1,11 @@
-import { IdParams } from '@carbone-reports/shared';
+import { EditLockHolderQuery, EditLockTakeoverBody, IdParams } from '@carbone-reports/shared';
 import { z } from 'zod';
 import type { App } from '../../app';
 import type { AppDeps } from '../../deps';
 import { AppError } from '../../lib/errors';
 import { MIME } from '../../lib/http';
 import { currentUser, type Guards } from '../auth/guards';
+import { activeLock, assertLockedBy } from '../edit-lock/service';
 import { loadTemplate, templateFileRef } from '../templates/service';
 import { handleCallback } from './callback';
 import { buildEditorConfig } from './editor-config';
@@ -13,16 +14,26 @@ import { verifyFileToken } from './jwt';
 export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards): void {
   app.get(
     '/api/templates/:id/editor-config',
-    { preHandler: guards.requireAdmin, schema: { params: IdParams } },
-    async (req) =>
-      buildEditorConfig(deps, await loadTemplate(deps.db, req.params.id), currentUser(req)),
+    {
+      preHandler: guards.requireAdmin,
+      schema: { params: IdParams, querystring: EditLockHolderQuery },
+    },
+    async (req) => {
+      const row = await loadTemplate(deps.db, req.params.id);
+      const lock = await activeLock(deps.db, row.id);
+      return buildEditorConfig(deps, row, currentUser(req), lock?.holder === req.query.holder);
+    },
   );
 
   app.post(
     '/api/templates/:id/save',
-    { preHandler: guards.requireAdmin, schema: { params: IdParams } },
+    {
+      preHandler: guards.requireAdmin,
+      schema: { params: IdParams, body: EditLockTakeoverBody },
+    },
     async (req, reply) => {
       const row = await loadTemplate(deps.db, req.params.id);
+      await assertLockedBy(deps.db, row.id, req.body.holder);
       await deps.onlyoffice.forceSave(row.docKey);
       return reply.status(204).send();
     },

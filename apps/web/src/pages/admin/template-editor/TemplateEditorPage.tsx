@@ -23,6 +23,7 @@ import { DocumentTab } from './DocumentTab';
 import { templateKey, usePreviewData, useTestParams } from './editorState';
 import { ParamsTab } from './ParamsTab';
 import { PreviewTab } from './PreviewTab';
+import { useEditLock } from './useEditLock';
 import { SettingsTab } from './SettingsTab';
 
 const TABS = ['document', 'data', 'charts', 'pdf', 'params', 'preview', 'settings'] as const;
@@ -34,13 +35,14 @@ export function TemplateEditorPage() {
   const [sp, setSp] = useSearchParams();
   const raw = sp.get('tab');
   const tab: TabId = (TABS as readonly string[]).includes(raw ?? '') ? (raw as TabId) : 'document';
+  const full = tab === 'document' && sp.get('full') === '1';
   const [documentVisited, setDocumentVisited] = useState(tab === 'document');
   if (tab === 'document' && !documentVisited) setDocumentVisited(true);
 
   // После display:none iframe OnlyOffice не знает свой размер: просим пересчитать раскладку, когда вкладка снова видна.
   useEffect(() => {
     if (tab === 'document') window.dispatchEvent(new Event('resize'));
-  }, [tab]);
+  }, [tab, full]);
 
   const template = useQuery({
     queryKey: templateKey(id),
@@ -50,12 +52,23 @@ export function TemplateEditorPage() {
   const [testParams, setTestParams] = useTestParams(id, t?.params ?? []);
   const [previewData, setPreviewData] = usePreviewData(id);
 
+  // Блокировка живёт на уровне страницы: переключение вкладок её не снимает, уход со страницы снимает.
+  // Берём только после первого захода на «Документ» и когда шаблон загружен.
+  const lock = useEditLock(id, documentVisited && !!t);
+
   if (template.isPending) return <Loader />;
   if (!t) return <ErrorAlert error={template.error} title="Не удалось открыть шаблон" />;
 
   const selectTab = (value: string) => {
     const next = new URLSearchParams(sp);
     next.set('tab', value);
+    next.delete('full');
+    setSp(next, { replace: true });
+  };
+  const setFull = (v: boolean) => {
+    const next = new URLSearchParams(sp);
+    if (v) next.set('full', '1');
+    else next.delete('full');
     setSp(next, { replace: true });
   };
   const tabProps = {
@@ -109,7 +122,7 @@ export function TemplateEditorPage() {
         {/* Документ не размонтируется при переключении вкладок: сессия OnlyOffice не прерывается. */}
         {(documentVisited || tab === 'document') && (
           <div hidden={tab !== 'document'}>
-            <DocumentTab {...tabProps} />
+            <DocumentTab {...tabProps} full={full} onFull={setFull} lock={lock} />
           </div>
         )}
         {tab === 'data' && <DataTab {...tabProps} />}
@@ -117,7 +130,9 @@ export function TemplateEditorPage() {
         {tab === 'pdf' && <PdfTab template={t} />}
         {tab === 'params' && <ParamsTab template={t} />}
         {tab === 'preview' && <PreviewTab {...tabProps} />}
-        {tab === 'settings' && <SettingsTab template={t} />}
+        {tab === 'settings' && (
+          <SettingsTab template={t} holder={documentVisited ? lock.holder : undefined} />
+        )}
       </div>
     </>
   );

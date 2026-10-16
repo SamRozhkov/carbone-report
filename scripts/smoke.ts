@@ -221,7 +221,7 @@ async function main() {
 
   await step('OnlyOffice → api: конвертация шаблона по внутреннему URL', async () => {
     const cfg = await json<{ document: { url: string } }>(
-      await api(`/api/templates/${templateId}/editor-config`),
+      await api(`/api/templates/${templateId}/editor-config?holder=${randomUUID()}`),
     );
     const body = {
       async: false,

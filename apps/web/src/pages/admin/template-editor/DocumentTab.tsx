@@ -1,4 +1,4 @@
-import { FloppyDisk, Tag } from '@gravity-ui/icons';
+import { ChevronsCollapseUpRight, ChevronsExpandUpRight, FloppyDisk, Tag } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Link, Loader, Text, useToaster } from '@gravity-ui/uikit';
 import { DocumentEditor } from '@onlyoffice/document-editor-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -6,11 +6,13 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../../api/endpoints';
 import { ApiRequestError } from '../../../api/client';
 import { errorMessage } from '../../../api/errors';
+import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { ErrorAlert } from '../../../components/ErrorAlert';
 import { pickParams } from '../../../lib/params';
 import type { TabProps } from './editorState';
 import { templateKey } from './editorState';
 import { TagsPanel } from './TagsPanel';
+import type { EditLock } from './useEditLock';
 
 let toastSeq = 0;
 const toastName = (prefix: string) => `${prefix}-${++toastSeq}`;
@@ -22,12 +24,27 @@ export function DocumentTab({
   onPreviewData,
   pollMs = 1500,
   pollTimeoutMs = 20_000,
-}: TabProps & { pollMs?: number; pollTimeoutMs?: number }) {
+  full,
+  onFull,
+  lock,
+}: TabProps & {
+  /** Блокировка страницы (живёт в TemplateEditorPage): её держит эта вкладка, пока открыта страница шаблона. */
+  lock: EditLock;
+  pollMs?: number;
+  pollTimeoutMs?: number;
+  full: boolean;
+  onFull: (v: boolean) => void;
+}) {
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const [showTags, setShowTags] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
+  const [confirmTakeover, setConfirmTakeover] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [readyId, setReadyId] = useState<string | null>(null);
+  const [rebuild, setRebuild] = useState(false);
+  const mode = lock.state === null ? null : lock.editing ? 'edit' : 'view';
   const polling = useRef(false);
   const mounted = useRef(true);
   const wake = useRef<(() => void) | null>(null);
@@ -41,22 +58,40 @@ export function DocumentTab({
   }, []);
 
   const config = useQuery({
-    queryKey: ['editor-config', template.id],
-    queryFn: () => api.templates.editorConfig(template.id),
+    queryKey: ['editor-config', template.id, lock.holder, mode],
+    queryFn: () => api.templates.editorConfig(template.id, lock.holder),
+    enabled: mode !== null,
     staleTime: Infinity,
     gcTime: 0,
     refetchOnMount: 'always',
   });
-  // Редактор пересоздаётся при любом изменении config — держим ссылку стабильной, пока не сменился ключ документа.
+  // Библиотека пересоздаёт редактор, когда СОДЕРЖИМОЕ config меняется (сравнивает JSON), поэтому держим конфиг неизменным,
+  // пока не сменились ключ документа или режим (иначе каждый новый токен JWT перезагружал бы документ).
+  // React key на DocumentEditor ставить нельзя: перемонтирование ломает DocsAPI («removeChild»).
   const key = config.data?.document?.key;
-  const stable = useRef<{ key: string | undefined; config: typeof config.data }>({
-    key: undefined,
+  const stableId = `${mode}:${key}`;
+  const stable = useRef<{ id: string | undefined; config: typeof config.data }>({
+    id: undefined,
     config: undefined,
   });
-  if (stable.current.key !== key || (stable.current.config === undefined && config.data)) {
-    stable.current = { key, config: config.data };
+  if (config.data && stable.current.id !== stableId) {
+    stable.current = { id: stableId, config: config.data };
   }
   const stableConfig = stable.current.config;
+
+  // Библиотека строит редактор из конфига того рендера, где загрузился api.js; смена режима за время загрузки
+  // её не затрагивает. Поэтому готовность помним по id конфига, с которым редактор построен (колбэк замыкает id своего
+  // рендера), а «Забрать»/«Начать» разрешаем только когда редактор построен под актуальный режим.
+  const currentId = useRef(stableId);
+  currentId.current = stableId;
+  const onAppReady = () => {
+    setReadyId(stableId);
+    // Построен по устаревшему конфигу — принудительная пересборка: смена незначимого пропа заставляет библиотеку
+    // уничтожить редактор и построить его заново из актуального конфига.
+    if (stableId !== currentId.current) setRebuild((v) => !v);
+  };
+  const editorReady = config.data !== undefined && readyId === stableId;
+  const canSwitch = editorReady || loadError !== null || config.isError;
 
   /** Пауза, которую размонтирование прерывает сразу. */
   const pause = (ms: number) =>
@@ -160,7 +195,7 @@ export function DocumentTab({
     }
   };
 
-  const save = useMutation({ mutationFn: () => api.templates.save(template.id) });
+  const save = useMutation({ mutationFn: () => api.templates.save(template.id, lock.holder) });
 
   const refresh = useMutation({
     mutationFn: () =>
@@ -178,6 +213,32 @@ export function DocumentTab({
   });
 
   const onSave = () => void runSave();
+  const doTakeover = () => {
+    if (busy) return;
+    setBusy(true);
+    lock
+      .takeover()
+      .catch((e) => {
+        if (!mounted.current) return;
+        add({
+          name: toastName('doc-takeover'),
+          title: 'Не удалось забрать редактирование',
+          content: errorMessage(e),
+          theme: 'danger',
+        });
+      })
+      .finally(() => {
+        if (mounted.current) setBusy(false);
+      });
+  };
+  const doStart = () => {
+    if (busy) return;
+    setBusy(true);
+    void lock.start().finally(() => {
+      if (mounted.current) setBusy(false);
+    });
+  };
+  const holderLogin = lock.state?.state === 'other' ? lock.state.user.login : '';
 
   // Версия шаблона изменилась (сохранение, замена файла в «Настройках»): ключ документа мог смениться.
   // Если ключ тот же, ссылка на конфиг не меняется и редактор не пересоздаётся.
@@ -189,30 +250,65 @@ export function DocumentTab({
     void refetch();
   }, [template.version, refetch]);
 
+  // Esc из iframe OnlyOffice сюда не доходит — это и нужно (в редакторе Esc принадлежит ему).
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onFull(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [full, onFull]);
+
   return (
-    <div className="cr-stack">
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <Button view="action" onClick={onSave} loading={waiting}>
-          <Icon data={FloppyDisk} />
-          Сохранить
-        </Button>
-        <Button
-          view={showTags ? 'normal' : 'flat'}
-          aria-pressed={showTags}
-          onClick={() => setShowTags((v) => !v)}
-        >
-          <Icon data={Tag} />
-          Теги
-        </Button>
-        {/* Новая вкладка: документ OnlyOffice в этой вкладке остаётся открытым (§23.1). */}
-        <Link href="/admin/help" target="_blank" rel="noopener">
-          Справка по синтаксису
-        </Link>
-        <Text color="secondary" variant="caption-2">
-          Изменения попадают в шаблон по кнопке «Сохранить» или автоматически после закрытия
-          редактора.
-        </Text>
+    <div className={full ? 'cr-stack cr-doc-full' : 'cr-stack'}>
+      <div className="cr-doc-bar">
+        {full && (
+          <Text variant="subheader-2" ellipsis>
+            {template.name}
+          </Text>
+        )}
+        <LockBar
+          lock={lock}
+          onTakeover={() => setConfirmTakeover(true)}
+          onTakeoverHere={doTakeover}
+          onStart={doStart}
+          disabled={!canSwitch}
+          busy={busy}
+        />
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          {lock.editing && (
+            <Button view="action" onClick={onSave} loading={waiting}>
+              <Icon data={FloppyDisk} />
+              Сохранить
+            </Button>
+          )}
+          <Button
+            view={showTags ? 'normal' : 'flat'}
+            aria-pressed={showTags}
+            onClick={() => setShowTags((v) => !v)}
+          >
+            <Icon data={Tag} />
+            Теги
+          </Button>
+          <Button onClick={() => onFull(!full)}>
+            <Icon data={full ? ChevronsCollapseUpRight : ChevronsExpandUpRight} />
+            {full ? 'Свернуть' : 'Развернуть'}
+          </Button>
+        </div>
       </div>
+      {!full && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Новая вкладка: документ OnlyOffice в этой вкладке остаётся открытым (§23.1). */}
+          <Link href="/admin/help" target="_blank" rel="noopener">
+            Справка по синтаксису
+          </Link>
+          <Text color="secondary" variant="caption-2">
+            Изменения попадают в шаблон по кнопке «Сохранить» или автоматически после закрытия
+            редактора.
+          </Text>
+        </div>
+      )}
       {loadError && (
         <Alert
           theme="danger"
@@ -226,8 +322,8 @@ export function DocumentTab({
           <Button onClick={() => void config.refetch()}>Повторить</Button>
         </div>
       )}
-      <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
-        <div style={{ flex: 1, height: 'calc(100vh - 260px)', minHeight: 480 }}>
+      <div className="cr-doc-body">
+        <div className="cr-doc-editor">
           {stableConfig ? (
             <DocumentEditor
               id="cr-doc-editor"
@@ -235,6 +331,8 @@ export function DocumentTab({
               config={stableConfig}
               height="100%"
               width="100%"
+              document_title={rebuild ? template.name : undefined}
+              events_onAppReady={onAppReady}
               onLoadComponentError={(code, description) =>
                 setLoadError(`${description} (код ${code})`)
               }
@@ -249,9 +347,81 @@ export function DocumentTab({
             charts={template.charts.map((c) => c.key)}
             onRefresh={() => refresh.mutate()}
             refreshing={refresh.isPending}
+            editing={lock.editing}
           />
         )}
       </div>
+      <ConfirmDialog
+        open={confirmTakeover}
+        title="Забрать редактирование"
+        text={`Шаблон сейчас редактирует ${holderLogin}. Забрать редактирование? Сделанные правки будут сохранены, а у ${holderLogin} редактор переключится в просмотр`}
+        confirmText="Забрать"
+        onCancel={() => setConfirmTakeover(false)}
+        onConfirm={() => {
+          setConfirmTakeover(false);
+          doTakeover();
+        }}
+      />
+    </div>
+  );
+}
+
+function LockBar({
+  lock,
+  onTakeover,
+  onTakeoverHere,
+  onStart,
+  disabled,
+  busy,
+}: {
+  lock: EditLock;
+  onTakeover: () => void;
+  onTakeoverHere: () => void;
+  onStart: () => void;
+  /** Редактор ещё не построен под текущий режим. */
+  disabled: boolean;
+  /** Идёт перехват или захват. */
+  busy: boolean;
+}) {
+  const s = lock.state;
+  if (!s) return null;
+  const time = (iso: string) =>
+    new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      {s.state === 'mine' && <Text color="positive">Вы редактируете</Text>}
+      {s.state === 'other' && !s.sameUser && (
+        <>
+          <Text color="warning">
+            Только просмотр — редактирует {s.user.login} с {time(s.since)}
+          </Text>
+          <Button size="s" onClick={onTakeover} disabled={disabled} loading={busy}>
+            Забрать редактирование
+          </Button>
+        </>
+      )}
+      {s.state === 'other' && s.sameUser && (
+        <>
+          <Text color="warning">Шаблон открыт у вас в другой вкладке</Text>
+          <Button size="s" onClick={onTakeoverHere} disabled={disabled} loading={busy}>
+            Редактировать здесь
+          </Button>
+        </>
+      )}
+      {s.state === 'free' && (
+        <>
+          <Text color="secondary">Документ свободен</Text>
+          <Button size="s" view="action" onClick={onStart} disabled={disabled} loading={busy}>
+            Начать редактирование
+          </Button>
+        </>
+      )}
+      {lock.lostTo && s.state !== 'mine' && (
+        <Text color="danger">Редактирование забрал {lock.lostTo}</Text>
+      )}
+      {lock.offline && (
+        <Text color="danger">Связь с сервером потеряна, изменения могут не сохраниться</Text>
+      )}
     </div>
   );
 }

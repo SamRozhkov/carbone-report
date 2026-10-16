@@ -12,7 +12,12 @@ const DOCUMENT_TYPE: Record<TemplateExt, 'word' | 'cell' | 'slide'> = {
   pptx: 'slide',
 };
 
-export async function buildEditorConfig(deps: AppDeps, row: TemplateRow, user: SessionUser) {
+export async function buildEditorConfig(
+  deps: AppDeps,
+  row: TemplateRow,
+  user: SessionUser,
+  edit: boolean,
+) {
   const base = deps.config.apiInternalUrl;
   const t = await signFileToken(row.id, deps.config.appSecret);
   const config = {
@@ -21,10 +26,12 @@ export async function buildEditorConfig(deps: AppDeps, row: TemplateRow, user: S
       key: row.docKey,
       title: `${row.name}.${row.fileExt}`,
       url: `${base}/internal/templates/${row.id}/file?t=${encodeURIComponent(t)}`,
-      permissions: { edit: true, download: true, print: true },
+      permissions: { edit, download: true, print: true },
     },
     documentType: DOCUMENT_TYPE[row.fileExt],
     editorConfig: {
+      // Просмотр — та же сессия документа: правки редактора видны на лету (проверено 2026-10-15, §38.3).
+      ...(edit ? {} : { mode: 'view' as const }),
       callbackUrl: `${base}/internal/onlyoffice/callback/${row.id}`,
       user: { id: user.id, name: user.login },
       lang: 'ru',

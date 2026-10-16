@@ -131,6 +131,35 @@ describe('ImportDialog', () => {
     await waitFor(() => expect(apply).toBeEnabled());
   });
 
+  it('кандидат заблокирован → предупреждение при «обновить», нет при «создать копию»', async () => {
+    mockApi([
+      ...base,
+      {
+        method: 'POST',
+        path: '/api/templates/import/preview',
+        body: preview([
+          item({
+            existing: [
+              {
+                id: T1,
+                name: 'Счёт',
+                updatedAt: '2026-10-09T10:00:00Z',
+                lockedBy: { login: 'petrov' },
+              },
+            ],
+          }),
+        ]),
+      },
+    ]);
+    const dialog = await openDialog();
+    await within(dialog).findByText('Счёт');
+    const warn = 'Шаблон редактирует petrov: обновление будет отклонено, пока редактор открыт';
+    expect(within(dialog).getByText(warn)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('combobox', { name: /Действие: Счёт/ }));
+    await userEvent.click(await screen.findByRole('option', { name: 'копия' }));
+    await waitFor(() => expect(within(dialog).queryByText(warn)).toBeNull());
+  });
+
   it('совпадение → «обновить» с самым свежим; несколько — выбор цели; targetId в решении', async () => {
     const { calls } = mockApi([
       ...base,
@@ -140,8 +169,8 @@ describe('ImportDialog', () => {
         body: preview([
           item({
             existing: [
-              { id: T1, name: 'Счёт', updatedAt: '2026-10-09T10:00:00Z' },
-              { id: T2, name: 'Счёт', updatedAt: '2026-10-01T10:00:00Z' },
+              { id: T1, name: 'Счёт', updatedAt: '2026-10-09T10:00:00Z', lockedBy: null },
+              { id: T2, name: 'Счёт', updatedAt: '2026-10-01T10:00:00Z', lockedBy: null },
             ],
           }),
         ]),
@@ -238,14 +267,16 @@ describe('ImportDialog', () => {
       index: 0,
       name: 'Акт',
       existing: [
-        { id: T1, name: 'Акт', updatedAt: '2026-10-09T10:00:00.000001Z' },
-        { id: T2, name: 'Акт', updatedAt: '2026-10-01T10:00:00.000001Z' },
+        { id: T1, name: 'Акт', updatedAt: '2026-10-09T10:00:00.000001Z', lockedBy: null },
+        { id: T2, name: 'Акт', updatedAt: '2026-10-01T10:00:00.000001Z', lockedBy: null },
       ],
     });
     const B = item({
       index: 1,
       name: 'Счёт',
-      existing: [{ id: T1, name: 'Счёт', updatedAt: '2026-10-09T10:00:00.000001Z' }],
+      existing: [
+        { id: T1, name: 'Счёт', updatedAt: '2026-10-09T10:00:00.000001Z', lockedBy: null },
+      ],
     });
     const C = item({ index: 2, name: 'Накладная', datasourceMatch: null });
     let previews = 0;

@@ -240,3 +240,61 @@ body {
   width: 100%;
   text-align: left;
 }
+
+/* Вкладка «Документ» во весь окно (§38.4): тот же узел DOM — iframe OnlyOffice не перезагружается. */
+.cr-doc-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.cr-doc-body {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+.cr-doc-editor {
+  flex: 1;
+  height: calc(100vh - 260px);
+  min-height: 480px;
+}
+.cr-tags-panel {
+  width: 320px;
+  flex-shrink: 0;
+  overflow: auto;
+  max-height: calc(100vh - 260px);
+}
+.cr-tag-tile {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--g-color-base-generic);
+}
+.cr-tag-tile[draggable='true']:active {
+  cursor: grabbing;
+}
+/* Область контента AsideHeader — свой контекст наложения (z-index 95), ниже меню (100): без этого
+   развёрнутый редактор не закрывает меню. 101 — выше меню, но ниже диалогов и попапов (1000). */
+body:has(.cr-doc-full) {
+  --gn-aside-header-content-z-index: 101;
+}
+.cr-doc-full {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--g-color-base-background);
+  padding: 8px 16px 12px;
+  display: flex;
+  flex-direction: column;
+}
+.cr-doc-full .cr-doc-body {
+  flex: 1;
+  min-height: 0;
+}
+.cr-doc-full .cr-doc-editor {
+  height: auto;
+  min-height: 0;
+}
+.cr-doc-full .cr-tags-panel {
+  max-height: none;
+}

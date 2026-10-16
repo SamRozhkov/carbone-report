@@ -66,6 +66,23 @@ describe('SettingsTab', () => {
     expect(await screen.findByText(/версия 4/)).toBeInTheDocument();
   });
 
+  it('замена файла с номером вкладки «Документ» → ?holder=', async () => {
+    const holder = '0b6c6f0e-2b4c-4a51-9a39-1f4b2a3c4d5e';
+    const { calls } = mockApi([
+      { path: '/api/datasources', body: [] },
+      { method: 'PUT', path: '/api/templates/t1/file', body: { ...t, version: 4 } },
+    ]);
+    renderWithProviders(<SettingsTab template={t} holder={holder} />);
+    await userEvent.upload(
+      await screen.findByLabelText('Новый файл шаблона'),
+      new File(['PK'], 'new.docx'),
+    );
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
+    expect(calls.find((c) => c.method === 'PUT')!.path).toBe(
+      `/api/templates/t1/file?holder=${holder}`,
+    );
+  });
+
   it('грязное название сохраняется при обновлении шаблона', async () => {
     mockApi([{ path: '/api/datasources', body: [] }]);
     const next = { ...t, name: 'Новое', updatedAt: '2026-02-01T00:00:00Z' };

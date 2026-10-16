@@ -22,7 +22,14 @@ import { applyTemplate } from './editorState';
 
 const SHOWN = ['name', 'description', 'datasourceId', 'defaultOutput'];
 
-export function SettingsTab({ template }: { template: TemplateAdminDetails }) {
+export function SettingsTab({
+  template,
+  holder,
+}: {
+  template: TemplateAdminDetails;
+  /** Номер вкладки «Документ» этой страницы: собственная блокировка замене файла не мешает (§38.2). */
+  holder?: string;
+}) {
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const datasources = useQuery({ queryKey: ['datasources'], queryFn: api.datasources.list });
@@ -64,7 +71,7 @@ export function SettingsTab({ template }: { template: TemplateAdminDetails }) {
     mutationFn: (file: File) => {
       const form = new FormData();
       form.append('file', file);
-      return api.templates.replaceFile(template.id, form);
+      return api.templates.replaceFile(template.id, form, holder);
     },
     onSuccess: (t) => {
       applyTemplate(queryClient, t);

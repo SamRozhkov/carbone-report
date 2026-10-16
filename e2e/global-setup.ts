@@ -12,15 +12,19 @@ export default async function globalSetup(): Promise<void> {
   const { buildDemoTemplate, DEMO, DEMO_PARAMS, DEMO_QUERIES } = await import('../demo/template');
   const api = await adminApi();
   const id = await demoTemplateId(api);
-  const res = await api.ctx.put(`/api/templates/${id}/file`, {
-    multipart: {
-      file: {
-        name: 'schet-demo.docx',
-        mimeType: 'application/octet-stream',
-        buffer: await buildDemoTemplate(),
+  const putFile = () =>
+    api.ctx.put(`/api/templates/${id}/file`, {
+      multipart: {
+        file: { name: 'schet-demo.docx', mimeType: 'application/octet-stream', buffer },
       },
-    },
-  });
+    });
+  const buffer = await buildDemoTemplate();
+  // Блокировка редактора от прошлого прогона (закрытая вкладка) истекает за минуту: 409 — ждём и повторяем.
+  let res = await putFile();
+  for (let i = 0; i < 18 && res.status() === 409; i++) {
+    await new Promise((r) => setTimeout(r, 5_000));
+    res = await putFile();
+  }
   expect(res.ok(), `восстановление файла шаблона: ${res.status()}`).toBeTruthy();
   await api.put(`/api/templates/${id}/queries`, DEMO_QUERIES);
   await api.put(`/api/templates/${id}/params`, DEMO_PARAMS);

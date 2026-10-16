@@ -95,6 +95,11 @@ export function TemplatesPage() {
       template: (t) => (
         <div>
           <Link to={`/admin/templates/${t.id}`}>{t.name}</Link>
+          {t.editingBy && (
+            <Label theme="warning" size="xs">
+              Редактирует {t.editingBy.login}
+            </Label>
+          )}
           {t.description && (
             <Text as="div" variant="caption-2" color="secondary">
               {t.description}

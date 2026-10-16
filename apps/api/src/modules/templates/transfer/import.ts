@@ -11,20 +11,23 @@ import type {
   TransferTemplate,
 } from '@carbone-reports/shared/template-transfer';
 import { normalizePdfOptions, type TemplateParam } from '@carbone-reports/shared';
-import { asc, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import {
   categories,
   datasources,
   groups,
   templateAttachments,
   templateCharts,
+  templateEditLocks,
   templateGroups,
   templateParams,
   templateQueries,
   templates,
+  users,
 } from '../../../db/schema';
 import type { AppDeps } from '../../../deps';
 import { AppError, badRequest, conflict } from '../../../lib/errors';
+import { activeLock, lockAlive } from '../../edit-lock/service';
 import { orderParams } from '../../queries/param-deps';
 import { checkParamDefaults } from '../../queries/params';
 import {
@@ -210,8 +213,15 @@ async function loadLookup(deps: ImportDeps, manifest: TransferManifest): Promise
   const categoryNames = lower(ts.flatMap((t) => (t.category === null ? [] : [t.category])));
   const [tpl, ds, gs, cs] = await Promise.all([
     db
-      .select({ id: templates.id, name: templates.name, updatedAt: updatedAtText })
+      .select({
+        id: templates.id,
+        name: templates.name,
+        updatedAt: updatedAtText,
+        lockLogin: users.login,
+      })
       .from(templates)
+      .leftJoin(templateEditLocks, and(eq(templateEditLocks.templateId, templates.id), lockAlive))
+      .leftJoin(users, eq(users.id, templateEditLocks.userId))
       .where(inArray(templates.name, [...new Set(ts.map((t) => t.name))]))
       .orderBy(desc(templates.updatedAt), templates.id),
     db
@@ -233,7 +243,12 @@ async function loadLookup(deps: ImportDeps, manifest: TransferManifest): Promise
   ]);
   const templatesByName = new Map<string, ImportExisting[]>();
   for (const r of tpl) {
-    const e = { id: r.id, name: r.name, updatedAt: r.updatedAt };
+    const e = {
+      id: r.id,
+      name: r.name,
+      updatedAt: r.updatedAt,
+      lockedBy: r.lockLogin ? { login: r.lockLogin } : null,
+    };
     templatesByName.set(r.name, [...(templatesByName.get(r.name) ?? []), e]);
   }
   const datasourcesByName = new Map<string, string[]>();
@@ -331,6 +346,12 @@ export async function applyImport(
         const cur = locked.get(r.targetId);
         if (cur?.name !== r.name || cur.updatedAtText !== r.targetUpdatedAt)
           throw changedSincePreview(r.name);
+      }
+      // Обновляемый шаблон открыт в редакторе — не обновляется (§38.2).
+      for (const r of resolved) {
+        if (!r.targetId) continue;
+        const lock = await activeLock(tx, r.targetId);
+        if (lock) throw conflict(`шаблон «${r.name}» редактирует ${lock.login} — повторите позже`);
       }
       // Имена — заново: между ранней проверкой и блокировкой могла пройти другая загрузка.
       const names = await tx.select({ name: templates.name }).from(templates);

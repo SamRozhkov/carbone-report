@@ -6,6 +6,7 @@ import {
   type TemplateCategoryRef,
   type TemplateChart,
   type TemplateDetails,
+  type TemplateEditingBy,
   type TemplateExt,
   type TemplateParam,
   type TemplateParamDto,
@@ -196,6 +197,7 @@ export async function loadCategoryRef(
 export const toSummary = (
   r: TemplateRow,
   category: TemplateCategoryRef | null,
+  editingBy: TemplateEditingBy | null = null,
 ): TemplateSummary => ({
   id: r.id,
   name: r.name,
@@ -204,6 +206,7 @@ export const toSummary = (
   defaultOutput: r.defaultOutput,
   updatedAt: r.updatedAt.toISOString(),
   category,
+  editingBy,
 });
 
 function toParamDto(p: TemplateParam, withSql: boolean): TemplateParamDto {

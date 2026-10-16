@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { templates } from '../src/db/schema';
@@ -113,11 +114,24 @@ describe('callback: прочее', () => {
   });
 });
 
+const holder = randomUUID();
+const takeLock = () =>
+  t.app.inject({
+    method: 'POST',
+    url: `/api/templates/${tplId}/edit-lock`,
+    headers: { cookie: admin },
+    payload: { holder, acquire: true },
+  });
+
 describe('editor-config', () => {
+  beforeEach(async () => {
+    await takeLock();
+  });
+
   it('подписанный конфиг с внутренними URL; user → 403', async () => {
     const r = await t.app.inject({
       method: 'GET',
-      url: `/api/templates/${tplId}/editor-config`,
+      url: `/api/templates/${tplId}/editor-config?holder=${holder}`,
       headers: { cookie: admin },
     });
     const cfg = r.json();
@@ -140,7 +154,7 @@ describe('editor-config', () => {
 
     const forbidden = await t.app.inject({
       method: 'GET',
-      url: `/api/templates/${tplId}/editor-config`,
+      url: `/api/templates/${tplId}/editor-config?holder=${holder}`,
       headers: { cookie: user },
     });
     expect(forbidden.statusCode).toBe(403);
@@ -150,7 +164,7 @@ describe('editor-config', () => {
     const cfg = (
       await t.app.inject({
         method: 'GET',
-        url: `/api/templates/${tplId}/editor-config`,
+        url: `/api/templates/${tplId}/editor-config?holder=${holder}`,
         headers: { cookie: admin },
       })
     ).json();
@@ -389,10 +403,12 @@ describe('callback hardening', () => {
 
 describe('save', () => {
   it('POST /save отправляет forcesave с текущим ключом', async () => {
+    await takeLock();
     const r = await t.app.inject({
       method: 'POST',
       url: `/api/templates/${tplId}/save`,
       headers: { cookie: admin },
+      payload: { holder },
     });
     expect(r.statusCode).toBe(204);
     expect(forceSaved.at(-1)).toBe((await row()).docKey);

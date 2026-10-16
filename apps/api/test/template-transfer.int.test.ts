@@ -15,6 +15,7 @@ import {
   reportRuns,
   templateAttachments,
   templateCharts,
+  templateEditLocks,
   templateGroups,
   templateParams,
   templateQueries,
@@ -272,7 +273,12 @@ describe('перенос шаблонов между средами', () => {
     expect(dup.statusCode).toBe(409);
     const p = (await preview(b, adminB, zip)).json() as ImportPreview;
     expect(p.templates[0]!.existing).toEqual([
-      { id: importedId, name, updatedAt: expect.stringMatching(/^\d{4}-.+T.+\.\d{6}Z$/) },
+      {
+        id: importedId,
+        name,
+        updatedAt: expect.stringMatching(/^\d{4}-.+T.+\.\d{6}Z$/),
+        lockedBy: null,
+      },
     ]);
     expect(p.templates[0]!.categoryExists).toBe(true);
     for (const n of [2, 3]) {
@@ -355,6 +361,39 @@ describe('перенос шаблонов между средами', () => {
     expect(runs).toHaveLength(1);
     expect(await b.deps.storage.exists(after!.filePath)).toBe(true);
     await expect.poll(() => b.deps.storage.exists(before!.filePath)).toBe(false);
+  });
+
+  it('update: lockedBy в предпросмотре, 409 при загрузке, пока шаблон редактируют (§38.2)', async () => {
+    const other = await loginAs(b, 'admin');
+    const lockRes = await b.app.inject({
+      method: 'POST',
+      url: `/api/templates/${importedId}/edit-lock`,
+      headers: { cookie: other.cookie },
+      payload: { holder: randomUUID(), acquire: true },
+    });
+    expect(lockRes.json()).toEqual({ state: 'mine' });
+    try {
+      const at = await stamp(zip, importedId);
+      const p = (await preview(b, adminB, zip)).json() as ImportPreview;
+      expect(p.templates[0]!.existing[0]!.lockedBy).toEqual({ login: other.user.login });
+      const res = await apply(b, adminB, zip, [
+        {
+          index: 0,
+          action: 'update',
+          datasourceId: dsB,
+          targetId: importedId,
+          targetUpdatedAt: at,
+        },
+      ]);
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error.message).toBe(
+        `шаблон «${name}» редактирует ${other.user.login} — повторите позже`,
+      );
+    } finally {
+      await b.deps.db
+        .delete(templateEditLocks)
+        .where(eq(templateEditLocks.templateId, importedId));
+    }
   });
 
   it('update архивом без charts: графики шаблона удалены, запрос charts допустим', async () => {

@@ -22,7 +22,8 @@ import {
   type ImportResult,
   MAX_TRANSFER_ARCHIVE_BYTES,
 } from '@carbone-reports/shared/template-transfer';
-import { asc, eq, getTableColumns } from 'drizzle-orm';
+import { and, asc, eq, getTableColumns } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { App } from '../../app';
@@ -30,17 +31,20 @@ import {
   categories,
   datasources,
   templateAttachments,
+  templateEditLocks,
   templateCharts,
   templateGroups,
   templateParams,
   templateQueries,
   templates,
   type TemplateRow,
+  users,
 } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { badRequest, notFound } from '../../lib/errors';
 import { contentDisposition, isZip, MIME } from '../../lib/http';
 import { accessibleTemplates, assertTemplateAccess } from '../access/access';
+import { assertNotLockedByOther, lockAlive } from '../edit-lock/service';
 import { currentUser, type Guards } from '../auth/guards';
 import { orderParams } from '../queries/param-deps';
 import { optionsForParam } from '../queries/param-options';
@@ -245,13 +249,27 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
   }
 
   app.get('/api/templates', anyUser, async (req) => {
+    const user = currentUser(req);
+    const lockUser = alias(users, 'lock_user');
     const rows = await db
-      .select({ row: getTableColumns(templates), category: categoryRefColumns })
+      .select({
+        row: getTableColumns(templates),
+        category: categoryRefColumns,
+        lockLogin: lockUser.login,
+      })
       .from(templates)
       .leftJoin(categories, eq(categories.id, templates.categoryId))
-      .where(accessibleTemplates(currentUser(req)))
+      .leftJoin(templateEditLocks, and(eq(templateEditLocks.templateId, templates.id), lockAlive))
+      .leftJoin(lockUser, eq(lockUser.id, templateEditLocks.userId))
+      .where(accessibleTemplates(user))
       .orderBy(asc(templates.name));
-    return rows.map((r) => toSummary(r.row, r.category));
+    return rows.map((r) =>
+      toSummary(
+        r.row,
+        r.category,
+        user.role === 'admin' && r.lockLogin ? { login: r.lockLogin } : null,
+      ),
+    );
   });
 
   app.get('/api/templates/:id', { ...anyUser, schema: { params: IdParams } }, async (req) => {
@@ -317,6 +335,8 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           .where(eq(templates.id, row.id))
           .for('update');
         if (!cur) throw notFound('шаблон');
+        // Документ открыт в редакторе у другой вкладки — файл не заменяется (§38.2).
+        await assertNotLockedByOther(tx, cur.id, null);
         // Новая версия — новый файл: при сбое коммита строка продолжает указывать на прежний.
         previous = cur.filePath;
         written = templateFilePath(cur.id, cur.fileExt, cur.version + 1);
@@ -379,7 +399,16 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     { ...admin, schema: { params: IdParams } },
     async (req, reply) => {
       const row = await loadTemplate(db, req.params.id);
-      await db.delete(templates).where(eq(templates.id, row.id));
+      await db.transaction(async (tx) => {
+        const [cur] = await tx
+          .select({ id: templates.id })
+          .from(templates)
+          .where(eq(templates.id, row.id))
+          .for('update');
+        if (!cur) throw notFound('шаблон');
+        await assertNotLockedByOther(tx, cur.id, null);
+        await tx.delete(templates).where(eq(templates.id, cur.id));
+      });
       await storage.remove(templateDir(row.id));
       // Строка могла ещё указывать на путь старого формата templates/<id>.<ext>.
       if (!row.filePath.startsWith(`${templateDir(row.id)}/`)) await storage.remove(row.filePath);

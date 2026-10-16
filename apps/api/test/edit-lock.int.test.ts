@@ -2,11 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { templateEditLocks, users } from '../src/db/schema';
+import { createBlankDocument } from '../src/modules/templates/blank';
 import {
   createSourceDatabase,
   createTemplate,
   createTestApp,
   loginAs,
+  multipart,
+  openTemplate,
   type TestApp,
 } from './helpers';
 
@@ -211,5 +214,110 @@ describe('edit-lock', () => {
     await lock(c.cookie, randomUUID());
     await t.deps.db.delete(users).where(eq(users.id, c.id));
     expect((await lock(a.cookie, randomUUID(), false)).json()).toEqual({ state: 'free' });
+  });
+});
+
+describe('где блокировка обязательна', () => {
+  const config = (cookie: string, holder: string) =>
+    t.app.inject({
+      method: 'GET',
+      url: `/api/templates/${tplId}/editor-config?holder=${holder}`,
+      headers: { cookie },
+    });
+  const save = (cookie: string, holder: string) =>
+    t.app.inject({
+      method: 'POST',
+      url: `/api/templates/${tplId}/save`,
+      headers: { cookie },
+      payload: { holder },
+    });
+
+  it('конфиг: правка у владельца блокировки, просмотр у остальных; holder обязателен', async () => {
+    const ha = randomUUID();
+    await lock(a.cookie, ha);
+    const mine = (await config(a.cookie, ha)).json();
+    expect(mine.document.permissions.edit).toBe(true);
+    expect(mine.editorConfig.mode).toBeUndefined();
+    const other = await config(b.cookie, randomUUID());
+    expect(other.statusCode).toBe(200);
+    expect(other.json().document.permissions.edit).toBe(false);
+    expect(other.json().editorConfig.mode).toBe('view');
+    expect(other.json().document.key).toBe(mine.document.key);
+    expect(
+      (
+        await t.app.inject({
+          method: 'GET',
+          url: `/api/templates/${tplId}/editor-config`,
+          headers: { cookie: a.cookie },
+        })
+      ).statusCode,
+    ).toBe(400);
+  });
+
+  it('конфиг без блокировки — просмотр (сам конфиг не захватывает)', async () => {
+    const r = (await config(a.cookie, randomUUID())).json();
+    expect(r.editorConfig.mode).toBe('view');
+    expect((await lock(b.cookie, randomUUID(), false)).json()).toEqual({ state: 'free' });
+  });
+
+  it('сохранение: только владелец блокировки', async () => {
+    const ha = randomUUID();
+    const none = await save(a.cookie, ha);
+    expect(none.statusCode).toBe(409);
+    expect(none.json().error).toMatchObject({
+      code: 'TEMPLATE_LOCKED',
+      message: 'начните редактирование',
+    });
+    await lock(a.cookie, ha);
+    expect((await save(a.cookie, ha)).statusCode).toBe(204);
+    const foreign = await save(b.cookie, randomUUID());
+    expect(foreign.statusCode).toBe(409);
+    expect(foreign.json().error.message).toBe(`шаблон редактирует ${a.login}`);
+    expect((await save(a.cookie, 'x')).statusCode).toBe(400);
+  });
+
+  it('замена файла и удаление: 409 при любой действующей блокировке (в т.ч. своей вкладки), можно после истечения', async () => {
+    await lock(a.cookie, randomUUID());
+    const put = async (cookie: string) => {
+      const mp = multipart({}, { name: 'x.docx', data: await createBlankDocument('docx') });
+      return t.app.inject({
+        method: 'PUT',
+        url: `/api/templates/${tplId}/file`,
+        headers: { cookie, ...mp.headers },
+        payload: mp.payload,
+      });
+    };
+    const del = (cookie: string) =>
+      t.app.inject({ method: 'DELETE', url: `/api/templates/${tplId}`, headers: { cookie } });
+    for (const who of [b, a]) {
+      const r = await put(who.cookie);
+      expect(r.statusCode).toBe(409);
+      expect(r.json().error.code).toBe('TEMPLATE_LOCKED');
+      expect((await del(who.cookie)).statusCode).toBe(409);
+    }
+    await expire();
+    expect((await del(b.cookie)).statusCode).toBe(204);
+  });
+
+  it('список: editingBy у администратора, null у пользователя и после истечения', async () => {
+    await lock(a.cookie, randomUUID());
+    const list = (
+      await t.app.inject({ method: 'GET', url: '/api/templates', headers: { cookie: b.cookie } })
+    ).json();
+    expect(list.find((x: { id: string }) => x.id === tplId).editingBy).toEqual({ login: a.login });
+    await expire();
+    const after = (
+      await t.app.inject({ method: 'GET', url: '/api/templates', headers: { cookie: b.cookie } })
+    ).json();
+    expect(after.find((x: { id: string }) => x.id === tplId).editingBy).toBeNull();
+  });
+
+  it('список у пользователя: editingBy всегда null', async () => {
+    await openTemplate(t, tplId);
+    await lock(a.cookie, randomUUID());
+    const list = (
+      await t.app.inject({ method: 'GET', url: '/api/templates', headers: { cookie: user } })
+    ).json();
+    expect(list.find((x: { id: string }) => x.id === tplId).editingBy).toBeNull();
   });
 });

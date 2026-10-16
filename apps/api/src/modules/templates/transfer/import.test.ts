@@ -567,8 +567,8 @@ describe('planImport', () => {
           [
             'T1',
             [
-              { id: 'e1', name: 'T1', updatedAt: '2026-10-10T10:00:00.000Z' },
-              { id: 'e0', name: 'T1', updatedAt: '2026-10-09T10:00:00.000Z' },
+              { id: 'e1', name: 'T1', updatedAt: '2026-10-10T10:00:00.000Z', lockedBy: null },
+              { id: 'e0', name: 'T1', updatedAt: '2026-10-09T10:00:00.000Z', lockedBy: null },
             ],
           ],
         ]),
@@ -615,7 +615,7 @@ describe('resolveDecisions', () => {
     ({ index, name, existing: [], errors: [], ...over }) as ImportPreviewItem;
   const AT = '2026-10-10T10:00:00.123456Z';
   const ex = (...ids: string[]) => ({
-    existing: ids.map((id) => ({ id, name: 'Есть', updatedAt: AT })),
+    existing: ids.map((id) => ({ id, name: 'Есть', updatedAt: AT, lockedBy: null })),
   });
   const ctx = (taken: string[] = []) => ({
     datasourceIds: new Set([DS]),

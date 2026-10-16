@@ -80,6 +80,23 @@ describe('TemplatesPage', () => {
     expect(await screen.findByText(/Сначала добавьте источник данных/)).toBeInTheDocument();
   });
 
+  it('метка «Редактирует» только при действующей блокировке', async () => {
+    mockApi([
+      adminMe,
+      {
+        path: '/api/templates',
+        body: [
+          { ...tpl, editingBy: { login: 'petrov' } },
+          { ...tpl, id: 't2', name: 'Акт', editingBy: null },
+        ],
+      },
+    ]);
+    renderRoute('/admin/templates');
+    await screen.findByText('Акт');
+    expect(screen.getAllByText(/^Редактирует /)).toHaveLength(1);
+    expect(screen.getByText('Редактирует petrov')).toBeInTheDocument();
+  });
+
   it('дублирование и удаление', async () => {
     const { calls } = mockApi([
       adminMe,

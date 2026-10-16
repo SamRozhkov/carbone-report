@@ -288,7 +288,6 @@ export function DocumentTab({
         <div className="cr-doc-editor">
           {stableConfig ? (
             <DocumentEditor
-              key={stable.current.id}
               id="cr-doc-editor"
               documentServerUrl="/onlyoffice/"
               config={stableConfig}

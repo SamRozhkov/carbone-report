@@ -358,7 +358,9 @@ describe('DocumentTab', () => {
     expect(screen.getByRole('button', { name: 'Сохранить' })).toBeInTheDocument();
     const configs = calls.filter((c) => c.path.startsWith('/api/templates/t1/editor-config'));
     expect(configs.at(-1)!.path).toMatch(/holder=[0-9a-f-]{36}/);
-    await waitFor(() => expect(mounts.count).toBe(2)); // редактор пересоздан: просмотр → правка
+    // Компонент не пересоздаётся (React.key ломает DocsAPI: «removeChild»): новый config библиотека
+    // применяет сама, пересоздавая iframe внутри того же компонента.
+    expect(mounts.count).toBe(1);
   });
 
   it('своя другая вкладка: «Редактировать здесь» без подтверждения', async () => {

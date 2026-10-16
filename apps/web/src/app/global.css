@@ -273,6 +273,11 @@ body {
 .cr-tag-tile[draggable='true']:active {
   cursor: grabbing;
 }
+/* Область контента AsideHeader — свой контекст наложения (z-index 95), ниже меню (100): без этого
+   развёрнутый редактор не закрывает меню. 101 — выше меню, но ниже диалогов и попапов (1000). */
+body:has(.cr-doc-full) {
+  --gn-aside-header-content-z-index: 101;
+}
 .cr-doc-full {
   position: fixed;
   inset: 0;

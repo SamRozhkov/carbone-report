@@ -131,6 +131,35 @@ describe('ImportDialog', () => {
     await waitFor(() => expect(apply).toBeEnabled());
   });
 
+  it('кандидат заблокирован → предупреждение при «обновить», нет при «создать копию»', async () => {
+    mockApi([
+      ...base,
+      {
+        method: 'POST',
+        path: '/api/templates/import/preview',
+        body: preview([
+          item({
+            existing: [
+              {
+                id: T1,
+                name: 'Счёт',
+                updatedAt: '2026-10-09T10:00:00Z',
+                lockedBy: { login: 'petrov' },
+              },
+            ],
+          }),
+        ]),
+      },
+    ]);
+    const dialog = await openDialog();
+    await within(dialog).findByText('Счёт');
+    const warn = 'Шаблон редактирует petrov: обновление будет отклонено, пока редактор открыт';
+    expect(within(dialog).getByText(warn)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('combobox', { name: /Действие: Счёт/ }));
+    await userEvent.click(await screen.findByRole('option', { name: 'копия' }));
+    await waitFor(() => expect(within(dialog).queryByText(warn)).toBeNull());
+  });
+
   it('совпадение → «обновить» с самым свежим; несколько — выбор цели; targetId в решении', async () => {
     const { calls } = mockApi([
       ...base,

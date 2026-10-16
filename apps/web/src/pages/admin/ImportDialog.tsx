@@ -257,6 +257,16 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
               пароль текущего шаблона
             </Text>
           )}
+          {rows[i]?.action === 'update' &&
+            (() => {
+              const target = t.existing.find((e) => e.id === rows[i]!.targetId);
+              return target?.lockedBy ? (
+                <Text as="div" variant="caption-2" color="warning">
+                  Шаблон редактирует {target.lockedBy.login}: обновление будет отклонено, пока
+                  редактор открыт
+                </Text>
+              ) : null;
+            })()}
           {!t.categoryExists && t.category && (
             <Text as="div" variant="caption-2" color="warning">
               Будет создана категория «{t.category}»

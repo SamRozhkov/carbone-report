@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import {
   adminApi,
@@ -12,6 +13,8 @@ import {
 
 let api: ApiClient;
 let templateId: string;
+// editor-config требует holder (UUID вкладки); наблюдатель не захватывает блокировку.
+const observer = randomUUID();
 
 test.beforeAll(async () => {
   await waitForStack();
@@ -72,12 +75,16 @@ test('наблюдение: смена ключа документа после 
   await loginAdminUi(page);
   await openEditor(page);
   const keyBefore = (
-    await api.get<{ document: { key: string } }>(`/api/templates/${templateId}/editor-config`)
+    await api.get<{ document: { key: string } }>(
+      `/api/templates/${templateId}/editor-config?holder=${observer}`,
+    )
   ).document.key;
   await page.goto('/reports'); // редактор закрыт
   await page.waitForTimeout(20_000); // наблюдение: Document Server закрывает сессию с задержкой
   const keyAfter = (
-    await api.get<{ document: { key: string } }>(`/api/templates/${templateId}/editor-config`)
+    await api.get<{ document: { key: string } }>(
+      `/api/templates/${templateId}/editor-config?holder=${observer}`,
+    )
   ).document.key;
   const observed =
     keyBefore === keyAfter

@@ -43,7 +43,9 @@ export function DocumentTab({
   const [confirmTakeover, setConfirmTakeover] = useState(false);
   const [busy, setBusy] = useState(false);
   const [readyId, setReadyId] = useState<string | null>(null);
-  const [rebuild, setRebuild] = useState(false);
+  // Незначимый проп для принудительной пересборки: название фиксируем в момент пересборки, иначе переименование
+  // шаблона меняло бы проп и ещё раз пересоздавало редактор, теряя несохранённые правки.
+  const [rebuildTitle, setRebuildTitle] = useState<string | undefined>(undefined);
   const mode = lock.state === null ? null : lock.editing ? 'edit' : 'view';
   const polling = useRef(false);
   const mounted = useRef(true);
@@ -88,7 +90,8 @@ export function DocumentTab({
     setReadyId(stableId);
     // Построен по устаревшему конфигу — принудительная пересборка: смена незначимого пропа заставляет библиотеку
     // уничтожить редактор и построить его заново из актуального конфига.
-    if (stableId !== currentId.current) setRebuild((v) => !v);
+    if (stableId !== currentId.current)
+      setRebuildTitle((v) => (v === undefined ? template.name : undefined));
   };
   const editorReady = config.data !== undefined && readyId === stableId;
   const canSwitch = editorReady || loadError !== null || config.isError;
@@ -331,7 +334,7 @@ export function DocumentTab({
               config={stableConfig}
               height="100%"
               width="100%"
-              document_title={rebuild ? template.name : undefined}
+              document_title={rebuildTitle}
               events_onAppReady={onAppReady}
               onLoadComponentError={(code, description) =>
                 setLoadError(`${description} (код ${code})`)

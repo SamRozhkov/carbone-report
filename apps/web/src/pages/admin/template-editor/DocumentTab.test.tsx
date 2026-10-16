@@ -14,7 +14,7 @@ function DocumentTab(props: Omit<ComponentProps<typeof DocumentTabView>, 'lock'>
   return <DocumentTabView {...props} lock={lock} />;
 }
 
-const mounts = vi.hoisted(() => ({ count: 0 }));
+const mounts = vi.hoisted(() => ({ count: 0, builds: 0 }));
 /** Управление загрузкой api.js в моке: пока hold, редактор не построен (как до загрузки скрипта). */
 const loader = vi.hoisted(() => ({ hold: false, finish: [] as Array<() => void> }));
 type EditorProps = {
@@ -32,6 +32,7 @@ vi.mock('@onlyoffice/document-editor-react', () => ({
     const [mode, setMode] = useState<string | null>(null);
     const build = (from: EditorProps) => {
       built.current = true;
+      mounts.builds++;
       setMode(from.config.editorConfig?.mode ?? 'edit');
       from.events_onAppReady?.({});
     };
@@ -574,7 +575,13 @@ describe('DocumentTab', () => {
           { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
           modal(() => mode),
         ]);
-        renderWithProviders(<DocumentTab {...base} />);
+        let rename!: (name: string) => void;
+        function Host() {
+          const [name, setName] = useState(t.name);
+          rename = setName;
+          return <DocumentTab {...base} template={{ ...t, name }} />;
+        }
+        renderWithProviders(<Host />);
         await screen.findByTestId('oo');
         mode = 'view';
         await act(() => vi.advanceTimersByTimeAsync(20_000));
@@ -584,6 +591,11 @@ describe('DocumentTab', () => {
         await waitFor(() =>
           expect(screen.getByTestId('oo')).toHaveAttribute('data-built-mode', 'view'),
         );
+        // Переименование после пересборки не пересоздаёт редактор (несохранённые правки не теряются).
+        const builds = mounts.builds;
+        await act(async () => rename('Новое имя'));
+        await act(() => vi.advanceTimersByTimeAsync(0));
+        expect(mounts.builds).toBe(builds);
       } finally {
         loader.hold = false;
       }

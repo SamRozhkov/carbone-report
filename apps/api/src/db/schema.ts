@@ -130,6 +130,20 @@ export const templates = pgTable('templates', {
   pdfPasswordEnc: text('pdf_password_enc'),
 });
 
+/** Блокировка редактирования шаблона (§38.1): одна строка на шаблон; просроченная равна отсутствующей. */
+export const templateEditLocks = pgTable('template_edit_locks', {
+  templateId: uuid('template_id')
+    .primaryKey()
+    .references(() => templates.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  /** Номер вкладки «Документ» (UUID из браузера). */
+  holder: text('holder').notNull(),
+  acquiredAt: timestamp('acquired_at', { withTimezone: true }).notNull(),
+  heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }).notNull(),
+});
+
 export const templateGroups = pgTable(
   'template_groups',
   {

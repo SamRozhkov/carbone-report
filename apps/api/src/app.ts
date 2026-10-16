@@ -16,6 +16,7 @@ import { registerAuthRoutes } from './modules/auth/routes';
 import { registerDatasourceRoutes } from './modules/datasources/routes';
 import { registerBackupRoutes } from './modules/backups/routes';
 import { registerMaintenance } from './modules/maintenance/routes';
+import { registerEditLockRoutes } from './modules/edit-lock/routes';
 import { registerOnlyOfficeRoutes } from './modules/onlyoffice/routes';
 import { registerRenderRoutes } from './modules/render/routes';
 import { registerReportRoutes } from './modules/reports/routes';
@@ -125,6 +126,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   registerTemplatePdfRoutes(app, deps, guards);
   registerReportRoutes(app, deps, guards);
   registerOnlyOfficeRoutes(app, deps, guards);
+  registerEditLockRoutes(app, deps, guards);
   registerRenderRoutes(app, deps.renderFiles);
   registerBackupRoutes(app, deps, guards);
 

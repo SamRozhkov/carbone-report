@@ -127,6 +127,8 @@ export const UserDto = z.object({
   blocked: z.boolean(),
   groupIds: z.array(z.string()),
   createdAt: z.string(),
+  /** Срок сертификата подписи (§39.1); null — не загружен. */
+  certificateNotAfter: z.string().nullable(),
 });
 export type UserDto = z.infer<typeof UserDto>;
 

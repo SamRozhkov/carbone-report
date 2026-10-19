@@ -68,6 +68,8 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     reportTimeoutMs: 20000,
     reportRetentionDays: 30,
     tz: 'Europe/Moscow',
+    signTsaUrl: null,
+    signTsaTimeoutMs: 10_000,
     port: 0,
     cookieSecure: false,
     appVersion: 'dev',

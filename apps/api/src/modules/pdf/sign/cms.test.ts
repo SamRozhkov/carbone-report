@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import * as asn1js from 'asn1js';
 import * as pkijs from 'pkijs';
 import { describe, expect, it } from 'vitest';
 import { buildSignedData, OID } from './cms';
@@ -60,5 +61,29 @@ describe('signedAttrs — DER SET OF', () => {
     );
     const sorted = [...encs].sort(Buffer.compare);
     expect(encs.map((e) => e.toString('hex'))).toEqual(sorted.map((e) => e.toString('hex')));
+  });
+});
+
+describe('eContent — DER', () => {
+  it('eContent кодируется примитивной OCTET STRING (тег 0x04)', async () => {
+    const p = readP12(fixture('rsa.p12'), FIXTURE_PASSWORD);
+    const content = Buffer.from('tst-info');
+    const cms = await buildSignedData({
+      key: p.key,
+      cert: p.cert,
+      chain: p.chain,
+      digestAlg: p.digestAlg,
+      digest: createHash('sha256').update(content).digest(),
+      contentType: OID.tstInfo,
+      eContent: content,
+    });
+    const root = asn1js.fromBER(ab(cms)).result as asn1js.Sequence;
+    const signedData = (root.valueBlock.value[1] as asn1js.Constructed).valueBlock
+      .value[0] as asn1js.Sequence;
+    const encap = signedData.valueBlock.value[2] as asn1js.Sequence;
+    const explicit = encap.valueBlock.value[1] as asn1js.Constructed;
+    const octets = explicit.valueBlock.value[0]!;
+    expect(octets.idBlock.isConstructed).toBe(false);
+    expect(Buffer.from((octets as asn1js.OctetString).valueBlock.valueHexView)).toEqual(content);
   });
 });

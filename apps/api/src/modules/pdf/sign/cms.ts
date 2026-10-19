@@ -101,12 +101,12 @@ export async function buildSignedData(i: SignedDataInput): Promise<Uint8Array> {
       type: 1,
       attributes: unsigned,
     });
+  const encap = new pkijs.EncapsulatedContentInfo({ eContentType: contentType });
+  // pkijs в конструкторе делает из eContent составную (chunked) строку; DER требует примитивную.
+  if (i.eContent) encap.eContent = new asn1js.OctetString({ valueHex: ab(i.eContent) });
   const signed = new pkijs.SignedData({
     version: contentType === OID.data ? 1 : 3,
-    encapContentInfo: new pkijs.EncapsulatedContentInfo({
-      eContentType: contentType,
-      ...(i.eContent ? { eContent: new asn1js.OctetString({ valueHex: ab(i.eContent) }) } : {}),
-    }),
+    encapContentInfo: encap,
     digestAlgorithms: [new pkijs.AlgorithmIdentifier({ algorithmId: digestOid })],
     certificates: [i.cert, ...i.chain].map((d) => pkijs.Certificate.fromBER(ab(d))),
     signerInfos: [signerInfo],

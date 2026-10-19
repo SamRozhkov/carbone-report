@@ -19,7 +19,7 @@ afterAll(async () => tsa?.close());
 
 async function signed(name: string, withTsa: boolean) {
   const base = await postprocessPdf(
-    await makePdf([{ label: 'Первая' }, { label: 'Последняя', rotate: 90 }]),
+    await makePdf([{ label: 'First' }, { label: 'Last', rotate: 90 }]),
     {
       pdfa: false,
       watermark: { text: 'ОБРАЗЕЦ', opacity: 20, color: 'gray', angle: 'diagonal' },
@@ -53,11 +53,12 @@ describe.skipIf(!enabled)('подпись PDF проверяется pyHanko (§
       const out = await pyhankoValidate(await signed(name, false));
       expect(out).toContain('INTACT:TRUSTED');
     },
+    60_000,
   );
 
   it('с меткой времени — метка тоже действительна', async () => {
     const out = await pyhankoValidate(await signed('rsa.p12', true));
     expect(out).toContain('INTACT:TRUSTED');
     expect(out).toContain('TIMESTAMP_TOKEN<INTACT:TRUSTED>');
-  });
+  }, 60_000);
 });

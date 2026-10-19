@@ -27,7 +27,7 @@ export async function pyhankoValidate(pdf: Buffer): Promise<string> {
   try {
     const file = join(dir, 'signed.pdf');
     await writeFile(file, pdf);
-    const { stdout } = await run(BIN, [
+    const { stdout, stderr } = await run(BIN, [
       'sign',
       'validate',
       '--no-revocation-check',
@@ -35,7 +35,7 @@ export async function pyhankoValidate(pdf: Buffer): Promise<string> {
       fixturePath('ca.pem'),
       file,
     ]);
-    return stdout;
+    return `${stdout}\n${stderr}`;
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

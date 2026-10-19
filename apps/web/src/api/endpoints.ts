@@ -1,6 +1,7 @@
 import type {
   BackupDto,
   BackupOperationDto,
+  CertificateInfo,
   CategoryBody,
   CategoryDto,
   CategoryPatch,
@@ -15,6 +16,7 @@ import type {
   GroupPatch,
   LoginBody,
   MoveAttachmentBody,
+  MyCertificate,
   MaintenanceStatus,
   OutputFormat,
   ParamOptionsResult,
@@ -67,9 +69,17 @@ export const api = {
     create: (body: CreateUserBody) => apiJson<UserDto>('/api/users', post(body)),
     update: (id: string, body: UpdateUserBody) => apiJson<UserDto>(`/api/users/${id}`, patch(body)),
     remove: (id: string) => apiJson<void>(`/api/users/${id}`, del),
+    removeCertificate: (id: string) => apiJson<void>(`/api/users/${id}/certificate`, del),
     revokeSessions: (id: string) => apiJson<void>(`/api/users/${id}/sessions/revoke`, post()),
     setGroups: (id: string, groupIds: string[]) =>
       apiJson<string[]>(`/api/users/${id}/groups`, put({ groupIds })),
+  },
+
+  signature: {
+    get: () => apiJson<MyCertificate>('/api/me/certificate'),
+    upload: (form: FormData) =>
+      apiJson<CertificateInfo>('/api/me/certificate', { method: 'POST', body: form }),
+    remove: () => apiJson<void>('/api/me/certificate', del),
   },
 
   groups: {

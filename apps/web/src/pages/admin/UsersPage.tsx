@@ -1,7 +1,7 @@
 import type { UserDto } from '@carbone-reports/shared';
 import { Lock, LockOpen, Pencil, PersonXmark, Plus, TrashBin } from '@gravity-ui/icons';
 import type { TableColumnConfig } from '@gravity-ui/uikit';
-import { Button, Icon, Label, Loader, Table, useToaster } from '@gravity-ui/uikit';
+import { Button, Icon, Label, Loader, Table, Text, useToaster } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/endpoints';
@@ -99,6 +99,20 @@ export function UsersPage() {
               .map((id) => groupName.get(id))
               .filter(Boolean)
               .join(', ') || '—',
+    },
+    {
+      id: 'certificate',
+      name: 'Подпись',
+      template: (u) =>
+        u.certificateNotAfter ? (
+          <Text
+            color={new Date(u.certificateNotAfter).getTime() <= Date.now() ? 'danger' : undefined}
+          >
+            до {formatDate(u.certificateNotAfter)}
+          </Text>
+        ) : (
+          '—'
+        ),
     },
     { id: 'createdAt', name: 'Создан', template: (u) => formatDate(u.createdAt) },
     {

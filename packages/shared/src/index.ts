@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TemplateChart } from './charts';
 import { PdfOptions, TemplateAttachment } from './pdf-options';
 import { TemplateEditingBy } from './edit-lock';
+import { RunSignature } from './signature';
 
 z.config(z.locales.ru());
 
@@ -364,6 +365,10 @@ export const RunDto = z.object({
   formats: z.array(OutputFormat),
   /** Уже собранные форматы. */
   readyFormats: z.array(OutputFormat),
+  /** Подпись запуска (§39.3); null — не подписан. */
+  signature: RunSignature.nullable(),
+  /** Можно подписать: снимок, ok, файл есть, подпись разрешена в снимке, ещё не подписан. */
+  signable: z.boolean(),
   durationMs: z.number(),
   createdAt: z.string(),
 });

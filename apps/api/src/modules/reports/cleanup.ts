@@ -1,5 +1,5 @@
 import { and, eq, isNotNull, lt } from 'drizzle-orm';
-import { reportRunFiles, reportRuns } from '../../db/schema';
+import { reportRunFiles, reportRunSignatures, reportRuns } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { runStoragePath } from './snapshot';
 
@@ -23,11 +23,13 @@ export async function cleanupOldReports(
   for (const r of rows) {
     try {
       // Сначала отметка в базе, затем удаление: при сбое удаления остаётся безвредный файл-сирота,
-      // а не строка, указывающая на отсутствующий файл. Строки собранных файлов уходят вместе с отметкой;
-      // идущая сборка держит строку запуска FOR SHARE, поэтому отметка ждёт её конца.
+      // а не строка, указывающая на отсутствующий файл. Строки собранных файлов и подписи уходят вместе с отметкой;
+      // идущая сборка или подпись держит строку запуска FOR SHARE, поэтому отметка ждёт её конца.
       await deps.db.transaction(async (tx) => {
         await tx.update(reportRuns).set({ fileDeleted: true }).where(eq(reportRuns.id, r.id));
         await tx.delete(reportRunFiles).where(eq(reportRunFiles.runId, r.id));
+        // Подпись запуска (§39.3, R11): файл out.signed.pdf уходит вместе с каталогом снимка.
+        await tx.delete(reportRunSignatures).where(eq(reportRunSignatures.runId, r.id));
       });
       // Снимок — каталог reports/<runId>/ целиком, старый запуск — его единственный файл.
       await deps.storage.remove(runStoragePath(r)!);

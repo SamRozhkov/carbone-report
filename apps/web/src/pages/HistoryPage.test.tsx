@@ -20,6 +20,8 @@ const run = (over: Partial<RunDto>): RunDto => ({
   fileAvailable: true,
   formats: ['pdf'],
   readyFormats: ['pdf'],
+  signature: null,
+  signable: false,
   durationMs: 1200,
   createdAt: '2026-01-31T09:05:00',
   ...over,

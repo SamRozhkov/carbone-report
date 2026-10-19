@@ -422,4 +422,83 @@ describe('ReportRunPage', () => {
     await waitFor(() => expect(button).toBeEnabled());
     expect(screen.queryByText('Загружаются варианты параметров…')).not.toBeInTheDocument();
   });
+  describe('подпись (§39.3)', () => {
+    const cert = {
+      subjectCn: 'Иванов Иван Иванович',
+      issuer: 'Тестовый УЦ',
+      serial: '1001',
+      notBefore: '2026-01-01T00:00:00.000Z',
+      notAfter: '2030-01-01T00:00:00.000Z',
+      fingerprint: 'AB'.repeat(32),
+      keyAlg: 'RSA-2048',
+    };
+    const signedAt = '2026-10-19T14:32:00';
+    const base = [
+      userMe,
+      { path: '/api/templates/t1', body: { ...template, signatureAllowed: true } },
+      { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
+    ];
+
+    it('подпись и скачивание подписанного PDF', async () => {
+      const spy = vi.spyOn(download, 'triggerDownload').mockImplementation(() => {});
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:run');
+      const { calls } = mockApi([
+        ...base,
+        { path: '/api/me/certificate', body: { certificate: cert } },
+        {
+          method: 'POST',
+          path: '/api/runs/r1/sign',
+          status: 201,
+          body: {
+            signerCn: 'Иванов Иван Иванович',
+            fingerprint: 'AB'.repeat(32),
+            signedAt,
+            timestamped: false,
+          },
+        },
+        {
+          path: '/api/runs/r1/file',
+          raw: 'PDF',
+          headers: { 'content-disposition': `attachment; filename="x.pdf"` },
+        },
+      ]);
+      renderRoute('/reports/t1');
+      await formAndRender();
+      const btn = await screen.findByRole('button', { name: 'Подписать PDF' });
+      await waitFor(() => expect(btn).toBeEnabled());
+      await userEvent.click(btn);
+      await userEvent.type(await screen.findByLabelText('Пароль к ключу подписи'), 'pw');
+      await userEvent.click(screen.getByRole('button', { name: 'Подписать' }));
+      expect(
+        await screen.findByText('Подписан: Иванов Иван Иванович, 19.10.2026 14:32'),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Подписать PDF' })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Скачать подписанный PDF' }));
+      await waitFor(() => expect(spy).toHaveBeenCalled());
+      expect(calls.some((c) => c.path === '/api/runs/r1/file?format=pdf&signed=1')).toBe(true);
+    });
+
+    it('без сертификата кнопка неактивна, есть подсказка со ссылкой', async () => {
+      mockApi([...base, { path: '/api/me/certificate', body: { certificate: null } }]);
+      renderRoute('/reports/t1');
+      await formAndRender();
+      expect(await screen.findByRole('button', { name: 'Подписать PDF' })).toBeDisabled();
+      expect(screen.getByText(/Загрузите сертификат на странице/)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Моя подпись' })).toHaveAttribute(
+        'href',
+        '/signature',
+      );
+    });
+
+    it('у шаблона без signatureAllowed кнопки нет', async () => {
+      mockApi([
+        userMe,
+        { path: '/api/templates/t1', body: template },
+        { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
+      ]);
+      renderRoute('/reports/t1');
+      await formAndRender();
+      expect(screen.queryByRole('button', { name: 'Подписать PDF' })).not.toBeInTheDocument();
+    });
+  });
 });

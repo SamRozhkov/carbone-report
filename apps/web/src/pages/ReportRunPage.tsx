@@ -1,5 +1,5 @@
-import type { ParamsInput } from '@carbone-reports/shared';
-import { Alert, Button, Loader, Text } from '@gravity-ui/uikit';
+import type { ParamsInput, RunSignature } from '@carbone-reports/shared';
+import { Alert, Button, Link, Loader, Text } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -8,9 +8,12 @@ import { ApiRequestError } from '../api/client';
 import { fieldErrors } from '../api/errors';
 import { useRunDownload } from '../api/useRunDownload';
 import { ErrorAlert } from '../components/ErrorAlert';
+import { SignRunDialog } from '../components/SignRunDialog';
 import { PageHeader } from '../components/PageHeader';
 import { ParamForm } from '../components/ParamForm';
+import { formatDateTime } from '../lib/format';
 import { initialValues, pickParams } from '../lib/params';
+import { certificateState, myCertificateKey } from './SignaturePage';
 
 export function ReportRunRoute() {
   const { id = '' } = useParams();
@@ -26,7 +29,14 @@ export function ReportRunPage() {
 
   const [values, setValues] = useState<ParamsInput>({});
   const [runId, setRunId] = useState<string | null>(null);
+  const [signature, setSignature] = useState<RunSignature | null>(null);
+  const [signOpen, setSignOpen] = useState(false);
   const [optionsLoading, setOptionsLoading] = useState(false);
+  const cert = useQuery({
+    queryKey: myCertificateKey,
+    queryFn: api.signature.get,
+    enabled: t?.signatureAllowed === true,
+  });
   const download = useRunDownload();
   const resetDownload = download.reset;
 
@@ -36,6 +46,8 @@ export function ReportRunPage() {
     if (!t) return;
     setValues(initialValues(t.params));
     setRunId(null);
+    setSignature(null);
+    setSignOpen(false);
     resetDownload();
   }, [version]);
 
@@ -52,6 +64,8 @@ export function ReportRunPage() {
   if (template.isPending) return <Loader />;
   if (!t) return <ErrorAlert error={template.error} title="Не удалось открыть отчёт" />;
 
+  const certificate = cert.data?.certificate ?? null;
+  const canSign = certificate !== null && certificateState(certificate) !== 'expired';
   const errors = fieldErrors(render.error);
   const declared = new Set(t.params.map((p) => p.name));
   const unmatched = Object.entries(errors).filter(([k]) => !declared.has(k));
@@ -79,6 +93,7 @@ export function ReportRunPage() {
           onSubmit={(e) => {
             e.preventDefault();
             setRunId(null);
+            setSignature(null);
             download.reset();
             render.mutate();
           }}
@@ -144,7 +159,62 @@ export function ReportRunPage() {
                   );
                 })}
               </div>
+              {t.signatureAllowed && (
+                <div className="cr-save">
+                  {signature ? (
+                    <>
+                      <Text>
+                        Подписан: {signature.signerCn}, {formatDateTime(signature.signedAt)}
+                      </Text>
+                      <Button
+                        view="outlined"
+                        size="l"
+                        loading={download.pending?.runId === runId && !!download.pending.signed}
+                        onClick={() => download.save({ runId, format: 'pdf', signed: true })}
+                      >
+                        Скачать подписанный PDF
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        view="outlined"
+                        size="l"
+                        disabled={!canSign}
+                        onClick={() => setSignOpen(true)}
+                      >
+                        Подписать PDF
+                      </Button>
+                      {!cert.isPending && !certificate && (
+                        <Text color="secondary">
+                          Загрузите сертификат на странице «
+                          <Link
+                            href="/signature"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              navigate('/signature');
+                            }}
+                          >
+                            Моя подпись
+                          </Link>
+                          »
+                        </Text>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
               <ErrorAlert error={download.error} title="Не удалось сохранить файл" />
+              <SignRunDialog
+                runId={runId}
+                open={signOpen}
+                onClose={() => setSignOpen(false)}
+                onSigned={(s) => {
+                  setSignature(s);
+                  setSignOpen(false);
+                  void queryClient.invalidateQueries({ queryKey: ['runs'] });
+                }}
+              />
             </>
           )}
         </div>

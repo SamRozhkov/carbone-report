@@ -24,6 +24,7 @@ import type {
   RenderBody,
   RunQueryBody,
   RunQueryResult,
+  RunSignature,
   RunsPage,
   RunsQuery,
   SavePdfOptionsBody,
@@ -189,6 +190,8 @@ export const api = {
       const qs = sp.toString();
       return apiJson<RunsPage>(`/api/runs${qs ? `?${qs}` : ''}`);
     },
+    sign: (id: string, password: string) =>
+      apiJson<RunSignature>(`/api/runs/${id}/sign`, post({ password })),
   },
 
   backups: {
@@ -213,11 +216,12 @@ export const api = {
 
 export const runFileUrl = (
   runId: string,
-  opts: { format?: OutputFormat; inline?: boolean } = {},
+  opts: { format?: OutputFormat; inline?: boolean; signed?: boolean } = {},
 ) => {
   const sp = new URLSearchParams();
   if (opts.format) sp.set('format', opts.format);
   if (opts.inline) sp.set('inline', '1');
+  if (opts.signed) sp.set('signed', '1');
   const qs = sp.toString();
   return `/api/runs/${runId}/file${qs ? `?${qs}` : ''}`;
 };

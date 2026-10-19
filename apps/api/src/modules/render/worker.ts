@@ -1,6 +1,7 @@
-// Поток пула рендера: собирает отчёт встроенной сборкой Carbone (формат шаблона) или обрабатывает
-// готовый PDF (§36.4, задача kind = pdf). Глобальные carbone.set()/reset() не вызываем: lang, timezone
-// и настройки загрузки изображений всегда приходят в options. Предупреждения рендера (R6) уходят пулу.
+// Поток пула рендера: собирает отчёт встроенной сборкой Carbone (формат шаблона), обрабатывает
+// готовый PDF (§36.4, задача kind = pdf) или готовит PDF к подписи (§39.4, задача kind = sign).
+// Глобальные carbone.set()/reset() не вызываем: lang, timezone и настройки загрузки изображений
+// всегда приходят в options. Предупреждения рендера (R6) уходят пулу.
 import { parentPort } from 'node:worker_threads';
 import carbone from '@carbone-reports/carbone';
 import { postprocessPdf, type PdfPostJob } from '../pdf/postprocess';

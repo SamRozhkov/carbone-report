@@ -34,16 +34,17 @@ export interface CarboneRenderer {
 }
 
 /** Обработка готового PDF (§36.4): приложения, водяной знак, нумерация, метаданные — в пределах timeoutMs. */
+export type PdfPostprocessor = (pdf: Buffer, job: PdfPostJob, timeoutMs: number) => Promise<Buffer>;
+
+/** Шифрование готового PDF (§37.2): пароль и запреты — в пределах timeoutMs. */
+export type PdfProtector = (pdf: Buffer, job: PdfProtectJob, timeoutMs: number) => Promise<Buffer>;
+
 /** Подготовка PDF к подписи (§39.4): поле, штамп, заглушки — в пределах timeoutMs. */
 export type PdfSignPreparer = (
   pdf: Buffer,
   job: SignPrepareJob,
   timeoutMs: number,
 ) => Promise<Buffer>;
-export type PdfPostprocessor = (pdf: Buffer, job: PdfPostJob, timeoutMs: number) => Promise<Buffer>;
-
-/** Шифрование готового PDF (§37.2): пароль и запреты — в пределах timeoutMs. */
-export type PdfProtector = (pdf: Buffer, job: PdfProtectJob, timeoutMs: number) => Promise<Buffer>;
 
 export interface OnlyOfficeCommands {
   forceSave(key: string): Promise<void>;

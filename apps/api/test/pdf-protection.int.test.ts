@@ -135,3 +135,47 @@ describe('пароль и запреты PDF (§37.1)', () => {
     });
   });
 });
+
+describe('подпись и защита (§39.2)', () => {
+  const sig = { signature: { position: 'bottom-right' } };
+
+  it('подпись с запретом — 400 у /signature', async () => {
+    const id = await newTemplate();
+    const res = await putOptions(id, {
+      pdfa: false,
+      ...sig,
+      protection: { noPrint: true, noCopy: false, noModify: false },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.details).toContainEqual({
+      path: '/signature',
+      message: 'Подпись несовместима с паролем и ограничениями',
+    });
+  });
+
+  it('подпись с новым паролем — 400; с уже сохранённым паролем без изменения — 400', async () => {
+    const id = await newTemplate();
+    expect((await putOptions(id, { pdfa: false, ...sig, password: 'secret1' })).statusCode).toBe(
+      400,
+    );
+    await putOptions(id, { pdfa: false, password: 'secret1' });
+    expect((await putOptions(id, { pdfa: false, ...sig })).statusCode).toBe(400);
+  });
+
+  it('подпись со снятием пароля в том же запросе — можно', async () => {
+    const id = await newTemplate();
+    await putOptions(id, { pdfa: false, password: 'secret1' });
+    const res = await putOptions(id, { pdfa: false, ...sig, password: null });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().pdfOptions.signature).toEqual({ position: 'bottom-right' });
+  });
+
+  it('подпись с PDF/A — можно; карточка шаблона: signatureAllowed', async () => {
+    const id = await newTemplate();
+    const card0 = await t.app.inject({ url: `/api/templates/${id}`, headers: { cookie: admin } });
+    expect(card0.json().signatureAllowed).toBe(false);
+    expect((await putOptions(id, { pdfa: true, ...sig })).statusCode).toBe(200);
+    const card = await t.app.inject({ url: `/api/templates/${id}`, headers: { cookie: admin } });
+    expect(card.json().signatureAllowed).toBe(true);
+  });
+});

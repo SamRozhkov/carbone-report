@@ -282,6 +282,8 @@ export type TemplateSummary = z.infer<typeof TemplateSummary>;
 export const TemplateDetails = TemplateSummary.extend({
   params: z.array(TemplateParamDto),
   outputFormats: z.array(OutputFormat),
+  /** Шаблон разрешает подпись PDF (§39.2). */
+  signatureAllowed: z.boolean(),
 });
 export type TemplateDetails = z.infer<typeof TemplateDetails>;
 

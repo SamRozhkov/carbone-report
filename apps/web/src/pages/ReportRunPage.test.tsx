@@ -12,6 +12,7 @@ const template = {
   defaultOutput: 'pdf',
   updatedAt: '2026-01-10T10:00:00Z',
   outputFormats: ['pdf', 'docx', 'odt'],
+  signatureAllowed: false,
   params: [
     {
       name: 'company',

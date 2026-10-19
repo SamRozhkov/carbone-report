@@ -218,6 +218,7 @@ export const toDetails = (f: TemplateFull, withSql = false): TemplateDetails => 
   ...toSummary(f.row, f.category),
   params: f.params.map((p) => toParamDto(p, withSql)),
   outputFormats: outputFormatsFor(f.row.fileExt),
+  signatureAllowed: Boolean(f.pdfOptions.signature),
 });
 
 export const toAdminDetails = (f: TemplateFull): TemplateAdminDetails => ({

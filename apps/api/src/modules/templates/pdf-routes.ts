@@ -9,6 +9,7 @@ import {
   MoveAttachmentBody,
   normalizePdfOptions,
   PDF_PROTECTION_PDFA_MESSAGE,
+  PDF_SIGNATURE_PROTECTION_MESSAGE,
   PdfOptions,
   PdfPlacement,
   SavePdfOptionsBody,
@@ -99,18 +100,24 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
       await db.transaction(async (tx) => {
         // Правила PDF/A — под блокировкой строки: параллельная загрузка приложения ждёт.
         await lockTemplate(tx, row.id);
-        if (options.pdfa) {
-          const bad = (await loadTemplateAttachments(tx, row.id)).find((a) => !a.pdfa);
-          if (bad) assertNoIssues([{ path: '/pdfa', message: pdfaMessage(bad.name) }]);
+        // Итоговое состояние пароля (R3 §37): не передан — сохранённый.
+        let passwordSet = false;
+        if (options.pdfa || options.signature) {
           const [cur] = await tx
             .select({ enc: templates.pdfPasswordEnc })
             .from(templates)
             .where(eq(templates.id, row.id));
-          // Итоговое состояние пароля (R3): не передан — сохранённый.
-          const passwordSet = password === undefined ? cur!.enc !== null : password !== null;
+          passwordSet = password === undefined ? cur!.enc !== null : password !== null;
+        }
+        if (options.pdfa) {
+          const bad = (await loadTemplateAttachments(tx, row.id)).find((a) => !a.pdfa);
+          if (bad) assertNoIssues([{ path: '/pdfa', message: pdfaMessage(bad.name) }]);
           if (hasPdfProtection(options, passwordSet))
             assertNoIssues([{ path: '/pdfa', message: PDF_PROTECTION_PDFA_MESSAGE }]);
         }
+        // §39.2: подпись несовместима с паролем и запретами.
+        if (options.signature && hasPdfProtection(options, passwordSet))
+          assertNoIssues([{ path: '/signature', message: PDF_SIGNATURE_PROTECTION_MESSAGE }]);
         await tx
           .update(templates)
           .set({

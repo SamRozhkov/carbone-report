@@ -22,9 +22,12 @@ function tokenFrom(body: Uint8Array, imprint: Uint8Array, nonce: Uint8Array): Ui
   if ((status !== 0 && status !== 1) || !resp.timeStampToken)
     throw new Error(`статус ответа ${status}`);
   const signed = new pkijs.SignedData({ schema: resp.timeStampToken.content });
+  if (signed.encapContentInfo.eContentType !== OID.tstInfo) throw new Error('метка не TSTInfo');
   const content = signed.encapContentInfo.eContent;
   if (!content) throw new Error('метка без TSTInfo');
   const tst = pkijs.TSTInfo.fromBER(content.getValue());
+  if (tst.messageImprint.hashAlgorithm.algorithmId !== OID.sha256)
+    throw new Error('алгоритм отпечатка метки не SHA-256');
   if (!same(tst.messageImprint.hashedMessage.valueBlock.valueHexView, imprint))
     throw new Error('отпечаток метки не совпадает');
   if (!tst.nonce || !same(tst.nonce.valueBlock.valueHexView, nonce))
@@ -55,10 +58,13 @@ export function createTsaClient(url: string, timeoutMs: number): TsaClient {
         method: 'POST',
         headers: { 'content-type': 'application/timestamp-query' },
         body: Buffer.from(request.toSchema().toBER()),
+        redirect: 'error',
         signal: AbortSignal.timeout(Math.min(left, timeoutMs)),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      body = new Uint8Array(await res.arrayBuffer());
+      const buf = await res.arrayBuffer();
+      if (buf.byteLength > 65_536) throw new Error('ответ слишком большой');
+      body = new Uint8Array(buf);
     } catch (e) {
       if (byDeadline && (e as Error).name === 'TimeoutError') throw timeout();
       throw tsaUnavailable(e);

@@ -58,27 +58,28 @@ function signatureOid(key: KeyObject, alg: DigestAlg): string {
 
 /**
  * CMS SignedData (PAdES baseline B-B, §39.4): подписанные атрибуты contentType, messageDigest,
- * signing-certificate-v2 — в этом порядке (он же порядок DER SET OF), без signingTime.
+ * signing-certificate-v2, без signingTime. Порядок — DER SET OF (RFC 5652 §5.4): по возрастанию
+ * байт кодировки атрибута; pkijs сам не сортирует, а длина messageDigest зависит от хэша.
  * Подпись — crypto.sign Node: RSA PKCS#1 v1.5, ECDSA в DER (R2).
  */
 export async function buildSignedData(i: SignedDataInput): Promise<Uint8Array> {
   const contentType = i.contentType ?? OID.data;
   const cert = pkijs.Certificate.fromBER(ab(i.cert));
   const digestOid = i.digestAlg === 'SHA-384' ? OID.sha384 : OID.sha256;
-  const signedAttrs = new pkijs.SignedAndUnsignedAttributes({
-    type: 0,
-    attributes: [
-      new pkijs.Attribute({
-        type: OID.contentType,
-        values: [new asn1js.ObjectIdentifier({ value: contentType })],
-      }),
-      new pkijs.Attribute({
-        type: OID.messageDigest,
-        values: [new asn1js.OctetString({ valueHex: ab(i.digest) })],
-      }),
-      new pkijs.Attribute({ type: OID.signingCertV2, values: [signingCertificateV2(i.cert)] }),
-    ],
-  });
+  const attrs = [
+    new pkijs.Attribute({
+      type: OID.contentType,
+      values: [new asn1js.ObjectIdentifier({ value: contentType })],
+    }),
+    new pkijs.Attribute({
+      type: OID.messageDigest,
+      values: [new asn1js.OctetString({ valueHex: ab(i.digest) })],
+    }),
+    new pkijs.Attribute({ type: OID.signingCertV2, values: [signingCertificateV2(i.cert)] }),
+  ];
+  const der = (a: pkijs.Attribute) => Buffer.from(a.toSchema().toBER());
+  attrs.sort((a, b) => Buffer.compare(der(a), der(b)));
+  const signedAttrs = new pkijs.SignedAndUnsignedAttributes({ type: 0, attributes: attrs });
   // Подписывается DER атрибутов с тегом SET (0x31), а не [0] IMPLICIT.
   const toSign = new Uint8Array(signedAttrs.toSchema().toBER());
   toSign[0] = 0x31;

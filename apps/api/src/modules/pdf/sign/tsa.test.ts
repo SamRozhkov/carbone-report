@@ -24,7 +24,7 @@ describe('createTsaClient (§39.4, RFC 3161)', () => {
     expect(tsa.requests).toBe(1);
   });
 
-  it.each(['reject', 'wrong-nonce', 'wrong-imprint', 'garbage'] as const)(
+  it.each(['reject', 'wrong-nonce', 'wrong-imprint', 'wrong-hash-alg', 'garbage'] as const)(
     '%s — 502 TSA_UNAVAILABLE',
     async (mode) => {
       tsa = await startTestTsa(mode);

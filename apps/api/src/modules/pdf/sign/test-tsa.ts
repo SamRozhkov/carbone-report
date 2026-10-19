@@ -7,7 +7,8 @@ import * as pkijs from 'pkijs';
 import { buildSignedData, OID } from './cms';
 import { fixture, fixtureCertDer } from './fixtures';
 
-export type TestTsaMode = 'ok' | 'reject' | 'wrong-nonce' | 'wrong-imprint' | 'garbage' | 'hang';
+export type TestTsaMode =
+  'ok' | 'reject' | 'wrong-nonce' | 'wrong-imprint' | 'wrong-hash-alg' | 'garbage' | 'hang';
 
 export interface TestTsa {
   url: string;
@@ -35,7 +36,10 @@ async function respond(body: Buffer, mode: TestTsaMode): Promise<Uint8Array> {
     version: 1,
     policy: '1.2.3.4.1',
     messageImprint: new pkijs.MessageImprint({
-      hashAlgorithm: req.messageImprint.hashAlgorithm,
+      hashAlgorithm:
+        mode === 'wrong-hash-alg'
+          ? new pkijs.AlgorithmIdentifier({ algorithmId: OID.sha384 })
+          : req.messageImprint.hashAlgorithm,
       hashedMessage: new asn1js.OctetString({ valueHex: ab(imprint) }),
     }),
     serialNumber: new asn1js.Integer({ value: Date.now() % 1_000_000 }),

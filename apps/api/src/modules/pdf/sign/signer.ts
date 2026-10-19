@@ -52,7 +52,8 @@ export class P12Signer implements CmsSigner {
       digestAlg: this.p12.digestAlg,
       digest,
       unsigned: tsa
-        ? async (signature) => [
+        ? // Отпечаток метки — SHA-256 значения подписи независимо от хэша документа (RFC 3161).
+          async (signature) => [
             timestampAttribute(
               await tsa(createHash('sha256').update(signature).digest(), deadline),
             ),

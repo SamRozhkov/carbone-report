@@ -35,7 +35,10 @@ describe('buildSignedData (§39.4)', () => {
   it('подписанные атрибуты — ровно три, без signingTime', async () => {
     const { sd } = await signData('rsa.p12', Buffer.from('x'));
     const types = sd.signerInfos[0]!.signedAttrs!.attributes.map((a) => a.type);
-    expect(types).toEqual([OID.contentType, OID.messageDigest, OID.signingCertV2]);
+    expect([...types].sort()).toEqual(
+      [OID.contentType, OID.messageDigest, OID.signingCertV2].sort(),
+    );
+    expect(types).not.toContain('1.2.840.113549.1.9.5');
   });
 
   it('алгоритмы: RSA — sha256WithRSA, P-256 — ecdsa-with-SHA256, P-384 — SHA-384', async () => {
@@ -46,5 +49,16 @@ describe('buildSignedData (§39.4)', () => {
     expect(await alg('rsa.p12')).toEqual([OID.sha256, OID.sha256WithRsa]);
     expect(await alg('ec.p12')).toEqual([OID.sha256, OID.ecdsaWithSha256]);
     expect(await alg('ec384.p12')).toEqual([OID.sha384, OID.ecdsaWithSha384]);
+  });
+});
+
+describe('signedAttrs — DER SET OF', () => {
+  it.each(['rsa.p12', 'ec384.p12'])('%s: кодировки атрибутов по возрастанию байт', async (name) => {
+    const { sd } = await signData(name, Buffer.from('x'));
+    const encs = sd.signerInfos[0]!.signedAttrs!.attributes.map((a) =>
+      Buffer.from(a.toSchema().toBER()),
+    );
+    const sorted = [...encs].sort(Buffer.compare);
+    expect(encs.map((e) => e.toString('hex'))).toEqual(sorted.map((e) => e.toString('hex')));
   });
 });

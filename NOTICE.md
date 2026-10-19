@@ -28,6 +28,11 @@ Apache ECharts (Apache-2.0).
 Шифрование PDF (с 2.7.1) выполняет программа `qpdf` — Apache-2.0, https://github.com/qpdf/qpdf; ставится
 в образ API пакетом Debian и вызывается отдельным процессом.
 
+Электронная подпись PDF (с 2.9.0) использует `pkijs` 3.4.1 и `asn1js` 3.1.0 — BSD-3-Clause, Peculiar Ventures
+(https://github.com/PeculiarVentures/PKI.js, https://github.com/PeculiarVentures/asn1.js); `node-forge` 1.4.0
+(чтение контейнеров `.p12`) — BSD-3-Clause или GPL-2.0 по выбору, Digital Bazaar, https://github.com/digitalbazaar/forge;
+используется на условиях BSD-3-Clause.
+
 ## ONLYOFFICE Document Server
 
 Document Server (контейнер `onlyoffice`) — отдельный продукт, который не входит в этот репозиторий и образы проекта

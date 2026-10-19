@@ -118,6 +118,17 @@ tests:
     asserts:
       - equal: { path: data.IMAGE_URL_ALLOWLIST, value: 'cdn.example.org,img.example.org:8443' }
       - equal: { path: data.IMAGE_URL_TIMEOUT_MS, value: '3000' }
+  - it: служба меток времени подписи — по умолчанию пусто, тайм-аут 10000
+    template: configmap-api.yaml
+    asserts:
+      - equal: { path: data.SIGN_TSA_URL, value: '' }
+      - equal: { path: data.SIGN_TSA_TIMEOUT_MS, value: '10000' }
+  - it: config.signTsaUrl и signTsaTimeoutMs — в ConfigMap
+    template: configmap-api.yaml
+    set: { config.signTsaUrl: 'http://timestamp.example.org/tsa', config.signTsaTimeoutMs: 5000 }
+    asserts:
+      - equal: { path: data.SIGN_TSA_URL, value: 'http://timestamp.example.org/tsa' }
+      - equal: { path: data.SIGN_TSA_TIMEOUT_MS, value: '5000' }
   - it: безопасность api — restricted
     template: api.yaml
     documentIndex: 0

@@ -11,8 +11,11 @@ export interface RenderOptions {
 }
 
 export interface RenderJob {
-  /** carbone (по умолчанию) — сборка отчёта; pdf — обработка готового PDF (§36.4), template — сам PDF. */
-  kind?: 'carbone' | 'pdf';
+  /**
+   * carbone (по умолчанию) — сборка отчёта; pdf — обработка готового PDF (§36.4), template — сам PDF;
+   * sign — подготовка PDF к подписи (§39.4), template — сам PDF.
+   */
+  kind?: 'carbone' | 'pdf' | 'sign';
   template: Buffer;
   ext: string;
   data: unknown;

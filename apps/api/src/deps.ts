@@ -1,3 +1,4 @@
+import type { SignPrepareJob } from './modules/pdf/sign/prepare';
 import type { PdfPostJob } from './modules/pdf/postprocess';
 import type { PdfProtectJob } from './modules/pdf/protect';
 import type { Inflight } from './lib/inflight';
@@ -33,6 +34,12 @@ export interface CarboneRenderer {
 }
 
 /** Обработка готового PDF (§36.4): приложения, водяной знак, нумерация, метаданные — в пределах timeoutMs. */
+/** Подготовка PDF к подписи (§39.4): поле, штамп, заглушки — в пределах timeoutMs. */
+export type PdfSignPreparer = (
+  pdf: Buffer,
+  job: SignPrepareJob,
+  timeoutMs: number,
+) => Promise<Buffer>;
 export type PdfPostprocessor = (pdf: Buffer, job: PdfPostJob, timeoutMs: number) => Promise<Buffer>;
 
 /** Шифрование готового PDF (§37.2): пароль и запреты — в пределах timeoutMs. */
@@ -62,6 +69,8 @@ export interface AppDeps {
   pdf: PdfPostprocessor;
   /** Шифрование PDF программой qpdf (§37.2). */
   pdfProtect: PdfProtector;
+  /** Подготовка PDF к подписи в пуле рендера (§39.4; тестам — в этом потоке). */
+  pdfSignPrepare: PdfSignPreparer;
   onlyoffice: OnlyOfficeCommands;
   fetchFile: FileFetcher;
   /** Общий Redis (лимит входа, режим обслуживания); null — лимиты считаются в памяти экземпляра. */

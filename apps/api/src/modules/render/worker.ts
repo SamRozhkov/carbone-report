@@ -4,11 +4,12 @@
 import { parentPort } from 'node:worker_threads';
 import carbone from '@carbone-reports/carbone';
 import { postprocessPdf, type PdfPostJob } from '../pdf/postprocess';
+import { prepareSignaturePdf, type SignPrepareJob } from '../pdf/sign/prepare';
 import type { RenderOptions } from './pool';
 
 interface Request {
   id: number;
-  kind?: 'carbone' | 'pdf';
+  kind?: 'carbone' | 'pdf' | 'sign';
   template: Uint8Array;
   ext: string;
   data: string;
@@ -25,6 +26,10 @@ if (!port) throw new Error('worker.ts запускается только как
 
 async function handle(m: Request): Promise<{ buffer: Uint8Array; warnings: string[] }> {
   const template = Buffer.from(m.template.buffer, m.template.byteOffset, m.template.byteLength);
+  if (m.kind === 'sign') {
+    const buffer = await prepareSignaturePdf(template, JSON.parse(m.data) as SignPrepareJob);
+    return { buffer, warnings: [] };
+  }
   if (m.kind === 'pdf') {
     const job = JSON.parse(m.data) as PdfJobData;
     const extra = m.extra ?? [];

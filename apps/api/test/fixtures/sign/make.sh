@@ -26,9 +26,9 @@ $O x509 -req -in "$tmp/int.csr" -CA ca.pem -CAkey ca.key -set_serial 0x2001 -day
 
 # key <имя> <алгоритм genpkey> [опции genpkey...]
 key() { n=$1; shift; $O genpkey -algorithm "$@" -out "$tmp/$n.key"; }
-# cert <имя> <serial> <ext> [ключ УЦ] [сертификат УЦ]
+# cert <имя> <serial> <ext> [ключ УЦ] [сертификат УЦ] [subject]
 cert() {
-  $O req -new -key "$tmp/$1.key" -out "$tmp/$1.csr" -utf8 -subj "/CN=Иванов Иван Иванович ($1)/O=Тест"
+  $O req -new -key "$tmp/$1.key" -out "$tmp/$1.csr" -utf8 -subj "${6:-/CN=Иванов Иван Иванович ($1)/O=Тест}"
   $O x509 -req -in "$tmp/$1.csr" -CA "${5:-ca.pem}" -CAkey "${4:-ca.key}" -set_serial "$2" \
     -days $DAYS -extfile "$tmp/$3.ext" -out "$tmp/$1.pem"
 }
@@ -41,10 +41,12 @@ key ec384 EC -pkeyopt ec_paramgen_curve:P-384 && cert ec384 0x1003 sign
 key rsa1024 RSA -pkeyopt rsa_keygen_bits:1024 && cert rsa1024 0x1004 sign
 key nosign RSA -pkeyopt rsa_keygen_bits:2048 && cert nosign 0x1005 nosign
 key chain3 RSA -pkeyopt rsa_keygen_bits:2048 && cert chain3 0x1006 sign "$tmp/int.key" "$tmp/int.pem"
+key rsainn RSA -pkeyopt rsa_keygen_bits:2048 && cert rsainn 0x1008 sign ca.key ca.pem "/CN=Иванов Иван Иванович (rsa-inn)/O=Тест/1.2.643.3.131.1.1=007700000000"
 key tsa RSA -pkeyopt rsa_keygen_bits:2048 && cert tsa 0x1007 tsa
 
 p12 rsa.p12 "$tmp/rsa.key" "$tmp/rsa.pem" ca.pem
 p12 rsa-legacy.p12 "$tmp/rsa.key" "$tmp/rsa.pem" ca.pem -legacy
+p12 rsa-inn.p12 "$tmp/rsainn.key" "$tmp/rsainn.pem" ca.pem
 p12 ec.p12 "$tmp/ec.key" "$tmp/ec.pem" ca.pem
 p12 ec384.p12 "$tmp/ec384.key" "$tmp/ec384.pem" ca.pem
 p12 rsa1024.p12 "$tmp/rsa1024.key" "$tmp/rsa1024.pem" ca.pem

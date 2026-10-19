@@ -14,6 +14,7 @@ export class P12Error extends Error {
     message: string,
   ) {
     super(message);
+    this.name = 'P12Error';
   }
 }
 
@@ -32,13 +33,25 @@ const ONE_KEY = 'в файле должен быть один ключ и его
 const UNSUPPORTED = 'алгоритм ключа не поддерживается';
 const GOST = 'ГОСТ-сертификаты подписываются через КриптоПро — пока не поддерживается';
 
-/** Есть OID семейства ГОСТ 1.2.643 (тег 06, длина, байты 2A 85 03) — R5. */
+/** Начала содержимого OID алгоритмов ГОСТ: 1.2.643.2.2.* (КриптоПро) и 1.2.643.7.1.* (ГОСТ Р 34.10/34.11-2012). */
+const GOST_ARCS = [
+  [0x2a, 0x85, 0x03, 0x02, 0x02],
+  [0x2a, 0x85, 0x03, 0x07, 0x01],
+];
+
+/**
+ * Есть OID алгоритма ГОСТ (тег 06, длина, затем 2A 85 03 02 02 или 2A 85 03 07 01) — R5.
+ * Прочие OID ветки 1.2.643 (ИНН, ОГРН, СНИЛС, политики) — обычные поля российских сертификатов.
+ */
 export function hasGostOid(der: Uint8Array): boolean {
-  for (let i = 0; i + 4 < der.length; i++)
-    if (der[i] === 0x06 && der[i + 2] === 0x2a && der[i + 3] === 0x85 && der[i + 4] === 0x03)
+  for (let i = 0; i + 6 < der.length; i++)
+    if (der[i] === 0x06 && GOST_ARCS.some((a) => a.every((b, j) => der[i + 2 + j] === b)))
       return true;
   return false;
 }
+
+const isGostAlgorithm = (oid: string) =>
+  oid.startsWith('1.2.643.2.2.') || oid.startsWith('1.2.643.7.1.');
 
 type Bag = forge.pkcs12.Bag & { asn1?: forge.asn1.Asn1 };
 
@@ -116,7 +129,20 @@ export function readP12(file: Uint8Array, password: string, now = new Date()): P
       ? forge.pki.wrapRsaPrivateKey(forge.pki.privateKeyToAsn1(kb.key as forge.pki.rsa.PrivateKey))
       : kb.asn1!,
   );
-  if (hasGostOid(pkcs8) || certs.some((c) => hasGostOid(c))) throw new P12Error('file', GOST);
+  // Разбор чужих структур: любая ошибка — «странный» файл, а не 500.
+  let parsed: pkijs.Certificate[];
+  let keyOid: string;
+  try {
+    parsed = certs.map((c) => pkijs.Certificate.fromBER(c as BufferSource));
+    keyOid = pkijs.PrivateKeyInfo.fromBER(pkcs8 as BufferSource).privateKeyAlgorithm.algorithmId;
+  } catch {
+    throw new P12Error('file', ONE_KEY);
+  }
+  if (
+    isGostAlgorithm(keyOid) ||
+    parsed.some((c) => isGostAlgorithm(c.subjectPublicKeyInfo.algorithm.algorithmId))
+  )
+    throw new P12Error('file', GOST);
   let key: KeyObject;
   try {
     key = createPrivateKey({ key: pkcs8, format: 'der', type: 'pkcs8' });
@@ -137,13 +163,20 @@ export function readP12(file: Uint8Array, password: string, now = new Date()): P
   const x = new X509Certificate(cert);
   if (now < new Date(x.validFrom)) throw new P12Error('file', 'сертификат ещё не действует');
   if (now > new Date(x.validTo)) throw new P12Error('file', 'срок действия сертификата истёк');
-  if (!allowsSigning(pkijs.Certificate.fromBER(cert)))
-    throw new P12Error('file', 'сертификат не предназначен для подписи');
+  let signing: boolean;
+  let info: CertificateInfo;
+  try {
+    signing = allowsSigning(parsed[idx]!);
+    info = certInfo(cert, alg.name);
+  } catch {
+    throw new P12Error('file', ONE_KEY);
+  }
+  if (!signing) throw new P12Error('file', 'сертификат не предназначен для подписи');
   return {
     key,
     cert,
     chain: certs.filter((_, i) => i !== idx),
-    info: certInfo(cert, alg.name),
+    info,
     digestAlg: alg.digestAlg,
   };
 }

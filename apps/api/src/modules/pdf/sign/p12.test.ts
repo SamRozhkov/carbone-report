@@ -109,11 +109,23 @@ describe('readP12 (§39.1)', () => {
   });
 
   it('пароль не попадает в текст ошибки', () => {
+    expect.assertions(3);
     try {
       read('rsa.p12', 'секрет-123');
     } catch (e) {
+      expect(e).toBeInstanceOf(P12Error);
       expect(String((e as Error).message)).not.toContain('секрет-123');
       expect(JSON.stringify(e)).not.toContain('секрет-123');
     }
+  });
+
+  it('OID ИНН 1.2.643.3.131.1.1 — не ГОСТ; сертификат RSA с ИНН принимается', () => {
+    const inn = Buffer.from([
+      0x30, 0x0a, 0x06, 0x08, 0x2a, 0x85, 0x03, 0x03, 0x81, 0x03, 0x01, 0x01,
+    ]);
+    expect(hasGostOid(inn)).toBe(false);
+    const r = read('rsa-inn.p12');
+    expect(r.info.keyAlg).toBe('RSA-2048');
+    expect(r.info.subjectCn).toBe('Иванов Иван Иванович (rsa-inn)');
   });
 });

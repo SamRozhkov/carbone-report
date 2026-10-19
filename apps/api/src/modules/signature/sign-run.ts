@@ -54,6 +54,11 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
     keyGenerator: (req: FastifyRequest) => currentUser(req).id,
   };
   const limit = app.createRateLimit(limitOptions);
+  const assertAttemptsLeft = async (req: FastifyRequest) => {
+    const attempts = await limit(req, { increment: false });
+    // isAllowed: true — только для allowList (не задан); иначе remaining — сколько неверных осталось.
+    if (!attempts.isAllowed && attempts.remaining <= 0) throw tooMany();
+  };
 
   app.post(
     '/api/runs/:id/sign',
@@ -73,14 +78,16 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
       const now = new Date();
       if (now < cert.notBefore) throw badRequest('сертификат ещё не действует');
       if (now > cert.notAfter) throw badRequest('срок действия сертификата истёк');
-      const attempts = await limit(req, { increment: false });
-      // isAllowed: true — только для allowList (не задан); иначе remaining — сколько неверных осталось.
-      if (!attempts.isAllowed && attempts.remaining <= 0) throw tooMany();
+      // Ранний 429 без ожидания блокировки; решающая проверка — внутри неё, перед паролем.
+      await assertAttemptsLeft(req);
 
-      // R9: одна подпись на запуск — блокировка '<runId>:signed' общая для всех экземпляров API.
+      // Блокировка на пользователя, а не на запуск: все попытки подписи одного пользователя (на любых
+      // запусках и экземплярах API) идут по одной, поэтому каждая видит счётчик неверных паролей с учётом
+      // предыдущих — одновременные запросы не дают больше пяти попыток (R8). Подписывает только владелец,
+      // так что одна подпись на запуск (R9) соблюдается: проверка «уже подписан» — внутри блокировки.
       const result: RunSignature = await deps.runFileGate(
         RUN_FILE_LOCK_CLASS,
-        `${run.id}:signed`,
+        `sign:${me.id}`,
         deadline,
         async (tx) => {
           // FOR SHARE: очистка ждёт конца подписи (как сборка форматов, §24.2).
@@ -96,6 +103,7 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
             .where(eq(reportRunSignatures.runId, run.id));
           if (done) throw conflict('отчёт уже подписан');
 
+          await assertAttemptsLeft(req);
           let p12: P12Contents;
           try {
             p12 = readP12(

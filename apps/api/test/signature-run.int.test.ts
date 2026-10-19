@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { reportRunSignatures, reportRuns } from '../src/db/schema';
 import type { CarboneRenderer } from '../src/deps';
@@ -236,6 +236,32 @@ describe('подпись запуска (§39.3)', () => {
     ).toHaveLength(0);
   });
 
+  it('одновременные неверные пароли на разных запусках — не больше пяти попыток (R8)', async () => {
+    const runs: string[] = [];
+    for (let i = 0; i < 9; i++) runs.push(await render(user.cookie));
+    const res = await Promise.all(runs.slice(0, 8).map((id) => signRun(user.cookie, id, 'нет')));
+    const codes = res.map((r) => r.statusCode);
+    expect(codes.filter((c) => c === 400).length).toBeLessThanOrEqual(5);
+    expect(codes.filter((c) => c !== 400 && c !== 429)).toEqual([]);
+    expect((await signRun(user.cookie, runs[8]!)).statusCode).toBe(429);
+  });
+
+  it('администратор видит чужой запуск в истории — signable: false', async () => {
+    const runId = await render(user.cookie);
+    expect((await runsOf(user.cookie)).find((r) => r.id === runId)).toMatchObject({
+      signable: true,
+    });
+    const admin = await loginAs(t, 'admin');
+    const items = (
+      await t.app.inject({
+        method: 'GET',
+        url: `/api/runs?userId=${user.user.id}`,
+        headers: { cookie: admin.cookie },
+      })
+    ).json().items as Array<{ id: string; signable: boolean }>;
+    expect(items.find((r) => r.id === runId)).toMatchObject({ signable: false });
+  });
+
   it('четыре неверных, затем верный — подписано; верные попытки счёт не увеличивают', async () => {
     const runId = await render(user.cookie);
     for (let i = 0; i < 4; i++) await signRun(user.cookie, runId, 'нет');
@@ -276,6 +302,24 @@ describe('подпись запуска (§39.3)', () => {
       const content = await t.deps.storage.read(`reports/${runId}/${name}`);
       expect(content.includes(Buffer.from(FIXTURE_PASSWORD))).toBe(false);
     }
+  });
+
+  it('вставка строки подписи упала — файл удалён, повтор подписывает (R9)', async () => {
+    const runId = await render(user.cookie);
+    await t.deps.db.execute(sql`
+      CREATE FUNCTION fail_sign_insert() RETURNS trigger LANGUAGE plpgsql AS
+        $$ BEGIN RAISE EXCEPTION 'test: insert failed'; END $$`);
+    await t.deps.db.execute(sql`
+      CREATE TRIGGER fail_sign_insert BEFORE INSERT ON report_run_signatures
+        FOR EACH ROW EXECUTE FUNCTION fail_sign_insert()`);
+    try {
+      expect((await signRun(user.cookie, runId)).statusCode).toBe(500);
+      expect(await t.deps.storage.exists(`reports/${runId}/out.signed.pdf`)).toBe(false);
+    } finally {
+      await t.deps.db.execute(sql`DROP TRIGGER fail_sign_insert ON report_run_signatures`);
+      await t.deps.db.execute(sql`DROP FUNCTION fail_sign_insert()`);
+    }
+    expect((await signRun(user.cookie, runId)).statusCode).toBe(201);
   });
 
   it('очистка по сроку удаляет подпись и файл', async () => {

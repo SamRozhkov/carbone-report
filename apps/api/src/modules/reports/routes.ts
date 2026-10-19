@@ -216,7 +216,9 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         fileAvailable: run.status === 'ok' && !!run.filePath && !run.fileDeleted,
         ...runFormats(run, built.get(run.id) ?? []),
         signature: signatures.has(run.id) ? toRunSignature(signatures.get(run.id)!) : null,
+        // Подписывает только владелец (§39.3): администратору чужой запуск подписать нельзя.
         signable:
+          run.userId === me.id &&
           run.snapshot &&
           run.status === 'ok' &&
           !run.fileDeleted &&

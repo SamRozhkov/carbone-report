@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PDF_SIGNATURE_PROTECTION_MESSAGE } from './pdf-options';
 import {
   ExportTemplatesBody,
   ImportDecisions,
@@ -315,5 +316,36 @@ describe('пароль PDF в архиве (§37.4)', () => {
         }),
       );
     }
+  });
+
+  it('подпись и защита в архиве — ошибка pdfOptions.signature (§39.2)', () => {
+    const withProt = manifest([
+      tpl({
+        pdfOptions: {
+          pdfa: false,
+          signature: { position: 'bottom-right' },
+          protection: { noPrint: true, noCopy: false, noModify: false },
+        },
+      } as never),
+    ]);
+    const r = TransferManifest.safeParse(withProt);
+    expect(r.success).toBe(false);
+    expect(r.error!.issues).toContainEqual(
+      expect.objectContaining({
+        path: ['templates', 0, 'pdfOptions', 'signature'],
+        message: PDF_SIGNATURE_PROTECTION_MESSAGE,
+      }),
+    );
+    const withPassword = manifest([
+      tpl({
+        pdfOptions: { pdfa: false, signature: { position: 'bottom-right' } },
+        pdfPasswordSet: true,
+      } as never),
+    ]);
+    expect(TransferManifest.safeParse(withPassword).success).toBe(false);
+    const ok = manifest([
+      tpl({ pdfOptions: { pdfa: true, signature: { position: 'bottom-left' } } } as never),
+    ]);
+    expect(TransferManifest.safeParse(ok).success).toBe(true);
   });
 });

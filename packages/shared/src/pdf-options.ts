@@ -82,6 +82,19 @@ export const PdfPassword = z
   // Ограничение qpdf 11.3: позиционный пароль с «-» в начале принимается за параметр.
   .refine((s) => !s.startsWith('-'), 'пароль не может начинаться с «-»');
 
+// ---- Электронная подпись (§39) ----
+
+export const PDF_SIGNATURE_PROTECTION_MESSAGE = 'Подпись несовместима с паролем и ограничениями';
+
+export const PdfSignaturePosition = z.enum(['bottom-left', 'bottom-center', 'bottom-right']);
+export type PdfSignaturePosition = z.infer<typeof PdfSignaturePosition>;
+
+/** Блок есть — шаблон разрешает подпись PDF; положение — штампа на последней странице. */
+export const PdfSignature = z.strictObject({
+  position: PdfSignaturePosition.default('bottom-right'),
+});
+export type PdfSignature = z.infer<typeof PdfSignature>;
+
 /** Выключенный блок — отсутствующий ключ (R1). */
 export const PdfOptions = z.strictObject({
   pdfa: z.boolean().default(false),
@@ -89,6 +102,7 @@ export const PdfOptions = z.strictObject({
   pageNumbers: PdfPageNumbers.optional(),
   metadata: PdfMetadata.optional(),
   protection: PdfProtection.optional(),
+  signature: PdfSignature.optional(),
 });
 export type PdfOptions = z.infer<typeof PdfOptions>;
 

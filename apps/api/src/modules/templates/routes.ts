@@ -14,6 +14,7 @@ import {
   TemplateExt,
   TemplateParam,
   TemplateQuery,
+  type TemplateTagWarnings,
   UpdateTemplateBody,
 } from '@carbone-reports/shared';
 import {
@@ -52,6 +53,7 @@ import { optionsForParam } from '../queries/param-options';
 import { checkParamDefaults } from '../queries/params';
 import { createBlankDocument } from './blank';
 import { assertNoIssues, chartIssues, queryIssuesForCharts } from './charts';
+import { findTagWarnings } from './tag-warnings';
 import { importInvalid } from './transfer/archive';
 import { buildExport } from './transfer/export';
 import { applyImport, previewImport } from './transfer/import';
@@ -319,6 +321,15 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     const row = await insertTemplate({ ...meta.data, ext, data, userId: currentUser(req).id });
     return reply.status(201).send(toSummary(row, null));
   });
+
+  app.get(
+    '/api/templates/:id/tag-warnings',
+    { ...admin, schema: { params: IdParams } },
+    async (req): Promise<TemplateTagWarnings> => {
+      const row = await loadTemplate(db, req.params.id);
+      return findTagWarnings(await templateFileRef(deps, row).read(), row.fileExt);
+    },
+  );
 
   app.put(
     '/api/templates/:id/file',

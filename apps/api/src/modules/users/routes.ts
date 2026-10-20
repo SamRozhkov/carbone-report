@@ -102,6 +102,8 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
           deps,
           { id: row.id, login: row.login, role: row.role },
           row.sessionVersion,
+          // Сессия Keycloak сохраняется: иначе back-channel и OIDC logout её уже не завершат.
+          req.oidcSessionId,
         );
       }
       return toUserDto(

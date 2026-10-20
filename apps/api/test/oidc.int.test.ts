@@ -331,6 +331,39 @@ describe('OIDC: маршруты с PostgreSQL и Redis', () => {
       401,
     );
   });
+  it('перевыпуск своей сессии после смены пароля сохраняет привязку к сессии Keycloak', async () => {
+    const first = await finish(await begin());
+    const meFirst = await app.inject({
+      url: '/api/auth/me',
+      headers: { cookie: sessionCookie(first) },
+    });
+    await t.deps.db.update(users).set({ role: 'admin' }).where(eq(users.id, meFirst.json().id));
+    // Вход заново: роль администратора читается из базы при выпуске сессии.
+    const r = await finish(await begin());
+    const me = await app.inject({ url: '/api/auth/me', headers: { cookie: sessionCookie(r) } });
+    expect(me.json().role).toBe('admin');
+    const patch = await app.inject({
+      method: 'PATCH',
+      url: '/api/users/' + me.json().id,
+      headers: { cookie: sessionCookie(r) },
+      payload: { password: 'new-local-password' },
+    });
+    expect(patch.statusCode).toBe(200);
+    const reissued = sessionCookie(patch);
+    expect(
+      (await app.inject({ url: '/api/auth/me', headers: { cookie: reissued } })).statusCode,
+    ).toBe(200);
+    const logout = await app.inject({
+      method: 'POST',
+      url: '/api/auth/oidc/backchannel-logout',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'logout_token=validated-by-test-provider',
+    });
+    expect(logout.statusCode).toBe(200);
+    expect(
+      (await app.inject({ url: '/api/auth/me', headers: { cookie: reissued } })).statusCode,
+    ).toBe(401);
+  });
   it('rejects unsigned or invalid back-channel logout', async () => {
     vi.mocked(mock.verifyLogout).mockRejectedValueOnce(new Error('bad signature'));
     expect(

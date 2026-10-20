@@ -227,6 +227,8 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
             .where(and(...criteria))
             .returning({ userId: oidcSessions.userId });
         } catch (error) {
+          // Принятая гонка: параллельная повторная доставка, пока первая падает, получит 200 как повтор;
+          // Keycloak не шлёт один и тот же токен параллельно.
           // Отзыв не выполнен: возвращаем ключ jti, иначе повторная доставка токена Keycloak
           // была бы пропущена как повтор и сессии остались бы действующими.
           await deps.redis?.del(replayKey).catch(() => {});

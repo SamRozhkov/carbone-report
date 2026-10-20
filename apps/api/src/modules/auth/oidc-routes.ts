@@ -14,10 +14,8 @@ import {
   type OidcFlow,
 } from './oidc-client';
 import { resolveOidcUser } from './oidc-users';
-import { SESSION_COOKIE } from './session';
-import { setSessionCookie } from './routes';
+import { clearSessionCookies, setSessionCookie } from './routes';
 
-const FLOW_COOKIE = 'oidc_flow';
 const random = () => randomBytes(32).toString('base64url');
 const flowKey = (state: string) => `cr:oidc:flow:${state}`;
 export function safeOidcNext(value: unknown): string {
@@ -41,6 +39,8 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
     if (!settings || !client) throw notFound('OIDC');
     return client;
   };
+  // __Secure- требует атрибут Secure; прежний `oidc_flow` не чистим: он живёт 10 минут и привязан к пути.
+  const flowCookieName = deps.config.cookieSecure ? '__Secure-oidc_flow' : 'oidc_flow';
   const flowCookie = {
     httpOnly: true,
     secure: deps.config.cookieSecure,
@@ -69,7 +69,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
       try {
         const url = await service.begin(flow);
         await deps.redis.set(flowKey(flow.state), JSON.stringify(flow), 'EX', 600, 'NX');
-        reply.setCookie(FLOW_COOKIE, flow.browser, { ...flowCookie, maxAge: 600 });
+        reply.setCookie(flowCookieName, flow.browser, { ...flowCookie, maxAge: 600 });
         return reply.redirect(url);
       } catch {
         throw new AppError(
@@ -86,10 +86,10 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
     async (req, reply) => {
       noStore(reply);
       const service = enabled();
-      reply.clearCookie(FLOW_COOKIE, flowCookie);
+      reply.clearCookie(flowCookieName, flowCookie);
       const params = new URL(req.url, settings!.redirectUri).searchParams;
       const state = params.get('state');
-      const browser = req.cookies[FLOW_COOKIE];
+      const browser = req.cookies[flowCookieName];
       if (
         !state ||
         !/^[A-Za-z0-9_-]{43}$/.test(state) ||
@@ -148,7 +148,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
         .update(oidcSessions)
         .set({ revokedAt: new Date() })
         .where(eq(oidcSessions.id, req.oidcSessionId));
-    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    clearSessionCookies(reply, deps);
     try {
       return { url: await service.logoutUrl() };
     } catch {

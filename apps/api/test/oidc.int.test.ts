@@ -491,4 +491,34 @@ describe('OIDC: маршруты с PostgreSQL и Redis', () => {
     ).map((x) => x.id);
     expect(left.sort()).toEqual([own!.id, freshRevoked].sort());
   });
+
+  it('при cookieSecure cookie потока называется __Secure-oidc_flow, сессия — __Host-session, выход чистит обе сессионные', async () => {
+    const secure = await buildApp({ ...t.deps, config: { ...t.deps.config, cookieSecure: true } });
+    try {
+      const r = await secure.inject({ url: '/api/auth/oidc/login?next=/reports' });
+      expect(r.statusCode).toBe(302);
+      const flow = r.cookies.find((x) => x.name === '__Secure-oidc_flow')!;
+      expect(flow).toBeDefined();
+      expect(r.cookies.some((x) => x.name === 'oidc_flow')).toBe(false);
+      const cb = await secure.inject({
+        url: '/api/auth/oidc/callback?code=test-code&state=' + loginFlow.state,
+        headers: { cookie: '__Secure-oidc_flow=' + flow.value },
+      });
+      expect(cb.statusCode).toBe(302);
+      const session = cb.cookies.find((x) => x.name === '__Host-session')!;
+      expect(session).toBeDefined();
+      expect(cb.cookies.some((x) => x.name === 'session')).toBe(false);
+      const out = await secure.inject({
+        method: 'POST',
+        url: '/api/auth/oidc/logout',
+        headers: { cookie: '__Host-session=' + session.value },
+      });
+      expect(out.statusCode).toBe(200);
+      const cleared = out.cookies.map((c) => c.name);
+      expect(cleared).toContain('__Host-session');
+      expect(cleared).toContain('session');
+    } finally {
+      await secure.close();
+    }
+  });
 });

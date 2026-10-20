@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createFastify, type App, type AppDeps } from '../../app';
 import { registerErrorHandler } from '../../lib/errors';
 import { makeGuards } from '../auth/guards';
-import { SESSION_COOKIE, signSession } from '../auth/session';
+import { sessionCookieName, signSession } from '../auth/session';
 import { registerVersionRoutes } from './routes';
 
 const SECRET = new TextEncoder().encode('test-secret-test-secret-test-secret');
@@ -49,7 +49,7 @@ describe('GET /api/version', () => {
     const r = await app.inject({
       method: 'GET',
       url: '/api/version',
-      cookies: { [SESSION_COOKIE]: token },
+      cookies: { [sessionCookieName(false)]: token },
     });
     expect(r.statusCode).toBe(200);
     expect(r.json()).toEqual({

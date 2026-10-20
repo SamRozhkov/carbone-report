@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { oidcSessions, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { forbidden, unauthorized } from '../../lib/errors';
-import { SESSION_COOKIE, verifySession, type SessionUser } from './session';
+import { sessionCookieName, verifySession, type SessionUser } from './session';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -20,7 +20,7 @@ export function currentUser(req: FastifyRequest): SessionUser {
 
 export function makeGuards(deps: AppDeps) {
   async function requireUser(req: FastifyRequest, _reply: FastifyReply): Promise<void> {
-    const token = req.cookies[SESSION_COOKIE];
+    const token = req.cookies[sessionCookieName(deps.config.cookieSecure)];
     const session = token ? await verifySession(token, deps.config.appSecret) : null;
     if (!session) throw unauthorized();
     // Роль, блокировка и версия сессий берутся из БД: изменения применяются сразу, без перевыпуска cookie.

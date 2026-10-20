@@ -9,7 +9,8 @@ import { AppError } from '../../lib/errors';
 import { currentUser, type Guards } from './guards';
 import { DUMMY_HASH_PROMISE, hashPassword, verifyPassword } from './password';
 import {
-  SESSION_COOKIE,
+  LEGACY_SESSION_COOKIE,
+  sessionCookieName,
   SESSION_TTL_SECONDS,
   signSession,
   verifySession,
@@ -24,7 +25,7 @@ export async function setSessionCookie(
   oidcSessionId?: string,
 ): Promise<void> {
   reply.setCookie(
-    SESSION_COOKIE,
+    sessionCookieName(deps.config.cookieSecure),
     await signSession(user, sv, deps.config.appSecret, oidcSessionId),
     {
       httpOnly: true,
@@ -34,6 +35,13 @@ export async function setSessionCookie(
       maxAge: SESSION_TTL_SECONDS,
     },
   );
+}
+
+/** Выход: очищает cookie текущего имени и, если оно другое, прежнюю `session` (иначе она останется в браузере). */
+export function clearSessionCookies(reply: FastifyReply, deps: AppDeps): void {
+  const name = sessionCookieName(deps.config.cookieSecure);
+  reply.clearCookie(name, { path: '/' });
+  if (name !== LEGACY_SESSION_COOKIE) reply.clearCookie(LEGACY_SESSION_COOKIE, { path: '/' });
 }
 
 /**
@@ -187,14 +195,14 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
   );
 
   app.post('/api/auth/logout', async (req, reply) => {
-    const token = req.cookies[SESSION_COOKIE];
+    const token = req.cookies[sessionCookieName(deps.config.cookieSecure)];
     const session = token ? await verifySession(token, deps.config.appSecret) : null;
     if (session?.oidcSessionId)
       await deps.db
         .update(oidcSessions)
         .set({ revokedAt: new Date() })
         .where(eq(oidcSessions.id, session.oidcSessionId));
-    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    clearSessionCookies(reply, deps);
     return reply.status(204).send();
   });
 
@@ -203,7 +211,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
       .update(users)
       .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
       .where(eq(users.id, currentUser(req).id));
-    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    clearSessionCookies(reply, deps);
     return reply.status(204).send();
   });
 

@@ -2,6 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { users } from '../src/db/schema';
 import { ensureAdmin } from '../src/modules/auth/bootstrap';
+import { hashPassword } from '../src/modules/auth/password';
 import { createTestApp, loginAs, type TestApp } from './helpers';
 
 let t: TestApp;
@@ -272,5 +273,44 @@ describe('отзыв сессий', () => {
       .setExpirationTime('1h')
       .sign(t.deps.config.appSecret);
     expect((await me(`session=${legacy}`)).statusCode).toBe(401);
+  });
+
+  it('при cookieSecure сессия — __Host-session (Secure, Path=/, без Domain); старое имя не принимается; выход чистит обе', async () => {
+    const ts = await createTestApp({}, { cookieSecure: true });
+    try {
+      const [u] = await ts.deps.db
+        .insert(users)
+        .values({
+          login: 'secure-user',
+          passwordHash: await hashPassword('password123'),
+          role: 'user',
+        })
+        .returning();
+      const login = await ts.app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { login: u!.login, password: 'password123' },
+      });
+      expect(login.statusCode).toBe(200);
+      const setCookie = String(login.headers['set-cookie']);
+      expect(setCookie).toMatch(/^__Host-session=/);
+      expect(setCookie).toMatch(/; Secure/i);
+      expect(setCookie).toMatch(/Path=\//);
+      expect(setCookie).not.toMatch(/Domain/i);
+      const pair = setCookie.split(';')[0]!;
+      const get = (cookie: string) =>
+        ts.app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
+      expect((await get(pair)).statusCode).toBe(200);
+      expect((await get(pair.replace('__Host-session=', 'session='))).statusCode).toBe(401);
+      for (const url of ['/api/auth/logout', '/api/auth/logout-all']) {
+        const out = await ts.app.inject({ method: 'POST', url, headers: { cookie: pair } });
+        expect(out.statusCode).toBe(204);
+        const cleared = out.cookies.map((c) => c.name);
+        expect(cleared).toContain('__Host-session');
+        expect(cleared).toContain('session');
+      }
+    } finally {
+      await ts.close();
+    }
   });
 });

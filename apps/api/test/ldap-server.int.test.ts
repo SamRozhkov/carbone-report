@@ -219,6 +219,17 @@ describe('POST /api/auth/login с настоящим LDAP', () => {
     expect(rows).toHaveLength(1);
   });
 
+  it('логин в пробелах (без loginAttribute) — тот же аккаунт, строки с пробелами не заводятся', async () => {
+    await app();
+    const padded = await login({ login: ' fry ', password: 'fry' });
+    expect(padded.statusCode).toBe(200);
+    const plain = await login({ login: 'fry', password: 'fry' });
+    expect(plain.statusCode).toBe(200);
+    expect(plain.json().id).toBe(padded.json().id);
+    const rows = await t.deps.db.select().from(users).where(eq(users.login, ' fry '));
+    expect(rows).toHaveLength(0);
+  });
+
   it('неверный пароль — 401, пользователь не заводится', async () => {
     await app();
     const res = await login({ login: 'fry', password: 'leela' });

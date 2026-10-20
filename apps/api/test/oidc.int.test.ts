@@ -53,7 +53,7 @@ describe('OIDC: маршруты с PostgreSQL и Redis', () => {
         expiresAt: new Date(Date.now() + 300000),
       })),
       logoutUrl: vi.fn(async () => 'https://keycloak.test/logout'),
-      verifyLogout: vi.fn(async () => ({ issuer: ISSUER, sid: 'provider-sid' })),
+      verifyLogout: vi.fn(async () => ({ issuer: ISSUER, jti: randomUUID(), sid: 'provider-sid' })),
     };
     t = await createTestApp(
       { oidcClient: mock, ldap },
@@ -161,12 +161,71 @@ describe('OIDC: маршруты с PostgreSQL и Redis', () => {
   it('does not merge an existing LDAP account by login', async () => {
     actualName = 'existing-ldap-user';
     const r = await finish(await begin());
-    expect(r.statusCode).toBe(409);
+    expect(r.statusCode).toBe(403);
+    expect(r.json().error.code).toBe('OIDC_LOGIN_UNAVAILABLE');
     const ids = await t.deps.db
       .select()
       .from(oidcIdentities)
       .where(eq(oidcIdentities.subject, actualSubject));
     expect(ids).toHaveLength(0);
+  });
+  it('callback: ADMIN_LOGIN и занятый логин получают одинаковый отказ (без различимых кодов)', async () => {
+    actualName = 'RECOVERY-ADMIN';
+    const reserved = await finish(await begin());
+    actualName = 'existing-ldap-user';
+    const taken = await finish(await begin());
+    for (const r of [reserved, taken]) {
+      expect(r.statusCode).toBe(403);
+      expect(r.json().error.code).toBe('OIDC_LOGIN_UNAVAILABLE');
+    }
+    expect(reserved.json().error.message).toBe(taken.json().error.message);
+  });
+  it('повтор того же logout token (jti) пропускается и не отзывает новую сессию', async () => {
+    const sub = 'subject-' + randomUUID();
+    const logout = () =>
+      app.inject({
+        method: 'POST',
+        url: '/api/auth/oidc/backchannel-logout',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: 'logout_token=validated-by-test-provider',
+      });
+    const jti = randomUUID();
+    vi.mocked(mock.verifyLogout).mockResolvedValue({ issuer: ISSUER, jti, subject: sub });
+    try {
+      actualSubject = sub;
+      const first = await finish(await begin());
+      expect((await logout()).statusCode).toBe(200);
+      expect(
+        (await app.inject({ url: '/api/auth/me', headers: { cookie: sessionCookie(first) } }))
+          .statusCode,
+      ).toBe(401);
+      // Второй вход того же sub; повтор того же токена не должен его отозвать.
+      const second = await finish(await begin());
+      expect((await logout()).statusCode).toBe(200);
+      const rows = await t.deps.db.select().from(oidcSessions).where(eq(oidcSessions.subject, sub));
+      expect(rows.filter((x) => x.revokedAt === null)).toHaveLength(1);
+      expect(
+        (await app.inject({ url: '/api/auth/me', headers: { cookie: sessionCookie(second) } }))
+          .statusCode,
+      ).toBe(200);
+      // Контроль: другой jti с тем же sub отзывает.
+      vi.mocked(mock.verifyLogout).mockResolvedValue({
+        issuer: ISSUER,
+        jti: randomUUID(),
+        subject: sub,
+      });
+      expect((await logout()).statusCode).toBe(200);
+      expect(
+        (await app.inject({ url: '/api/auth/me', headers: { cookie: sessionCookie(second) } }))
+          .statusCode,
+      ).toBe(401);
+    } finally {
+      vi.mocked(mock.verifyLogout).mockImplementation(async () => ({
+        issuer: ISSUER,
+        jti: randomUUID(),
+        sid: 'provider-sid',
+      }));
+    }
   });
   it('administrator explicitly links existing account preserving its ID', async () => {
     actualName = 'existing-ldap-user';
@@ -184,7 +243,9 @@ describe('OIDC: маршруты с PostgreSQL и Redis', () => {
   });
   it('never links or provisions the recovery administrator', async () => {
     actualName = 'RECOVERY-ADMIN';
-    expect((await finish(await begin())).statusCode).toBe(403);
+    const reserved = await finish(await begin());
+    expect(reserved.statusCode).toBe(403);
+    expect(reserved.json().error.code).toBe('OIDC_LOGIN_UNAVAILABLE');
     const token = await app.inject({ url: '/api/auth/me', headers: { cookie: adminCookie } });
     const link = await app.inject({
       method: 'POST',
@@ -283,7 +344,7 @@ describe('OIDC: маршруты с PostgreSQL и Redis', () => {
     expect((await app.inject({ url: '/api/auth/me', headers: { cookie: sc } })).statusCode).toBe(
       401,
     );
-    expect((await finish(await begin())).statusCode).toBe(409);
+    expect((await finish(await begin())).statusCode).toBe(403);
   });
   it('disabling OIDC invalidates OIDC sessions while local admin stays valid', async () => {
     const r = await finish(await begin());

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { FastifyBaseLogger } from 'fastify';
 import { and, eq, lt, or, sql } from 'drizzle-orm';
 import type { AppDeps } from '../../deps';
 import { oidcIdentities, oidcSessions, users } from '../../db/schema';
@@ -6,14 +7,24 @@ import { AppError } from '../../lib/errors';
 import { hashPassword } from './password';
 import type { OidcPerson } from './oidc-client';
 
-export async function resolveOidcUser(deps: AppDeps, person: OidcPerson) {
+export async function resolveOidcUser(
+  deps: AppDeps,
+  person: OidcPerson,
+  log?: Pick<FastifyBaseLogger, 'warn'>,
+) {
+  // Один и тот же ответ для всех отказов по логину: причина — только в журнале, иначе по коду
+  // ошибки можно выяснить, занят ли логин и является ли он логином встроенного администратора.
+  const unavailable: (reason: string) => never = (reason) => {
+    log?.warn({ login: person.username, sub: person.subject }, `OIDC: вход отклонён — ${reason}`);
+    throw new AppError(
+      'OIDC_LOGIN_UNAVAILABLE',
+      403,
+      'вход через Keycloak для этой учётной записи недоступен — обратитесь к администратору',
+    );
+  };
   // Never attach a directory identity to the recovery administrator.
   if (person.username.toLowerCase() === (deps.config.adminLogin ?? '').toLowerCase())
-    throw new AppError(
-      'OIDC_ACCOUNT_RESERVED',
-      403,
-      'эта учётная запись доступна только для локального входа',
-    );
+    unavailable('логин встроенного администратора');
   return deps.db.transaction(async (tx) => {
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify([person.issuer, person.subject])}, 0))`,
@@ -31,12 +42,7 @@ export async function resolveOidcUser(deps: AppDeps, person: OidcPerson) {
         .select()
         .from(users)
         .where(sql`lower(${users.login}) = lower(${person.username})`);
-      if (existing)
-        throw new AppError(
-          'OIDC_ACCOUNT_LINK_REQUIRED',
-          409,
-          'учётная запись уже существует: администратор должен привязать Keycloak к ней',
-        );
+      if (existing) unavailable('логин занят, нужна привязка администратором');
       [user] = await tx
         .insert(users)
         .values({
@@ -47,12 +53,7 @@ export async function resolveOidcUser(deps: AppDeps, person: OidcPerson) {
         })
         .onConflictDoNothing()
         .returning();
-      if (!user)
-        throw new AppError(
-          'OIDC_ACCOUNT_LINK_REQUIRED',
-          409,
-          'требуется привязка учётной записи администратором',
-        );
+      if (!user) unavailable('логин занят, нужна привязка администратором');
       await tx
         .insert(oidcIdentities)
         .values({ issuer: person.issuer, subject: person.subject, userId: user.id });

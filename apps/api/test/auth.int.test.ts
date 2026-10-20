@@ -115,6 +115,23 @@ describe('auth', () => {
     expect((await attempt(other.user.login, 'password123')).statusCode).toBe(200);
   });
 
+  it('логин в пробелах: вход тем же пользователем; из одних пробелов — 400 VALIDATION', async () => {
+    const spaced = await t.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: '  root  ', password: 'rootpass123' },
+    });
+    expect(spaced.statusCode).toBe(200);
+    expect(spaced.json()).toMatchObject({ login: 'root', role: 'admin' });
+    const blank = await t.app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: '   ', password: 'rootpass123' },
+    });
+    expect(blank.statusCode).toBe(400);
+    expect(blank.json().error.code).toBe('VALIDATION');
+  });
+
   it('пароль длиннее 1024 символов при входе → 400', async () => {
     const res = await t.app.inject({
       method: 'POST',

@@ -1,4 +1,4 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { App } from '../../app';
@@ -128,7 +128,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
           'не удалось подтвердить вход через Keycloak',
         );
       }
-      const { user, sessionId } = await resolveOidcUser(deps, person);
+      const { user, sessionId } = await resolveOidcUser(deps, person, req.log);
       req.log.info({ userId: user.id }, 'OIDC: вход выполнен');
       await setSessionCookie(
         reply,
@@ -197,6 +197,24 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
           }
           req.log.warn({ reason }, 'OIDC: back-channel logout отклонён');
           throw new AppError('OIDC_INVALID_LOGOUT', 400, 'неверный logout token');
+        }
+        // Повтор того же logout token (jti) пропускаем: иначе перехваченный токен отзывал бы
+        // и сессии, заведённые после него. Redis недоступен — проверить нельзя: 503, Keycloak повторит.
+        const replayKey = `cr:oidc:logout-jti:${createHash('sha256').update(`${identity.issuer}\n${identity.jti}`).digest('hex')}`;
+        let fresh;
+        try {
+          if (!deps.redis) throw new Error('Redis не настроен');
+          fresh = await deps.redis.set(replayKey, '1', 'EX', 600, 'NX');
+        } catch (error) {
+          req.log.error(
+            { reason: (error as Error).message },
+            'OIDC: back-channel logout не проверен — Redis недоступен',
+          );
+          throw new AppError('OIDC_UNAVAILABLE', 503, 'Keycloak недоступен, повторите позже');
+        }
+        if (fresh !== 'OK') {
+          req.log.info('OIDC: повтор back-channel logout пропущен');
+          return reply.status(200).send();
         }
         const criteria = [eq(oidcSessions.issuer, identity.issuer)];
         if (identity.sid) criteria.push(eq(oidcSessions.providerSid, identity.sid));

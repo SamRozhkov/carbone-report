@@ -18,7 +18,7 @@ export type OidcPerson = {
   sid?: string;
   expiresAt: Date;
 };
-export type LogoutPerson = { issuer: string; subject?: string; sid?: string };
+export type LogoutPerson = { issuer: string; jti: string; subject?: string; sid?: string };
 export type Discover = (config: OidcConfig) => Promise<oidc.Configuration>;
 
 /**
@@ -167,8 +167,11 @@ export function createOidcClient(
         (typeof payload.sid !== 'string' && typeof payload.sub !== 'string')
       )
         throw new Error('Invalid logout token');
+      // jti обязателен (requiredClaims), но тип проверяем: он ключ защиты от повтора токена.
+      if (typeof payload.jti !== 'string') throw new Error('Invalid logout token');
       return {
         issuer: settings.issuer,
+        jti: payload.jti,
         ...(typeof payload.sid === 'string' ? { sid: payload.sid } : {}),
         ...(typeof payload.sub === 'string' ? { subject: payload.sub } : {}),
       };

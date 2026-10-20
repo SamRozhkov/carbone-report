@@ -34,10 +34,21 @@ export const redactToken = (url?: string) => url?.replace(/([?&])t=[^&]*/g, '$1t
 
 /**
  * URL запроса для журнала: у маршрутов OIDC query не пишется вовсе — в callback это код
- * авторизации и state; у остальных скрыт токен файлового доступа.
+ * авторизации и state; у остальных скрыт токен файлового доступа. Маршрут определяется по
+ * декодированному пути (`/api/auth/%6fidc/...` — тот же маршрут); битая кодировка не бросает
+ * исключение — иначе упало бы логирование запроса.
  */
-export const logUrl = (url?: string) =>
-  url?.startsWith('/api/auth/oidc/') ? url.split('?')[0] : redactToken(url);
+export const logUrl = (url?: string) => {
+  if (url === undefined) return url;
+  const path = url.split('?')[0]!;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+  return decoded.startsWith('/api/auth/oidc/') ? path : redactToken(url);
+};
 
 /**
  * Сколько прокси стоит перед API. Сейчас один — nginx: req.ip — последний адрес

@@ -66,10 +66,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: qpdf для тестов шифрования PDF
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qpdf
+      - name: pyHanko для проверки подписи PDF
+        run: pipx install pyhanko-cli==0.6.0
       - run: pnpm test:int
         env:
           TEST_ONLYOFFICE: '1'
           REQUIRE_QPDF: '1'
+          REQUIRE_PYHANKO: '1'
 
   chart:
     name: Чарт Helm

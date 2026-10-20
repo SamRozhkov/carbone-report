@@ -17,6 +17,8 @@ import { createAgentClient } from './modules/backups/agent-client';
 import { createSourcePools } from './modules/datasources/pools';
 import { createOnlyOfficeCommands } from './modules/onlyoffice/commands';
 import { createPoolPdfPostprocessor } from './modules/pdf/postprocessor';
+import { createPoolP12Reader } from './modules/pdf/sign/p12-reader';
+import { createPoolSignPreparer } from './modules/pdf/sign/preparer';
 import { createQpdfProtector, qpdfVersion } from './modules/pdf/protect';
 import { createRenderHandoff } from './modules/render/handoff';
 import { createOnlyOfficeConverter } from './modules/render/onlyoffice-convert';
@@ -100,6 +102,8 @@ const deps: AppDeps = {
   sources: createSourcePools({ db, config }),
   carbone,
   pdf: createPoolPdfPostprocessor(renderPool),
+  pdfSignPrepare: createPoolSignPreparer(renderPool),
+  p12Read: createPoolP12Reader(renderPool),
   pdfProtect: createQpdfProtector({ maxConcurrent: config.renderWorkers }),
   onlyoffice: createOnlyOfficeCommands({
     baseUrl: config.onlyofficeInternalUrl,

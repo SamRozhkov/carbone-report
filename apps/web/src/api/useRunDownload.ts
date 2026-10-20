@@ -7,6 +7,7 @@ import { runFileUrl } from './endpoints';
 export interface RunFileRequest {
   runId: string;
   format: OutputFormat;
+  signed?: boolean;
 }
 
 /**
@@ -16,8 +17,8 @@ export interface RunFileRequest {
 export function useRunDownload() {
   const queryClient = useQueryClient();
   const m = useMutation({
-    mutationFn: async ({ runId, format }: RunFileRequest) => {
-      const { blob, filename } = await apiFile(runFileUrl(runId, { format }));
+    mutationFn: async ({ runId, format, signed }: RunFileRequest) => {
+      const { blob, filename } = await apiFile(runFileUrl(runId, { format, signed }));
       const url = URL.createObjectURL(blob);
       triggerDownload(url, filename);
       // Ссылка нужна браузеру, пока он забирает файл; потом память освобождается.

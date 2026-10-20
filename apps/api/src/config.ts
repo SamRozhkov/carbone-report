@@ -103,6 +103,20 @@ const Env = z
     REPORT_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
     REPORT_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
     TZ: z.string().default('Europe/Moscow'),
+    // Служба меток времени для подписи PDF (§39.6); пусто — подпись без метки.
+    SIGN_TSA_URL: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.url({ protocol: /^https?$/, error: 'SIGN_TSA_URL: адрес http:// или https://' }).optional(),
+    ),
+    SIGN_TSA_TIMEOUT_MS: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.coerce
+        .number({ error: 'целое от 1000 до 60000' })
+        .int('целое от 1000 до 60000')
+        .min(1000, 'целое от 1000 до 60000')
+        .max(60000, 'целое от 1000 до 60000')
+        .default(10000),
+    ),
     PORT: z.coerce.number().int().default(3000),
     COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
     OIDC_ENABLED: z.enum(['true', 'false']).default('false'),
@@ -302,6 +316,9 @@ export interface Config {
   reportTimeoutMs: number;
   reportRetentionDays: number;
   tz: string;
+  /** Служба меток времени подписи PDF (§39.6); null — без метки. */
+  signTsaUrl: string | null;
+  signTsaTimeoutMs: number;
   port: number;
   cookieSecure: boolean;
   /** Версия сборки: тег выпуска без `v` или `dev`. */
@@ -413,6 +430,8 @@ export function loadConfig(
     reportTimeoutMs: e.REPORT_TIMEOUT_MS,
     reportRetentionDays: e.REPORT_RETENTION_DAYS,
     tz: e.TZ,
+    signTsaUrl: e.SIGN_TSA_URL ?? null,
+    signTsaTimeoutMs: e.SIGN_TSA_TIMEOUT_MS,
     port: e.PORT,
     cookieSecure: e.COOKIE_SECURE === 'true',
     appVersion: e.APP_VERSION,

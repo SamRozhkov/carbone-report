@@ -23,6 +23,8 @@ data:
   IMAGE_URL_ALLOWLIST: {{ .Values.config.imageUrlAllowlist | toString | quote }}
   IMAGE_URL_TIMEOUT_MS: {{ .Values.config.imageUrlTimeoutMs | toString | quote }}
   REPORT_TIMEOUT_MS: {{ .Values.config.reportTimeoutMs | toString | quote }}
+  SIGN_TSA_URL: {{ .Values.config.signTsaUrl | toString | quote }}
+  SIGN_TSA_TIMEOUT_MS: {{ .Values.config.signTsaTimeoutMs | toString | quote }}
   REPORT_RETENTION_DAYS: {{ .Values.config.reportRetentionDays | toString | quote }}
   {{- if .Values.config.renderWorkers }}
   RENDER_WORKERS: {{ .Values.config.renderWorkers | toString | quote }}

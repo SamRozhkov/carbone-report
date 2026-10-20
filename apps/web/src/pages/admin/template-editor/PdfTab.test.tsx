@@ -218,7 +218,7 @@ describe('PdfTab — защита (§37.3)', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'PDF/A-2b' }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Запретить копирование текста' }));
     expect(screen.getByRole('checkbox', { name: 'PDF/A-2b' })).toBeDisabled();
-    expect(screen.getByText('Недоступно при пароле или запретах')).toBeInTheDocument();
+    expect(screen.getAllByText('Недоступно при пароле или запретах').length).toBeGreaterThan(0);
   });
 
   it('ошибка пароля — у поля', async () => {
@@ -240,5 +240,142 @@ describe('PdfTab — защита (§37.3)', () => {
     await userEvent.type(await screen.findByLabelText('Пароль на открытие'), 'abc');
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
     expect(await screen.findByText('пароль — от 4 до 64 символов')).toBeInTheDocument();
+  });
+});
+
+describe('PdfTab — электронная подпись (§39.2)', () => {
+  const base = { ...adminTemplate, pdfOptions: { pdfa: false } } as TemplateAdminDetails;
+  const SAVE = { method: 'PUT', path: '/api/templates/t1/pdf-options', body: base } as const;
+  const pick = async (name: string) => {
+    await userEvent.click(screen.getByRole('combobox', { name: 'Положение штампа' }));
+    await userEvent.click(await screen.findByRole('option', { name }));
+  };
+
+  it('флажок включает положение (по умолчанию справа); сохранение и выключение', async () => {
+    const { calls } = mockApi([SAVE]);
+    renderWithProviders(<PdfTab template={base} />);
+    expect(screen.queryByRole('combobox', { name: 'Положение штампа' })).toBeNull();
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Разрешить подпись PDF' }));
+    expect(screen.getByRole('combobox', { name: 'Положение штампа' })).toHaveTextContent(
+      'Внизу справа',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]!.body).toEqual({ pdfa: false, signature: { position: 'bottom-right' } });
+  });
+
+  it('выбор «Внизу слева» отправляет bottom-left', async () => {
+    const { calls } = mockApi([SAVE]);
+    renderWithProviders(<PdfTab template={base} />);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Разрешить подпись PDF' }));
+    await pick('Внизу слева');
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]!.body).toEqual({ pdfa: false, signature: { position: 'bottom-left' } });
+  });
+
+  it('выключение подписи — тело без signature', async () => {
+    const on = {
+      ...base,
+      pdfOptions: { pdfa: false, signature: { position: 'bottom-left' } },
+    } as TemplateAdminDetails;
+    const { calls } = mockApi([SAVE]);
+    renderWithProviders(<PdfTab template={on} />);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Разрешить подпись PDF' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]!.body).not.toHaveProperty('signature');
+  });
+
+  it('пояснения видны', async () => {
+    mockApi([]);
+    renderWithProviders(<PdfTab template={base} />);
+    expect(
+      await screen.findByText(
+        'Отчёт подписывает пользователь своим сертификатом после формирования.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Штамп ставится поверх последней страницы — оставьте внизу последней страницы 110 пт.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('запрет или пароль делают подпись недоступной', async () => {
+    mockApi([]);
+    const { unmount } = renderWithProviders(<PdfTab template={base} />);
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: 'Запретить копирование текста' }),
+    );
+    expect(screen.getByRole('checkbox', { name: 'Разрешить подпись PDF' })).toBeDisabled();
+    expect(screen.getAllByText('Недоступно при пароле или запретах')).toHaveLength(2);
+    unmount();
+    renderWithProviders(
+      <PdfTab template={{ ...base, pdfPasswordSet: true } as TemplateAdminDetails} />,
+    );
+    expect(await screen.findByRole('checkbox', { name: 'Разрешить подпись PDF' })).toBeDisabled();
+  });
+
+  it('подпись блокирует защиту, PDF/A остаётся активным', async () => {
+    mockApi([]);
+    renderWithProviders(<PdfTab template={base} />);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Разрешить подпись PDF' }));
+    expect(screen.getByText('Недоступно при электронной подписи')).toBeInTheDocument();
+    for (const n of ['Запретить печать', 'Запретить копирование текста', 'Запретить изменение']) {
+      expect(screen.getByRole('checkbox', { name: n })).toBeDisabled();
+    }
+    expect(screen.getByLabelText('Пароль на открытие')).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'PDF/A-2b' })).toBeEnabled();
+  });
+
+  it('при заданном пароле кнопки «Сменить»/«Убрать» неактивны при подписи', async () => {
+    mockApi([]);
+    const withPw = {
+      ...base,
+      pdfPasswordSet: true,
+      pdfOptions: { pdfa: false, signature: { position: 'bottom-right' } },
+    } as TemplateAdminDetails;
+    renderWithProviders(<PdfTab template={withPw} />);
+    expect(await screen.findByRole('button', { name: 'Сменить' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Убрать' })).toBeDisabled();
+  });
+
+  it('ошибка сервера у /signature — под блоком', async () => {
+    mockApi([
+      {
+        method: 'PUT',
+        path: '/api/templates/t1/pdf-options',
+        status: 400,
+        body: {
+          error: {
+            code: 'VALIDATION',
+            message: 'неверные данные запроса',
+            details: [
+              { path: '/signature', message: 'Подпись несовместима с паролем и ограничениями' },
+            ],
+          },
+        },
+      },
+    ]);
+    renderWithProviders(<PdfTab template={base} />);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Разрешить подпись PDF' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
+    expect(
+      await screen.findByText('Подпись несовместима с паролем и ограничениями'),
+    ).toBeInTheDocument();
+  });
+
+  it('черновик: снятый флажок не теряет выбранное положение', async () => {
+    mockApi([]);
+    renderWithProviders(<PdfTab template={base} />);
+    const box = await screen.findByRole('checkbox', { name: 'Разрешить подпись PDF' });
+    await userEvent.click(box);
+    await pick('Внизу по центру');
+    await userEvent.click(box);
+    await userEvent.click(box);
+    expect(screen.getByRole('combobox', { name: 'Положение штампа' })).toHaveTextContent(
+      'Внизу по центру',
+    );
   });
 });

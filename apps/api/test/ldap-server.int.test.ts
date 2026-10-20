@@ -21,7 +21,13 @@ let url: string;
 beforeAll(async () => {
   ldap = await new GenericContainer(LDAP_IMAGE)
     .withExposedPorts(389)
-    .withWaitStrategy(Wait.forLogMessage(/slapd starting/))
+    // «slapd starting» печатается до listen() в потоке демона: на загруженном раннере первые подключения
+    // отклонялись. Ждём настоящий ответ каталога изнутри контейнера.
+    .withWaitStrategy(
+      Wait.forSuccessfulCommand(
+        `ldapsearch -x -LLL -H ldap://localhost -b ${BASE_DN} '(uid=fry)' dn | grep -q '^dn:'`,
+      ),
+    )
     .start();
   url = `ldap://${ldap.getHost()}:${ldap.getMappedPort(389)}`;
 }, 120_000);
@@ -47,6 +53,13 @@ function capturingLog() {
   return { warnings, log: { warn: (msg: string) => warnings.push(msg) } };
 }
 
+/** Успешный вход; при провале в сообщении видны предупреждения аутентификатора (причина ошибки LDAP). */
+async function expectLogin(over: Partial<LdapConfig>, login: string, password: string) {
+  const { warnings, log } = capturingLog();
+  const ok = await createLdapAuthenticator(cfg(over), log).authenticate(login, password);
+  expect({ ok, warnings }).toEqual({ ok: true, warnings: [] });
+}
+
 describe('LDAP-аутентификатор с настоящим сервером OpenLDAP', () => {
   it('верный пароль — успех; поиск анонимный', async () => {
     const { warnings, log } = capturingLog();
@@ -66,6 +79,15 @@ describe('LDAP-аутентификатор с настоящим серверо
   it('DN с не-ASCII символами (bender) — успех', async () => {
     const auth = createLdapAuthenticator(cfg(), capturingLog().log);
     expect(await auth.authenticate('bender', 'bender')).toBe('bender');
+    await expectLogin({}, 'fry', 'fry');
+  });
+
+  it('верный пароль — успех; поиск от сервисной учётной записи', async () => {
+    await expectLogin({ bindDn: ADMIN_DN, bindPassword: ADMIN_PASSWORD }, 'fry', 'fry');
+  });
+
+  it('DN с не-ASCII символами (bender) — успех', async () => {
+    await expectLogin({}, 'bender', 'bender');
   });
 
   it('неверный пароль, неизвестный логин и пустой пароль — отказ', async () => {
@@ -93,6 +115,9 @@ describe('LDAP-аутентификатор с настоящим серверо
     expect(await auth.authenticate('fry', 'fry')).toBeNull();
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('employeeNumber');
+  it('фильтр с несколькими %s: вход по uid или по почте', async () => {
+    await expectLogin({ userFilter: '(|(uid=%s)(mail=%s))' }, 'fry', 'fry');
+    await expectLogin({ userFilter: '(|(uid=%s)(mail=%s))' }, 'fry@planetexpress.com', 'fry');
   });
 
   it('фильтр нашёл больше одной записи — отказ', async () => {

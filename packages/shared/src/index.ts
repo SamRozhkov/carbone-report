@@ -2,11 +2,13 @@ import { z } from 'zod';
 import { TemplateChart } from './charts';
 import { PdfOptions, TemplateAttachment } from './pdf-options';
 import { TemplateEditingBy } from './edit-lock';
+import { RunSignature } from './signature';
 
 z.config(z.locales.ru());
 
 export * from './charts';
 export * from './pdf-options';
+export * from './signature';
 export * from './edit-lock';
 
 export const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
@@ -126,6 +128,8 @@ export const UserDto = z.object({
   blocked: z.boolean(),
   groupIds: z.array(z.string()),
   createdAt: z.string(),
+  /** Срок сертификата подписи (§39.1); null — не загружен. */
+  certificateNotAfter: z.string().nullable(),
 });
 export type UserDto = z.infer<typeof UserDto>;
 
@@ -279,6 +283,8 @@ export type TemplateSummary = z.infer<typeof TemplateSummary>;
 export const TemplateDetails = TemplateSummary.extend({
   params: z.array(TemplateParamDto),
   outputFormats: z.array(OutputFormat),
+  /** Шаблон разрешает подпись PDF (§39.2). */
+  signatureAllowed: z.boolean(),
 });
 export type TemplateDetails = z.infer<typeof TemplateDetails>;
 
@@ -359,6 +365,10 @@ export const RunDto = z.object({
   formats: z.array(OutputFormat),
   /** Уже собранные форматы. */
   readyFormats: z.array(OutputFormat),
+  /** Подпись запуска (§39.3); null — не подписан. */
+  signature: RunSignature.nullable(),
+  /** Можно подписать: снимок, ok, файл есть, подпись разрешена в снимке, ещё не подписан. */
+  signable: z.boolean(),
   durationMs: z.number(),
   createdAt: z.string(),
 });

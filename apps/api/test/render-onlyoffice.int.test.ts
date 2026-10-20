@@ -8,6 +8,13 @@ import type { CarboneRenderer, TemplateFileRef } from '../src/deps';
 import { registerErrorHandler } from '../src/lib/errors';
 import { inspectPdf } from '../src/modules/pdf/inspect';
 import { postprocessPdf } from '../src/modules/pdf/postprocess';
+import { fixture, FIXTURE_PASSWORD } from '../src/modules/pdf/sign/fixtures';
+import { readP12 } from '../src/modules/pdf/sign/p12';
+import { inProcessSignPreparer } from '../src/modules/pdf/sign/preparer';
+import { signPdf } from '../src/modules/pdf/sign/sign-pdf';
+import { P12Signer } from '../src/modules/pdf/sign/signer';
+import { startTestTsa } from '../src/modules/pdf/sign/test-tsa';
+import { createTsaClient } from '../src/modules/pdf/sign/tsa';
 import { pageTexts } from '../src/modules/pdf/test-pdf';
 import { createRenderHandoff, type RenderHandoff } from '../src/modules/render/handoff';
 import { createOnlyOfficeConverter } from '../src/modules/render/onlyoffice-convert';
@@ -16,6 +23,7 @@ import { createEmbeddedRenderer } from '../src/modules/render/renderer';
 import { registerRenderRoutes } from '../src/modules/render/routes';
 import { renderWorkerUrl } from '../src/modules/render/worker-url';
 import { ONLYOFFICE_IMAGE, VERAPDF_IMAGE } from './images';
+import { pyhankoAvailable, pyhankoValidate } from './pyhanko';
 
 // Настоящий Document Server весит около 3,4 ГБ: тест идёт только в CI (TEST_ONLYOFFICE=1).
 const enabled = Boolean(process.env.TEST_ONLYOFFICE);
@@ -842,6 +850,62 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
       );
     },
     CONVERT_TIMEOUT * 3,
+  );
+
+  it(
+    'PDF/A + обработка §36 + подпись с меткой: pyHanko принимает подпись, veraPDF — PDF/A-2B (§39.7)',
+    async () => {
+      const roA = { ...(ro('pdf') as object), pdfa: true } as never;
+      const report = await diagnose('pdfa подпись', async () =>
+        renderer.render(
+          tpl('docx', await docxTemplate(wp('Компания: {d.name}') + wp('Счёт № 42'))),
+          { name: NAME },
+          roA,
+        ),
+      );
+      const processed = await postprocessPdf(report, {
+        pdfa: true,
+        watermark: { text: 'ЧЕРНОВИК', opacity: 20, color: 'red', angle: 'diagonal' },
+        pageNumbers: {
+          format: 'Стр. {page} из {pages}',
+          position: 'bottom-center',
+          skipFirst: false,
+        },
+        metadata: {
+          title: 'Счёт № 42',
+          author: 'Отдел продаж',
+          subject: 'Оплата',
+          keywords: 'счёт',
+        },
+        attachments: [],
+        now: new Date().toISOString(),
+      });
+      const tsa = await startTestTsa();
+      try {
+        const signer = new P12Signer(
+          readP12(fixture('rsa.p12'), FIXTURE_PASSWORD),
+          createTsaClient(tsa.url, 5000),
+        );
+        const signedPdf = await signPdf(Buffer.from(processed), signer, {
+          position: 'bottom-right',
+          now: new Date(),
+          timeZone: 'Europe/Moscow',
+          deadline: Date.now() + 60_000,
+          prepare: inProcessSignPreparer,
+        });
+        const checked = await verapdf(signedPdf);
+        expect(checked.compliant, `PDF/A после подписи:\n${checked.failed}`).toBe(true);
+        // В CI pyHanko обязателен (REQUIRE_PYHANKO=1): без него pyhankoAvailable бросает.
+        if (await pyhankoAvailable()) {
+          const out = await pyhankoValidate(signedPdf);
+          expect(out).toContain('INTACT:TRUSTED');
+          expect(out).toContain('TIMESTAMP_TOKEN<INTACT:TRUSTED>');
+        }
+      } finally {
+        await tsa.close();
+      }
+    },
+    CONVERT_TIMEOUT * 2,
   );
 
   it(

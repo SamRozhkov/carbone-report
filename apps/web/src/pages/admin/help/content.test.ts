@@ -14,7 +14,7 @@ const canonicalRow = (line: string) => {
 };
 
 describe('содержание справки', () => {
-  it('одиннадцать разделов в порядке §23.2 (+ §32, §34, §35)', () => {
+  it('двенадцать разделов в порядке §23.2 (+ §32, §34, §35, §39)', () => {
     expect(HELP_SECTIONS.map((s) => [s.id, s.title])).toEqual([
       ['basics', 'Основы'],
       ['tables', 'Таблицы'],
@@ -27,9 +27,21 @@ describe('содержание справки', () => {
       ['echarts', 'Графики ECharts'],
       ['html', 'HTML'],
       ['pdf', 'PDF: PDF/A, водяной знак, нумерация, приложения, пароль'],
+      ['signature', 'Электронная подпись'],
       ['unavailable', 'Недоступно в бесплатной версии'],
     ]);
-    for (const s of HELP_SECTIONS) expect(s.examples.length, s.id).toBeGreaterThan(0);
+    // Раздел «Электронная подпись» — только текст: подпись не тег, примеров Carbone у неё нет.
+    for (const s of HELP_SECTIONS.filter((x) => x.id !== 'signature'))
+      expect(s.examples.length, s.id).toBeGreaterThan(0);
+  });
+
+  it('раздел «Электронная подпись» идёт после PDF и называет место под штамп и страницу подписи', () => {
+    const ids = HELP_SECTIONS.map((s) => s.id);
+    expect(ids.indexOf('signature')).toBe(ids.indexOf('pdf') + 1);
+    const text = HELP_SECTIONS.find((s) => s.id === 'signature')!.intro.join('\n');
+    expect(text).toContain('110 пт');
+    expect(text).toContain('Моя подпись');
+    expect(text).toContain('SIGN_TSA_URL');
   });
 
   it('data каждого примера — корректный JSON-объект', () => {

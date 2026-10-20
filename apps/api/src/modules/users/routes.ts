@@ -1,22 +1,28 @@
 import { CreateUserBody, IdParams, UpdateUserBody, type UserDto } from '@carbone-reports/shared';
 import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
 import type { App } from '../../app';
-import { reportRuns, userGroups, users, type UserRow } from '../../db/schema';
+import { reportRuns, userCertificates, userGroups, users, type UserRow } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { isUniqueViolation } from '../../lib/db-errors';
 import { badRequest, conflict, notFound, unauthorized } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
 import { hashPassword } from '../auth/password';
 import { setSessionCookie } from '../auth/routes';
+import { loadUserCertificate } from '../signature/certificates';
 import { runStoragePath } from '../reports/snapshot';
 
-export const toUserDto = (r: UserRow, groupIds: string[] = []): UserDto => ({
+export const toUserDto = (
+  r: UserRow,
+  groupIds: string[] = [],
+  certificateNotAfter: Date | null = null,
+): UserDto => ({
   id: r.id,
   login: r.login,
   role: r.role,
   blocked: r.blocked,
   groupIds,
   createdAt: r.createdAt.toISOString(),
+  certificateNotAfter: certificateNotAfter?.toISOString() ?? null,
 });
 
 const userGroupIds = async (deps: AppDeps, userId: string) =>
@@ -37,7 +43,11 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
     const links = await deps.db.select().from(userGroups);
     const byUser = new Map<string, string[]>();
     for (const l of links) byUser.set(l.userId, [...(byUser.get(l.userId) ?? []), l.groupId]);
-    return rows.map((r) => toUserDto(r, byUser.get(r.id)?.sort()));
+    const certs = await deps.db
+      .select({ userId: userCertificates.userId, notAfter: userCertificates.notAfter })
+      .from(userCertificates);
+    const notAfter = new Map(certs.map((c) => [c.userId, c.notAfter]));
+    return rows.map((r) => toUserDto(r, byUser.get(r.id)?.sort(), notAfter.get(r.id) ?? null));
   });
 
   app.post('/api/users', { ...pre, schema: { body: CreateUserBody } }, async (req, reply) => {
@@ -94,7 +104,11 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
           row.sessionVersion,
         );
       }
-      return toUserDto(row, await userGroupIds(deps, row.id));
+      return toUserDto(
+        row,
+        await userGroupIds(deps, row.id),
+        (await loadUserCertificate(deps.db, row.id))?.notAfter ?? null,
+      );
     },
   );
 

@@ -1,9 +1,10 @@
 import type { Role, UpdateUserBody, UserDto } from '@carbone-reports/shared';
-import { Dialog, Select, Switch, TextInput } from '@gravity-ui/uikit';
+import { Button, Dialog, Select, Switch, TextInput } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/endpoints';
 import { fieldErrors } from '../../api/errors';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Field } from '../../components/Field';
 import { GeneralError } from '../../components/GeneralError';
@@ -122,6 +123,15 @@ export function EditUserDialog({
     },
   });
   const errors = fieldErrors(save.error);
+  const [confirmCert, setConfirmCert] = useState(false);
+  const removeCert = useMutation({
+    mutationFn: () => api.users.removeCertificate(user!.id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setConfirmCert(false);
+      onClose();
+    },
+  });
 
   return (
     <Dialog open={!!user} onClose={onClose} aria-labelledby="cr-user-edit">
@@ -169,8 +179,24 @@ export function EditUserDialog({
             />
           </Field>
           {groups.error && <ErrorAlert error={groups.error} title="Не удалось загрузить группы" />}
+          {user?.certificateNotAfter && (
+            <Button view="outlined-danger" onClick={() => setConfirmCert(true)}>
+              Удалить сертификат подписи
+            </Button>
+          )}
           <GeneralError error={save.error} errors={errors} shown={['password']} />
         </div>
+        <ConfirmDialog
+          open={confirmCert}
+          title="Удалить сертификат подписи?"
+          text={`Пользователь ${user?.login ?? ''} не сможет подписывать PDF, пока не загрузит новый сертификат.`}
+          confirmText="Удалить"
+          danger
+          loading={removeCert.isPending}
+          onConfirm={() => removeCert.mutate()}
+          onCancel={() => setConfirmCert(false)}
+        />
+        {removeCert.error && <ErrorAlert error={removeCert.error} />}
       </Dialog.Body>
       <Dialog.Footer
         onClickButtonApply={() => save.mutate()}

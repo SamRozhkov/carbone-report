@@ -1,14 +1,18 @@
-// Поток пула рендера: собирает отчёт встроенной сборкой Carbone (формат шаблона) или обрабатывает
-// готовый PDF (§36.4, задача kind = pdf). Глобальные carbone.set()/reset() не вызываем: lang, timezone
-// и настройки загрузки изображений всегда приходят в options. Предупреждения рендера (R6) уходят пулу.
+// Поток пула рендера: собирает отчёт встроенной сборкой Carbone (формат шаблона), обрабатывает
+// готовый PDF (§36.4, задача kind = pdf) или готовит PDF к подписи (§39.4, задача kind = sign)
+// или разбирает .p12 (§39.8, задача kind = p12).
+// Глобальные carbone.set()/reset() не вызываем: lang, timezone и настройки загрузки изображений
+// всегда приходят в options. Предупреждения рендера (R6) уходят пулу.
 import { parentPort } from 'node:worker_threads';
 import carbone from '@carbone-reports/carbone';
 import { postprocessPdf, type PdfPostJob } from '../pdf/postprocess';
+import { P12Error, readP12 } from '../pdf/sign/p12';
+import { prepareSignaturePdf, type SignPrepareJob } from '../pdf/sign/prepare';
 import type { RenderOptions } from './pool';
 
 interface Request {
   id: number;
-  kind?: 'carbone' | 'pdf';
+  kind?: 'carbone' | 'pdf' | 'sign' | 'p12';
   template: Uint8Array;
   ext: string;
   data: string;
@@ -23,8 +27,27 @@ type PdfJobData = Omit<PdfPostJob, 'attachments'> & {
 const port = parentPort;
 if (!port) throw new Error('worker.ts запускается только как поток пула рендера');
 
-async function handle(m: Request): Promise<{ buffer: Uint8Array; warnings: string[] }> {
+async function handle(
+  m: Request,
+): Promise<{ buffer: Uint8Array; warnings: string[]; meta?: string }> {
   const template = Buffer.from(m.template.buffer, m.template.byteOffset, m.template.byteLength);
+  if (m.kind === 'p12') {
+    const { password, now } = JSON.parse(m.data) as { password: string; now: string };
+    const p = readP12(template, password, new Date(now));
+    // Ключ — DER PKCS#8 без шифрования: главный поток делает из него KeyObject и затирает буфер.
+    const key = p.key.export({ type: 'pkcs8', format: 'der' });
+    const meta = JSON.stringify({
+      cert: p.cert.toString('base64'),
+      chain: p.chain.map((c) => c.toString('base64')),
+      info: p.info,
+      digestAlg: p.digestAlg,
+    });
+    return { buffer: key, warnings: [], meta };
+  }
+  if (m.kind === 'sign') {
+    const buffer = await prepareSignaturePdf(template, JSON.parse(m.data) as SignPrepareJob);
+    return { buffer, warnings: [] };
+  }
   if (m.kind === 'pdf') {
     const job = JSON.parse(m.data) as PdfJobData;
     const extra = m.extra ?? [];
@@ -39,19 +62,25 @@ async function handle(m: Request): Promise<{ buffer: Uint8Array; warnings: strin
 
 port.on('message', (m: Request) => {
   handle(m).then(
-    ({ buffer: out, warnings }) => {
+    ({ buffer: out, warnings, meta }) => {
       // Передаём ArrayBuffer без копии, если буфер занимает его целиком; иначе копируем.
       const ab = out.buffer;
       const whole =
         ab instanceof ArrayBuffer && out.byteOffset === 0 && out.byteLength === ab.byteLength;
       const bytes = whole ? new Uint8Array(ab, 0, out.byteLength) : new Uint8Array(out);
-      port.postMessage({ id: m.id, ok: true, out: bytes, warnings }, [bytes.buffer as ArrayBuffer]);
+      port.postMessage({ id: m.id, ok: true, out: bytes, warnings, meta }, [
+        bytes.buffer as ArrayBuffer,
+      ]);
+      // Копия (буфер не занимал ArrayBuffer целиком) осталась в потоке: для ключа затираем её.
+      if (!whole && m.kind === 'p12') out.fill(0);
     },
     (err: unknown) => {
       port.postMessage({
         id: m.id,
         ok: false,
         message: err instanceof Error ? err.message : String(err),
+        // Только у P12Error: главный поток восстанавливает её с тем же полем (§39.8).
+        ...(err instanceof P12Error ? { field: err.field } : {}),
       });
     },
   );

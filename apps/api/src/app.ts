@@ -23,6 +23,7 @@ import { registerRenderRoutes } from './modules/render/routes';
 import { registerReportRoutes } from './modules/reports/routes';
 import { registerTemplatePdfRoutes } from './modules/templates/pdf-routes';
 import { registerTemplateRoutes } from './modules/templates/routes';
+import { registerSignatureRoutes } from './modules/signature/routes';
 import { registerUserRoutes } from './modules/users/routes';
 import { registerVersionRoutes } from './modules/version/routes';
 
@@ -56,6 +57,7 @@ export function createFastify(hops: number = TRUSTED_PROXY_HOPS) {
         ? false
         : {
             level: 'info',
+            redact: { paths: ['password', '*.password', 'body.password'], censor: '***' },
             serializers: {
               req: (req: { method?: string; url?: string }) => ({
                 method: req.method,
@@ -122,6 +124,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   registerAuthRoutes(app, deps, guards);
   registerOidcRoutes(app, deps, guards);
   registerUserRoutes(app, deps, guards);
+  registerSignatureRoutes(app, deps, guards);
   registerAccessRoutes(app, deps, guards);
   registerDatasourceRoutes(app, deps, guards);
   registerTemplateRoutes(app, deps, guards);

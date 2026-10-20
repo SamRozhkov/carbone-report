@@ -10,6 +10,7 @@ import {
   Folders,
   Layers,
   Moon,
+  PencilToLine,
   Person,
   Persons,
   PersonsLock,
@@ -67,6 +68,7 @@ export function Layout() {
   const menuItems: AsideHeaderItem[] = [
     item('reports', 'Отчёты', FileText, '/reports'),
     item('history', 'История', ClockArrowRotateLeft, '/history'),
+    item('signature', 'Моя подпись', PencilToLine, '/signature'),
   ];
   if (me?.role === 'admin') {
     menuItems.push(

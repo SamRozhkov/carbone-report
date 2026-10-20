@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import * as download from '../lib/download';
@@ -12,6 +12,7 @@ const template = {
   defaultOutput: 'pdf',
   updatedAt: '2026-01-10T10:00:00Z',
   outputFormats: ['pdf', 'docx', 'odt'],
+  signatureAllowed: false,
   params: [
     {
       name: 'company',
@@ -420,5 +421,133 @@ describe('ReportRunPage', () => {
     release();
     await waitFor(() => expect(button).toBeEnabled());
     expect(screen.queryByText('Загружаются варианты параметров…')).not.toBeInTheDocument();
+  });
+  describe('подпись (§39.3)', () => {
+    const cert = {
+      subjectCn: 'Иванов Иван Иванович',
+      issuer: 'Тестовый УЦ',
+      serial: '1001',
+      notBefore: '2026-01-01T00:00:00.000Z',
+      notAfter: '2030-01-01T00:00:00.000Z',
+      fingerprint: 'AB'.repeat(32),
+      keyAlg: 'RSA-2048',
+    };
+    const signedAt = '2026-10-19T14:32:00';
+    const base = [
+      userMe,
+      { path: '/api/templates/t1', body: { ...template, signatureAllowed: true } },
+      { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
+    ];
+
+    it('подпись и скачивание подписанного PDF', async () => {
+      const spy = vi.spyOn(download, 'triggerDownload').mockImplementation(() => {});
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:run');
+      const { calls } = mockApi([
+        ...base,
+        { path: '/api/me/certificate', body: { certificate: cert } },
+        {
+          method: 'POST',
+          path: '/api/runs/r1/sign',
+          status: 201,
+          body: {
+            signerCn: 'Иванов Иван Иванович',
+            fingerprint: 'AB'.repeat(32),
+            signedAt,
+            timestamped: false,
+          },
+        },
+        {
+          path: '/api/runs/r1/file',
+          raw: 'PDF',
+          headers: { 'content-disposition': `attachment; filename="x.pdf"` },
+        },
+      ]);
+      renderRoute('/reports/t1');
+      await formAndRender();
+      const btn = await screen.findByRole('button', { name: 'Подписать PDF' });
+      await waitFor(() => expect(btn).toBeEnabled());
+      await userEvent.click(btn);
+      await userEvent.type(await screen.findByLabelText('Пароль к ключу подписи'), 'pw');
+      await userEvent.click(screen.getByRole('button', { name: 'Подписать' }));
+      expect(
+        await screen.findByText('Подписан: Иванов Иван Иванович, 19.10.2026 14:32'),
+      ).toBeInTheDocument();
+      // Модальное окно скрывает остальную страницу (aria-hidden), пока не размонтировано.
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: 'Подписать PDF' })).not.toBeInTheDocument();
+      const release = holdRequests('signed=1');
+      const signedBtn = await screen.findByRole('button', { name: 'Скачать подписанный PDF' });
+      await userEvent.click(signedBtn);
+      await waitFor(() => expect(signedBtn).toHaveClass('g-button_loading'));
+      // Обычная кнопка PDF «Сохранить как» не крутится во время скачивания подписанного.
+      const pdf = within(screen.getByRole('group', { name: 'Сохранить как' })).getByRole('button', {
+        name: 'PDF',
+      });
+      expect(pdf).not.toHaveClass('g-button_loading');
+      release();
+      await waitFor(() => expect(spy).toHaveBeenCalled());
+      expect(calls.some((c) => c.path === '/api/runs/r1/file?format=pdf&signed=1')).toBe(true);
+    });
+
+    it('«Отмена» в диалоге подписи: при повторном открытии поле пароля пустое', async () => {
+      mockApi([...base, { path: '/api/me/certificate', body: { certificate: cert } }]);
+      renderRoute('/reports/t1');
+      await formAndRender();
+      const btn = await screen.findByRole('button', { name: 'Подписать PDF' });
+      await waitFor(() => expect(btn).toBeEnabled());
+      await userEvent.click(btn);
+      await userEvent.type(await screen.findByLabelText('Пароль к ключу подписи'), 'pw');
+      await userEvent.click(screen.getByRole('button', { name: 'Отмена' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await userEvent.click(await screen.findByRole('button', { name: 'Подписать PDF' }));
+      expect(await screen.findByLabelText('Пароль к ключу подписи')).toHaveValue('');
+    });
+
+    it('ошибка загрузки сертификата — подсказки «Загрузите сертификат…» нет', async () => {
+      mockApi([
+        ...base,
+        {
+          path: '/api/me/certificate',
+          status: 500,
+          body: { error: { code: 'INTERNAL', message: 'сбой' } },
+        },
+      ]);
+      renderRoute('/reports/t1');
+      await formAndRender();
+      expect(await screen.findByRole('button', { name: 'Подписать PDF' })).toBeDisabled();
+      await waitFor(() =>
+        expect(
+          vi
+            .mocked(globalThis.fetch)
+            .mock.calls.some(([u]) => String(u).includes('/api/me/certificate')),
+        ).toBe(true),
+      );
+      // Ответ с ошибкой обработан (retry выключен) — подсказки всё равно нет.
+      await act(() => new Promise((r) => setTimeout(r, 50)));
+      expect(screen.queryByText(/Загрузите сертификат на странице/)).not.toBeInTheDocument();
+    });
+
+    it('без сертификата кнопка неактивна, есть подсказка со ссылкой', async () => {
+      mockApi([...base, { path: '/api/me/certificate', body: { certificate: null } }]);
+      renderRoute('/reports/t1');
+      await formAndRender();
+      expect(await screen.findByRole('button', { name: 'Подписать PDF' })).toBeDisabled();
+      expect(screen.getByText(/Загрузите сертификат на странице/)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Моя подпись' })).toHaveAttribute(
+        'href',
+        '/signature',
+      );
+    });
+
+    it('у шаблона без signatureAllowed кнопки нет', async () => {
+      mockApi([
+        userMe,
+        { path: '/api/templates/t1', body: template },
+        { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
+      ]);
+      renderRoute('/reports/t1');
+      await formAndRender();
+      expect(screen.queryByRole('button', { name: 'Подписать PDF' })).not.toBeInTheDocument();
+    });
   });
 });

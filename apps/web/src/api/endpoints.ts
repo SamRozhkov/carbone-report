@@ -1,6 +1,7 @@
 import type {
   BackupDto,
   BackupOperationDto,
+  CertificateInfo,
   CategoryBody,
   CategoryDto,
   CategoryPatch,
@@ -15,6 +16,7 @@ import type {
   GroupPatch,
   LoginBody,
   MoveAttachmentBody,
+  MyCertificate,
   MaintenanceStatus,
   OutputFormat,
   ParamOptionsResult,
@@ -22,6 +24,7 @@ import type {
   RenderBody,
   RunQueryBody,
   RunQueryResult,
+  RunSignature,
   RunsPage,
   RunsQuery,
   SavePdfOptionsBody,
@@ -67,9 +70,17 @@ export const api = {
     create: (body: CreateUserBody) => apiJson<UserDto>('/api/users', post(body)),
     update: (id: string, body: UpdateUserBody) => apiJson<UserDto>(`/api/users/${id}`, patch(body)),
     remove: (id: string) => apiJson<void>(`/api/users/${id}`, del),
+    removeCertificate: (id: string) => apiJson<void>(`/api/users/${id}/certificate`, del),
     revokeSessions: (id: string) => apiJson<void>(`/api/users/${id}/sessions/revoke`, post()),
     setGroups: (id: string, groupIds: string[]) =>
       apiJson<string[]>(`/api/users/${id}/groups`, put({ groupIds })),
+  },
+
+  signature: {
+    get: () => apiJson<MyCertificate>('/api/me/certificate'),
+    upload: (form: FormData) =>
+      apiJson<CertificateInfo>('/api/me/certificate', { method: 'POST', body: form }),
+    remove: () => apiJson<void>('/api/me/certificate', del),
   },
 
   groups: {
@@ -179,6 +190,8 @@ export const api = {
       const qs = sp.toString();
       return apiJson<RunsPage>(`/api/runs${qs ? `?${qs}` : ''}`);
     },
+    sign: (id: string, password: string) =>
+      apiJson<RunSignature>(`/api/runs/${id}/sign`, post({ password })),
   },
 
   backups: {
@@ -203,11 +216,12 @@ export const api = {
 
 export const runFileUrl = (
   runId: string,
-  opts: { format?: OutputFormat; inline?: boolean } = {},
+  opts: { format?: OutputFormat; inline?: boolean; signed?: boolean } = {},
 ) => {
   const sp = new URLSearchParams();
   if (opts.format) sp.set('format', opts.format);
   if (opts.inline) sp.set('inline', '1');
+  if (opts.signed) sp.set('signed', '1');
   const qs = sp.toString();
   return `/api/runs/${runId}/file${qs ? `?${qs}` : ''}`;
 };

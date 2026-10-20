@@ -13,6 +13,7 @@ import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { ReportRunRoute } from '../pages/ReportRunPage';
 import { ReportsPage } from '../pages/ReportsPage';
+import { SignaturePage } from '../pages/SignaturePage';
 
 export const routes: RouteObject[] = [
   { path: '/login', element: <LoginPage /> },
@@ -27,6 +28,7 @@ export const routes: RouteObject[] = [
           { path: 'reports', element: <ReportsPage /> },
           { path: 'reports/:id', element: <ReportRunRoute /> },
           { path: 'history', element: <HistoryPage /> },
+          { path: 'signature', element: <SignaturePage /> },
           {
             path: 'admin',
             element: <RequireAdmin />,

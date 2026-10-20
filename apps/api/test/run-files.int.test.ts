@@ -509,4 +509,48 @@ describe('пул сборки (createRunFileGate)', () => {
       await pool.end();
     }
   });
+
+  it('ifBusy: блокировка занята — сразу ошибка ifBusy, соединение возвращено в пул', async () => {
+    const pool = new pg.Pool({ connectionString: t.deps.config.databaseUrl, max: 3 });
+    pool.on('error', () => {});
+    const gate = createRunFileGate(pool);
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    try {
+      const busy = () => new AppError('SIGN_BUSY', 409, 'занято');
+      let entered!: () => void;
+      const inside = new Promise<void>((r) => (entered = r));
+      const first = gate(7, 'k', new Deadline(10_000), async () => {
+        entered();
+        await held;
+        return 'first';
+      });
+      await inside;
+      // Уничтоженное соединение pg-pool сразу убирает из _clients, а 'remove' шлёт после client.end().
+      let removed = 0;
+      const onRemove = () => removed++;
+      pool.on('remove', onRemove);
+      const t0 = Date.now();
+      await expect(
+        gate(7, 'k', new Deadline(10_000), async () => 'second', { ifBusy: busy }),
+      ).rejects.toMatchObject({ code: 'SIGN_BUSY' });
+      expect(Date.now() - t0).toBeLessThan(1000);
+      // Второе соединение вернулось в пул и не уничтожено (ошибка приложения): два открытых, одно свободно.
+      expect(pool.totalCount).toBe(2);
+      expect(pool.idleCount).toBe(1);
+      release();
+      expect(await first).toBe('first');
+      // Свободно — ifBusy не мешает.
+      expect(await gate(7, 'k', new Deadline(10_000), async () => 'third', { ifBusy: busy })).toBe(
+        'third',
+      );
+      // Ни одно соединение не уничтожалось ('remove' к этому времени уже пришёл бы).
+      pool.off('remove', onRemove);
+      expect(removed).toBe(0);
+    } finally {
+      // Упавшая проверка не должна оставить первую транзакцию висеть: иначе pool.end() не завершится.
+      release();
+      await pool.end();
+    }
+  });
 });

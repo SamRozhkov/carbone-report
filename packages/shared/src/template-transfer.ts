@@ -4,6 +4,7 @@ import {
   MAX_PDF_ATTACHMENTS,
   MAX_TEMPLATE_CHARTS,
   PDF_PROTECTION_PDFA_MESSAGE,
+  PDF_SIGNATURE_PROTECTION_MESSAGE,
   PdfOptions,
   PdfPlacement,
   TemplateChartConfig,
@@ -167,6 +168,8 @@ export const TransferTemplate = z
     }
     if (t.pdfOptions?.pdfa && hasPdfProtection(t.pdfOptions, t.pdfPasswordSet ?? false))
       issue(['pdfOptions', 'pdfa'], PDF_PROTECTION_PDFA_MESSAGE);
+    if (t.pdfOptions?.signature && hasPdfProtection(t.pdfOptions, t.pdfPasswordSet ?? false))
+      issue(['pdfOptions', 'signature'], PDF_SIGNATURE_PROTECTION_MESSAGE);
   });
 export type TransferTemplate = z.infer<typeof TransferTemplate>;
 

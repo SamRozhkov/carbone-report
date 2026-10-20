@@ -175,4 +175,24 @@ describe('worker.ts: обработка PDF (§36.4)', () => {
     );
     await expect(run).rejects.toThrow(TemplateRenderError);
   }, 40_000);
+
+  it('задача sign: на выходе есть поле подписи (§39.4)', async () => {
+    const { makePdf } = await import('../pdf/test-pdf');
+    const r = await pool.run(
+      {
+        kind: 'sign',
+        template: Buffer.from(await makePdf([{ label: 'R1' }])),
+        ext: 'pdf',
+        data: {
+          position: 'bottom-right',
+          lines: ['a', 'b', 'c', 'd', 'e'],
+          contentsBytes: 1000,
+          signedAt: '2026-10-19T11:32:00.000Z',
+        },
+        options: { lang: '', timezone: '' },
+      },
+      Date.now() + 30_000,
+    );
+    expect(r.out.toString('latin1')).toContain('/FT /Sig');
+  }, 40_000);
 });

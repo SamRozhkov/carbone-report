@@ -12,6 +12,14 @@ const FONT_FILE = join(
   'NotoSans-Regular.ttf',
 );
 
+const BOLD_FONT_FILE = join(dirname(FONT_FILE), 'NotoSans-Bold.ttf');
+let boldBytes: Buffer | undefined;
+
+/** Noto Sans Bold — заголовок штампа подписи (§39.5); набор символов тот же, что у Regular. */
+export function pdfBoldFontBytes(): Buffer {
+  return (boldBytes ??= readFileSync(BOLD_FONT_FILE));
+}
+
 let bytes: Buffer | undefined;
 let font: ReturnType<typeof fontkit.create> | undefined;
 

@@ -15,7 +15,13 @@ import {
 import { and, count, desc, eq, inArray, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { App } from '../../app';
-import { reportRunFiles, reportRuns, users } from '../../db/schema';
+import {
+  reportRunFiles,
+  reportRunSignatures,
+  reportRuns,
+  users,
+  type RunSignatureRow,
+} from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { Deadline } from '../../lib/deadline';
 import { AppError, notFound } from '../../lib/errors';
@@ -29,11 +35,14 @@ import { templatePdf } from '../pdf/finish';
 import { collectReportData, renderReport } from './service';
 import {
   ensureRunFile,
+  formatUnavailable,
+  readSnapshotFile,
   renderFromSnapshot,
   resolveRunFormat,
   runFormats,
   snapshotGone,
   snapshotPaths,
+  toRunSignature,
   writeSnapshot,
 } from './snapshot';
 
@@ -116,6 +125,8 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
             status: 'ok',
             snapshot: true,
             filePath: snap.template,
+            // R16: положение штампа из тех же настроек, что записаны в pdf-options.json снимка.
+            signaturePosition: pdf.options.signature?.position ?? null,
             durationMs: Date.now() - started,
           });
           await tx
@@ -178,12 +189,17 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
       // Собранные форматы — только для запусков со снимком на этой странице.
       const snapIds = rows.filter(({ run }) => run.snapshot).map(({ run }) => run.id);
       const built = new Map<string, OutputFormat[]>();
+      const signatures = new Map<string, RunSignatureRow>();
       if (snapIds.length > 0) {
-        const files = await db
-          .select({ runId: reportRunFiles.runId, format: reportRunFiles.format })
-          .from(reportRunFiles)
-          .where(inArray(reportRunFiles.runId, snapIds));
+        const [files, signed] = await Promise.all([
+          db
+            .select({ runId: reportRunFiles.runId, format: reportRunFiles.format })
+            .from(reportRunFiles)
+            .where(inArray(reportRunFiles.runId, snapIds)),
+          db.select().from(reportRunSignatures).where(inArray(reportRunSignatures.runId, snapIds)),
+        ]);
         for (const f of files) built.set(f.runId, [...(built.get(f.runId) ?? []), f.format]);
+        for (const sig of signed) signatures.set(sig.runId, sig);
       }
 
       const items: RunDto[] = rows.map(({ run, login }) => ({
@@ -199,6 +215,15 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         error: run.error,
         fileAvailable: run.status === 'ok' && !!run.filePath && !run.fileDeleted,
         ...runFormats(run, built.get(run.id) ?? []),
+        signature: signatures.has(run.id) ? toRunSignature(signatures.get(run.id)!) : null,
+        // Подписывает только владелец (§39.3): администратору чужой запуск подписать нельзя.
+        signable:
+          run.userId === me.id &&
+          run.snapshot &&
+          run.status === 'ok' &&
+          !run.fileDeleted &&
+          run.signaturePosition !== null &&
+          !signatures.has(run.id),
         durationMs: run.durationMs,
         createdAt: run.createdAt.toISOString(),
       }));
@@ -216,6 +241,8 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
           // Строка, а не enum: любой недоступный формат — одна ошибка «формат недоступен…» (§24.4).
           format: z.string().max(16).optional(),
           inline: z.enum(['0', '1']).optional(),
+          /** Подписанный PDF (§39.3). */
+          signed: z.enum(['0', '1']).optional(),
         }),
       },
     },
@@ -227,6 +254,24 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
       // Чужой запуск для пользователя неотличим от несуществующего.
       if (!run || (me.role !== 'admin' && run.userId !== me.id)) throw notFound('запуск');
       if (run.status !== 'ok' || !run.filePath) throw notFound('файл');
+      if (req.query.signed === '1') {
+        // R10: подписанный файл есть только в PDF.
+        if (req.query.format !== undefined && req.query.format !== 'pdf') throw formatUnavailable();
+        if (run.fileDeleted) throw snapshotGone();
+        const [sig] = await db
+          .select()
+          .from(reportRunSignatures)
+          .where(eq(reportRunSignatures.runId, run.id));
+        if (!sig) throw notFound('файл');
+        const date = run.createdAt.toISOString().slice(0, 10);
+        return reply
+          .header('content-type', MIME.pdf)
+          .header(
+            'content-disposition',
+            contentDisposition(`${run.templateName} ${date}-signed.pdf`, req.query.inline === '1'),
+          )
+          .send(await readSnapshotFile(deps, sig.filePath));
+      }
       const format = resolveRunFormat(run, req.query.format);
       let content: Buffer;
       if (run.snapshot) {

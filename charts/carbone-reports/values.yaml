@@ -114,6 +114,9 @@ web:
   affinity: {}
   podAnnotations: {}
   extraEnv: []
+  # ConfigMap с ключом cadesplugin_api.js (скрипт КриптоПро для подписи по ГОСТ; не поставляется).
+  # Создание: kubectl create configmap cades --from-file=cadesplugin_api.js. Пусто — без подписи по ГОСТ.
+  cadesPluginConfigMap: ""
 
 api:
   replicas: 2

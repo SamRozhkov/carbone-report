@@ -31,6 +31,8 @@ services:
       - '${WEB_HTTPS_PORT:-443}:443'
     volumes:
       - ./certs:/etc/nginx/certs:ro
+      # Скрипт КриптоПро для подписи по ГОСТ кладёт администратор (docs/operations/gost-signature.md).
+      - ./cades:/usr/share/nginx/cades:ro
     depends_on:
       api:
         condition: service_started

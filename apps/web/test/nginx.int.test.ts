@@ -79,11 +79,15 @@ afterAll(async () => {
   if (certs) rmSync(certs, { recursive: true, force: true });
 });
 
-async function web(env: Record<string, string>, opts: { tls?: boolean } = {}) {
+async function web(env: Record<string, string>, opts: { tls?: boolean; cades?: string } = {}) {
+  const content = [{ content: INDEX, target: '/usr/share/nginx/html/index.html' }];
+  // Скрипт КриптоПро администратор монтирует в /usr/share/nginx/cades (том compose, ConfigMap Helm).
+  if (opts.cades !== undefined)
+    content.push({ content: opts.cades, target: '/usr/share/nginx/cades/cadesplugin_api.js' });
   let c = new GenericContainer(IMAGE)
     .withEnvironment(env)
     .withNetwork(network)
-    .withCopyContentToContainer([{ content: INDEX, target: '/usr/share/nginx/html/index.html' }])
+    .withCopyContentToContainer(content)
     .withExposedPorts(...(opts.tls ? [80, 443] : [80]))
     .withWaitStrategy(Wait.forListeningPorts());
   if (opts.tls)
@@ -191,6 +195,23 @@ describe('образ web: nginx', () => {
     const page = await fetch(url(c, 80, '/'));
     expect(page.status).toBe(200);
     expect(page.headers.get('strict-transport-security')).toBeNull();
+  });
+
+  it('cadesplugin_api.js: без файла — 404 (не index.html), с файлом из тома — 200, JavaScript, заголовки безопасности', async () => {
+    const absent = await web({ NGINX_MODE: 'dev' });
+    const miss = await fetch(url(absent, 80, '/cadesplugin_api.js'));
+    expect(miss.status).toBe(404);
+    expect(await miss.text()).not.toContain('<title>stub</title>');
+
+    const SCRIPT = '/* cadesplugin stub */ var cadesplugin = {};';
+    const c = await web({ NGINX_MODE: 'http', API_UPSTREAM: 'http://api:3000' }, { cades: SCRIPT });
+    const r = await fetch(url(c, 80, '/cadesplugin_api.js'));
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toMatch(/javascript/);
+    expect(await r.text()).toBe(SCRIPT);
+    expect(r.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(r.headers.get('strict-transport-security')).toBe('max-age=31536000');
+    expect(r.headers.get('content-security-policy')).toContain("script-src 'self'");
   });
 
   it('неверный NGINX_MODE — контейнер не стартует, в логе понятная ошибка', async () => {

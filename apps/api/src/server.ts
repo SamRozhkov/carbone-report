@@ -17,6 +17,7 @@ import { createAgentClient } from './modules/backups/agent-client';
 import { createSourcePools } from './modules/datasources/pools';
 import { createOnlyOfficeCommands } from './modules/onlyoffice/commands';
 import { createPoolPdfPostprocessor } from './modules/pdf/postprocessor';
+import { createPoolGostPreparer, createPoolGostVerifier } from './modules/pdf/sign/gost/pool';
 import { createPoolP12Reader } from './modules/pdf/sign/p12-reader';
 import { createPoolSignPreparer } from './modules/pdf/sign/preparer';
 import { createQpdfProtector, qpdfVersion } from './modules/pdf/protect';
@@ -104,6 +105,8 @@ const deps: AppDeps = {
   pdf: createPoolPdfPostprocessor(renderPool),
   pdfSignPrepare: createPoolSignPreparer(renderPool),
   p12Read: createPoolP12Reader(renderPool),
+  gostPrepare: createPoolGostPreparer(renderPool),
+  gostVerify: createPoolGostVerifier(renderPool),
   pdfProtect: createQpdfProtector({ maxConcurrent: config.renderWorkers }),
   onlyoffice: createOnlyOfficeCommands({
     baseUrl: config.onlyofficeInternalUrl,

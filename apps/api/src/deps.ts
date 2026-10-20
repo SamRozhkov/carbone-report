@@ -1,4 +1,5 @@
-import type { SignPrepareJob } from './modules/pdf/sign/prepare';
+import type { SignPrepareJob, StampJob } from './modules/pdf/sign/prepare';
+import type { CadesInput, CadesResult, GostHashAlg } from './modules/pdf/sign/gost/cades';
 import type { P12Contents } from './modules/pdf/sign/p12';
 import type { PdfPostJob } from './modules/pdf/postprocess';
 import type { PdfProtectJob } from './modules/pdf/protect';
@@ -56,6 +57,22 @@ export type PdfSignPreparer = (
   timeoutMs: number,
 ) => Promise<Buffer>;
 
+/**
+ * Подготовка PDF к подписи ГОСТ (§42): штамп без поля подписи и хеш Стрибог от итогового PDF;
+ * в пуле рендера. deadlineAt — срок, мс эпохи.
+ */
+export type GostPreparer = (
+  pdf: Buffer,
+  job: StampJob & { hashAlg: GostHashAlg },
+  deadlineAt: number,
+) => Promise<{ pdf: Buffer; hash: Uint8Array }>;
+
+/** Проверка подписи CAdES по ГОСТ (§42.4) в пуле рендера; отказ — AppError GOST_INVALID 400. */
+export type GostVerifier = (
+  input: Omit<CadesInput, 'now'> & { now: Date },
+  deadlineAt: number,
+) => Promise<CadesResult>;
+
 export interface OnlyOfficeCommands {
   forceSave(key: string): Promise<void>;
 }
@@ -84,6 +101,10 @@ export interface AppDeps {
   pdfSignPrepare: PdfSignPreparer;
   /** Разбор .p12 в пуле рендера (§39.8; тестам — в этом потоке). */
   p12Read: P12Reader;
+  /** Штамп и хеш для подписи ГОСТ в пуле рендера (§42; тестам — в этом потоке). */
+  gostPrepare: GostPreparer;
+  /** Проверка подписи ГОСТ в пуле рендера (§42.4; тестам — в этом потоке). */
+  gostVerify: GostVerifier;
   onlyoffice: OnlyOfficeCommands;
   fetchFile: FileFetcher;
   /** Общий Redis (лимит входа, режим обслуживания); null — лимиты считаются в памяти экземпляра. */

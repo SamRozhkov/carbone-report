@@ -2,6 +2,8 @@ import fontkit from '@pdf-lib/fontkit';
 import type { PdfSignaturePosition } from '@carbone-reports/shared';
 import {
   beginText,
+  concatTransformationMatrix,
+  drawObject,
   endText,
   fill,
   moveText,
@@ -21,11 +23,19 @@ import {
   stroke,
   type PDFFont,
   type PDFOperator,
+  type PDFPage,
+  type PDFRef,
 } from 'pdf-lib';
 import { pdfBoldFontBytes, pdfFontBytes, sanitizePdfText } from '../font';
 import { toPage, visualView } from '../postprocess';
 
 export type StampLines = [string, string, string, string, string];
+
+/** Видимый штамп: положение на последней странице и строки (уже в часовом поясе config.tz). */
+export interface StampJob {
+  position: PdfSignaturePosition;
+  lines: StampLines;
+}
 
 /** Задача пула рендера `kind: 'sign'` (R3): строки штампа уже отформатированы в часовом поясе config.tz. */
 export interface SignPrepareJob {
@@ -92,15 +102,20 @@ function stampOperators(lines: StampLines, regular: PDFFont, bold: PDFFont): PDF
   return ops;
 }
 
-/**
- * Поле подписи со штампом на последней странице и заглушки ByteRange и /Contents (§39.4).
- * Документ сохраняется целиком без изменения Info и XMP (PDF/A остаётся действительным).
- */
-export async function prepareSignaturePdf(
-  pdf: Uint8Array,
-  job: SignPrepareJob,
-): Promise<Uint8Array> {
-  const doc = await PDFDocument.load(pdf, { updateMetadata: false });
+type Matrix = [number, number, number, number, number, number];
+
+interface Stamp {
+  page: PDFPage;
+  /** Form XObject внешнего вида штампа (BBox 0 0 w h, Matrix — по повороту страницы). */
+  xobject: PDFRef;
+  /** Прямоугольник штампа на странице (координаты страницы). */
+  rect: [number, number, number, number];
+  /** cm для вывода xobject содержимым страницы: переносит повёрнутый BBox в rect. */
+  matrix: Matrix;
+}
+
+/** Штамп на последней странице: шрифты, внешний вид и его место — общее для поля подписи и §42. */
+async function buildStamp(doc: PDFDocument, job: StampJob): Promise<Stamp> {
   doc.registerFontkit(fontkit);
   const regular = await doc.embedFont(pdfFontBytes(), { subset: true });
   const bold = await doc.embedFont(pdfBoldFontBytes(), { subset: true });
@@ -115,15 +130,42 @@ export async function prepareSignaturePdf(
         : v.w - margin - w;
   const a = toPage(v, u, margin);
   const b = toPage(v, u + w, margin + h);
-  const rect = [Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y)];
-
-  const appearance = doc.context.register(
+  const rect: Stamp['rect'] = [
+    Math.min(a.x, b.x),
+    Math.min(a.y, b.y),
+    Math.max(a.x, b.x),
+    Math.max(a.y, b.y),
+  ];
+  const m = MATRIX[v.rot];
+  const xobject = doc.context.register(
     doc.context.formXObject(stampOperators(job.lines, regular, bold), {
       BBox: [0, 0, w, h],
-      Matrix: MATRIX[v.rot],
+      Matrix: m,
       Resources: { Font: { F1: regular.ref, F2: bold.ref } },
     }),
   );
+  // Угол BBox, повёрнутого Matrix формы, — в левый нижний угол rect.
+  const corners = [
+    [0, 0],
+    [w, 0],
+    [0, h],
+    [w, h],
+  ].map(([x, y]) => [m[0]! * x! + m[2]! * y! + m[4]!, m[1]! * x! + m[3]! * y! + m[5]!]);
+  const minX = Math.min(...corners.map((c) => c[0]!));
+  const minY = Math.min(...corners.map((c) => c[1]!));
+  return { page, xobject, rect, matrix: [1, 0, 0, 1, rect[0] - minX, rect[1] - minY] };
+}
+
+/**
+ * Поле подписи со штампом на последней странице и заглушки ByteRange и /Contents (§39.4).
+ * Документ сохраняется целиком без изменения Info и XMP (PDF/A остаётся действительным).
+ */
+export async function prepareSignaturePdf(
+  pdf: Uint8Array,
+  job: SignPrepareJob,
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdf, { updateMetadata: false });
+  const { page, xobject: appearance, rect } = await buildStamp(doc, job);
   const signature = doc.context.register(
     doc.context.obj({
       Type: 'Sig',
@@ -151,5 +193,29 @@ export async function prepareSignaturePdf(
   const form = doc.catalog.getOrCreateAcroForm();
   form.addField(widget);
   form.dict.set(PDFName.of('SigFlags'), PDFNumber.of(3));
+  return doc.save({ useObjectStreams: false, updateFieldAppearances: false });
+}
+
+/**
+ * Видимый штамп без поля подписи (§42): содержимое последней страницы дополняется выводом
+ * XObject штампа. Info и XMP не меняются; одинаковые входы дают одинаковые байты — хеш документа,
+ * подписанного в браузере, совпадает с хешем повторной подготовки.
+ */
+export async function prepareStampPdf(pdf: Uint8Array, job: StampJob): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdf, { updateMetadata: false });
+  const { page, xobject, matrix } = await buildStamp(doc, job);
+  // Имя — первое свободное St1, St2, … (не случайное: результат детерминирован).
+  const resources = page.node.normalizedEntries().XObject;
+  let n = 1;
+  while (resources.has(PDFName.of(`St${n}`))) n++;
+  const name = `St${n}`;
+  page.node.setXObject(PDFName.of(name), xobject);
+  // pushOperators обрамляет прежнее содержимое q … Q: его cm не сдвинет штамп.
+  page.pushOperators(
+    pushGraphicsState(),
+    concatTransformationMatrix(...matrix),
+    drawObject(name),
+    popGraphicsState(),
+  );
   return doc.save({ useObjectStreams: false, updateFieldAppearances: false });
 }

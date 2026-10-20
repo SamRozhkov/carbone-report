@@ -179,7 +179,7 @@ describe('TemplateEditorPage', () => {
     ]);
     renderRoute('/admin/templates/t1?tab=settings');
     expect(
-      await screen.findByText('В тегах есть русские буквы среди латинских'),
+      await screen.findByText('В тегах есть русские буквы вместо латинских'),
     ).toBeInTheDocument();
     expect(screen.getByText('{d.data[].сnt:aggSum}')).toBeInTheDocument();
     expect(screen.getByText(/«с» в «сnt» — русская/)).toBeInTheDocument();
@@ -197,6 +197,6 @@ describe('TemplateEditorPage', () => {
     renderRoute('/admin/templates/t1?tab=settings');
     await screen.findByText('Счёт');
     await waitFor(() => expect(calls.some((c) => c.path.endsWith('/tag-warnings'))).toBe(true));
-    expect(screen.queryByText('В тегах есть русские буквы среди латинских')).toBeNull();
+    expect(screen.queryByText('В тегах есть русские буквы вместо латинских')).toBeNull();
   });
 });

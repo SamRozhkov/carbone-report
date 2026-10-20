@@ -75,4 +75,50 @@ describe('findTagWarnings', () => {
     expect(r.warnings).toHaveLength(20);
     expect(r.total).toBe(25);
   });
+  it('заниженный размер в заголовках: часть пропускается, без падения', async () => {
+    const z = new JSZip();
+    z.file('word/document.xml', `<w:t>{d.сnt}</w:t>${'a'.repeat(30 * 1024 * 1024)}`);
+    const file = await z.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+    // Занижаем размер до распаковки в локальном (+22) и центральном (+24) заголовках.
+    for (let i = 0; i + 30 < file.length; i++) {
+      const sig = file.readUInt32LE(i);
+      if (sig === 0x04034b50) file.writeUInt32LE(100, i + 22);
+      else if (sig === 0x02014b50) file.writeUInt32LE(100, i + 24);
+    }
+    expect(await findTagWarnings(file, 'docx')).toEqual({ warnings: [], total: 0 });
+  });
+
+  it('слишком большая часть пропускается, остальные читаются', async () => {
+    const z = new JSZip();
+    z.file('word/document.xml', `<w:t>{d.a}</w:t>${'a'.repeat(21 * 1024 * 1024)}`);
+    z.file('word/footer1.xml', '<w:t>{d.сnt}</w:t>');
+    const file = await z.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+    const r = await findTagWarnings(file, 'docx');
+    expect(r.total).toBe(1);
+  });
+
+  it('значения фильтров и корректные теги не дают предупреждений', async () => {
+    const file = await zip({
+      'xl/sharedStrings.xml': sst(
+        '{d.rows[id=.obl].v}',
+        '{d.x:set(c.g[id=.obl].rows[])}',
+        '{c.g[i].cnt}',
+        '{d.rows[name=Ромашка_Inc].v}',
+      ),
+    });
+    expect((await findTagWarnings(file, 'xlsx')).total).toBe(0);
+  });
+
+  it('прописная русская С в корне — предупреждение', async () => {
+    const file = await zip({ 'xl/sharedStrings.xml': sst('{С.g[i].x}') });
+    const r = await findTagWarnings(file, 'xlsx');
+    expect(r.warnings).toEqual([{ tag: '{С.g[i].x}', word: 'С', letters: ['С'] }]);
+  });
+
+  it('соседние абзацы не склеиваются в тег', async () => {
+    const file = await zip({
+      'word/document.xml': '<w:p><w:t>{d.a</w:t></w:p><w:p><w:t>сb}</w:t></w:p>',
+    });
+    expect((await findTagWarnings(file, 'docx')).total).toBe(0);
+  });
 });

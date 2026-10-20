@@ -121,7 +121,7 @@ export function TemplateEditorPage() {
         <div style={{ marginBottom: 12 }}>
           <Alert
             theme="warning"
-            title="В тегах есть русские буквы среди латинских"
+            title="В тегах есть русские буквы вместо латинских"
             message={
               <div>
                 <div>Такие теги не найдут данные — замените выделенные буквы латинскими.</div>

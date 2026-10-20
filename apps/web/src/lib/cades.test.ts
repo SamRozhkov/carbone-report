@@ -45,6 +45,7 @@ function fakePlugin(certs: ReturnType<typeof fakeCert>[], opts: { csp?: boolean 
   const signer = {
     propset_Certificate: vi.fn(async () => undefined),
     propset_TSAAddress: vi.fn(async () => undefined),
+    propset_Options: vi.fn(async () => undefined),
   };
   const hashed = {
     propset_Algorithm: vi.fn(async () => undefined),
@@ -203,6 +204,8 @@ describe('signHash', () => {
     expect(sig).toBe('MIAGCSqG');
     expect(f.signer.propset_Certificate).toHaveBeenCalledWith(list[1]);
     expect(f.signer.propset_TSAAddress).not.toHaveBeenCalled();
+    // В подпись — только сертификат подписанта: цепочка не строится (CAPICOM_CERTIFICATE_INCLUDE_END_ENTITY_ONLY).
+    expect(f.signer.propset_Options).toHaveBeenCalledWith(2);
     expect(f.hashed.propset_Algorithm).toHaveBeenCalledWith(101);
     // Хеш сервера передаётся без изменений.
     expect(f.hashed.SetHashValue).toHaveBeenCalledWith('ab'.repeat(32));

@@ -46,6 +46,7 @@ interface CadesStore {
 interface CadesSigner {
   propset_Certificate(cert: CadesCertificate): Promise<unknown>;
   propset_TSAAddress(url: string): Promise<unknown>;
+  propset_Options(options: number): Promise<unknown>;
 }
 interface CadesHashedData {
   propset_Algorithm(alg: number): Promise<unknown>;
@@ -80,6 +81,7 @@ const CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_512 = 102;
 const CADESCOM_CADES_BES = 1;
 const CADESCOM_CADES_T = 5;
 const CADESCOM_ENCODE_BASE64 = 0;
+const CAPICOM_CERTIFICATE_INCLUDE_END_ENTITY_ONLY = 2;
 /** PROV_GOST_2012_256: тип провайдера КриптоПро CSP для ключей ГОСТ Р 34.10-2012. */
 const PROV_GOST_2012_256 = 80;
 /** OID ключа ГОСТ Р 34.10-2012 → длина ключа. */
@@ -201,6 +203,10 @@ function createCades(plugin: CadesPlugin, about: CadesAbout): Cades {
       if (!cert) throw new Error('Сертификат не найден в хранилище «Личное»');
       const signer = await plugin.CreateObjectAsync('CAdESCOM.CPSigner');
       await signer.propset_Certificate(cert);
+      // Только сертификат подписанта: по умолчанию (INCLUDE_CHAIN_EXCEPT_ROOT) SignHash строит цепочку и
+      // падает с 0x800B010A без промежуточного/корневого УЦ; серверу (§42.4) нужен лишь сертификат по sid.
+      // Если ошибка цепочки всё же появится — следующее свойство для проверки: CPSigner.CheckCertificate.
+      await signer.propset_Options(CAPICOM_CERTIFICATE_INCLUDE_END_ENTITY_ONLY);
       if (tsaUrl) await signer.propset_TSAAddress(tsaUrl);
       const hashed = await plugin.CreateObjectAsync('CAdESCOM.HashedData');
       await hashed.propset_Algorithm(

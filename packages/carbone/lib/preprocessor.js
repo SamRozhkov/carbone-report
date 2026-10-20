@@ -132,6 +132,12 @@ var preprocessor = {
         _inlined = charts.tagSheet(_inlined);
         Object.defineProperty(_modifiedFile, 'chartsTagged', { value : true, enumerable : false, writable : true });
       }
+      _inlined = preprocessor.fillWorksheetGaps(_inlined);
+      // метки снимает finishXlsx — только у листов книги верхнего уровня
+      if ((parentFilter === '' || parentFilter === undefined) && /<mergeCell\b/.test(_inlined) === true) {
+        _inlined = preprocessor.tagMergeRows(_inlined);
+        Object.defineProperty(_modifiedFile, 'mergeTagged', { value : true, enumerable : false, writable : true });
+      }
       _modifiedFile.data = preprocessor.removeRowCounterInWorksheet(_inlined);
       // после сборки номера строк и ячеек восстанавливает finishXlsx (renderBuffer); свойство неперечисляемое —
       // разобранный шаблон сериализуется как в апстриме
@@ -256,6 +262,130 @@ var preprocessor = {
   },
 
   /**
+   * [XLSX] Дописать пустые ячейки и строки, которых нет в файле. Excel не сохраняет пустые ячейки и строки без
+   * оформления, а после removeRowCounterInWorksheet позиции задаёт только порядок: без пропусков ячейка «B5»
+   * в строке без «A5» стала бы «A5», а строка 5 после пропущенной 4 — строкой 4 (addRowCounterInWorksheet нумерует
+   * подряд). Пропуски заполняются до удаления r; строки и ячейки без r не трогаются — порядок там уже определён.
+   * @param  {String} xml sheet
+   * @return {String}     sheet updated
+   */
+  fillWorksheetGaps : function (xml) {
+    if (typeof(xml) !== 'string') {
+      return xml;
+    }
+    var _start = xml.indexOf('<sheetData');
+    var _end = xml.lastIndexOf('</sheetData>');
+    if (_start === -1 || _end === -1) {
+      return xml;
+    }
+    var _lastRow = 0;
+    var _row = 0;
+    var _lastCol = 0;
+    var _data = xml.slice(_start, _end).replace(/<(row|c)\b([^>]*?)(\/?)>/g, function (tag, name, attrs) {
+      var _r = /\sr\s*=\s*"([^"]*)"/.exec(attrs);
+      var _fill = '';
+      if (name === 'row') {
+        _lastCol = 0;
+        _row = _r !== null && /^\d+$/.test(_r[1]) === true ? parseInt(_r[1], 10) : 0;
+        if (_row === 0) {
+          // строка без номера: дальше пропуски не считаем — неизвестно, какая это строка
+          _lastRow = -1;
+          return tag;
+        }
+        if (_lastRow >= 0) {
+          for (var _missingRow = _lastRow + 1; _missingRow < _row; _missingRow++) {
+            _fill += '<row r="' + _missingRow + '"/>';
+          }
+        }
+        _lastRow = _row;
+        return _fill + tag;
+      }
+      var _ref = _r !== null ? /^([A-Z]+)\d+$/.exec(_r[1]) : null;
+      if (_ref === null || _row === 0 || _lastCol < 0) {
+        _lastCol = -1;
+        return tag;
+      }
+      var _col = preprocessor.columnIndex(_ref[1]);
+      for (var _missingCol = _lastCol + 1; _missingCol < _col; _missingCol++) {
+        _fill += '<c r="' + preprocessor.columnName(_missingCol) + _row + '"/>';
+      }
+      _lastCol = _col;
+      return _fill + tag;
+    });
+    return xml.slice(0, _start) + _data + xml.slice(_end);
+  },
+
+  /**
+   * [XLSX] Пометить строки листа исходным номером (`cmRow`) до удаления r: после сборки moveMergeCells по меткам
+   * переносит объединения ячеек (циклы размножают и удаляют строки, а `mergeCells` сборка не меняет)
+   * @param  {String} xml sheet
+   * @return {String}     sheet updated
+   */
+  tagMergeRows : function (xml) {
+    var _start = xml.indexOf('<sheetData');
+    var _end = xml.lastIndexOf('</sheetData>');
+    if (_start === -1 || _end === -1) {
+      return xml;
+    }
+    var _data = xml.slice(_start, _end).replace(/<row\b([^>]*?)(\/?)>/g, function (tag, attrs, slash) {
+      var _r = /\sr\s*=\s*"(\d+)"/.exec(attrs);
+      return _r === null ? tag : '<row' + attrs + ' cmRow="' + _r[1] + '"' + slash + '>';
+    });
+    return xml.slice(0, _start) + _data + xml.slice(_end);
+  },
+
+  /**
+   * [XLSX] После сборки перенести объединения ячеек по меткам `cmRow` (номера строк — по правилу
+   * addRowCounterInWorksheet: r строки или следующий по порядку) и снять метки:
+   * - объединение в одной строке — в каждой собранной строке из неё (строка цикла размножается);
+   * - на несколько строк — от первой собранной строки верхней до последней собранной строки нижней;
+   * - строки нет в собранном листе (строка [i+1], drop) — объединение убирается; пустой `mergeCells` — тоже.
+   * @param  {String} xml sheet
+   * @return {String}     sheet updated
+   */
+  moveMergeCells : function (xml) {
+    if (typeof(xml) !== 'string') {
+      return xml;
+    }
+    var _rows = new Map();
+    var _row = 0;
+    xml = xml.replace(/<row\b([^>]*?)(\/?)>/g, function (tag, attrs, slash) {
+      var _r = /\sr\s*=\s*"(\d+)"/.exec(attrs);
+      _row = _r !== null ? parseInt(_r[1], 10) : _row + 1;
+      var _tag = /\scmRow="(\d+)"/.exec(attrs);
+      if (_tag === null) {
+        return tag;
+      }
+      var _orig = parseInt(_tag[1], 10);
+      if (_rows.has(_orig) === false) {
+        _rows.set(_orig, []);
+      }
+      _rows.get(_orig).push(_row);
+      return '<row' + attrs.replace(_tag[0], '') + slash + '>';
+    });
+    return xml.replace(/<mergeCells\b[^>]*>([\s\S]*?)<\/mergeCells>/, function (block, body) {
+      var _merges = [];
+      body.replace(/<mergeCell\b[^>]*\sref="([A-Z]+)(\d+):([A-Z]+)(\d+)"[^>]*\/>/g, function (m, c1, r1, c2, r2) {
+        var _top = _rows.get(parseInt(r1, 10));
+        var _bottom = _rows.get(parseInt(r2, 10));
+        if (_top === undefined || _bottom === undefined) {
+          return m;
+        }
+        if (r1 === r2) {
+          _top.forEach(function (r) {
+            _merges.push('<mergeCell ref="' + c1 + r + ':' + c2 + r + '"/>');
+          });
+        }
+        else if (_bottom[_bottom.length - 1] > _top[0]) {
+          _merges.push('<mergeCell ref="' + c1 + _top[0] + ':' + c2 + _bottom[_bottom.length - 1] + '"/>');
+        }
+        return m;
+      });
+      return _merges.length === 0 ? '' : '<mergeCells count="' + _merges.length + '">' + _merges.join('') + '</mergeCells>';
+    });
+  },
+
+  /**
    * [XLSX] Remove row and column counter (r=1, c=A1) in sheet (should be added in post-processing)
    * Carbone Engine cannot update these counter itself
    * @param  {String} xml sheet
@@ -318,6 +448,9 @@ var preprocessor = {
     }
     for (var f = 0; f < template.files.length; f++) {
       if (template.files[f].rowCounterRemoved === true && (template.files[f].parent === '' || template.files[f].parent === undefined)) {
+        if (template.files[f].mergeTagged === true) {
+          template.files[f].data = preprocessor.moveMergeCells(template.files[f].data);
+        }
         template.files[f].data = preprocessor.addRowCounterInWorksheet(template.files[f].data);
       }
     }
@@ -405,6 +538,15 @@ var preprocessor = {
   /**
    * Имя столбца Excel по номеру с 1: 1 → A, 27 → AA
    */
+  /** «A» → 1, «Z» → 26, «AA» → 27 (обратное columnName) */
+  columnIndex : function (name) {
+    var _index = 0;
+    for (var i = 0; i < name.length; i++) {
+      _index = _index * 26 + (name.charCodeAt(i) - 64);
+    }
+    return _index;
+  },
+
   columnName : function (index) {
     var _name = '';
     for (var n = index; n > 0; n = Math.floor((n - 1) / 26)) {

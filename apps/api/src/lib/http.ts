@@ -9,6 +9,9 @@ export const MIME: Record<OutputFormat | TemplateExt, string> = {
   ods: 'application/vnd.oasis.opendocument.spreadsheet',
 };
 
+/** Открепленная подпись CMS (`.sig`, §42.6). */
+export const SIG_MIME = 'application/pkcs7-signature';
+
 export function contentDisposition(filename: string, inline = false): string {
   const ascii = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '');
   const encoded = encodeURIComponent(filename).replace(

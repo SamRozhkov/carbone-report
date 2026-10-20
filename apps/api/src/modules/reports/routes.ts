@@ -25,7 +25,7 @@ import {
 import type { AppDeps } from '../../deps';
 import { Deadline } from '../../lib/deadline';
 import { AppError, notFound } from '../../lib/errors';
-import { contentDisposition, MIME } from '../../lib/http';
+import { contentDisposition, MIME, SIG_MIME } from '../../lib/http';
 import { assertTemplateAccess } from '../access/access';
 import { currentUser, type Guards } from '../auth/guards';
 import { previewQuery } from '../queries/executor';
@@ -274,6 +274,25 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
             contentDisposition(`${run.templateName} ${date}-signed.pdf`, req.query.inline === '1'),
           )
           .send(await readSnapshotFile(deps, sig.filePath));
+      }
+      if (req.query.format === 'sig') {
+        // Открепленная подпись ГОСТ (§42.6): только скачивание, без signed и inline.
+        if (req.query.signed !== undefined || req.query.inline !== undefined)
+          throw formatUnavailable();
+        if (run.fileDeleted) throw snapshotGone();
+        const [sig] = await db
+          .select()
+          .from(reportRunSignatures)
+          .where(eq(reportRunSignatures.runId, run.id));
+        if (!sig || sig.method !== 'gost' || !sig.sigPath) throw notFound('файл');
+        const date = run.createdAt.toISOString().slice(0, 10);
+        return reply
+          .header('content-type', SIG_MIME)
+          .header(
+            'content-disposition',
+            contentDisposition(`${run.templateName} ${date}-signed.pdf.sig`),
+          )
+          .send(await readSnapshotFile(deps, sig.sigPath));
       }
       const format = resolveRunFormat(run, req.query.format);
       let content: Buffer;

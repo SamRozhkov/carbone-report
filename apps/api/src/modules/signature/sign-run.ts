@@ -28,7 +28,7 @@ import {
 import { loadUserCertificate } from './certificates';
 import { recordSignFailure, signBlocked } from './password-failures';
 
-const unavailable = () => badRequest('подпись для этого отчёта недоступна');
+export const unavailable = () => badRequest('подпись для этого отчёта недоступна');
 // Пароль не попадает ни в сообщение, ни в details (Review Focus 1).
 const wrongPassword = () =>
   new AppError('VALIDATION', 400, 'неверные данные запроса', [
@@ -40,7 +40,7 @@ const tooMany = () =>
     429,
     'слишком много неверных паролей — попробуйте через 15 минут',
   );
-const busy = () =>
+export const busy = () =>
   new AppError(
     'SIGN_BUSY',
     409,

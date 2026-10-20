@@ -1,7 +1,8 @@
 import { and, eq, isNotNull, lt } from 'drizzle-orm';
-import { reportRunFiles, reportRunSignatures, reportRuns } from '../../db/schema';
+import { gostSignPending, reportRunFiles, reportRunSignatures, reportRuns } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { cleanupOidcSessions } from '../auth/oidc-users';
+import { cleanupGostPending } from '../signature/gost-pending';
 import { runStoragePath } from './snapshot';
 
 export async function cleanupOldReports(
@@ -31,6 +32,8 @@ export async function cleanupOldReports(
         await tx.delete(reportRunFiles).where(eq(reportRunFiles.runId, r.id));
         // Подпись запуска (§39.3, R11): файл out.signed.pdf уходит вместе с каталогом снимка.
         await tx.delete(reportRunSignatures).where(eq(reportRunSignatures.runId, r.id));
+        // Начатая подпись ГОСТ (§42.5): черновик и .sig уходят вместе с каталогом снимка.
+        await tx.delete(gostSignPending).where(eq(gostSignPending.runId, r.id));
       });
       // Снимок — каталог reports/<runId>/ целиком, старый запуск — его единственный файл.
       await deps.storage.remove(runStoragePath(r)!);
@@ -52,6 +55,10 @@ export function startCleanupTimer(
     );
     // Истёкшие и давно отозванные OIDC-сессии: таблица не растёт без предела.
     await cleanupOidcSessions(deps).catch((e) => log.error(e, 'очистка OIDC-сессий не удалась'));
+    // Истёкшие ожидания подписи ГОСТ и их черновики (§42.5).
+    await cleanupGostPending(deps, new Date(), log).catch((e) =>
+      log.error(e, 'очистка ожиданий подписи ГОСТ не удалась'),
+    );
   };
   void tick();
   const timer = setInterval(tick, 60 * 60 * 1000);

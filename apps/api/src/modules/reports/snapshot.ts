@@ -42,6 +42,12 @@ export function snapshotPaths(runId: string, ext: TemplateExt) {
 /** Подписанный PDF запуска (§39.3). */
 export const signedPath = (runId: string) => `${runDir(runId)}/out.signed.pdf`;
 
+/** Открепленная подпись ГОСТ рядом с подписанным PDF (§42.5). */
+export const signaturePath = (runId: string) => `${runDir(runId)}/out.signed.pdf.sig`;
+
+/** Черновик подписи ГОСТ: PDF со штампом до завершения подписи (§42.2). */
+export const gostDraftPath = (runId: string) => `${runDir(runId)}/out.gost.pdf`;
+
 export const toRunSignature = (r: RunSignatureRow): RunSignature => ({
   signerCn: r.signerCn,
   fingerprint: r.fingerprint,

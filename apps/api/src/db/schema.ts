@@ -282,6 +282,15 @@ export const userCertificates = pgTable('user_certificates', {
 });
 export type UserCertificateRow = typeof userCertificates.$inferSelect;
 
+/** Неверные пароли подписи (§39.8): окно 15 минут от первой ошибки; строка на пользователя. */
+export const signPasswordFailures = pgTable('sign_password_failures', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  count: integer('count').notNull(),
+  windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+});
+
 /** Подпись запуска (§39.3): одна на запуск; файл — reports/<runId>/out.signed.pdf. */
 export const reportRunSignatures = pgTable('report_run_signatures', {
   runId: uuid('run_id')

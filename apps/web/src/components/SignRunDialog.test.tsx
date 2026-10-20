@@ -94,6 +94,20 @@ describe('SignRunDialog', () => {
     expect(input).toHaveValue('');
   });
 
+  it('409 SIGN_BUSY — текстом в диалоге, пароль сохраняется', async () => {
+    const message = 'другая подпись уже выполняется — повторите через несколько секунд';
+    mockApi([
+      certRoute,
+      { method: 'POST', path: '/api/runs/r1/sign', ...err(409, 'SIGN_BUSY', message) },
+    ]);
+    open();
+    const input = await screen.findByLabelText('Пароль к ключу подписи');
+    await userEvent.type(input, 'pw');
+    await userEvent.click(screen.getByRole('button', { name: 'Подписать' }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(input).toHaveValue('pw');
+  });
+
   it('Enter в поле пароля подписывает; при пустом пароле — нет', async () => {
     const { calls } = mockApi([
       certRoute,

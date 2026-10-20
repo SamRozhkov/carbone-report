@@ -13,9 +13,10 @@ export interface RenderOptions {
 export interface RenderJob {
   /**
    * carbone (по умолчанию) — сборка отчёта; pdf — обработка готового PDF (§36.4), template — сам PDF;
-   * sign — подготовка PDF к подписи (§39.4), template — сам PDF.
+   * sign — подготовка PDF к подписи (§39.4), template — сам PDF;
+   * p12 — разбор .p12 (§39.8), template — файл, data — { password, now }.
    */
-  kind?: 'carbone' | 'pdf' | 'sign';
+  kind?: 'carbone' | 'pdf' | 'sign' | 'p12';
   template: Buffer;
   ext: string;
   data: unknown;
@@ -28,6 +29,8 @@ export interface RenderJob {
 export interface RenderResult {
   out: Buffer;
   warnings: string[];
+  /** Метаданные задачи (JSON от потока): для p12 — сертификаты и сведения. */
+  meta?: unknown;
 }
 
 export interface RenderPoolOptions {
@@ -51,13 +54,20 @@ export class RenderTimeoutError extends Error {
 /** Поток завершился аварийно или пул остановлен. */
 export class RenderCrashError extends Error {}
 
-/** Ошибка шаблона: message — текст Carbone. */
-export class TemplateRenderError extends Error {}
+/** Ошибка шаблона: message — текст Carbone; field — поле формы (ошибка .p12, §39.8). */
+export class TemplateRenderError extends Error {
+  constructor(
+    message: string,
+    readonly field?: string,
+  ) {
+    super(message);
+  }
+}
 
 type Reply =
   | { ready: true }
-  | { id: number; ok: true; out: Uint8Array; warnings?: string[] }
-  | { id: number; ok: false; message: string };
+  | { id: number; ok: true; out: Uint8Array; warnings?: string[]; meta?: string }
+  | { id: number; ok: false; message: string; field?: string };
 
 interface Task {
   id: number;
@@ -230,8 +240,9 @@ export class RenderPool {
       task.resolve({
         out: Buffer.from(m.out.buffer, m.out.byteOffset, m.out.byteLength),
         warnings: Array.isArray(m.warnings) ? m.warnings : [],
+        ...(typeof m.meta === 'string' ? { meta: JSON.parse(m.meta) as unknown } : {}),
       });
-    else task.reject(new TemplateRenderError(m.message));
+    else task.reject(new TemplateRenderError(m.message, m.field));
     this.dispatch();
   }
 

@@ -1,4 +1,10 @@
-import { createCipheriv, createHash, pbkdf2Sync, randomBytes } from 'node:crypto';
+import {
+  createCipheriv,
+  createHash,
+  generateKeyPairSync,
+  pbkdf2Sync,
+  randomBytes,
+} from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { fixture, fixtureCertDer, FIXTURE_PASSWORD } from './fixtures';
 import forge from 'node-forge';
@@ -273,6 +279,24 @@ describe('readP12 (§39.1)', () => {
     fails(() => readP12(file, FIXTURE_PASSWORD), 'file', msg);
     expect(performance.now() - t).toBeLessThan(500);
   });
+
+  it('скрытые ключи, каждый в пределе, вместе сверх бюджета — отказ до третьего расчёта', () => {
+    const msg = 'файл сертификата не поддерживается: слишком много итераций шифрования';
+    // Настоящий PKCS#8: node-forge расшифровывает мешок и не падает на нём до проверки следующего.
+    const pk8 = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({
+      type: 'pkcs8',
+      format: 'der',
+    });
+    const bag = () => {
+      const { alg, encrypted } = pbes2Encrypt(pk8, MAX_P12_ITERATIONS);
+      return seq(oid(O.shroudedKeyBag), explicit0(seq(alg, oct(encrypted))));
+    };
+    // Видимая цена мала (MAC и внешняя часть по 2048), три мешка по 100 000 видны только после
+    // расшифровки внешней части: два считаются, третий превышает бюджет 300 000.
+    const file = withExtraParts([encryptedPart(der(seq(bag(), bag(), bag())), 2048)]);
+    expect(file.length).toBeLessThan(MAX_P12_BYTES);
+    fails(() => readP12(file, FIXTURE_PASSWORD), 'file', msg);
+  }, 30_000);
 
   it('пароль кириллицей: OpenSSL 3 (PBES2, UTF-8) и -legacy (BMPString)', () => {
     expect(read('rsa-cyr.p12', 'пароль1').info.serial).toBe('1001');

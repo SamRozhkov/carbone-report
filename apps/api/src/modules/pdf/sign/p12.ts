@@ -57,11 +57,85 @@ type Bag = forge.pkcs12.Bag & { asn1?: forge.asn1.Asn1 };
 
 const toDer = (a: forge.asn1.Asn1) => Buffer.from(forge.asn1.toDer(a).getBytes(), 'binary');
 
+/**
+ * Предел итераций PBKDF2/PKCS#12 KDF (MAC и шифрование). `node-forge` считает их синхронно
+ * в главном потоке (1 000 000 — секунды), а итерации задаёт автор файла: больше — отказ до расчёта.
+ */
+export const MAX_P12_ITERATIONS = 600_000;
+const TOO_MANY_ITERATIONS = 'файл сертификата не поддерживается: слишком много итераций шифрования';
+
+type Asn1 = forge.asn1.Asn1;
+const children = (a: Asn1 | undefined): Asn1[] =>
+  a && Array.isArray(a.value) ? (a.value as Asn1[]) : [];
+
+/** Значение INTEGER; длиннее 4 байт (без ведущих нулей) — заведомо больше предела. */
+function intValue(a: Asn1 | undefined): number | null {
+  if (!a || a.tagClass !== forge.asn1.Class.UNIVERSAL || a.type !== forge.asn1.Type.INTEGER)
+    return null;
+  if (typeof a.value !== 'string') return null;
+  const bytes = a.value.replace(/^\0+/, '');
+  if (bytes.length > 4) return Number.MAX_SAFE_INTEGER;
+  let n = 0;
+  for (const ch of bytes) n = n * 256 + ch.charCodeAt(0);
+  return n;
+}
+
+function checkIterations(n: number | null) {
+  if (n !== null && n > MAX_P12_ITERATIONS) throw new P12Error('file', TOO_MANY_ITERATIONS);
+}
+
+/**
+ * Итерации MAC (`macData.iterations`) — их `node-forge` считает первыми, до расшифровки.
+ * PFX ::= SEQUENCE { version, authSafe ContentInfo, macData MacData OPTIONAL },
+ * MacData ::= SEQUENCE { mac DigestInfo, macSalt OCTET STRING, iterations INTEGER DEFAULT 1 }.
+ */
+function checkMacIterations(pfx: Asn1) {
+  checkIterations(intValue(children(children(pfx)[2])[2]));
+}
+
+/**
+ * Итерации параметров PBE: PKCS#12 PBE-params ::= SEQUENCE { salt, iterations INTEGER };
+ * PBES2-params ::= SEQUENCE { keyDerivationFunc SEQUENCE { pbkdf2 OID,
+ * PBKDF2-params SEQUENCE { salt, iterationCount INTEGER, ... } }, encryptionScheme }.
+ */
+function pbeIterations(oid: string, params: Asn1): number | null {
+  if (oid === forge.pki.oids.pkcs5PBES2)
+    return intValue(children(children(children(params)[0])[1])[1]);
+  return intValue(children(params)[1]);
+}
+
+type GetCipher = (oid: string, params: Asn1, password: string) => unknown;
+const pbe = (forge.pki as unknown as { pbe: { getCipher: GetCipher } }).pbe;
+
+/**
+ * На время синхронного разбора `node-forge` оборачивает `pki.pbe.getCipher` — через него идёт
+ * расшифровка всех SafeContents и всех pkcs8ShroudedKeyBag, в том числе мешков внутри
+ * зашифрованных SafeContents (их параметры видны только после внешней расшифровки), так что
+ * итерации проверяются перед каждым расчётом ключа. Заодно пароль для PBES2 (PBKDF2) передаётся
+ * байтами UTF-8, как его кодирует OpenSSL 3 (иначе пароль не латиницей не подходит); MAC и PBE
+ * PKCS#12 (-legacy) `node-forge` сам переводит в BMPString.
+ */
+function withPbeGuard<T>(fn: () => T): T {
+  const original = pbe.getCipher;
+  pbe.getCipher = (oid, params, password) => {
+    checkIterations(pbeIterations(oid, params));
+    const pw = oid === forge.pki.oids.pkcs5PBES2 ? forge.util.encodeUtf8(password) : password;
+    return original.call(pbe, oid, params, pw);
+  };
+  try {
+    return fn();
+  } finally {
+    pbe.getCipher = original;
+  }
+}
+
 function openPfx(file: Uint8Array, password: string): forge.pkcs12.Pkcs12Pfx {
   try {
     const asn1 = forge.asn1.fromDer(forge.util.createBuffer(Buffer.from(file).toString('binary')));
-    return forge.pkcs12.pkcs12FromAsn1(asn1, true, password);
-  } catch {
+    checkMacIterations(asn1);
+    return withPbeGuard(() => forge.pkcs12.pkcs12FromAsn1(asn1, true, password));
+  } catch (e) {
+    if (e instanceof P12Error) throw e;
     // Причина (MAC, ASN.1) пользователю не нужна и может повторять входные данные.
     throw new P12Error('password', BAD_FILE);
   }

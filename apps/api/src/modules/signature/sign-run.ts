@@ -75,9 +75,9 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
         throw unavailable();
       const cert = await loadUserCertificate(db, me.id);
       if (!cert) throw badRequest('загрузите сертификат на странице «Моя подпись»');
-      const now = new Date();
-      if (now < cert.notBefore) throw badRequest('сертификат ещё не действует');
-      if (now > cert.notAfter) throw badRequest('срок действия сертификата истёк');
+      const checkedAt = new Date();
+      if (checkedAt < cert.notBefore) throw badRequest('сертификат ещё не действует');
+      if (checkedAt > cert.notAfter) throw badRequest('срок действия сертификата истёк');
       // Ранний 429 без ожидания блокировки; решающая проверка — внутри неё, перед паролем.
       await assertAttemptsLeft(req);
 
@@ -104,6 +104,9 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
           if (done) throw conflict('отчёт уже подписан');
 
           await assertAttemptsLeft(req);
+          // Время подписи — после ожидания блокировки: им проверяется срок сертификата (readP12),
+          // оно же в штампе, /M и строке подписи.
+          const now = new Date();
           let p12: P12Contents;
           try {
             p12 = readP12(

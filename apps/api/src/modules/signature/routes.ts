@@ -17,11 +17,18 @@ async function readCertificateUpload(
 ): Promise<{ file: Buffer; password: string }> {
   let file: Buffer | undefined;
   let password: string | undefined;
-  for await (const part of req.parts({ limits: { fileSize: 1024 * 1024 } })) {
-    if (part.type === 'file') {
-      if (part.fieldname !== 'file') throw badRequest('файл передаётся в поле file');
-      file = await part.toBuffer();
-    } else if (part.fieldname === 'password') password = String(part.value);
+  try {
+    for await (const part of req.parts({ limits: { fileSize: 1024 * 1024 } })) {
+      if (part.type === 'file') {
+        if (part.fieldname !== 'file') throw badRequest('файл передаётся в поле file');
+        file = await part.toBuffer();
+      } else if (part.fieldname === 'password') password = String(part.value);
+    }
+  } catch (err) {
+    // Больше 1 МБ — не общее «файл больше 20 МБ» (413), а то же, что даёт readP12 (400 у /file).
+    if ((err as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE')
+      throw p12FieldError(new P12Error('file', 'файл больше 50 КБ'));
+    throw err;
   }
   if (!file) throw badRequest('файл не передан');
   if (!password)

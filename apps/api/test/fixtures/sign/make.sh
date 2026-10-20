@@ -53,6 +53,13 @@ p12 rsa1024.p12 "$tmp/rsa1024.key" "$tmp/rsa1024.pem" ca.pem
 p12 nosign.p12 "$tmp/nosign.key" "$tmp/nosign.pem" ca.pem
 cat "$tmp/int.pem" ca.pem >"$tmp/chain.pem"
 p12 chain3.p12 "$tmp/chain3.key" "$tmp/chain3.pem" "$tmp/chain.pem"
+# Слишком много итераций (защита от DoS): и шифрование, и MAC; только шифрование (MAC — 1 итерация).
+p12 iter-high.p12 "$tmp/rsa.key" "$tmp/rsa.pem" ca.pem -iter 1000000
+p12 iter-high-pbe.p12 "$tmp/rsa.key" "$tmp/rsa.pem" ca.pem -iter 1000000 -nomaciter
+# Пароль кириллицей: PBES2 (UTF-8) и -legacy (BMPString).
+cyr() { f=$1; shift; $O pkcs12 -export -inkey "$tmp/rsa.key" -in "$tmp/rsa.pem" -certfile ca.pem -passout 'pass:пароль1' -out "$f" "$@"; }
+cyr rsa-cyr.p12
+cyr rsa-cyr-legacy.p12 -legacy
 # Файл только с ключом и файл без ключа.
 $O pkcs12 -export -nocerts -inkey "$tmp/rsa.key" -passout $P -out keyonly.p12
 $O pkcs12 -export -nokeys -in "$tmp/rsa.pem" -certfile ca.pem -passout $P -out nokey.p12

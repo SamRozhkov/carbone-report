@@ -87,6 +87,16 @@ describe('сертификат пользователя (§39.1)', () => {
   it('больше 50 КБ — 400 у файла', async () => {
     const { cookie } = await loginAs(t, 'user');
     const res = await upload(cookie, Buffer.alloc(60 * 1024, 1), 'x');
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({
+      error: { code: 'VALIDATION', details: [{ path: '/file', message: 'файл больше 50 КБ' }] },
+    });
+  });
+
+  it('больше лимита части (1 МБ) — тоже 400 «файл больше 50 КБ», а не 413', async () => {
+    const { cookie } = await loginAs(t, 'user');
+    const res = await upload(cookie, Buffer.alloc(2 * 1024 * 1024, 1), 'x');
+    expect(res.statusCode).toBe(400);
     expect(res.json()).toMatchObject({
       error: { code: 'VALIDATION', details: [{ path: '/file', message: 'файл больше 50 КБ' }] },
     });

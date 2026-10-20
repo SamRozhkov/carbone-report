@@ -178,7 +178,43 @@ describe('OIDC: маршруты с PostgreSQL и Redis', () => {
       expect(r.statusCode).toBe(403);
       expect(r.json().error.code).toBe('OIDC_LOGIN_UNAVAILABLE');
     }
-    expect(reserved.json().error.message).toBe(taken.json().error.message);
+    expect(reserved.statusCode).toBe(taken.statusCode);
+    expect(reserved.json()).toEqual(taken.json());
+  });
+  it('сбой БД при отзыве: повторная доставка того же logout token всё же отзывает сессию', async () => {
+    const sub = 'subject-' + randomUUID();
+    actualSubject = sub;
+    const r = await finish(await begin());
+    vi.mocked(mock.verifyLogout).mockResolvedValue({
+      issuer: ISSUER,
+      jti: randomUUID(),
+      subject: sub,
+    });
+    const logout = () =>
+      app.inject({
+        method: 'POST',
+        url: '/api/auth/oidc/backchannel-logout',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: 'logout_token=validated-by-test-provider',
+      });
+    const spy = vi.spyOn(t.deps.db, 'update').mockImplementationOnce(() => {
+      throw new Error('db down');
+    });
+    try {
+      expect((await logout()).statusCode).toBe(500);
+      expect((await logout()).statusCode).toBe(200);
+      expect(
+        (await app.inject({ url: '/api/auth/me', headers: { cookie: sessionCookie(r) } }))
+          .statusCode,
+      ).toBe(401);
+    } finally {
+      spy.mockRestore();
+      vi.mocked(mock.verifyLogout).mockImplementation(async () => ({
+        issuer: ISSUER,
+        jti: randomUUID(),
+        sid: 'provider-sid',
+      }));
+    }
   });
   it('повтор того же logout token (jti) пропускается и не отзывает новую сессию', async () => {
     const sub = 'subject-' + randomUUID();

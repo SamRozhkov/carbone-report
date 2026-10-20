@@ -219,11 +219,19 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
         const criteria = [eq(oidcSessions.issuer, identity.issuer)];
         if (identity.sid) criteria.push(eq(oidcSessions.providerSid, identity.sid));
         if (identity.subject) criteria.push(eq(oidcSessions.subject, identity.subject));
-        const revoked = await deps.db
-          .update(oidcSessions)
-          .set({ revokedAt: new Date() })
-          .where(and(...criteria))
-          .returning({ userId: oidcSessions.userId });
+        let revoked;
+        try {
+          revoked = await deps.db
+            .update(oidcSessions)
+            .set({ revokedAt: new Date() })
+            .where(and(...criteria))
+            .returning({ userId: oidcSessions.userId });
+        } catch (error) {
+          // Отзыв не выполнен: возвращаем ключ jti, иначе повторная доставка токена Keycloak
+          // была бы пропущена как повтор и сессии остались бы действующими.
+          await deps.redis?.del(replayKey).catch(() => {});
+          throw error;
+        }
         req.log.info({ sessions: revoked.length }, 'OIDC: back-channel logout выполнен');
         return reply.status(200).send();
       },

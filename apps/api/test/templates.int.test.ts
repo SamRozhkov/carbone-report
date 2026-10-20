@@ -324,4 +324,37 @@ describe('templates', () => {
     expect(r.statusCode).toBe(200);
     expect(r.json().version).toBe(before.json().version + 1);
   });
+  it('GET /tag-warnings: русская буква в теге; не админ — 403; неизвестный id — 404', async () => {
+    const JSZip = (await import('jszip')).default;
+    const z = new JSZip();
+    z.file('xl/sharedStrings.xml', '<sst><si><t>{d.data[].сnt:aggSum}</t></si></sst>');
+    const data = await z.generateAsync({ type: 'nodebuffer' });
+    const mp = multipart(
+      { name: 'Теги', description: '', datasourceId: dsId },
+      { name: 'Теги.xlsx', data },
+    );
+    const up = await t.app.inject({
+      method: 'POST',
+      url: '/api/templates/upload',
+      headers: { cookie: admin, ...mp.headers },
+      payload: mp.payload,
+    });
+    expect(up.statusCode).toBe(201);
+    const id = up.json().id;
+    const url = `/api/templates/${id}/tag-warnings`;
+    const ok = await t.app.inject({ method: 'GET', url, headers: { cookie: admin } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toEqual({
+      warnings: [{ tag: '{d.data[].сnt:aggSum}', word: 'сnt', letters: ['с'] }],
+      total: 1,
+    });
+    const denied = await t.app.inject({ method: 'GET', url, headers: { cookie: user } });
+    expect(denied.statusCode).toBe(403);
+    const missing = await t.app.inject({
+      method: 'GET',
+      url: '/api/templates/00000000-0000-4000-8000-000000000000/tag-warnings',
+      headers: { cookie: admin },
+    });
+    expect(missing.statusCode).toBe(404);
+  });
 });

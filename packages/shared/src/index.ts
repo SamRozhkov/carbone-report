@@ -306,6 +306,25 @@ export const TemplateAdminDetails = TemplateDetails.extend({
 });
 export type TemplateAdminDetails = z.infer<typeof TemplateAdminDetails>;
 
+/** Тег с русскими буквами среди латинских (или русским корнем `с`/`С`): такой тег не находит данные. */
+export const TagWarning = z.object({
+  /** Тег целиком, вместе с фигурными скобками. */
+  tag: z.string(),
+  /** Слово, в котором смешаны алфавиты. */
+  word: z.string(),
+  /** Русские буквы этого слова. */
+  letters: z.array(z.string()),
+});
+export type TagWarning = z.infer<typeof TagWarning>;
+
+export const TemplateTagWarnings = z.object({
+  /** Не более 20 первых. */
+  warnings: z.array(TagWarning),
+  /** Сколько всего тегов с предупреждением. */
+  total: z.number(),
+});
+export type TemplateTagWarnings = z.infer<typeof TemplateTagWarnings>;
+
 export const CreateTemplateBody = z.object({
   name: z.string().trim().min(1),
   description: z.string().default(''),

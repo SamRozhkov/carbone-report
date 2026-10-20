@@ -56,6 +56,16 @@ export function TemplateEditorPage() {
   // Берём только после первого захода на «Документ» и когда шаблон загружен.
   const lock = useEditLock(id, documentVisited && !!t);
 
+  // Предупреждение перечитывается с новой версией файла (загрузка, замена, сохранение из OnlyOffice).
+  // Ошибка запроса не показывается: подсказка необязательна.
+  const tagWarnings = useQuery({
+    queryKey: ['template-tag-warnings', id, t?.version],
+    queryFn: () => api.templates.tagWarnings(id),
+    enabled: !!t,
+    retry: false,
+  });
+  const warned = tagWarnings.data;
+
   if (template.isPending) return <Loader />;
   if (!t) return <ErrorAlert error={template.error} title="Не удалось открыть шаблон" />;
 
@@ -104,6 +114,32 @@ export function TemplateEditorPage() {
             theme="danger"
             title="Последнее сохранение из редактора не удалось"
             message={t.lastSaveError}
+          />
+        </div>
+      )}
+      {warned && warned.total > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <Alert
+            theme="warning"
+            title="В тегах есть русские буквы вместо латинских"
+            message={
+              <div>
+                <div>Такие теги не найдут данные — замените выделенные буквы латинскими.</div>
+                <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+                  {warned.warnings.map((w) => (
+                    <li key={w.tag}>
+                      <code>{w.tag}</code> —{' '}
+                      {w.word === w.letters[0] && w.letters.length === 1
+                        ? `«${w.word}» в начале тега — русская`
+                        : `«${w.letters.join('», «')}» в «${w.word}» — русская`}
+                    </li>
+                  ))}
+                </ul>
+                {warned.total > warned.warnings.length && (
+                  <div>и ещё {warned.total - warned.warnings.length}</div>
+                )}
+              </div>
+            }
           />
         </div>
       )}

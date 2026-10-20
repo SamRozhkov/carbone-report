@@ -161,4 +161,42 @@ describe('TemplateEditorPage', () => {
     expect(calls.find((c) => c.method === 'PUT')!.path).toBe('/api/templates/t1/file');
     expect(calls.some((c) => c.path.includes('/edit-lock'))).toBe(false);
   });
+  it('предупреждение о русских буквах в тегах: список и «и ещё N»; при total = 0 скрыто', async () => {
+    mockApi([
+      adminMe,
+      { path: '/api/templates/t1', body: adminTemplate },
+      {
+        path: '/api/templates/t1/tag-warnings',
+        body: {
+          warnings: [
+            { tag: '{d.data[].сnt:aggSum}', word: 'сnt', letters: ['с'] },
+            { tag: '{с.g[i].cnt}', word: 'с', letters: ['с'] },
+          ],
+          total: 5,
+        },
+      },
+      { path: '/api/datasources', body: [] },
+    ]);
+    renderRoute('/admin/templates/t1?tab=settings');
+    expect(
+      await screen.findByText('В тегах есть русские буквы вместо латинских'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('{d.data[].сnt:aggSum}')).toBeInTheDocument();
+    expect(screen.getByText(/«с» в «сnt» — русская/)).toBeInTheDocument();
+    expect(screen.getByText(/«с» в начале тега — русская/)).toBeInTheDocument();
+    expect(screen.getByText('и ещё 3')).toBeInTheDocument();
+  });
+
+  it('без предупреждений баннера нет', async () => {
+    const { calls } = mockApi([
+      adminMe,
+      { path: '/api/templates/t1', body: adminTemplate },
+      { path: '/api/templates/t1/tag-warnings', body: { warnings: [], total: 0 } },
+      { path: '/api/datasources', body: [] },
+    ]);
+    renderRoute('/admin/templates/t1?tab=settings');
+    await screen.findByText('Счёт');
+    await waitFor(() => expect(calls.some((c) => c.path.endsWith('/tag-warnings'))).toBe(true));
+    expect(screen.queryByText('В тегах есть русские буквы вместо латинских')).toBeNull();
+  });
 });

@@ -35,6 +35,7 @@ import type {
   TemplateParam,
   TemplateQuery,
   TemplateSummary,
+  TemplateTagWarnings,
   UpdateTemplateBody,
   UpdateUserBody,
   UserDto,
@@ -116,6 +117,7 @@ export const api = {
     list: () => apiJson<TemplateSummary[]>('/api/templates'),
     get: (id: string) => apiJson<TemplateDetails>(`/api/templates/${id}`),
     getAdmin: (id: string) => apiJson<TemplateAdminDetails>(`/api/templates/${id}`),
+    tagWarnings: (id: string) => apiJson<TemplateTagWarnings>(`/api/templates/${id}/tag-warnings`),
     create: (body: CreateTemplateBody) => apiJson<TemplateSummary>('/api/templates', post(body)),
     upload: (form: FormData) =>
       apiJson<TemplateSummary>('/api/templates/upload', { method: 'POST', body: form }),

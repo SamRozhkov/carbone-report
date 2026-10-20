@@ -37,7 +37,7 @@ export const DEFAULT_LIMITS: ArchiveLimits = {
 const mb = (n: number) => `${Math.round(n / 1024 / 1024)} МБ`;
 
 /** Запись центрального каталога zip. Размеры из заголовков — только для сверки, не для лимитов. */
-interface ZipEntry {
+export interface ZipEntry {
   name: string;
   flags: number;
   method: number;
@@ -55,7 +55,7 @@ const SIG_LOCAL = 0x04034b50;
  * Центральный каталог zip — свой разбор вместо JSZip: JSZip молча схлопывает записи с одинаковым
  * именем, «исправляет» пути с `../` и читает каталог целиком до проверки числа записей.
  */
-function readDirectory(buf: Buffer, limits: ArchiveLimits): ZipEntry[] {
+export function readDirectory(buf: Buffer, limits: ArchiveLimits): ZipEntry[] {
   let eocd = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 22 - 0xffff); i--) {
     if (buf.readUInt32LE(i) === SIG_EOCD) {
@@ -119,7 +119,7 @@ function checkPath(name: string): void {
  * Распаковывает запись не больше чем в `budget` байт: zlib прерывает распаковку, как только
  * фактический объём превышает лимит, — заявленный в заголовке размер не учитывается.
  */
-async function extract(
+export async function extract(
   buf: Buffer,
   e: ZipEntry,
   budget: number,

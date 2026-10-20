@@ -247,4 +247,3 @@ describe('POST /api/auth/login с настоящим LDAP', () => {
       .where(eq(users.login, 'fry@planetexpress.com'));
     expect(byEmailLogin).toHaveLength(0);
   });
-});

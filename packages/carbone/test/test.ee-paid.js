@@ -895,21 +895,22 @@ describe('XLSX: общие строки и номера строк и ячеек
     });
   });
   // строки — массивы значений ячеек; общие строки, как в файле Excel (sharedStrings.xml)
-  async function xlsx (rows, cols, extra) {
+  async function xlsx (rows, cols, extra, sheetExtra) {
     const strings = [];
     const cell = (v, r, c) => {
       const ref = String.fromCharCode(65 + c) + r;
       strings.push(v);
       return '<c r="' + ref + '" t="s"><v>' + (strings.length - 1) + '</v></c>';
     };
-    const sheet = rows.map((cells, r) => '<row r="' + (r + 1) + '" spans="1:' + cells.length + '">' + cells.map((v, c) => cell(v, r + 1, c)).join('') + '</row>').join('');
+    // null вместо строки или ячейки — её нет в файле, как у пустых ячеек и строк без оформления в Excel
+    const sheet = rows.map((cells, r) => cells === null ? '' : '<row r="' + (r + 1) + '" spans="1:' + cells.length + '">' + cells.map((v, c) => v === null ? '' : cell(v, r + 1, c)).join('') + '</row>').join('');
     return zip({
       '[Content_Types].xml': XML + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>',
       '_rels/.rels': XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
       'xl/workbook.xml': XML + '<workbook xmlns="' + M + '" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Лист1" sheetId="1" r:id="rId1"/></sheets></workbook>',
       'xl/_rels/workbook.xml.rels': XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>',
       'xl/sharedStrings.xml': XML + '<sst xmlns="' + M + '">' + strings.map((s) => '<si><t>' + s + '</t></si>').join('') + '</sst>',
-      'xl/worksheets/sheet1.xml': XML + '<worksheet xmlns="' + M + '">' + (cols || '') + '<sheetData>' + sheet + '</sheetData></worksheet>',
+      'xl/worksheets/sheet1.xml': XML + '<worksheet xmlns="' + M + '">' + (cols || '') + '<sheetData>' + sheet + '</sheetData>' + (sheetExtra || '') + '</worksheet>',
       ...(extra || {})
     });
   }
@@ -918,7 +919,7 @@ describe('XLSX: общие строки и номера строк и ячеек
     const strings = [...sst.matchAll(/<si>([\s\S]*?)<\/si>/g)].map(([, si]) => [...si.matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map((m) => m[1]).join(''));
     const rows = [];
     let expectRow = 1;
-    for (const [, rowAttrs, body] of sheetXml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/g)) {
+    for (const [, rowAttrs, body = ''] of sheetXml.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
       const r = /\sr="(\d+)"/.exec(rowAttrs);
       assert.ok(r, 'у строки нет r: ' + rowAttrs);
       assert.strictEqual(Number(r[1]), expectRow++, 'номера строк не подряд');
@@ -937,13 +938,14 @@ describe('XLSX: общие строки и номера строк и ячеек
     }
     return rows;
   }
-  async function render (rows, data, cols) {
-    const out = await renderBuffer(await xlsx(rows, cols), 'xlsx', data, RU);
+  async function render (rows, data, cols, sheetExtra) {
+    const out = await renderBuffer(await xlsx(rows, cols, null, sheetExtra), 'xlsx', data, RU);
     const sheet = await entry(out, 'xl/worksheets/sheet1.xml');
     const sst = await entry(out, 'xl/sharedStrings.xml');
     assert.match(await entry(out, '[Content_Types].xml'), /PartName="\/xl\/sharedStrings\.xml"/);
     assert.match(await entry(out, 'xl/_rels/workbook.xml.rels'), /relationships\/sharedStrings" Target="sharedStrings\.xml"/);
-    return { sheet, sst, grid: grid(sheet, sst) };
+    const merges = [...sheet.matchAll(/<mergeCell ref="([^"]+)"\/>/g)].map((m) => m[1]);
+    return { sheet, sst, grid: grid(sheet, sst), merges };
   }
   const CARS = { cars: [{ n: 'Лада', ok: true }, { n: 'Тесла', ok: false }, { n: 'БМВ', ok: true }], hide: true };
 
@@ -993,6 +995,55 @@ describe('XLSX: общие строки и номера строк и ячеек
     assert.strictEqual((sst.match(/<si>/g) || []).length, 2, sst);
     assert.match(sst, /<si><t>X<\/t><\/si><si><t>Y<\/t><\/si>/);
     assert.match(xml, /<c r="A1" t="s"><v>0<\/v><extLst><ext uri="u"\/><\/extLst><\/c><c r="B1" t="s"><v>1<\/v><\/c>/);
+  });
+  it('пустые ячейки и строки, которых нет в файле, не сдвигают соседние: итоги под циклом на своих местах', async function () {
+    const data = { data: [{ n: 'A', v: 1 }, { n: 'B', v: 10 }, { n: 'C', v: 100 }] };
+    const out = await render([
+      [null, 'Должность', 'Кол-во'],
+      ['{d.data[i].n:count()}', '{d.data[i].n}', '{d.data[i].v}'],
+      [null, '{d.data[i+1]}', null],
+      null,
+      [null, null, '{d.data[].v:aggSum}']
+    ], data);
+    assert.deepStrictEqual(out.grid, [
+      ['', 'Должность', 'Кол-во'],
+      ['1', 'A', '1'],
+      ['2', 'B', '10'],
+      ['3', 'C', '100'],
+      [],
+      ['', '', '111']
+    ]);
+  });
+  it('объединённые ячейки следуют за строками: после цикла — сдвиг, в строке цикла — в каждой строке, в [i+1] — убираются', async function () {
+    const data = { data: [{ n: 'A', v: 1 }, { n: 'B', v: 10 }, { n: 'C', v: 100 }] };
+    const out = await render([
+      ['Шапка', '', ''],
+      ['{d.data[i].n}', '', '{d.data[i].v}'],
+      ['{d.data[i+1]}', '', ''],
+      ['Итого', '', '{d.data[].v:aggSum}']
+    ], data, null, '<mergeCells count="4"><mergeCell ref="A1:C1"/><mergeCell ref="A2:B2"/><mergeCell ref="A3:B3"/><mergeCell ref="A4:B4"/></mergeCells>');
+    assert.deepStrictEqual(out.grid.map((r) => r[0] + '|' + r[2]), ['Шапка|', 'A|1', 'B|10', 'C|100', 'Итого|111']);
+    assert.deepStrictEqual(out.merges, ['A1:C1', 'A2:B2', 'A3:B3', 'A4:B4', 'A5:B5']);
+    assert.match(out.sheet, /<mergeCells count="5">/);
+    assert.ok(!/cmRow/.test(out.sheet), 'служебный атрибут остался');
+  });
+  it('объединения нет в собранном листе (строка удалена drop) — элемент mergeCells убирается', async function () {
+    const out = await render([
+      ['{d.hide:ifEQ(true):drop(row)}x', ''],
+      ['y', '']
+    ], { hide: true }, null, '<mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells>');
+    assert.deepStrictEqual(out.grid, [['y', '']]);
+    assert.deepStrictEqual(out.merges, []);
+    assert.ok(!/<mergeCells/.test(out.sheet), out.sheet);
+  });
+  it('fillWorksheetGaps: недостающие ячейки и строки до removeRowCounterInWorksheet', function () {
+    const { fillWorksheetGaps } = require('../lib/preprocessor');
+    assert.strictEqual(fillWorksheetGaps('<x><sheetData><row r="2"><c r="C2"><v>1</v></c><c r="E2"/></row><row r="3"/></sheetData></x>'),
+      '<x><sheetData><row r="1"/><row r="2"><c r="A2"/><c r="B2"/><c r="C2"><v>1</v></c><c r="D2"/><c r="E2"/></row><row r="3"/></sheetData></x>');
+    // без r (уже обработанный или чужой лист) — не трогается
+    assert.strictEqual(fillWorksheetGaps('<x><sheetData><row><c><v>1</v></c></row></sheetData></x>'), '<x><sheetData><row><c><v>1</v></c></row></sheetData></x>');
+    assert.strictEqual(fillWorksheetGaps('<x/>'), '<x/>');
+    assert.strictEqual(fillWorksheetGaps(null), null);
   });
   it('addRowCounterInWorksheet: пустые и самозакрытые ячейки, столбцы после Z, существующие r не трогаются', function () {
     const { addRowCounterInWorksheet, columnName } = require('../lib/preprocessor');

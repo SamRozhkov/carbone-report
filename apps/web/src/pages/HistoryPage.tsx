@@ -1,4 +1,4 @@
-import type { ParamsInput, RunDto } from '@carbone-reports/shared';
+import type { ParamsInput, RunDto, SignMethod } from '@carbone-reports/shared';
 import { RUNS_PAGE_SIZE } from '@carbone-reports/shared';
 import { ArrowDownToLine, PencilToLine } from '@gravity-ui/icons';
 import type { TableColumnConfig } from '@gravity-ui/uikit';
@@ -20,9 +20,12 @@ import { api, runFileUrl } from '../api/endpoints';
 import { useMe } from '../api/session';
 import { useRunDownload } from '../api/useRunDownload';
 import { ErrorAlert } from '../components/ErrorAlert';
+import { SignGostDialog } from '../components/SignGostDialog';
 import { SignRunDialog } from '../components/SignRunDialog';
 import { PageHeader } from '../components/PageHeader';
 import { formatDateTime, formatDuration } from '../lib/format';
+
+const METHOD_LABEL: Record<SignMethod, string> = { gost: 'ГОСТ', p12: '.p12' };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -50,7 +53,7 @@ export function HistoryPage() {
 
   const download = useRunDownload();
   const queryClient = useQueryClient();
-  const [signing, setSigning] = useState<string | null>(null);
+  const [signing, setSigning] = useState<{ id: string; method: SignMethod | null } | null>(null);
   const runs = useQuery({
     queryKey: ['runs', { page, status, templateId, userId }],
     queryFn: () =>
@@ -124,7 +127,7 @@ export function HistoryPage() {
             <Label theme="success">готово</Label>
             {r.signature && (
               <span
-                title={`Подписан: ${r.signature.signerCn}, ${formatDateTime(r.signature.signedAt)}`}
+                title={`Подписан (${METHOD_LABEL[r.signature.method]}): ${r.signature.signerCn}, ${formatDateTime(r.signature.signedAt)}`}
               >
                 <Icon data={PencilToLine} size={16} />
               </span>
@@ -180,15 +183,33 @@ export function HistoryPage() {
                 text: f.toUpperCase(),
                 action: () => download.save({ runId: r.id, format: f }),
               })),
-              ...(r.signature
+              ...(r.signature?.method === 'gost'
                 ? [
                     {
-                      text: 'PDF с подписью',
+                      text: 'PDF со штампом',
                       action: () => download.save({ runId: r.id, format: 'pdf', signed: true }),
+                    },
+                    {
+                      text: 'Подпись (.sig)',
+                      action: () => download.save({ runId: r.id, format: 'sig' }),
+                    },
+                  ]
+                : r.signature
+                  ? [
+                      {
+                        text: 'PDF с подписью',
+                        action: () => download.save({ runId: r.id, format: 'pdf', signed: true }),
+                      },
+                    ]
+                  : []),
+              ...(r.signable
+                ? [
+                    {
+                      text: 'Подписать…',
+                      action: () => setSigning({ id: r.id, method: r.signMethod }),
                     },
                   ]
                 : []),
-              ...(r.signable ? [{ text: 'Подписать…', action: () => setSigning(r.id) }] : []),
             ]}
             renderSwitcher={({ onClick, onKeyDown }) => (
               <Button
@@ -208,6 +229,9 @@ export function HistoryPage() {
       },
     },
   ];
+
+  // Способ подписи — из снимка запуска (§42.1).
+  const SignDialog = signing?.method === 'gost' ? SignGostDialog : SignRunDialog;
 
   return (
     <>
@@ -251,8 +275,8 @@ export function HistoryPage() {
       <ErrorAlert error={runs.error} />
       <ErrorAlert error={download.error} title="Не удалось скачать файл" />
       {signing && (
-        <SignRunDialog
-          runId={signing}
+        <SignDialog
+          runId={signing.id}
           open
           onClose={() => setSigning(null)}
           onSigned={() => {

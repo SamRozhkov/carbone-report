@@ -2,9 +2,15 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { RunDto } from '@carbone-reports/shared';
 import { describe, expect, it, vi } from 'vitest';
+import { loadCades } from '../lib/cades';
 import * as download from '../lib/download';
 import { adminMe, mockApi, renderRoute, userMe } from '../test/utils';
 import { formatRunParams } from './HistoryPage';
+
+vi.mock('../lib/cades', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/cades')>()),
+  loadCades: vi.fn(),
+}));
 
 const run = (over: Partial<RunDto>): RunDto => ({
   id: 'r1',
@@ -131,7 +137,7 @@ describe('HistoryPage', () => {
     ]);
     renderRoute('/history');
     expect(
-      await screen.findByTitle('Подписан: Иванов Иван Иванович, 19.10.2026 14:32'),
+      await screen.findByTitle('Подписан (.p12): Иванов Иван Иванович, 19.10.2026 14:32'),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Скачать' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'PDF с подписью' }));
@@ -189,6 +195,78 @@ describe('HistoryPage', () => {
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Скачать' })).toBeInTheDocument();
+  });
+
+  it('ГОСТ: подсказка «Подписан (ГОСТ)», пункты «PDF со штампом» и «Подпись (.sig)»', async () => {
+    vi.spyOn(download, 'triggerDownload').mockImplementation(() => {});
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:run');
+    const { calls } = mockApi([
+      userMe,
+      { path: '/api/templates', body: [] },
+      {
+        path: '/api/runs',
+        body: page([
+          run({
+            outputFormat: null,
+            formats: ['pdf'],
+            signMethod: 'gost',
+            signature: {
+              signerCn: 'Петров Пётр',
+              fingerprint: 'AB'.repeat(32),
+              signedAt: '2026-10-19T14:32:00',
+              timestamped: true,
+              method: 'gost',
+            },
+          }),
+        ]),
+      },
+      {
+        path: '/api/runs/r1/file',
+        raw: 'X',
+        headers: { 'content-disposition': 'attachment; filename="x.pdf.sig"' },
+      },
+    ]);
+    renderRoute('/history');
+    expect(
+      await screen.findByTitle('Подписан (ГОСТ): Петров Пётр, 19.10.2026 14:32'),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Скачать' }));
+    expect(await screen.findByRole('menuitem', { name: 'PDF со штампом' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'PDF с подписью' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Подпись (.sig)' }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.path === '/api/runs/r1/file?format=sig')).toBe(true),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Скачать' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'PDF со штампом' }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.path === '/api/runs/r1/file?format=pdf&signed=1')).toBe(true),
+    );
+  });
+
+  it('ГОСТ signable: «Подписать…» открывает диалог КриптоПро', async () => {
+    vi.mocked(loadCades).mockResolvedValue({
+      versions: vi.fn(),
+      listCertificates: vi.fn(async () => []),
+      signHash: vi.fn(),
+    });
+    mockApi([
+      userMe,
+      { path: '/api/templates', body: [] },
+      {
+        path: '/api/runs',
+        body: page([run({ outputFormat: null, signable: true, signMethod: 'gost' })]),
+      },
+    ]);
+    renderRoute('/history');
+    await userEvent.click(await screen.findByRole('button', { name: 'Скачать' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Подписать…' }));
+    expect(
+      await screen.findByText(
+        'Нет действующих сертификатов ГОСТ — установите сертификат в КриптоПро',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText('Пароль к ключу подписи')).not.toBeInTheDocument();
   });
 
   it('admin: колонка пользователя, фильтры из URL уходят в запрос', async () => {

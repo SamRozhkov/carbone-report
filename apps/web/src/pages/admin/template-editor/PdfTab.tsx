@@ -8,6 +8,7 @@ import {
   type PdfProtection,
   type PdfSignature,
   type PdfSignaturePosition,
+  type SignMethod,
   type PdfWatermark,
   type SavePdfOptionsBody,
   type TemplateAdminDetails,
@@ -60,6 +61,10 @@ const SIGNATURE_POSITIONS = [
   { value: 'bottom-center', content: 'Внизу по центру' },
   { value: 'bottom-right', content: 'Внизу справа' },
 ];
+const SIGN_METHODS = [
+  { value: 'p12', content: 'Сертификат .p12 (подпись в PDF)' },
+  { value: 'gost', content: 'ГОСТ, КриптоПро (файл .sig)' },
+];
 const META: { key: keyof PdfMetadata; label: string }[] = [
   { key: 'title', label: 'Название' },
   { key: 'author', label: 'Автор' },
@@ -102,7 +107,11 @@ function toDraft(o: PdfOptions): Draft {
     meta: o.metadata ?? { title: '', author: '', subject: '', keywords: '' },
     prot: o.protection ?? NO_PROTECTION,
     sigOn: Boolean(o.signature),
-    sig: o.signature ?? { position: 'bottom-right' },
+    // Способ сохраняется явно: нет поля — '.p12' (§42.1).
+    sig: {
+      position: o.signature?.position ?? 'bottom-right',
+      method: o.signature?.method ?? 'p12',
+    },
   };
 }
 
@@ -388,16 +397,34 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
           Разрешить подпись PDF
         </Checkbox>
         {draft.sigOn && (
-          <Field label="Положение штампа">
-            <Select
-              value={[draft.sig.position]}
-              options={SIGNATURE_POSITIONS}
-              onUpdate={([position]) =>
-                set({ sig: { position: position as PdfSignaturePosition } })
-              }
-              aria-label="Положение штампа"
-            />
-          </Field>
+          <>
+            <Field label="Способ подписи">
+              <Select
+                value={[draft.sig.method ?? 'p12']}
+                options={SIGN_METHODS}
+                onUpdate={([method]) =>
+                  set({ sig: { ...draft.sig, method: method as SignMethod } })
+                }
+                aria-label="Способ подписи"
+              />
+            </Field>
+            {draft.sig.method === 'gost' && (
+              <Text color="secondary">
+                Пользователю нужны КриптоПро CSP, КриптоПро ЭЦП Browser plug-in и сертификат ГОСТ на
+                своём компьютере
+              </Text>
+            )}
+            <Field label="Положение штампа">
+              <Select
+                value={[draft.sig.position]}
+                options={SIGNATURE_POSITIONS}
+                onUpdate={([position]) =>
+                  set({ sig: { ...draft.sig, position: position as PdfSignaturePosition } })
+                }
+                aria-label="Положение штампа"
+              />
+            </Field>
+          </>
         )}
         <Text color="secondary">
           Отчёт подписывает пользователь своим сертификатом после формирования.

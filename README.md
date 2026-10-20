@@ -417,6 +417,13 @@ bind найденным DN с введённым паролем. Поиск, е�
 - `ldaps://` с самоподписанным сертификатом сервера LDAP — `LDAP_TLS_REJECT_UNAUTHORIZED=false`.
 - Active Directory: `LDAP_USER_FILTER=(sAMAccountName=%s)`. OpenLDAP: `LDAP_USER_FILTER=(uid=%s)` (по умолчанию).
 
+## Вход через Keycloak (OpenID Connect)
+
+Необязательный вход через Keycloak или другой провайдер OIDC; по умолчанию выключен (`OIDC_ENABLED=false`).
+Локальный вход и LDAP продолжают работать. Настройка клиента в Keycloak, переменные окружения, привязка
+существующих пользователей, выход и проверки перед обновлением — в
+[docs/operations/keycloak.md](docs/operations/keycloak.md).
+
 ## Разработка интерфейса
 
 Интерфейс — `apps/web` (React 19, Gravity UI, Vite). Бэкенд и OnlyOffice берутся из dev-стека:

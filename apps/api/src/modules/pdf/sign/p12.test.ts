@@ -1,8 +1,15 @@
-import { createHash } from 'node:crypto';
+import { createCipheriv, createHash, pbkdf2Sync, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { fixture, fixtureCertDer, FIXTURE_PASSWORD } from './fixtures';
 import forge from 'node-forge';
-import { hasGostOid, MAX_P12_BYTES, MAX_P12_ITERATIONS, P12Error, readP12 } from './p12';
+import {
+  hasGostOid,
+  MAX_P12_BYTES,
+  MAX_P12_ITERATIONS,
+  MAX_P12_TOTAL_ITERATIONS,
+  P12Error,
+  readP12,
+} from './p12';
 
 const read = (name: string, password = FIXTURE_PASSWORD, now?: Date) =>
   readP12(fixture(name), password, now);
@@ -20,6 +27,99 @@ function fails(fn: () => unknown, field: 'file' | 'password', message: string) {
   }
   throw new Error('ожидалась P12Error');
 }
+
+// --- Синтетические .p12: rsa.p12 плюс дополнительные зашифрованные части (PBES2/AES-256-CBC) ---
+const A = forge.asn1;
+const seq = (...v: forge.asn1.Asn1[]) => A.create(A.Class.UNIVERSAL, A.Type.SEQUENCE, true, v);
+const oid = (o: string) => A.create(A.Class.UNIVERSAL, A.Type.OID, false, A.oidToDer(o).getBytes());
+const int = (n: number) =>
+  A.create(A.Class.UNIVERSAL, A.Type.INTEGER, false, A.integerToDer(n).getBytes());
+const oct = (b: Buffer | string) =>
+  A.create(
+    A.Class.UNIVERSAL,
+    A.Type.OCTETSTRING,
+    false,
+    typeof b === 'string' ? b : b.toString('binary'),
+  );
+const explicit0 = (v: forge.asn1.Asn1) => A.create(A.Class.CONTEXT_SPECIFIC, 0, true, [v]);
+const der = (a: forge.asn1.Asn1) => Buffer.from(A.toDer(a).getBytes(), 'binary');
+const O = {
+  data: '1.2.840.113549.1.7.1',
+  encryptedData: '1.2.840.113549.1.7.6',
+  pbes2: '1.2.840.113549.1.5.13',
+  pbkdf2: '1.2.840.113549.1.5.12',
+  hmacSha256: '1.2.840.113549.2.9',
+  aes256: '2.16.840.1.101.3.4.1.42',
+  shroudedKeyBag: '1.2.840.113549.1.12.10.1.2',
+};
+
+const pbkdf2Cache = new Map<number, { salt: Buffer; key: Buffer }>();
+
+/** AlgorithmIdentifier PBES2 и шифрование `plain` паролем fixture (UTF-8, как OpenSSL 3). */
+function pbes2Encrypt(plain: Buffer, iterations: number) {
+  // Части расшифровываются по-настоящему (атака реальна); ключ один на число итераций.
+  let k = pbkdf2Cache.get(iterations);
+  if (!k) {
+    const salt = randomBytes(8);
+    k = { salt, key: pbkdf2Sync(FIXTURE_PASSWORD, salt, iterations, 32, 'sha256') };
+    pbkdf2Cache.set(iterations, k);
+  }
+  const { salt, key } = k;
+  const iv = randomBytes(16);
+  const c = createCipheriv('aes-256-cbc', key, iv);
+  const alg = seq(
+    oid(O.pbes2),
+    seq(
+      seq(
+        oid(O.pbkdf2),
+        seq(
+          oct(salt),
+          int(iterations),
+          seq(oid(O.hmacSha256), A.create(A.Class.UNIVERSAL, A.Type.NULL, false, '')),
+        ),
+      ),
+      seq(oid(O.aes256), oct(iv)),
+    ),
+  );
+  return { alg, encrypted: Buffer.concat([c.update(plain), c.final()]) };
+}
+
+/** ContentInfo EncryptedData с SafeContents `safe` (DER), PBES2 с `iterations`. */
+function encryptedPart(safe: Buffer, iterations: number) {
+  const { alg, encrypted } = pbes2Encrypt(safe, iterations);
+  const content = A.create(A.Class.CONTEXT_SPECIFIC, 0, false, encrypted.toString('binary'));
+  return seq(oid(O.encryptedData), explicit0(seq(int(0), seq(oid(O.data), alg, content))));
+}
+
+/** rsa.p12 с дополнительными частями AuthenticatedSafe; MAC пересчитан (пароль известен автору). */
+function withExtraParts(extra: forge.asn1.Asn1[]): Buffer {
+  const pfx = A.fromDer(fixture('rsa.p12').toString('binary'));
+  const [, authCi, macData] = pfx.value as forge.asn1.Asn1[];
+  const octet = ((authCi!.value as forge.asn1.Asn1[])[1]!.value as forge.asn1.Asn1[])[0]!;
+  const parts = A.fromDer(octet.value as string);
+  (parts.value as forge.asn1.Asn1[]).push(...extra);
+  octet.value = A.toDer(parts).getBytes();
+  const [digestInfo, macSalt, macIter] = macData!.value as forge.asn1.Asn1[];
+  const iter = parseInt(forge.util.bytesToHex(macIter!.value as string), 16);
+  const p12 = forge.pkcs12 as unknown as {
+    generateKey: (...a: unknown[]) => forge.util.ByteStringBuffer;
+  };
+  const key = p12.generateKey(
+    FIXTURE_PASSWORD,
+    forge.util.createBuffer(macSalt!.value as string),
+    3,
+    iter,
+    32,
+    forge.md.sha256.create(),
+  );
+  const hmac = forge.hmac.create();
+  hmac.start('sha256', key.getBytes());
+  hmac.update(octet.value as string);
+  (digestInfo!.value as forge.asn1.Asn1[])[1]!.value = hmac.digest().getBytes();
+  return der(pfx);
+}
+
+const EMPTY_SAFE = Buffer.from([0x30, 0x00]);
 
 describe('readP12 (§39.1)', () => {
   it('RSA, формат OpenSSL 3: ключ, сертификат, цепочка, сведения', () => {
@@ -132,7 +232,8 @@ describe('readP12 (§39.1)', () => {
 
   it('слишком много итераций MAC или шифрования — отказ без расчёта (DoS)', () => {
     const msg = 'файл сертификата не поддерживается: слишком много итераций шифрования';
-    expect(MAX_P12_ITERATIONS).toBe(600_000);
+    expect(MAX_P12_ITERATIONS).toBe(100_000);
+    expect(MAX_P12_TOTAL_ITERATIONS).toBe(300_000);
     const getCipher = (forge.pki as unknown as { pbe: { getCipher: unknown } }).pbe.getCipher;
     const t = performance.now();
     // MAC проверяется до пароля: отказ и при неверном пароле.
@@ -143,6 +244,34 @@ describe('readP12 (§39.1)', () => {
     expect(performance.now() - t).toBeLessThan(1000);
     // Обёртка снята и после отказа.
     expect((forge.pki as unknown as { pbe: { getCipher: unknown } }).pbe.getCipher).toBe(getCipher);
+  });
+
+  it('синтетический файл: дополнительные зашифрованные части в пределах бюджета читаются', () => {
+    const file = withExtraParts([encryptedPart(EMPTY_SAFE, 2048), encryptedPart(EMPTY_SAFE, 2048)]);
+    expect(read('rsa.p12').info.serial).toBe('1001');
+    expect(readP12(file, FIXTURE_PASSWORD).info.serial).toBe('1001');
+  });
+
+  it('много зашифрованных частей (каждая в пределе) — общий бюджет, отказ сразу', () => {
+    const msg = 'файл сертификата не поддерживается: слишком много итераций шифрования';
+    const file = withExtraParts(
+      Array.from({ length: 20 }, () => encryptedPart(EMPTY_SAFE, MAX_P12_ITERATIONS)),
+    );
+    expect(file.length).toBeLessThan(MAX_P12_BYTES);
+    const t = performance.now();
+    fails(() => readP12(file, FIXTURE_PASSWORD), 'file', msg);
+    expect(performance.now() - t).toBeLessThan(500);
+  });
+
+  it('ключ внутри зашифрованной части с итерациями сверх предела — отказ до его расчёта', () => {
+    const msg = 'файл сертификата не поддерживается: слишком много итераций шифрования';
+    // Внутренний pkcs8ShroudedKeyBag виден только после расшифровки внешней части (2048).
+    const { alg, encrypted } = pbes2Encrypt(randomBytes(32), 2 * MAX_P12_ITERATIONS);
+    const bag = seq(oid(O.shroudedKeyBag), explicit0(seq(alg, oct(encrypted))));
+    const file = withExtraParts([encryptedPart(der(seq(bag)), 2048)]);
+    const t = performance.now();
+    fails(() => readP12(file, FIXTURE_PASSWORD), 'file', msg);
+    expect(performance.now() - t).toBeLessThan(500);
   });
 
   it('пароль кириллицей: OpenSSL 3 (PBES2, UTF-8) и -legacy (BMPString)', () => {

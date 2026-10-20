@@ -102,6 +102,23 @@ describe('сертификат пользователя (§39.1)', () => {
     });
   });
 
+  it('больше 10 загрузок в минуту на пользователя — 429; другой пользователь не затронут', async () => {
+    const { cookie } = await loginAs(t, 'user');
+    // Дешёвое тело (не .p12): попытка считается до разбора файла.
+    for (let i = 0; i < 10; i++)
+      expect((await upload(cookie, Buffer.from('x'), 'x')).statusCode).toBe(400);
+    const res = await upload(cookie, Buffer.from('x'), 'x');
+    expect(res.statusCode).toBe(429);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: 'TOO_MANY_ATTEMPTS',
+        message: 'слишком много загрузок сертификата — попробуйте через минуту',
+      },
+    });
+    const other = await loginAs(t, 'user');
+    expect((await upload(other.cookie, Buffer.from('x'), 'x')).statusCode).toBe(400);
+  });
+
   it('нет файла или пароля — 400', async () => {
     const { cookie } = await loginAs(t, 'user');
     expect((await upload(cookie, null, 'x')).statusCode).toBe(400);

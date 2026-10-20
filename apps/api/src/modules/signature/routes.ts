@@ -1,6 +1,6 @@
 import { IdParams, type CertificateInfo, type MyCertificate } from '@carbone-reports/shared';
 import { eq } from 'drizzle-orm';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { App } from '../../app';
 import { userCertificates, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
@@ -51,34 +51,63 @@ export function registerSignatureRoutes(app: App, deps: AppDeps, guards: Guards)
     },
   );
 
-  app.post('/api/me/certificate', { preHandler: guards.requireUser }, async (req, reply) => {
-    const { file, password } = await readCertificateUpload(req);
-    let info: CertificateInfo;
-    try {
-      info = readP12(file, password).info;
-    } catch (e) {
-      if (e instanceof P12Error) throw p12FieldError(e);
-      throw e;
+  // Каждая загрузка — разбор .p12 в главном потоке (до 300 000 итераций KDF): не больше 10 в минуту
+  // на пользователя. Лимит — в preHandler после входа, до чтения тела (multipart читает обработчик).
+  // В типах CreateRateLimitOptions нет nameSpace (его читает FallbackStore.child) — опции через переменную.
+  const uploadLimitOptions = {
+    max: 10,
+    timeWindow: '1 minute',
+    nameSpace: 'cr:rl-cert:',
+    keyGenerator: (req: FastifyRequest) => currentUser(req).id,
+  };
+  const uploadLimit = app.createRateLimit(uploadLimitOptions);
+  const limitUploads = async (req: FastifyRequest, reply: FastifyReply) => {
+    const r = await uploadLimit(req);
+    if (!r.isAllowed && r.isExceeded) {
+      reply
+        .header('retry-after', r.ttlInSeconds)
+        .header('x-ratelimit-limit', r.max)
+        .header('x-ratelimit-remaining', 0);
+      throw new AppError(
+        'TOO_MANY_ATTEMPTS',
+        429,
+        'слишком много загрузок сертификата — попробуйте через минуту',
+      );
     }
-    const values = {
-      p12Enc: encryptSecret(file.toString('base64'), deps.config.encryptionKey),
-      subjectCn: info.subjectCn,
-      issuer: info.issuer,
-      serial: info.serial,
-      fingerprint: info.fingerprint,
-      keyAlg: info.keyAlg,
-      notBefore: new Date(info.notBefore),
-      notAfter: new Date(info.notAfter),
-    };
-    await db
-      .insert(userCertificates)
-      .values({ userId: currentUser(req).id, ...values })
-      .onConflictDoUpdate({
-        target: userCertificates.userId,
-        set: { ...values, createdAt: new Date() },
-      });
-    return reply.status(201).send(info);
-  });
+  };
+
+  app.post(
+    '/api/me/certificate',
+    { preHandler: [guards.requireUser, limitUploads] },
+    async (req, reply) => {
+      const { file, password } = await readCertificateUpload(req);
+      let info: CertificateInfo;
+      try {
+        info = readP12(file, password).info;
+      } catch (e) {
+        if (e instanceof P12Error) throw p12FieldError(e);
+        throw e;
+      }
+      const values = {
+        p12Enc: encryptSecret(file.toString('base64'), deps.config.encryptionKey),
+        subjectCn: info.subjectCn,
+        issuer: info.issuer,
+        serial: info.serial,
+        fingerprint: info.fingerprint,
+        keyAlg: info.keyAlg,
+        notBefore: new Date(info.notBefore),
+        notAfter: new Date(info.notAfter),
+      };
+      await db
+        .insert(userCertificates)
+        .values({ userId: currentUser(req).id, ...values })
+        .onConflictDoUpdate({
+          target: userCertificates.userId,
+          set: { ...values, createdAt: new Date() },
+        });
+      return reply.status(201).send(info);
+    },
+  );
 
   app.delete('/api/me/certificate', { preHandler: guards.requireUser }, async (req, reply) => {
     await db.delete(userCertificates).where(eq(userCertificates.userId, currentUser(req).id));

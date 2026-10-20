@@ -1,4 +1,5 @@
 import type { SignPrepareJob } from './modules/pdf/sign/prepare';
+import type { P12Contents } from './modules/pdf/sign/p12';
 import type { PdfPostJob } from './modules/pdf/postprocess';
 import type { PdfProtectJob } from './modules/pdf/protect';
 import type { Inflight } from './lib/inflight';
@@ -40,6 +41,14 @@ export type PdfPostprocessor = (pdf: Buffer, job: PdfPostJob, timeoutMs: number)
 export type PdfProtector = (pdf: Buffer, job: PdfProtectJob, timeoutMs: number) => Promise<Buffer>;
 
 /** Подготовка PDF к подписи (§39.4): поле, штамп, заглушки — в пределах timeoutMs. */
+/** Разбор .p12 (§39.8): в пуле рендера — главный поток не считает KDF; deadlineAt — срок, мс эпохи. */
+export type P12Reader = (
+  file: Buffer,
+  password: string,
+  now: Date,
+  deadlineAt: number,
+) => Promise<P12Contents>;
+
 export type PdfSignPreparer = (
   pdf: Buffer,
   job: SignPrepareJob,
@@ -72,6 +81,8 @@ export interface AppDeps {
   pdfProtect: PdfProtector;
   /** Подготовка PDF к подписи в пуле рендера (§39.4; тестам — в этом потоке). */
   pdfSignPrepare: PdfSignPreparer;
+  /** Разбор .p12 в пуле рендера (§39.8; тестам — в этом потоке). */
+  p12Read: P12Reader;
   onlyoffice: OnlyOfficeCommands;
   fetchFile: FileFetcher;
   /** Общий Redis (лимит входа, режим обслуживания); null — лимиты считаются в памяти экземпляра. */

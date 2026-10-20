@@ -31,6 +31,7 @@ describe('SignaturePage (§39.1)', () => {
       type: 'application/x-pkcs12',
     });
     await userEvent.upload(screen.getByLabelText('Файл сертификата'), file);
+    expect(screen.getByLabelText('Пароль к файлу')).toHaveAttribute('autocomplete', 'new-password');
     await userEvent.type(screen.getByLabelText('Пароль к файлу'), 'secret');
     await userEvent.click(screen.getByRole('button', { name: 'Загрузить сертификат' }));
     await waitFor(() =>
@@ -83,6 +84,8 @@ describe('SignaturePage (§39.1)', () => {
         true,
       ),
     );
+    // Окно подтверждения скрывает страницу (aria-hidden), пока не размонтировано.
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   it('ошибка у поля пароля', async () => {

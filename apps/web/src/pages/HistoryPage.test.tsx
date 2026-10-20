@@ -181,6 +181,8 @@ describe('HistoryPage', () => {
     await waitFor(() =>
       expect(screen.queryByLabelText('Пароль к ключу подписи')).not.toBeInTheDocument(),
     );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Скачать' })).toBeInTheDocument();
   });
 
   it('admin: колонка пользователя, фильтры из URL уходят в запрос', async () => {

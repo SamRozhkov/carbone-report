@@ -28,13 +28,14 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   const api = await adminApi();
-  if (savedPdfOptions) {
-    const { signature: _signature, ...rest } = savedPdfOptions;
-    await api.put(`/api/templates/${templateId}/pdf-options`, rest);
+  try {
+    // Настройки — как были до теста (пароль не передаётся и остаётся прежним).
+    if (savedPdfOptions) await api.put(`/api/templates/${templateId}/pdf-options`, savedPdfOptions);
+  } finally {
+    const users = await api.get<{ id: string; login: string }[]>('/api/users');
+    const u = users.find((x) => x.login === login);
+    if (u) await api.del(`/api/users/${u.id}`);
   }
-  const users = await api.get<{ id: string; login: string }[]>('/api/users');
-  const u = users.find((x) => x.login === login);
-  if (u) await api.del(`/api/users/${u.id}`);
 });
 
 test('подпись PDF: сертификат → отчёт → «Подписать PDF» → подписанный файл, история', async ({
@@ -79,10 +80,7 @@ test('подпись PDF: сертификат → отчёт → «Подпис
 
   // 5. Сертификат удаляется.
   await page.goto('/signature');
-  await page.getByRole('button', { name: 'Удалить' }).click();
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: /^Удалить/ })
-    .click();
+  await page.getByRole('button', { name: 'Удалить', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Удалить', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Загрузить сертификат' })).toBeVisible();
 });

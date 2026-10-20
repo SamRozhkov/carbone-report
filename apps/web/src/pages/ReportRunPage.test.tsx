@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import * as download from '../lib/download';
@@ -472,10 +472,59 @@ describe('ReportRunPage', () => {
       expect(
         await screen.findByText('Подписан: Иванов Иван Иванович, 19.10.2026 14:32'),
       ).toBeInTheDocument();
+      // Модальное окно скрывает остальную страницу (aria-hidden), пока не размонтировано.
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect(screen.queryByRole('button', { name: 'Подписать PDF' })).not.toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: 'Скачать подписанный PDF' }));
+      const release = holdRequests('signed=1');
+      const signedBtn = await screen.findByRole('button', { name: 'Скачать подписанный PDF' });
+      await userEvent.click(signedBtn);
+      await waitFor(() => expect(signedBtn).toHaveClass('g-button_loading'));
+      // Обычная кнопка PDF «Сохранить как» не крутится во время скачивания подписанного.
+      const pdf = within(screen.getByRole('group', { name: 'Сохранить как' })).getByRole('button', {
+        name: 'PDF',
+      });
+      expect(pdf).not.toHaveClass('g-button_loading');
+      release();
       await waitFor(() => expect(spy).toHaveBeenCalled());
       expect(calls.some((c) => c.path === '/api/runs/r1/file?format=pdf&signed=1')).toBe(true);
+    });
+
+    it('«Отмена» в диалоге подписи: при повторном открытии поле пароля пустое', async () => {
+      mockApi([...base, { path: '/api/me/certificate', body: { certificate: cert } }]);
+      renderRoute('/reports/t1');
+      await formAndRender();
+      const btn = await screen.findByRole('button', { name: 'Подписать PDF' });
+      await waitFor(() => expect(btn).toBeEnabled());
+      await userEvent.click(btn);
+      await userEvent.type(await screen.findByLabelText('Пароль к ключу подписи'), 'pw');
+      await userEvent.click(screen.getByRole('button', { name: 'Отмена' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await userEvent.click(await screen.findByRole('button', { name: 'Подписать PDF' }));
+      expect(await screen.findByLabelText('Пароль к ключу подписи')).toHaveValue('');
+    });
+
+    it('ошибка загрузки сертификата — подсказки «Загрузите сертификат…» нет', async () => {
+      mockApi([
+        ...base,
+        {
+          path: '/api/me/certificate',
+          status: 500,
+          body: { error: { code: 'INTERNAL', message: 'сбой' } },
+        },
+      ]);
+      renderRoute('/reports/t1');
+      await formAndRender();
+      expect(await screen.findByRole('button', { name: 'Подписать PDF' })).toBeDisabled();
+      await waitFor(() =>
+        expect(
+          vi
+            .mocked(globalThis.fetch)
+            .mock.calls.some(([u]) => String(u).includes('/api/me/certificate')),
+        ).toBe(true),
+      );
+      // Ответ с ошибкой обработан (retry выключен) — подсказки всё равно нет.
+      await act(() => new Promise((r) => setTimeout(r, 50)));
+      expect(screen.queryByText(/Загрузите сертификат на странице/)).not.toBeInTheDocument();
     });
 
     it('без сертификата кнопка неактивна, есть подсказка со ссылкой', async () => {

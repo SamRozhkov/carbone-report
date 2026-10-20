@@ -144,7 +144,10 @@ export function ReportRunPage() {
               <div className="cr-save" role="group" aria-label="Сохранить как">
                 <Text variant="subheader-1">Сохранить как</Text>
                 {t.outputFormats.map((f) => {
-                  const busy = download.pending?.runId === runId && download.pending.format === f;
+                  const busy =
+                    download.pending?.runId === runId &&
+                    download.pending.format === f &&
+                    !download.pending.signed;
                   return (
                     <Button
                       key={f}
@@ -185,7 +188,7 @@ export function ReportRunPage() {
                       >
                         Подписать PDF
                       </Button>
-                      {!cert.isPending && !certificate && (
+                      {cert.isSuccess && !certificate && (
                         <Text color="secondary">
                           Загрузите сертификат на странице «
                           <Link
@@ -205,16 +208,18 @@ export function ReportRunPage() {
                 </div>
               )}
               <ErrorAlert error={download.error} title="Не удалось сохранить файл" />
-              <SignRunDialog
-                runId={runId}
-                open={signOpen}
-                onClose={() => setSignOpen(false)}
-                onSigned={(s) => {
-                  setSignature(s);
-                  setSignOpen(false);
-                  void queryClient.invalidateQueries({ queryKey: ['runs'] });
-                }}
-              />
+              {signOpen && (
+                <SignRunDialog
+                  runId={runId}
+                  open
+                  onClose={() => setSignOpen(false)}
+                  onSigned={(s) => {
+                    setSignature(s);
+                    setSignOpen(false);
+                    void queryClient.invalidateQueries({ queryKey: ['runs'] });
+                  }}
+                />
+              )}
             </>
           )}
         </div>

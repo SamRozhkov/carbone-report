@@ -67,7 +67,7 @@ function UploadForm({ onDone, onCancel }: { onDone: () => void; onCancel?: () =>
           type="password"
           value={password}
           onUpdate={setPassword}
-          autoComplete="off"
+          autoComplete="new-password"
           validationState={errors.password ? 'invalid' : undefined}
           controlProps={{ 'aria-label': 'Пароль к файлу' }}
         />

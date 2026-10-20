@@ -31,8 +31,18 @@ export function SignRunDialog(props: {
   });
   const errors = fieldErrors(sign.error);
   const c = cert.data?.certificate;
+  const canSubmit = password !== '' && !sign.isPending;
+  const submit = () => {
+    if (canSubmit) sign.mutate();
+  };
+  // Отмена и Esc: введённый пароль и прежняя ошибка не остаются до следующего открытия.
+  const close = () => {
+    setPassword('');
+    sign.reset();
+    props.onClose();
+  };
   return (
-    <Dialog open={props.open} onClose={props.onClose} size="s" aria-label="Подписать PDF">
+    <Dialog open={props.open} onClose={close} size="s" aria-label="Подписать PDF">
       <Dialog.Header caption="Подписать PDF" />
       <Dialog.Body>
         {c && (
@@ -45,8 +55,15 @@ export function SignRunDialog(props: {
             type="password"
             value={password}
             onUpdate={setPassword}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                submit();
+              }
+            }}
             autoFocus
-            controlProps={{ 'aria-label': 'Пароль к ключу подписи', autoComplete: 'off' }}
+            autoComplete="new-password"
+            controlProps={{ 'aria-label': 'Пароль к ключу подписи' }}
           />
         </Field>
         <ErrorAlert error={sign.error && !errors.password ? sign.error : null} />
@@ -54,8 +71,8 @@ export function SignRunDialog(props: {
       <Dialog.Footer
         textButtonApply="Подписать"
         textButtonCancel="Отмена"
-        onClickButtonApply={() => sign.mutate()}
-        onClickButtonCancel={props.onClose}
+        onClickButtonApply={submit}
+        onClickButtonCancel={close}
         loading={sign.isPending}
         propsButtonApply={{ disabled: password === '' }}
       />

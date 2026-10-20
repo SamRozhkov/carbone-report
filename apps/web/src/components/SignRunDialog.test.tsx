@@ -93,4 +93,40 @@ describe('SignRunDialog', () => {
     expect(screen.queryByTestId('field-error')).not.toBeInTheDocument();
     expect(input).toHaveValue('');
   });
+
+  it('Enter в поле пароля подписывает; при пустом пароле — нет', async () => {
+    const { calls } = mockApi([
+      certRoute,
+      { method: 'POST', path: '/api/runs/r1/sign', status: 201, body: signature },
+    ]);
+    const { onSigned } = open();
+    const input = await screen.findByLabelText('Пароль к ключу подписи');
+    expect(input).toHaveAttribute('autocomplete', 'new-password');
+    await userEvent.type(input, '{Enter}');
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0);
+    await userEvent.type(input, 'secret{Enter}');
+    await waitFor(() => expect(onSigned).toHaveBeenCalledWith(signature));
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1);
+  });
+
+  it('«Отмена» стирает пароль и прежнюю ошибку', async () => {
+    mockApi([
+      certRoute,
+      {
+        method: 'POST',
+        path: '/api/runs/r1/sign',
+        ...err(502, 'TSA_UNAVAILABLE', 'служба меток времени недоступна'),
+      },
+    ]);
+    const { onClose } = open();
+    const input = await screen.findByLabelText('Пароль к ключу подписи');
+    await userEvent.type(input, 'pw');
+    await userEvent.click(screen.getByRole('button', { name: 'Подписать' }));
+    expect(await screen.findByText('служба меток времени недоступна')).toBeInTheDocument();
+    await userEvent.type(input, 'typed');
+    await userEvent.click(screen.getByRole('button', { name: 'Отмена' }));
+    expect(onClose).toHaveBeenCalled();
+    expect(input).toHaveValue('');
+    expect(screen.queryByText('служба меток времени недоступна')).not.toBeInTheDocument();
+  });
 });

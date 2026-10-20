@@ -517,6 +517,13 @@ describe('OIDC: маршруты с PostgreSQL и Redis', () => {
       const cleared = out.cookies.map((c) => c.name);
       expect(cleared).toContain('__Host-session');
       expect(cleared).toContain('session');
+      const hostCleared = [out.headers['set-cookie']]
+        .flat()
+        .find((c) => String(c).startsWith('__Host-session='))!;
+      expect(hostCleared).toMatch(/; Secure/i);
+      expect(hostCleared).toMatch(/Path=\//);
+      expect(hostCleared).not.toMatch(/Domain/i);
+      expect(hostCleared).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/i);
     } finally {
       await secure.close();
     }

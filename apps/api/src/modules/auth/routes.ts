@@ -17,6 +17,14 @@ import {
   type SessionUser,
 } from './session';
 
+/** Атрибуты cookie сессии; удаление обязано передавать те же (в т.ч. Secure — иначе браузер игнорирует `__Host-`). */
+const sessionCookieOptions = (deps: AppDeps) => ({
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: deps.config.cookieSecure,
+  path: '/',
+});
+
 export async function setSessionCookie(
   reply: FastifyReply,
   deps: AppDeps,
@@ -27,21 +35,16 @@ export async function setSessionCookie(
   reply.setCookie(
     sessionCookieName(deps.config.cookieSecure),
     await signSession(user, sv, deps.config.appSecret, oidcSessionId),
-    {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: deps.config.cookieSecure,
-      path: '/',
-      maxAge: SESSION_TTL_SECONDS,
-    },
+    { ...sessionCookieOptions(deps), maxAge: SESSION_TTL_SECONDS },
   );
 }
 
 /** Выход: очищает cookie текущего имени и, если оно другое, прежнюю `session` (иначе она останется в браузере). */
 export function clearSessionCookies(reply: FastifyReply, deps: AppDeps): void {
   const name = sessionCookieName(deps.config.cookieSecure);
-  reply.clearCookie(name, { path: '/' });
-  if (name !== LEGACY_SESSION_COOKIE) reply.clearCookie(LEGACY_SESSION_COOKIE, { path: '/' });
+  const options = sessionCookieOptions(deps);
+  reply.clearCookie(name, options);
+  if (name !== LEGACY_SESSION_COOKIE) reply.clearCookie(LEGACY_SESSION_COOKIE, options);
 }
 
 /**

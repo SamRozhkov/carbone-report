@@ -6,6 +6,7 @@
 // всегда приходят в options. Предупреждения рендера (R6) уходят пулу.
 import { parentPort } from 'node:worker_threads';
 import carbone from '@carbone-reports/carbone';
+import { z } from 'zod';
 import { postprocessPdf, type PdfPostJob } from '../pdf/postprocess';
 import { CadesError, verifyCades, type GostHashAlg } from '../pdf/sign/gost/cades';
 import { streebog } from '../pdf/sign/gost/streebog';
@@ -28,13 +29,15 @@ interface Request {
   extra?: Uint8Array[];
 }
 
-type GostVerifyData = {
-  certDer: string;
-  hash: string;
-  hashAlg: GostHashAlg;
-  requireTimestamp: boolean;
-  now: string;
-};
+/** Данные задачи gost-verify (pool.ts → поток); времена — ISO-строки. */
+const GostVerifyData = z.object({
+  certDer: z.base64(),
+  hash: z.hex(),
+  hashAlg: z.enum(['streebog256', 'streebog512']),
+  requireTimestamp: z.boolean(),
+  now: z.iso.datetime(),
+  preparedAt: z.iso.datetime().nullable(),
+});
 
 type PdfJobData = Omit<PdfPostJob, 'attachments'> & {
   attachments: { placement: PdfPostJob['attachments'][number]['placement'] }[];
@@ -71,7 +74,7 @@ async function handle(
     };
   }
   if (m.kind === 'gost-verify') {
-    const d = JSON.parse(m.data) as GostVerifyData;
+    const d = GostVerifyData.parse(JSON.parse(m.data));
     const r = await verifyCades({
       signature: template,
       certDer: Buffer.from(d.certDer, 'base64'),
@@ -79,6 +82,7 @@ async function handle(
       hashAlg: d.hashAlg,
       requireTimestamp: d.requireTimestamp,
       now: new Date(d.now),
+      ...(d.preparedAt ? { preparedAt: new Date(d.preparedAt) } : {}),
     });
     const meta = JSON.stringify({
       signedAt: r.signedAt?.toISOString() ?? null,

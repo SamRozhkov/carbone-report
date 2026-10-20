@@ -90,6 +90,16 @@ describe.each([
     ).resolves.toEqual({ signedAt: new Date('2026-10-20T15:04:15Z'), timestamped: true });
   }, 30_000);
 
+  it('gost-verify: время подготовки доходит до проверки — метка раньше окна отклоняется', async () => {
+    // genTime 15:04:15; окно с 15:04:00 — успех, с 15:04:16 — отказ.
+    await expect(
+      deps().verify(input('t-256a.sig', { preparedAt: new Date('2026-10-20T15:09:00Z') }), soon()),
+    ).resolves.toMatchObject({ timestamped: true });
+    await expect(
+      deps().verify(input('t-256a.sig', { preparedAt: new Date('2026-10-20T15:09:16Z') }), soon()),
+    ).rejects.toMatchObject({ code: 'GOST_INVALID', message: 'метка времени недействительна' });
+  }, 30_000);
+
   it('gost-verify: испорченная подпись — GOST_INVALID 400 «подпись недействительна»', async () => {
     const e = await deps()
       .verify(input('bad-value.sig'), soon())

@@ -76,6 +76,51 @@ function transplantToken(from: Uint8Array, to: Uint8Array): Uint8Array {
   );
 }
 
+/** Узел BER: тег и либо дочерние узлы, либо содержимое; raw — готовые байты узла целиком. */
+type Tlv = { tag: number; kids: Tlv[] | null; body: Uint8Array; raw?: Uint8Array };
+
+/** Разбор DER (определенная длина, однобайтовый тег — как в CMS). */
+function parseTlv(b: Uint8Array): Tlv[] {
+  const out: Tlv[] = [];
+  for (let i = 0; i < b.length;) {
+    const tag = b[i]!;
+    let len = b[i + 1]!;
+    let at = i + 2;
+    if (len & 0x80) {
+      const n = len & 0x7f;
+      len = 0;
+      for (let k = 0; k < n; k++) len = len * 256 + b[at + k]!;
+      at += n;
+    }
+    const body = b.subarray(at, at + len);
+    out.push({ tag, kids: tag & 0x20 ? parseTlv(body) : null, body });
+    i = at + len;
+  }
+  return out;
+}
+
+/** Длина в минимальной форме; zeros — лишние нулевые байты (неминимальная форма BER). */
+function lenBytes(n: number, zeros = 0): number[] {
+  if (n < 128 && !zeros) return [n];
+  const v: number[] = [];
+  for (let x = n; x > 0; x = Math.floor(x / 256)) v.unshift(x % 256);
+  return [0x80 | (v.length + zeros), ...Array<number>(zeros).fill(0), ...v];
+}
+
+/** Кодирование с пересчетом длин; indef(path) — неопределенная длина у составного узла. */
+function encodeTlv(t: Tlv, indef: (path: number[]) => boolean = () => false, path = [0]): Buffer {
+  if (t.raw) return Buffer.from(t.raw);
+  const body = t.kids
+    ? Buffer.concat(t.kids.map((k, i) => encodeTlv(k, indef, [...path, i])))
+    : Buffer.from(t.body);
+  if (t.kids && indef(path))
+    return Buffer.concat([Buffer.from([t.tag, 0x80]), body, Buffer.alloc(2)]);
+  return Buffer.concat([Buffer.from([t.tag, ...lenBytes(body.length)]), body]);
+}
+
+/** SignedData в ContentInfo: SEQUENCE → [0] EXPLICIT → SEQUENCE. */
+const signedDataNode = (ci: Tlv) => ci.kids![1]!.kids![0]!;
+
 describe('verifyCades — успех', () => {
   it('CAdES-BES 256 tc26 A', async () => {
     await expect(verifyCades(input(fx('bes-256a.sig')))).resolves.toEqual({
@@ -108,6 +153,54 @@ describe('verifyCades — успех', () => {
   it('CAdES-T, метка ГОСТ: signedAt — genTime', async () => {
     await expect(verifyCades(input(fx('t-256a.sig'), { requireTimestamp: true }))).resolves.toEqual(
       { timestamped: true, signedAt: new Date('2026-10-20T15:04:15Z') },
+    );
+  });
+
+  it('CAdES-T: метка в окне [подготовка − 5 мин, сейчас + 5 мин]', async () => {
+    // genTime t-256a.sig — 2026-10-20T15:04:15Z.
+    await expect(
+      verifyCades(
+        input(fx('t-256a.sig'), {
+          preparedAt: new Date('2026-10-20T15:09:00Z'),
+          now: new Date('2026-10-20T14:59:30Z'),
+        }),
+      ),
+    ).resolves.toMatchObject({ timestamped: true });
+  });
+
+  it('BER неопределенной длины: ContentInfo, SignedData и его поля', async () => {
+    const ci = parseTlv(fx('bes-256a.sig'))[0]!;
+    // Путь [0] — ContentInfo, [0,1] — [0], [0,1,0] — SignedData, [0,1,0,i] — его поля.
+    const sig = encodeTlv(ci, (path) => path.length <= 4);
+    expect(sig[1]).toBe(0x80);
+    expect(sig.length).toBeGreaterThan(fx('bes-256a.sig').length);
+    await expect(verifyCades(input(new Uint8Array(sig)))).resolves.toEqual({
+      timestamped: false,
+      signedAt: null,
+    });
+  });
+
+  it('сертификат с неминимальной длиной (BER): те же байты в подписи и при подготовке', async () => {
+    const der = Buffer.from(pemDer('user256a.pem'));
+    const cert = parseTlv(der)[0]!;
+    const ber = Buffer.concat([
+      Buffer.from([0x30, ...lenBytes(cert.body.length, 1)]),
+      Buffer.from(cert.body),
+    ]);
+    expect(ber.length).toBe(der.length + 1);
+    const ci = parseTlv(fx('bes-256a.sig'))[0]!;
+    const certs = signedDataNode(ci).kids!.find((k) => k.tag === 0xa0)!;
+    expect(certs.kids).toHaveLength(1);
+    certs.kids![0] = { ...certs.kids![0]!, raw: ber };
+    const sig = new Uint8Array(encodeTlv(ci));
+    await expect(verifyCades(input(sig, { certDer: new Uint8Array(ber) }))).resolves.toEqual({
+      timestamped: false,
+      signedAt: null,
+    });
+    // Другой сертификат по-прежнему отличается.
+    await rejects(
+      input(sig, { certDer: pemDer('other256.pem') }),
+      'подпись сделана другим сертификатом',
     );
   });
 
@@ -177,6 +270,38 @@ describe('verifyCades — отказы по порядку §42.4', () => {
     await rejects(
       input(fx('bes-256a.sig'), { now: new Date('2000-01-01T00:00:00Z') }),
       'срок действия сертификата истёк',
+    );
+  });
+
+  it('метка раньше подготовки − 5 мин или позже сейчас + 5 мин — «метка времени недействительна»', async () => {
+    // genTime t-256a.sig — 2026-10-20T15:04:15Z.
+    await rejects(
+      input(fx('t-256a.sig'), { preparedAt: new Date('2026-10-20T15:09:16Z') }),
+      'метка времени недействительна',
+    );
+    await rejects(
+      input(fx('t-256a.sig'), { now: new Date('2026-10-20T14:59:14Z') }),
+      'метка времени недействительна',
+    );
+  });
+
+  it('метка вне срока сертификата подписанта — «метка времени недействительна»', async () => {
+    // notBefore user256a — 2026-10-20T15:04:13Z; сдвигаем на 15:04:16, после genTime (15:04:15).
+    // Подпись УЦ над сертификатом не проверяется (§42.4), а в подписанные атрибуты он не входит.
+    const shift = (b: Uint8Array) => {
+      const out = Buffer.from(b);
+      const from = Buffer.from('261020150413Z');
+      const at = out.indexOf(from);
+      expect(at).toBeGreaterThan(0);
+      expect(out.indexOf(from, at + 1)).toBe(-1);
+      Buffer.from('261020150416Z').copy(out, at);
+      return new Uint8Array(out);
+    };
+    const certDer = shift(pemDer('user256a.pem'));
+    await rejects(input(shift(fx('t-256a.sig')), { certDer }), 'метка времени недействительна');
+    // Без метки та же подмена принимается (NOW — в новом сроке): отказ выше — именно из-за метки.
+    await expect(verifyCades(input(shift(fx('bes-256a.sig')), { certDer }))).resolves.toMatchObject(
+      { timestamped: false },
     );
   });
 

@@ -234,7 +234,7 @@ describe('worker.ts: задачи ГОСТ (§42)', () => {
 
   it('задача gost-verify: пустой выход, meta — signedAt и timestamped', async () => {
     const { streebog } = await import('../pdf/sign/gost/streebog');
-    const job = async (sig: string) => ({
+    const job = async (sig: string, preparedAt: string | null = null) => ({
       kind: 'gost-verify' as const,
       template: await fx(sig),
       ext: 'sig',
@@ -244,6 +244,7 @@ describe('worker.ts: задачи ГОСТ (§42)', () => {
         hashAlg: 'streebog256',
         requireTimestamp: false,
         now: '2026-10-20T16:00:00.000Z',
+        preparedAt,
       },
       options: { lang: '', timezone: '' },
     });
@@ -253,5 +254,10 @@ describe('worker.ts: задачи ГОСТ (§42)', () => {
     const bad = await pool.run(await job('bad-value.sig'), Date.now() + 30_000).catch((e) => e);
     expect(bad).toBeInstanceOf(TemplateRenderError);
     expect(bad).toMatchObject({ field: 'gost', message: 'подпись недействительна' });
+    // Время подготовки — нижняя граница метки: genTime 15:04:15 раньше 15:20 − 5 мин.
+    const early = await pool
+      .run(await job('t-256a.sig', '2026-10-20T15:20:00.000Z'), Date.now() + 30_000)
+      .catch((e) => e);
+    expect(early).toMatchObject({ field: 'gost', message: 'метка времени недействительна' });
   }, 40_000);
 });

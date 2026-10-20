@@ -214,8 +214,9 @@ function createCades(plugin: CadesPlugin, about: CadesAbout): Cades {
           ? CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_512
           : CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256,
       );
-      // Хеш сервера — уже в порядке байтов SetHashValue (§42.2): передаётся без изменений.
-      await hashed.SetHashValue(hashHex);
+      // Хеш сервера — уже в порядке байтов SetHashValue (§42.2); hex — в верхнем регистре, как в
+      // примерах КриптоПро (регистр подтверждается ручной приёмкой, §42.8).
+      await hashed.SetHashValue(hashHex.toUpperCase());
       const signed = await plugin.CreateObjectAsync('CAdESCOM.CadesSignedData');
       const sig = await signed.SignHash(
         hashed,

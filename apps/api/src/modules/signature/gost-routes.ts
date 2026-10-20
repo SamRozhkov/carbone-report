@@ -217,18 +217,15 @@ export function registerGostSignRoutes(app: App, deps: AppDeps, guards: Guards):
       const run = await loadGostRun(deps, req.params.id, me.id);
       const signature = Buffer.from(req.body.signature, 'base64');
       if (signature.length > MAX_SIGNATURE_BYTES) throw badRequest('подпись больше 64 КБ');
-      // Черновик удаляется под блокировкой пользователя, как и меняется строка ожидания.
-      // Сбой удаления не мешает ответу — файл-сирота уйдёт с каталогом запуска.
-      const removeDraft = (path: string) =>
-        storage
-          .remove(path)
-          .catch((err) => req.log.warn({ err, runId: run.id }, 'черновик ГОСТ не удалён'));
-
       const outcome = await deps.runFileGate(
         RUN_FILE_LOCK_CLASS,
         `sign:${me.id}`,
         deadline,
-        async (tx): Promise<{ signature: RunSignature } | { expired: true }> => {
+        async (
+          tx,
+        ): Promise<
+          ({ signature: RunSignature } | { expired: true }) & { oldDraft: string | null }
+        > => {
           await lockRun(tx, run.id);
           const [pending] = await tx
             .select()
@@ -239,8 +236,7 @@ export function registerGostSignRoutes(app: App, deps: AppDeps, guards: Guards):
           if (pending.expiresAt <= now) {
             // Удаление строки должно зафиксироваться — не бросаем из транзакции, а возвращаем результат.
             await tx.delete(gostSignPending).where(eq(gostSignPending.runId, run.id));
-            await removeDraft(pending.draftPath);
-            return { expired: true };
+            return { expired: true, oldDraft: pending.draftPath };
           }
           // Любой отказ проверки — 400 GOST_INVALID; черновик и ожидание остаются до срока (§42.2).
           const result = await deps.gostVerify(
@@ -251,6 +247,8 @@ export function registerGostSignRoutes(app: App, deps: AppDeps, guards: Guards):
               hashAlg: pending.hashAlg,
               requireTimestamp: config.signGostTsaUrl !== null,
               now,
+              // Время подготовки — нижняя граница времени метки (§42.4 п. 5).
+              preparedAt: new Date(pending.expiresAt.getTime() - PENDING_TTL_MS),
             },
             Date.now() + deadline.remaining(),
           );
@@ -261,7 +259,7 @@ export function registerGostSignRoutes(app: App, deps: AppDeps, guards: Guards):
             if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') throw e;
             // Черновика нет — ожидание бесполезно.
             await tx.delete(gostSignPending).where(eq(gostSignPending.runId, run.id));
-            return { expired: true };
+            return { expired: true, oldDraft: null };
           }
           const pdfPath = signedPath(run.id);
           const sigPath = signaturePath(run.id);
@@ -297,11 +295,17 @@ export function registerGostSignRoutes(app: App, deps: AppDeps, guards: Guards):
             );
             throw e;
           }
-          await removeDraft(pending.draftPath);
-          return { signature: signed };
+          return { signature: signed, oldDraft: pending.draftPath };
         },
         { ifBusy: busy },
       );
+      // Черновик удалённой строки — только после фиксации (как oldDraft у подготовки): сбой фиксации
+      // оставляет строку ожидания с её черновиком. Путь у каждой подготовки свой, новые его не займут.
+      // Сбой удаления не мешает ответу — файл-сирота уйдёт с каталогом запуска.
+      if (outcome.oldDraft)
+        await storage
+          .remove(outcome.oldDraft)
+          .catch((err) => req.log.warn({ err, runId: run.id }, 'черновик ГОСТ не удалён'));
       if ('expired' in outcome) throw restart();
       return reply.status(201).send(outcome.signature);
     },

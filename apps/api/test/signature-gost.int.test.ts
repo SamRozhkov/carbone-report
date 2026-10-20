@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gostSignPending, reportRunSignatures, reportRuns } from '../src/db/schema';
 import type { CarboneRenderer, GostPreparer } from '../src/deps';
 import { streebog } from '../src/modules/pdf/sign/gost/streebog';
@@ -427,6 +427,82 @@ describe('завершение подписи ГОСТ (§42.2, §42.6)', () => 
     }
     expect((await complete(user.cookie, runId, sigB64('bes-256a.sig'))).statusCode).toBe(201);
   });
+
+  it('сбой фиксации завершения: ожидание и его черновик остаются, повтор подписывает', async () => {
+    const runId = await render(user.cookie);
+    expect((await prepare(user.cookie, runId)).statusCode).toBe(200);
+    const draftPath = await draftOf(runId);
+    // Отложенный триггер падает на COMMIT — после записи файлов, строки подписи и удаления ожидания.
+    await env.t.deps.db.execute(sql`
+      CREATE FUNCTION fail_gost_complete_commit() RETURNS trigger LANGUAGE plpgsql AS
+        $$ BEGIN RAISE EXCEPTION 'test: commit failed'; END $$`);
+    await env.t.deps.db.execute(sql`
+      CREATE CONSTRAINT TRIGGER fail_gost_complete_commit AFTER DELETE ON gost_sign_pending
+        DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fail_gost_complete_commit()`);
+    try {
+      expect((await complete(user.cookie, runId, sigB64('bes-256a.sig'))).statusCode).toBe(500);
+    } finally {
+      await env.t.deps.db.execute(sql`DROP TRIGGER fail_gost_complete_commit ON gost_sign_pending`);
+      await env.t.deps.db.execute(sql`DROP FUNCTION fail_gost_complete_commit()`);
+    }
+    expect(await pendingOf(runId)).toHaveLength(1);
+    expect(await env.t.deps.storage.exists(draftPath)).toBe(true);
+    expect((await complete(user.cookie, runId, sigB64('bes-256a.sig'))).statusCode).toBe(201);
+    expect(await env.t.deps.storage.exists(draftPath)).toBe(false);
+  });
+});
+
+describe('снимок решает способ (§42.1)', () => {
+  const setMethod = async (templateId: string, method?: 'gost') => {
+    const r = await env.t.app.inject({
+      method: 'PUT',
+      url: `/api/templates/${templateId}/pdf-options`,
+      headers: { cookie: env.adminCookie },
+      payload: { pdfa: false, signature: { position: 'bottom-left', ...(method && { method }) } },
+    });
+    if (r.statusCode !== 200) throw new Error(r.body);
+  };
+  const signP12 = (runId: string) =>
+    env.t.app.inject({
+      method: 'POST',
+      url: `/api/runs/${runId}/sign`,
+      headers: { cookie: user.cookie },
+      payload: { password: 'x' },
+    });
+  const methodOf = async (runId: string) =>
+    (
+      (
+        await env.t.app.inject({
+          method: 'GET',
+          url: '/api/runs',
+          headers: { cookie: user.cookie },
+        })
+      ).json().items as Array<{ id: string; signMethod: unknown }>
+    ).find((r) => r.id === runId)?.signMethod;
+
+  it('смена способа в шаблоне не меняет уже созданные запуски', async () => {
+    const gostRun = await render(user.cookie);
+    const p12Run = await render(user.cookie, env.p12Id);
+    await setMethod(env.gostId);
+    await setMethod(env.p12Id, 'gost');
+    try {
+      expect(await methodOf(gostRun)).toBe('gost');
+      expect(await methodOf(p12Run)).toBe('p12');
+      // ГОСТ-запуск: .p12 по-прежнему не подписывает, плагин — подписывает.
+      const p12 = await signP12(gostRun);
+      expect(p12.statusCode).toBe(400);
+      expect(p12.json().error).toMatchObject({ message: 'подпись для этого отчёта недоступна' });
+      expect((await prepare(user.cookie, gostRun)).statusCode).toBe(200);
+      expect((await complete(user.cookie, gostRun, sigB64('bes-256a.sig'))).statusCode).toBe(201);
+      // .p12-запуск ГОСТ не подписывается.
+      const gost = await prepare(user.cookie, p12Run);
+      expect(gost.statusCode).toBe(400);
+      expect(gost.json().error).toMatchObject({ message: 'подпись для этого отчёта недоступна' });
+    } finally {
+      await setMethod(env.gostId, 'gost');
+      await setMethod(env.p12Id);
+    }
+  });
 });
 
 describe('настоящая подготовка (штамп §42.3)', () => {
@@ -461,13 +537,25 @@ describe('метка времени (SIGN_GOST_TSA_URL)', () => {
     const bes = await complete(u.cookie, runId, sigB64('bes-256a.sig'), tsaEnv);
     expect(bes.statusCode).toBe(400);
     expect(bes.json().error).toMatchObject({ message: 'нет метки времени' });
-    const t = await complete(u.cookie, runId, sigB64('t-256a.sig'), tsaEnv);
-    expect(t.statusCode).toBe(201);
-    expect(t.json()).toMatchObject({
-      method: 'gost',
-      timestamped: true,
-      signedAt: '2026-10-20T15:04:15.000Z',
-    });
+    // genTime t-256a.sig (2026-10-20T15:04:15Z) раньше этой подготовки больше чем на 5 минут.
+    const late = await complete(u.cookie, runId, sigB64('t-256a.sig'), tsaEnv);
+    expect(late.statusCode).toBe(400);
+    expect(late.json().error).toMatchObject({ message: 'метка времени недействительна' });
+    // Подготовка и завершение «в момент» создания тестовых данных: метка — в окне (§42.4 п. 5).
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-20T15:06:00Z') });
+    try {
+      expect((await prepare(u.cookie, runId, undefined, tsaEnv)).statusCode).toBe(200);
+      vi.setSystemTime(new Date('2026-10-20T15:07:00Z'));
+      const t = await complete(u.cookie, runId, sigB64('t-256a.sig'), tsaEnv);
+      expect(t.statusCode).toBe(201);
+      expect(t.json()).toMatchObject({
+        method: 'gost',
+        timestamped: true,
+        signedAt: '2026-10-20T15:04:15.000Z',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

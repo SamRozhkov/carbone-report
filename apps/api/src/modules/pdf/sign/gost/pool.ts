@@ -62,6 +62,7 @@ export function createPoolGostVerifier(pool: Pick<RenderPool, 'run'>): GostVerif
             hashAlg: input.hashAlg,
             requireTimestamp: input.requireTimestamp,
             now: input.now.toISOString(),
+            preparedAt: input.preparedAt?.toISOString() ?? null,
           },
           options: { lang: '', timezone: '' },
         },

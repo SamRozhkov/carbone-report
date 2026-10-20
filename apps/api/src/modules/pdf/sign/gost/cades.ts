@@ -29,7 +29,15 @@ export interface CadesInput {
   /** Метка времени обязательна (задан SIGN_GOST_TSA_URL). */
   requireTimestamp: boolean;
   now: Date;
+  /**
+   * Время подготовки: метка не раньше него (минус TIMESTAMP_SKEW_MS). Сертификат службы меток не
+   * проверяется (§42.4), поэтому без нижней границы самодельная метка дала бы любое время подписи.
+   */
+  preparedAt?: Date;
 }
+
+/** Допуск на расхождение часов службы меток и сервера (§42.4 п. 5). */
+export const TIMESTAMP_SKEW_MS = 5 * 60 * 1000;
 
 export interface CadesResult {
   /** genTime метки времени или null, если метки нет. */
@@ -67,6 +75,7 @@ const fail = (text: string): never => {
 const same = (a: ArrayBuffer | Uint8Array, b: Uint8Array) =>
   Buffer.from(a instanceof Uint8Array ? a : new Uint8Array(a)).equals(Buffer.from(b));
 const ab = (b: Uint8Array) => new Uint8Array(b).slice().buffer;
+/** Обе стороны сравнения сертификатов кодируются одинаково (pkijs): байты УЦ могут быть не строгим DER. */
 const der = (c: pkijs.Certificate) => new Uint8Array(c.toSchema().toBER());
 
 /** Любая ошибка разбора данных из подписи (не CadesError) превращается в отказ с текстом text. */
@@ -161,11 +170,12 @@ const within = (cert: pkijs.Certificate, at: Date) =>
 /**
  * П. 5 §42.4: метка signature-time-stamp. Нет — null. Есть — отпечаток от значения подписи,
  * подпись службы (ГОСТ — своим кодом, иначе pkijs, без цепочки), genTime в сроке сертификата
- * подписанта; иначе «метка времени недействительна».
+ * подписанта и в окне [подготовка − 5 мин, сейчас + 5 мин]; иначе «метка времени недействительна».
  */
 async function checkTimestamp(
   si: pkijs.SignerInfo,
   signerCert: pkijs.Certificate,
+  window: { from: number; to: number },
 ): Promise<Date | null> {
   const tokens = (si.unsignedAttrs?.attributes ?? [])
     .filter((a) => a.type === OID.signatureTimeStamp)
@@ -207,7 +217,9 @@ async function checkTimestamp(
     if (
       !(genTime instanceof Date) ||
       Number.isNaN(genTime.getTime()) ||
-      !within(signerCert, genTime)
+      !within(signerCert, genTime) ||
+      genTime.getTime() < window.from ||
+      genTime.getTime() > window.to
     )
       return fail(E.timestamp);
     return genTime;
@@ -231,8 +243,9 @@ export async function verifyCades(i: CadesInput): Promise<CadesResult> {
 
   // 2. Сертификат подписанта (по sid из certificates) — сертификат подготовки.
   const matches = await guard(E.otherCert, () => certsBySid(sd, si));
-  if (!matches.length || !matches.every((c) => same(der(c), i.certDer))) fail(E.otherCert);
-  const signerCert = pkijs.Certificate.fromBER(ab(i.certDer));
+  const signerCert = await guard(E.otherCert, () => pkijs.Certificate.fromBER(ab(i.certDer)));
+  const want = der(signerCert);
+  if (!matches.length || !matches.every((c) => same(der(c), want))) fail(E.otherCert);
 
   // 3–4. Подписанные атрибуты и значение подписи.
   const failure = await guard(E.document, () => {
@@ -245,7 +258,10 @@ export async function verifyCades(i: CadesInput): Promise<CadesResult> {
   if (failure) fail(E[failure]);
 
   // 5. Метка времени.
-  const genTime = await checkTimestamp(si, signerCert);
+  const genTime = await checkTimestamp(si, signerCert, {
+    from: i.preparedAt ? i.preparedAt.getTime() - TIMESTAMP_SKEW_MS : -Infinity,
+    to: i.now.getTime() + TIMESTAMP_SKEW_MS,
+  });
   if (!genTime && i.requireTimestamp) fail(E.noTimestamp);
 
   // 6. Срок сертификата — на время метки, без нее — на время сервера.

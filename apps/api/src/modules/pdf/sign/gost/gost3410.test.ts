@@ -155,6 +155,41 @@ describe('ГОСТ Р 34.10-2012: наборы параметров', () => {
     expect((c.y * c.y - (c.x ** 3n + c.a * c.x + c.b)) % c.p).toBe(0n);
   });
 
+  it.each(expected)('%s: q·G = O (порядок базовой точки — q)', (oid) => {
+    // Независимо от gost3410.ts: аффинные координаты, обратный — расширенным алгоритмом Евклида.
+    const c = GOST_CURVES.get(oid)!;
+    const m = (v: bigint) => ((v % c.p) + c.p) % c.p;
+    const inv = (v: bigint) => {
+      let [r0, r1, t0, t1] = [m(v), c.p, 1n, 0n];
+      while (r1 !== 0n) {
+        const k = r0 / r1;
+        [r0, r1, t0, t1] = [r1, r0 - k * r1, t1, t0 - k * t1];
+      }
+      return m(t0);
+    };
+    type P = { x: bigint; y: bigint } | null; // null — бесконечно удаленная точка
+    const add = (A: P, B: P): P => {
+      if (!A) return B;
+      if (!B) return A;
+      if (A.x === B.x && m(A.y + B.y) === 0n) return null;
+      const l =
+        A.x === B.x ? m((3n * A.x * A.x + c.a) * inv(2n * A.y)) : m((B.y - A.y) * inv(B.x - A.x));
+      const x = m(l * l - A.x - B.x);
+      return { x, y: m(l * (A.x - x) - A.y) };
+    };
+    const mulP = (k: bigint, G: P): P => {
+      let R: P = null;
+      for (let i = k.toString(2).length - 1; i >= 0; i--) {
+        R = add(R, R);
+        if ((k >> BigInt(i)) & 1n) R = add(R, G);
+      }
+      return R;
+    };
+    const G = { x: c.x, y: c.y };
+    expect(mulP(c.q - 1n, G)).toEqual({ x: c.x, y: m(-c.y) });
+    expect(mulP(c.q, G)).toBeNull();
+  });
+
   it('псевдонимы: TC26-256-B/C/D = CryptoPro A/B/C, XchA = A, XchB = C', () => {
     const same = (a: string, b: string) => {
       const { oid: _a, ...x } = GOST_CURVES.get(a)!;

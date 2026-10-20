@@ -207,8 +207,8 @@ describe('signHash', () => {
     // В подпись — только сертификат подписанта: цепочка не строится (CAPICOM_CERTIFICATE_INCLUDE_END_ENTITY_ONLY).
     expect(f.signer.propset_Options).toHaveBeenCalledWith(2);
     expect(f.hashed.propset_Algorithm).toHaveBeenCalledWith(101);
-    // Хеш сервера передаётся без изменений.
-    expect(f.hashed.SetHashValue).toHaveBeenCalledWith('ab'.repeat(32));
+    // Хеш сервера — тот же порядок байтов, hex в верхнем регистре (как в примерах КриптоПро).
+    expect(f.hashed.SetHashValue).toHaveBeenCalledWith('AB'.repeat(32));
     expect(f.signed.SignHash).toHaveBeenCalledWith(f.hashed, f.signer, 1);
   });
 

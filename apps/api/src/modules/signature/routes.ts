@@ -80,12 +80,12 @@ export function registerSignatureRoutes(app: App, deps: AppDeps, guards: Guards)
     '/api/me/certificate',
     { preHandler: [guards.requireUser, limitUploads] },
     async (req, reply) => {
+      // Срок отсчитывается от начала запроса, а не от конца чтения тела.
+      const deadlineAt = Date.now() + deps.config.reportTimeoutMs;
       const { file, password } = await readCertificateUpload(req);
       let info: CertificateInfo;
       try {
-        info = (
-          await deps.p12Read(file, password, new Date(), Date.now() + deps.config.reportTimeoutMs)
-        ).info;
+        info = (await deps.p12Read(file, password, new Date(), deadlineAt)).info;
       } catch (e) {
         if (e instanceof P12Error) throw p12FieldError(e);
         throw e;

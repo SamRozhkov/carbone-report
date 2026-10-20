@@ -338,26 +338,37 @@ describe('подпись запуска (§39.3)', () => {
     expect((await signRun(user.cookie, runs[8]!)).statusCode).toBe(429);
   });
 
-  it('счётчик в базе: окно закончилось — снова 400, новое окно с count = 1 (§39.8)', async () => {
+  it('счётчик в базе: окно по часам базы — 14 минут блокирует, 16 — новое окно с count = 1 (§39.8)', async () => {
     const runId = await render(user.cookie);
+    // Окно задаётся SQL-временем базы: часы API не участвуют.
     await t.deps.db
       .insert(signPasswordFailures)
-      .values({ userId: user.user.id, count: 5, windowStart: new Date() })
+      .values({
+        userId: user.user.id,
+        count: 5,
+        windowStart: sql`now() - interval '14 minutes'`,
+      })
       .onConflictDoUpdate({
         target: signPasswordFailures.userId,
-        set: { count: 5, windowStart: new Date() },
+        set: { count: 5, windowStart: sql`now() - interval '14 minutes'` },
       });
     expect((await signRun(user.cookie, runId)).statusCode).toBe(429);
     await t.deps.db
       .update(signPasswordFailures)
-      .set({ windowStart: new Date(Date.now() - 16 * 60_000) })
+      .set({ windowStart: sql`now() - interval '16 minutes'` })
       .where(eq(signPasswordFailures.userId, user.user.id));
     expect((await signRun(user.cookie, runId, 'нет')).statusCode).toBe(400);
     const [row] = await t.deps.db
-      .select()
+      .select({
+        count: signPasswordFailures.count,
+        ageSec: sql<number>`extract(epoch from now() - ${signPasswordFailures.windowStart})`,
+      })
       .from(signPasswordFailures)
       .where(eq(signPasswordFailures.userId, user.user.id));
     expect(row!.count).toBe(1);
+    // Новое окно начато по now() базы, а не по времени API: возраст — секунды.
+    expect(Number(row!.ageSec)).toBeGreaterThanOrEqual(0);
+    expect(Number(row!.ageSec)).toBeLessThan(60);
     expect((await signRun(user.cookie, runId)).statusCode).toBe(201);
     // Верный пароль счётчик не сбрасывает и не увеличивает.
     const [after] = await t.deps.db

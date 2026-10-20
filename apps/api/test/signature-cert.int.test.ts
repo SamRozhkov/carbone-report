@@ -4,6 +4,9 @@ import { userCertificates } from '../src/db/schema';
 import { decryptSecret } from '../src/lib/crypto';
 import { AppError } from '../src/lib/errors';
 import { fixture, FIXTURE_PASSWORD } from '../src/modules/pdf/sign/fixtures';
+import { createPoolP12Reader } from '../src/modules/pdf/sign/p12-reader';
+import { RenderPool } from '../src/modules/render/pool';
+import { renderWorkerUrl } from '../src/modules/render/worker-url';
 import { createTestApp, loginAs, multipart, type TestApp } from './helpers';
 
 let t: TestApp;
@@ -210,4 +213,32 @@ describe('сертификат пользователя (§39.1)', () => {
       401,
     );
   });
+});
+
+// Загрузка через настоящий поток пула, как в server.ts: ответ потока проходит разбор meta.
+describe('сертификат через пул рендера (§39.8)', () => {
+  let pool: RenderPool;
+  let pt: TestApp;
+  beforeAll(async () => {
+    const w = renderWorkerUrl();
+    pool = new RenderPool({ size: 1, workerUrl: w.url, execArgv: w.execArgv });
+    pt = await createTestApp({ p12Read: createPoolP12Reader(pool) });
+  });
+  afterAll(async () => {
+    await pt?.close();
+    await pool?.destroy();
+  });
+
+  it('загрузка и замена — 201; неверный пароль — 400 у password', async () => {
+    const { cookie } = await loginAs(pt, 'user');
+    const first = await upload(cookie, fixture('rsa.p12'), FIXTURE_PASSWORD, pt);
+    expect(first.statusCode).toBe(201);
+    expect(first.json()).toMatchObject({ serial: '1001', keyAlg: 'RSA-2048' });
+    const again = await upload(cookie, fixture('ec.p12'), FIXTURE_PASSWORD, pt);
+    expect(again.statusCode).toBe(201);
+    const bad = await upload(cookie, fixture('rsa.p12'), 'неверный-пароль', pt);
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error.details).toEqual([expect.objectContaining({ path: '/password' })]);
+    expect(bad.body).not.toContain('неверный-пароль');
+  }, 60_000);
 });

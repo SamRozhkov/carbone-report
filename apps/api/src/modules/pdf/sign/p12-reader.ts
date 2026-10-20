@@ -1,16 +1,23 @@
 import { createPrivateKey } from 'node:crypto';
-import type { CertificateInfo } from '@carbone-reports/shared';
+import { CertificateInfo } from '@carbone-reports/shared';
+import { z } from 'zod';
 import type { P12Reader } from '../../../deps';
 import { AppError } from '../../../lib/errors';
 import { RenderTimeoutError, TemplateRenderError, type RenderPool } from '../../render/pool';
 import { P12Error, readP12, type DigestAlg } from './p12';
 
-interface P12Meta {
+/** Ответ потока проверяется: чужая или повреждённая форма не должна дойти до подписи как TypeError. */
+const P12Meta = z.object({
+  cert: z.string(),
+  chain: z.array(z.string()),
+  info: CertificateInfo,
+  digestAlg: z.enum(['SHA-256', 'SHA-384']),
+}) satisfies z.ZodType<{
   cert: string;
   chain: string[];
   info: CertificateInfo;
   digestAlg: DigestAlg;
-}
+}>;
 
 /** Разбор — задачей пула рендера: KDF (до 300 000 итераций) не блокирует главный поток (§39.8). */
 export function createPoolP12Reader(pool: Pick<RenderPool, 'run'>): P12Reader {
@@ -35,8 +42,10 @@ export function createPoolP12Reader(pool: Pick<RenderPool, 'run'>): P12Reader {
       // Прочее — внутренняя ошибка; текст потока пользователю не нужен.
       throw new Error('разбор .p12 в пуле рендера не удался', { cause: e });
     }
-    const meta = r.meta as P12Meta;
     try {
+      const parsed = P12Meta.safeParse(r.meta);
+      if (!parsed.success) throw new Error('некорректный ответ потока при разборе .p12');
+      const meta = parsed.data;
       return {
         key: createPrivateKey({ key: r.out, format: 'der', type: 'pkcs8' }),
         cert: Buffer.from(meta.cert, 'base64'),

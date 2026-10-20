@@ -53,6 +53,17 @@ describe.each([
     expect(String(e.message)).not.toContain('секрет-123');
   }, 30_000);
 
+  it('не PKCS#12 — P12Error, как у readP12', async () => {
+    const e = await reader()(Buffer.from('not a p12'), FIXTURE_PASSWORD, new Date(), soon()).catch(
+      (x) => x,
+    );
+    expect(e).toBeInstanceOf(P12Error);
+    expect(e).toMatchObject({
+      field: 'password',
+      message: 'неверный пароль или повреждённый файл',
+    });
+  }, 30_000);
+
   it('просроченный сертификат — P12Error у file', async () => {
     // Срок проверяется на переданный момент: 2200 год — сертификат (до 2126) уже истёк.
     const e = await reader()(

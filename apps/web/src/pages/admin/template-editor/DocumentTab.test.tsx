@@ -82,6 +82,15 @@ const lock = [
   { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
 ];
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/**
+ * Кнопки перехвата отключены, пока редактор не построен (editor-config + onAppReady): клик по
+ * отключённой кнопке ничего не делает, и на медленном раннере тест ждал бы окна или тоста впустую.
+ */
+async function clickWhenEnabled(name: string) {
+  const btn = await screen.findByRole('button', { name });
+  await waitFor(() => expect(btn).toBeEnabled());
+  await userEvent.click(btn);
+}
 
 describe('DocumentTab', () => {
   it('редактор с конфигом сервера; переключение панели тегов не пересоздаёт редактор', async () => {
@@ -411,7 +420,7 @@ describe('DocumentTab', () => {
       await screen.findByText(/Только просмотр — редактирует petrov с \d\d:\d\d/),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: 'Забрать редактирование' }));
+    await clickWhenEnabled('Забрать редактирование');
     expect(
       screen.getByText(
         'Шаблон сейчас редактирует petrov. Забрать редактирование? Сделанные правки будут сохранены, а у petrov редактор переключится в просмотр',
@@ -436,7 +445,7 @@ describe('DocumentTab', () => {
     ]);
     renderWithProviders(<DocumentTab {...base} />);
     expect(await screen.findByText('Шаблон открыт у вас в другой вкладке')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Редактировать здесь' }));
+    await clickWhenEnabled('Редактировать здесь');
     expect(await screen.findByText('Вы редактируете')).toBeInTheDocument();
   });
 
@@ -453,7 +462,7 @@ describe('DocumentTab', () => {
       { path: '/api/templates/t1/editor-config', body: config },
     ]);
     renderWithProviders(<DocumentTab {...base} />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Редактировать здесь' }));
+    await clickWhenEnabled('Редактировать здесь');
     expect(await screen.findByText('Не удалось забрать редактирование')).toBeInTheDocument();
     expect(screen.getByText('сбой сервера')).toBeInTheDocument();
   });
@@ -506,7 +515,7 @@ describe('DocumentTab', () => {
     await waitFor(() =>
       expect(screen.getByTestId('oo')).toHaveAttribute('data-built-mode', 'view'),
     );
-    await userEvent.click(await screen.findByRole('button', { name: 'Редактировать здесь' }));
+    await clickWhenEnabled('Редактировать здесь');
     await waitFor(() =>
       expect(screen.getByTestId('oo')).toHaveAttribute('data-built-mode', 'edit'),
     );

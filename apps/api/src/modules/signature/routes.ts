@@ -7,7 +7,7 @@ import type { AppDeps } from '../../deps';
 import { encryptSecret } from '../../lib/crypto';
 import { AppError, badRequest, notFound } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
-import { P12Error, readP12 } from '../pdf/sign/p12';
+import { P12Error } from '../pdf/sign/p12';
 import { loadUserCertificate, p12FieldError, toCertificateInfo } from './certificates';
 import { registerSignRunRoute } from './sign-run';
 
@@ -51,8 +51,8 @@ export function registerSignatureRoutes(app: App, deps: AppDeps, guards: Guards)
     },
   );
 
-  // Каждая загрузка — разбор .p12 в главном потоке (до 300 000 итераций KDF): не больше 10 в минуту
-  // на пользователя. Лимит — в preHandler после входа, до чтения тела (multipart читает обработчик).
+  // Каждая загрузка — разбор .p12 в пуле рендера (до 300 000 итераций KDF): не больше 10 в минуту
+  // на пользователя, чтобы не занимать пул. Лимит — в preHandler после входа, до чтения тела (multipart читает обработчик).
   // В типах CreateRateLimitOptions нет nameSpace (его читает FallbackStore.child) — опции через переменную.
   const uploadLimitOptions = {
     max: 10,
@@ -83,7 +83,9 @@ export function registerSignatureRoutes(app: App, deps: AppDeps, guards: Guards)
       const { file, password } = await readCertificateUpload(req);
       let info: CertificateInfo;
       try {
-        info = readP12(file, password).info;
+        info = (
+          await deps.p12Read(file, password, new Date(), Date.now() + deps.config.reportTimeoutMs)
+        ).info;
       } catch (e) {
         if (e instanceof P12Error) throw p12FieldError(e);
         throw e;

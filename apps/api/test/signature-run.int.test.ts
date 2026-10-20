@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { reportRunSignatures, reportRuns } from '../src/db/schema';
+import { reportRunSignatures, reportRuns, signPasswordFailures } from '../src/db/schema';
 import type { CarboneRenderer } from '../src/deps';
 import { cleanupOldReports } from '../src/modules/reports/cleanup';
 import { fixture, FIXTURE_PASSWORD } from '../src/modules/pdf/sign/fixtures';
@@ -136,6 +136,9 @@ describe('подпись запуска (§39.3)', () => {
     const runId = await render(user.cookie);
     const [a, b] = await Promise.all([signRun(user.cookie, runId), signRun(user.cookie, runId)]);
     expect([a.statusCode, b.statusCode].sort()).toEqual([201, 409]);
+    // Второй либо застал блокировку (SIGN_BUSY), либо пришёл после первой подписи (CONFLICT).
+    const loser = a.statusCode === 409 ? a : b;
+    expect(['SIGN_BUSY', 'CONFLICT']).toContain(loser.json().error.code);
     const again = await signRun(user.cookie, runId);
     expect(again.statusCode).toBe(409);
     expect(again.json().error).toMatchObject({ message: 'отчёт уже подписан' });
@@ -145,6 +148,19 @@ describe('подпись запуска (§39.3)', () => {
         .from(reportRunSignatures)
         .where(eq(reportRunSignatures.runId, runId)),
     ).toHaveLength(1);
+  });
+
+  it('две одновременные подписи разных запусков — 201 и 409 SIGN_BUSY (§39.8)', async () => {
+    const a = await render(user.cookie);
+    const b = await render(user.cookie);
+    const res = await Promise.all([signRun(user.cookie, a), signRun(user.cookie, b)]);
+    const codes = res.map((r) => r.statusCode).sort();
+    expect(codes).toEqual([201, 409]);
+    const busy = res.find((r) => r.statusCode === 409)!;
+    expect(busy.json().error).toMatchObject({
+      code: 'SIGN_BUSY',
+      message: 'другая подпись уже выполняется — повторите через несколько секунд',
+    });
   });
 
   it('служба меток отказала — 502, подписи нет; повтор после восстановления — 201', async () => {
@@ -228,6 +244,11 @@ describe('подпись запуска (§39.3)', () => {
       code: 'TOO_MANY_ATTEMPTS',
       message: 'слишком много неверных паролей — попробуйте через 15 минут',
     });
+    const [row] = await t.deps.db
+      .select()
+      .from(signPasswordFailures)
+      .where(eq(signPasswordFailures.userId, user.user.id));
+    expect(row).toMatchObject({ count: 5 });
     expect(
       await t.deps.db
         .select()
@@ -241,9 +262,43 @@ describe('подпись запуска (§39.3)', () => {
     for (let i = 0; i < 9; i++) runs.push(await render(user.cookie));
     const res = await Promise.all(runs.slice(0, 8).map((id) => signRun(user.cookie, id, 'нет')));
     const codes = res.map((r) => r.statusCode);
+    // Параллельные получают 409 SIGN_BUSY, пока идёт чужая попытка (§39.8).
     expect(codes.filter((c) => c === 400).length).toBeLessThanOrEqual(5);
-    expect(codes.filter((c) => c !== 400 && c !== 429)).toEqual([]);
+    expect(codes.filter((c) => c !== 400 && c !== 409 && c !== 429)).toEqual([]);
+    // Дальше по одной, пока не придёт 429: всего неверных попыток — ровно пять.
+    let wrong = codes.filter((c) => c === 400).length;
+    for (let i = 0; ; i++) {
+      expect(i).toBeLessThan(6);
+      const r = await signRun(user.cookie, runs[i]!, 'нет');
+      if (r.statusCode === 429) break;
+      expect(r.statusCode).toBe(400);
+      wrong++;
+    }
+    expect(wrong).toBe(5);
     expect((await signRun(user.cookie, runs[8]!)).statusCode).toBe(429);
+  });
+
+  it('счётчик в базе: окно закончилось — снова 400, новое окно с count = 1 (§39.8)', async () => {
+    const runId = await render(user.cookie);
+    await t.deps.db
+      .insert(signPasswordFailures)
+      .values({ userId: user.user.id, count: 5, windowStart: new Date() })
+      .onConflictDoUpdate({
+        target: signPasswordFailures.userId,
+        set: { count: 5, windowStart: new Date() },
+      });
+    expect((await signRun(user.cookie, runId)).statusCode).toBe(429);
+    await t.deps.db
+      .update(signPasswordFailures)
+      .set({ windowStart: new Date(Date.now() - 16 * 60_000) })
+      .where(eq(signPasswordFailures.userId, user.user.id));
+    expect((await signRun(user.cookie, runId, 'нет')).statusCode).toBe(400);
+    const [row] = await t.deps.db
+      .select()
+      .from(signPasswordFailures)
+      .where(eq(signPasswordFailures.userId, user.user.id));
+    expect(row!.count).toBe(1);
+    expect((await signRun(user.cookie, runId)).statusCode).toBe(201);
   });
 
   it('администратор видит чужой запуск в истории — signable: false', async () => {

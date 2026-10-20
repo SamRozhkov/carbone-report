@@ -85,6 +85,13 @@
       "when": 1792417075623,
       "tag": "0011_signatures",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792477403405,
+      "tag": "0012_sign_password_failures",
+      "breakpoints": true
     }
   ]
 }

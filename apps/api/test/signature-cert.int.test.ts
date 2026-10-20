@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { userCertificates } from '../src/db/schema';
 import { decryptSecret } from '../src/lib/crypto';
+import { AppError } from '../src/lib/errors';
 import { fixture, FIXTURE_PASSWORD } from '../src/modules/pdf/sign/fixtures';
 import { createTestApp, loginAs, multipart, type TestApp } from './helpers';
 
@@ -11,10 +12,10 @@ beforeAll(async () => {
 });
 afterAll(async () => t?.close());
 
-function upload(cookie: string, file: Buffer | null, password?: string) {
+function upload(cookie: string, file: Buffer | null, password?: string, app = t) {
   const fields: Record<string, string> = password === undefined ? {} : { password };
   const body = multipart(fields, file ? { name: 'me.p12', data: file } : undefined);
-  return t.app.inject({
+  return app.app.inject({
     method: 'POST',
     url: '/api/me/certificate',
     headers: { cookie, ...body.headers },
@@ -179,6 +180,29 @@ describe('сертификат пользователя (§39.1)', () => {
       headers: { cookie: admin.cookie },
     });
     expect(missing.statusCode).toBe(404);
+  });
+
+  it('разбор .p12 не успел (TIMEOUT пула) — 504, сертификат не сохранён (§39.8)', async () => {
+    const slow = await createTestApp({
+      p12Read: async () => {
+        throw new AppError('TIMEOUT', 504, 'превышено время ожидания');
+      },
+    });
+    try {
+      const { cookie } = await loginAs(slow, 'user');
+      const res = await upload(cookie, fixture('rsa.p12'), FIXTURE_PASSWORD, slow);
+      expect(res.statusCode).toBe(504);
+      expect(res.json().error).toMatchObject({ code: 'TIMEOUT' });
+      expect(res.body).not.toContain(FIXTURE_PASSWORD);
+      const me = await slow.app.inject({
+        method: 'GET',
+        url: '/api/me/certificate',
+        headers: { cookie },
+      });
+      expect(me.json()).toEqual({ certificate: null });
+    } finally {
+      await slow.close();
+    }
   });
 
   it('без входа — 401', async () => {

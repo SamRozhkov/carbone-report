@@ -509,4 +509,38 @@ describe('пул сборки (createRunFileGate)', () => {
       await pool.end();
     }
   });
+
+  it('ifBusy: блокировка занята — сразу ошибка ifBusy, соединение возвращено в пул', async () => {
+    const pool = new pg.Pool({ connectionString: t.deps.config.databaseUrl, max: 3 });
+    pool.on('error', () => {});
+    const gate = createRunFileGate(pool);
+    try {
+      const busy = () => new AppError('SIGN_BUSY', 409, 'занято');
+      let release!: () => void;
+      const held = new Promise<void>((r) => (release = r));
+      let entered!: () => void;
+      const inside = new Promise<void>((r) => (entered = r));
+      const first = gate(7, 'k', new Deadline(10_000), async () => {
+        entered();
+        await held;
+        return 'first';
+      });
+      await inside;
+      const t0 = Date.now();
+      await expect(
+        gate(7, 'k', new Deadline(10_000), async () => 'second', { ifBusy: busy }),
+      ).rejects.toMatchObject({ code: 'SIGN_BUSY' });
+      expect(Date.now() - t0).toBeLessThan(1000);
+      // Второе соединение вернулось в пул и не уничтожено (ошибка приложения).
+      expect(pool.totalCount - pool.idleCount).toBe(1);
+      release();
+      expect(await first).toBe('first');
+      // Свободно — ifBusy не мешает.
+      expect(await gate(7, 'k', new Deadline(10_000), async () => 'third', { ifBusy: busy })).toBe(
+        'third',
+      );
+    } finally {
+      await pool.end();
+    }
+  });
 });

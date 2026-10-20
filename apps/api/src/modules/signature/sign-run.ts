@@ -5,7 +5,6 @@ import {
   type RunSignature,
 } from '@carbone-reports/shared';
 import { eq } from 'drizzle-orm';
-import type { FastifyRequest } from 'fastify';
 import type { App } from '../../app';
 import { reportRunSignatures, reportRuns } from '../../db/schema';
 import type { AppDeps } from '../../deps';
@@ -13,7 +12,7 @@ import { decryptSecret } from '../../lib/crypto';
 import { Deadline } from '../../lib/deadline';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
-import { P12Error, readP12, type P12Contents } from '../pdf/sign/p12';
+import { P12Error, type P12Contents } from '../pdf/sign/p12';
 import { signPdf } from '../pdf/sign/sign-pdf';
 import { P12Signer } from '../pdf/sign/signer';
 import { createTsaClient } from '../pdf/sign/tsa';
@@ -27,6 +26,7 @@ import {
   toRunSignature,
 } from '../reports/snapshot';
 import { loadUserCertificate } from './certificates';
+import { recordSignFailure, signBlocked } from './password-failures';
 
 const unavailable = () => badRequest('подпись для этого отчёта недоступна');
 // Пароль не попадает ни в сообщение, ни в details (Review Focus 1).
@@ -40,25 +40,20 @@ const tooMany = () =>
     429,
     'слишком много неверных паролей — попробуйте через 15 минут',
   );
+const busy = () =>
+  new AppError(
+    'SIGN_BUSY',
+    409,
+    'другая подпись уже выполняется — повторите через несколько секунд',
+  );
 
-/** POST /api/runs/:id/sign — подпись PDF запуска сертификатом пользователя (§39.3). */
+/**
+ * POST /api/runs/:id/sign — подпись PDF запуска сертификатом пользователя (§39.3).
+ * R8: считаются только неверные пароли — счётчик в Postgres (sign_password_failures), один для всех
+ * экземпляров API: не больше пяти за 15 минут от первой ошибки (§39.8).
+ */
 export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): void {
   const { db, storage, config } = deps;
-  // R8: считаются только неверные пароли. createRateLimit 11.2: `{ increment: false }` читает счётчик
-  // (store.read) и даёт remaining = max(0, max - current), т. е. 0 после пяти неверных.
-  // В типах CreateRateLimitOptions нет nameSpace (его читает FallbackStore.child) — опции через переменную.
-  const limitOptions = {
-    max: 5,
-    timeWindow: '15 minutes',
-    nameSpace: 'cr:rl-sign:',
-    keyGenerator: (req: FastifyRequest) => currentUser(req).id,
-  };
-  const limit = app.createRateLimit(limitOptions);
-  const assertAttemptsLeft = async (req: FastifyRequest) => {
-    const attempts = await limit(req, { increment: false });
-    // isAllowed: true — только для allowList (не задан); иначе remaining — сколько неверных осталось.
-    if (!attempts.isAllowed && attempts.remaining <= 0) throw tooMany();
-  };
 
   app.post(
     '/api/runs/:id/sign',
@@ -78,18 +73,20 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
       const checkedAt = new Date();
       if (checkedAt < cert.notBefore) throw badRequest('сертификат ещё не действует');
       if (checkedAt > cert.notAfter) throw badRequest('срок действия сертификата истёк');
-      // Ранний 429 без ожидания блокировки; решающая проверка — внутри неё, перед паролем.
-      await assertAttemptsLeft(req);
+      // Ранний 429 без блокировки; решающая проверка — внутри неё, перед паролем (§39.8).
+      if (await signBlocked(db, me.id, checkedAt)) throw tooMany();
 
-      // Блокировка на пользователя, а не на запуск: все попытки подписи одного пользователя (на любых
-      // запусках и экземплярах API) идут по одной, поэтому каждая видит счётчик неверных паролей с учётом
-      // предыдущих — одновременные запросы не дают больше пяти попыток (R8). Подписывает только владелец,
-      // так что одна подпись на запуск (R9) соблюдается: проверка «уже подписан» — внутри блокировки.
-      const result: RunSignature = await deps.runFileGate(
+      // Блокировка на пользователя без ожидания (§39.8): вторая подпись того же пользователя (на любых
+      // запусках и экземплярах API) — сразу 409 SIGN_BUSY, соединение runFilePool не занимается. Попытки
+      // одного пользователя идут по одной, и каждая видит счётчик неверных паролей с учётом предыдущих (R8).
+      // Подписывает только владелец, так что одна подпись на запуск (R9) соблюдается: проверка «уже подписан» —
+      // внутри блокировки. Неверный пароль не бросается из транзакции, а возвращается результатом:
+      // запись счётчика должна зафиксироваться.
+      const outcome = await deps.runFileGate(
         RUN_FILE_LOCK_CLASS,
         `sign:${me.id}`,
         deadline,
-        async (tx) => {
+        async (tx): Promise<{ signature: RunSignature } | { wrongPassword: true }> => {
           // FOR SHARE: очистка ждёт конца подписи (как сборка форматов, §24.2).
           const [cur] = await tx
             .select({ fileDeleted: reportRuns.fileDeleted })
@@ -103,21 +100,22 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
             .where(eq(reportRunSignatures.runId, run.id));
           if (done) throw conflict('отчёт уже подписан');
 
-          await assertAttemptsLeft(req);
-          // Время подписи — после ожидания блокировки: им проверяется срок сертификата (readP12),
+          // Время подписи — после взятия блокировки: им проверяется срок сертификата (p12Read),
           // оно же в штампе, /M и строке подписи.
           const now = new Date();
+          if (await signBlocked(tx, me.id, now)) throw tooMany();
           let p12: P12Contents;
           try {
-            p12 = readP12(
+            p12 = await deps.p12Read(
               Buffer.from(decryptSecret(cert.p12Enc, config.encryptionKey), 'base64'),
               req.body.password,
               now,
+              Date.now() + deadline.remaining(),
             );
           } catch (e) {
             if (e instanceof P12Error && e.field === 'password') {
-              await limit(req);
-              throw wrongPassword();
+              await recordSignFailure(tx, me.id, now);
+              return { wrongPassword: true };
             }
             if (e instanceof P12Error) throw badRequest(e.message);
             throw e;
@@ -153,7 +151,7 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
                 filePath: path,
               })
               .returning();
-            return toRunSignature(row!);
+            return { signature: toRunSignature(row!) };
           } catch (e) {
             await storage
               .remove(path)
@@ -161,8 +159,10 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
             throw e;
           }
         },
+        { ifBusy: busy },
       );
-      return reply.status(201).send(result);
+      if ('wrongPassword' in outcome) throw wrongPassword();
+      return reply.status(201).send(outcome.signature);
     },
   );
 }

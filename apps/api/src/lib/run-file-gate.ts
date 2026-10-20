@@ -9,15 +9,22 @@ import { AppError } from './errors';
 
 export type RunFileTx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
+export interface RunFileGateOptions {
+  /** Не ждать блокировку: занята — откат, соединение назад в пул, бросается ifBusy() (§39.8). */
+  ifBusy?: () => Error;
+}
+
 /**
  * Транзакция под advisory-блокировкой (класс, hashtext(key)) на отдельном пуле. Всё ограничено `deadline`:
  * и получение соединения, и ожидание блокировки (lock_timeout); не успели — TIMEOUT 504.
+ * `opts.ifBusy` — без ожидания: блокировка занята — сразу ошибка ifBusy().
  */
 export type RunFileGate = <T>(
   lockClass: number,
   key: string,
   deadline: Deadline,
   fn: (tx: RunFileTx) => Promise<T>,
+  opts?: RunFileGateOptions,
 ) => Promise<T>;
 
 /**
@@ -41,7 +48,7 @@ export function createRunFileGate(pool: pg.Pool): RunFileGate {
     }
   }
 
-  return async (lockClass, key, deadline, fn) => {
+  return async (lockClass, key, deadline, fn, opts) => {
     const client = await acquire(deadline);
     let broken = false;
     try {
@@ -49,9 +56,16 @@ export function createRunFileGate(pool: pg.Pool): RunFileGate {
         // Ждать чужую сборку — не дольше остатка срока; set_config(..., true) действует до конца транзакции.
         const wait = `${deadline.cap(deadline.remaining())}ms`;
         await tx.execute(sql`select set_config('lock_timeout', ${wait}, true)`);
-        await tx.execute(
-          sql`select pg_advisory_xact_lock(${lockClass}::int, hashtext(${key}::text))`,
-        );
+        if (opts?.ifBusy) {
+          const r = await tx.execute<{ ok: boolean }>(
+            sql`select pg_try_advisory_xact_lock(${lockClass}::int, hashtext(${key}::text)) as ok`,
+          );
+          if (!r.rows[0]?.ok) throw opts.ifBusy();
+        } else {
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(${lockClass}::int, hashtext(${key}::text))`,
+          );
+        }
         return fn(tx);
       });
     } catch (e) {

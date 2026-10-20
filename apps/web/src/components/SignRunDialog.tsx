@@ -2,6 +2,7 @@ import type { RunSignature } from '@carbone-reports/shared';
 import { Dialog, Text, TextInput } from '@gravity-ui/uikit';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { ApiRequestError } from '../api/client';
 import { api } from '../api/endpoints';
 import { fieldErrors } from '../api/errors';
 import { formatDate } from '../lib/format';
@@ -27,7 +28,10 @@ export function SignRunDialog(props: {
       setPassword('');
       props.onSigned(s);
     },
-    onError: () => setPassword(''),
+    // Занято другой подписью (§39.8) — пароль верен или ещё не проверен: повторить без ввода заново.
+    onError: (e) => {
+      if (!(e instanceof ApiRequestError && e.code === 'SIGN_BUSY')) setPassword('');
+    },
   });
   const errors = fieldErrors(sign.error);
   const c = cert.data?.certificate;

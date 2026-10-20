@@ -24,6 +24,20 @@ describe('loadConfig', () => {
     expect(c.cookieSecure).toBe(false);
     expect(c.redisUrl).toBe('redis://redis:6379');
   });
+  it('служба меток времени подписи: SIGN_TSA_*', () => {
+    expect(loadConfig(base).signTsaUrl).toBeNull();
+    expect(loadConfig(base).signTsaTimeoutMs).toBe(10000);
+    expect(loadConfig({ ...base, SIGN_TSA_URL: '' }).signTsaUrl).toBeNull();
+    expect(loadConfig({ ...base, SIGN_TSA_URL: 'https://tsa.example/' }).signTsaUrl).toBe(
+      'https://tsa.example/',
+    );
+    expect(() => loadConfig({ ...base, SIGN_TSA_URL: 'ftp://x' })).toThrow(
+      /SIGN_TSA_URL: адрес http:\/\/ или https:\/\//,
+    );
+    expect(() => loadConfig({ ...base, SIGN_TSA_TIMEOUT_MS: '500' })).toThrow(
+      /целое от 1000 до 60000/,
+    );
+  });
   it('версия сборки: по умолчанию dev/unknown/unknown, пустые значения — тоже', () => {
     const c = loadConfig(base);
     expect([c.appVersion, c.appCommit, c.appBuildDate]).toEqual(['dev', 'unknown', 'unknown']);

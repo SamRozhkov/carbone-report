@@ -6,6 +6,8 @@ import {
   type PdfOptions,
   type PdfPageNumbers,
   type PdfProtection,
+  type PdfSignature,
+  type PdfSignaturePosition,
   type PdfWatermark,
   type SavePdfOptionsBody,
   type TemplateAdminDetails,
@@ -53,6 +55,11 @@ const PLACEMENTS = [
   { value: 'end', content: 'В конец' },
   { value: 'start', content: 'В начало' },
 ];
+const SIGNATURE_POSITIONS = [
+  { value: 'bottom-left', content: 'Внизу слева' },
+  { value: 'bottom-center', content: 'Внизу по центру' },
+  { value: 'bottom-right', content: 'Внизу справа' },
+];
 const META: { key: keyof PdfMetadata; label: string }[] = [
   { key: 'title', label: 'Название' },
   { key: 'author', label: 'Автор' },
@@ -77,6 +84,8 @@ interface Draft {
   pn: PdfPageNumbers;
   meta: PdfMetadata;
   prot: PdfProtection;
+  sigOn: boolean;
+  sig: PdfSignature;
 }
 
 function toDraft(o: PdfOptions): Draft {
@@ -92,6 +101,8 @@ function toDraft(o: PdfOptions): Draft {
     },
     meta: o.metadata ?? { title: '', author: '', subject: '', keywords: '' },
     prot: o.protection ?? NO_PROTECTION,
+    sigOn: Boolean(o.signature),
+    sig: o.signature ?? { position: 'bottom-right' },
   };
 }
 
@@ -102,6 +113,7 @@ function fromDraft(d: Draft): PdfOptions {
     ...(d.pnOn ? { pageNumbers: d.pn } : {}),
     metadata: d.meta,
     protection: d.prot,
+    ...(d.sigOn ? { signature: d.sig } : {}),
   });
 }
 
@@ -135,6 +147,7 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
         ? true
         : template.pdfPasswordSet;
   const protectionOn = hasPdfProtection({ protection: draft.prot }, passwordSet);
+  const signatureOn = draft.sigOn;
   const dirty = JSON.stringify(fromDraft(draft)) !== canon(baseline) || pwDirty;
   // Настройки изменились на сервере: без несохранённых правок подхватываем, иначе — предупреждение.
   const stale = canon(template.pdfOptions) !== canon(baseline);
@@ -301,13 +314,20 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
       <Card view="outlined" style={{ padding: 16 }} className="cr-stack">
         <Text variant="subheader-2">Защита</Text>
         {draft.pdfa && <Text color="secondary">Недоступно при PDF/A</Text>}
+        {signatureOn && <Text color="secondary">Недоступно при электронной подписи</Text>}
         {pw.mode === 'keep' ? (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Text>Пароль задан</Text>
-            <Button disabled={draft.pdfa} onClick={() => setPwState({ mode: 'set', value: '' })}>
+            <Button
+              disabled={draft.pdfa || signatureOn}
+              onClick={() => setPwState({ mode: 'set', value: '' })}
+            >
               Сменить
             </Button>
-            <Button disabled={draft.pdfa} onClick={() => setPwState({ mode: 'remove', value: '' })}>
+            <Button
+              disabled={draft.pdfa || signatureOn}
+              onClick={() => setPwState({ mode: 'remove', value: '' })}
+            >
               Убрать
             </Button>
           </div>
@@ -322,14 +342,14 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
               <TextInput
                 type={showPw ? 'text' : 'password'}
                 value={pw.value}
-                disabled={draft.pdfa}
+                disabled={draft.pdfa || signatureOn}
                 onUpdate={(value) => setPwState({ mode: 'set', value })}
                 controlProps={{
                   'aria-label': 'Пароль на открытие',
                   autoComplete: 'new-password',
                 }}
               />
-              <Button disabled={draft.pdfa} onClick={() => setShowPw((s) => !s)}>
+              <Button disabled={draft.pdfa || signatureOn} onClick={() => setShowPw((s) => !s)}>
                 {showPw ? 'Скрыть' : 'Показать'}
               </Button>
               {template.pdfPasswordSet && (
@@ -342,7 +362,7 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
           <Checkbox
             key={key}
             checked={draft.prot[key]}
-            disabled={draft.pdfa}
+            disabled={draft.pdfa || signatureOn}
             onUpdate={(v) => set({ prot: { ...draft.prot, [key]: v } })}
           >
             {label}
@@ -355,6 +375,37 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
         <Text color="secondary">
           Защита применяется к сформированным отчётам; предпросмотр показывается без неё.
         </Text>
+      </Card>
+
+      <Card view="outlined" style={{ padding: 16 }} className="cr-stack">
+        <Text variant="subheader-2">Электронная подпись</Text>
+        {protectionOn && <Text color="secondary">Недоступно при пароле или запретах</Text>}
+        <Checkbox
+          checked={draft.sigOn}
+          disabled={protectionOn}
+          onUpdate={(sigOn) => set({ sigOn })}
+        >
+          Разрешить подпись PDF
+        </Checkbox>
+        {draft.sigOn && (
+          <Field label="Положение штампа">
+            <Select
+              value={[draft.sig.position]}
+              options={SIGNATURE_POSITIONS}
+              onUpdate={([position]) =>
+                set({ sig: { position: position as PdfSignaturePosition } })
+              }
+              aria-label="Положение штампа"
+            />
+          </Field>
+        )}
+        <Text color="secondary">
+          Отчёт подписывает пользователь своим сертификатом после формирования.
+        </Text>
+        <Text color="secondary">
+          Штамп ставится поверх последней страницы — оставьте внизу последней страницы 110 пт.
+        </Text>
+        {errorOf('signature') && <Text color="danger">{errors.signature}</Text>}
       </Card>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

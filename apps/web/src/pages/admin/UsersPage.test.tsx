@@ -363,7 +363,13 @@ describe('UsersPage', () => {
   });
 
   it('группы ещё загружаются: в колонке «…», а не «—»', async () => {
-    mockApi([adminMe, { path: '/api/users', body: users }]);
+    mockApi([
+      adminMe,
+      {
+        path: '/api/users',
+        body: [users[0], { ...users[1], certificateNotAfter: '2030-01-01T00:00:00.000Z' }],
+      },
+    ]);
     const mocked = vi.mocked(globalThis.fetch);
     const base = mocked.getMockImplementation()!;
     mocked.mockImplementation((input, init) =>
@@ -406,5 +412,57 @@ describe('UsersPage', () => {
     expect(await within(dialog).findByText(/неизвестная группа/)).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     await waitFor(() => expect(usersGets()).toBeGreaterThan(before));
+  });
+
+  it('колонка «Подпись»: срок сертификата, «—» без него, истёкший — красным', async () => {
+    mockApi([
+      adminMe,
+      {
+        path: '/api/users',
+        body: [
+          { ...users[0], certificateNotAfter: null },
+          { ...users[1], certificateNotAfter: '2030-01-01T00:00:00.000Z' },
+          {
+            ...users[1],
+            id: 'u3',
+            login: 'petrov',
+            certificateNotAfter: '2020-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+    ]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    expect(screen.getByText('Подпись')).toBeInTheDocument();
+    expect(within(row('ivanov')).getByText('до 01.01.2030')).toBeInTheDocument();
+    expect(within(row('admin (вы)')).getAllByText('—').length).toBeGreaterThan(0);
+    expect(within(row('petrov')).getByText('до 01.01.2020')).toHaveClass(
+      'g-color-text_color_danger',
+    );
+  });
+
+  it('удаление сертификата подписи из диалога правки', async () => {
+    const { calls } = mockApi([
+      adminMe,
+      {
+        path: '/api/users',
+        body: [users[0], { ...users[1], certificateNotAfter: '2030-01-01T00:00:00.000Z' }],
+      },
+      { method: 'DELETE', path: '/api/users/u2/certificate', status: 204, body: null },
+    ]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    await userEvent.click(within(row('ivanov')).getByRole('button', { name: 'Изменить' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Удалить сертификат подписи' }),
+    );
+    const confirm = (await screen.findAllByRole('dialog')).at(-1)!;
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Удалить' }));
+    await waitFor(() =>
+      expect(
+        calls.some((c) => c.method === 'DELETE' && c.path === '/api/users/u2/certificate'),
+      ).toBe(true),
+    );
   });
 });

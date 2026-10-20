@@ -1,14 +1,16 @@
-// Поток пула рендера: собирает отчёт встроенной сборкой Carbone (формат шаблона) или обрабатывает
-// готовый PDF (§36.4, задача kind = pdf). Глобальные carbone.set()/reset() не вызываем: lang, timezone
-// и настройки загрузки изображений всегда приходят в options. Предупреждения рендера (R6) уходят пулу.
+// Поток пула рендера: собирает отчёт встроенной сборкой Carbone (формат шаблона), обрабатывает
+// готовый PDF (§36.4, задача kind = pdf) или готовит PDF к подписи (§39.4, задача kind = sign).
+// Глобальные carbone.set()/reset() не вызываем: lang, timezone и настройки загрузки изображений
+// всегда приходят в options. Предупреждения рендера (R6) уходят пулу.
 import { parentPort } from 'node:worker_threads';
 import carbone from '@carbone-reports/carbone';
 import { postprocessPdf, type PdfPostJob } from '../pdf/postprocess';
+import { prepareSignaturePdf, type SignPrepareJob } from '../pdf/sign/prepare';
 import type { RenderOptions } from './pool';
 
 interface Request {
   id: number;
-  kind?: 'carbone' | 'pdf';
+  kind?: 'carbone' | 'pdf' | 'sign';
   template: Uint8Array;
   ext: string;
   data: string;
@@ -25,6 +27,10 @@ if (!port) throw new Error('worker.ts запускается только как
 
 async function handle(m: Request): Promise<{ buffer: Uint8Array; warnings: string[] }> {
   const template = Buffer.from(m.template.buffer, m.template.byteOffset, m.template.byteLength);
+  if (m.kind === 'sign') {
+    const buffer = await prepareSignaturePdf(template, JSON.parse(m.data) as SignPrepareJob);
+    return { buffer, warnings: [] };
+  }
   if (m.kind === 'pdf') {
     const job = JSON.parse(m.data) as PdfJobData;
     const extra = m.extra ?? [];

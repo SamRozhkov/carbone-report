@@ -1,12 +1,14 @@
 import '@testing-library/jest-dom/vitest';
 import { settings } from '@gravity-ui/date-utils';
 import { configure } from '@gravity-ui/uikit';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure as configureTesting } from '@testing-library/react';
 import type { ChangeEvent } from 'react';
 import { afterEach, vi } from 'vitest';
 import type { CodeEditorProps } from '../components/CodeEditor';
 
 configure({ lang: 'ru' });
+// Медленные раннеры CI: холодный старт страницы дольше стандартной секунды findBy*/waitFor.
+configureTesting({ asyncUtilTimeout: 3000 });
 await settings.loadLocale('ru');
 settings.setLocale('ru');
 

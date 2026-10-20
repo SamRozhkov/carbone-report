@@ -26,6 +26,7 @@ import { createRunFileGate } from '../src/lib/run-file-gate';
 import { createRemoveGate } from '../src/lib/storage-gate';
 import { createSourcePools } from '../src/modules/datasources/pools';
 import { inProcessPdfPostprocessor } from '../src/modules/pdf/postprocessor';
+import { inProcessSignPreparer } from '../src/modules/pdf/sign/preparer';
 import { createRenderHandoff } from '../src/modules/render/handoff';
 import { hashPassword } from '../src/modules/auth/password';
 
@@ -67,6 +68,8 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     reportTimeoutMs: 20000,
     reportRetentionDays: 30,
     tz: 'Europe/Moscow',
+    signTsaUrl: null,
+    signTsaTimeoutMs: 10_000,
     port: 0,
     cookieSecure: false,
     appVersion: 'dev',
@@ -251,6 +254,7 @@ export async function createTestApp(
     sources: createSourcePools({ db, config: cfg }),
     carbone: { render: notConfigured('carbone') },
     pdf: inProcessPdfPostprocessor,
+    pdfSignPrepare: inProcessSignPreparer,
     pdfProtect: notConfigured('pdfProtect'),
     onlyoffice: { forceSave: notConfigured('onlyoffice') },
     fetchFile: notConfigured('fetchFile'),

@@ -8,6 +8,7 @@ export const adminTemplate = {
   defaultOutput: 'pdf',
   updatedAt: '2026-01-10T10:00:00Z',
   outputFormats: ['pdf', 'docx', 'odt'],
+  signatureAllowed: false,
   datasourceId: 'd1',
   version: 3,
   queries: [{ key: 'company', mode: 'single', sql: 'select 1 as name' }],

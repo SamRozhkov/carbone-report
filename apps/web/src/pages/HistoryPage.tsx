@@ -1,6 +1,6 @@
 import type { ParamsInput, RunDto } from '@carbone-reports/shared';
 import { RUNS_PAGE_SIZE } from '@carbone-reports/shared';
-import { ArrowDownToLine } from '@gravity-ui/icons';
+import { ArrowDownToLine, PencilToLine } from '@gravity-ui/icons';
 import type { TableColumnConfig } from '@gravity-ui/uikit';
 import {
   Button,
@@ -13,13 +13,14 @@ import {
   Table,
   Text,
 } from '@gravity-ui/uikit';
-import { useEffect } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
 import { api, runFileUrl } from '../api/endpoints';
 import { useMe } from '../api/session';
 import { useRunDownload } from '../api/useRunDownload';
 import { ErrorAlert } from '../components/ErrorAlert';
+import { SignRunDialog } from '../components/SignRunDialog';
 import { PageHeader } from '../components/PageHeader';
 import { formatDateTime, formatDuration } from '../lib/format';
 
@@ -48,6 +49,8 @@ export function HistoryPage() {
   const userId = isAdmin && UUID_RE.test(rawUserId) ? rawUserId : '';
 
   const download = useRunDownload();
+  const queryClient = useQueryClient();
+  const [signing, setSigning] = useState<string | null>(null);
   const runs = useQuery({
     queryKey: ['runs', { page, status, templateId, userId }],
     queryFn: () =>
@@ -117,7 +120,16 @@ export function HistoryPage() {
       name: 'Результат',
       template: (r) =>
         r.status === 'ok' ? (
-          <Label theme="success">готово</Label>
+          <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <Label theme="success">готово</Label>
+            {r.signature && (
+              <span
+                title={`Подписан: ${r.signature.signerCn}, ${formatDateTime(r.signature.signedAt)}`}
+              >
+                <Icon data={PencilToLine} size={16} />
+              </span>
+            )}
+          </span>
         ) : (
           <div>
             <Label theme="danger">ошибка</Label>
@@ -163,10 +175,21 @@ export function HistoryPage() {
         // Запуск со снимком — меню со всеми форматами (§24.6).
         return (
           <DropdownMenu
-            items={r.formats.map((f) => ({
-              text: f.toUpperCase(),
-              action: () => download.save({ runId: r.id, format: f }),
-            }))}
+            items={[
+              ...r.formats.map((f) => ({
+                text: f.toUpperCase(),
+                action: () => download.save({ runId: r.id, format: f }),
+              })),
+              ...(r.signature
+                ? [
+                    {
+                      text: 'PDF с подписью',
+                      action: () => download.save({ runId: r.id, format: 'pdf', signed: true }),
+                    },
+                  ]
+                : []),
+              ...(r.signable ? [{ text: 'Подписать…', action: () => setSigning(r.id) }] : []),
+            ]}
             renderSwitcher={({ onClick, onKeyDown }) => (
               <Button
                 view="flat"
@@ -227,6 +250,17 @@ export function HistoryPage() {
       </div>
       <ErrorAlert error={runs.error} />
       <ErrorAlert error={download.error} title="Не удалось скачать файл" />
+      {signing && (
+        <SignRunDialog
+          runId={signing}
+          open
+          onClose={() => setSigning(null)}
+          onSigned={() => {
+            setSigning(null);
+            void queryClient.invalidateQueries({ queryKey: ['runs'] });
+          }}
+        />
+      )}
       {runs.isError ? null : runs.isPending ? (
         <Loader />
       ) : (

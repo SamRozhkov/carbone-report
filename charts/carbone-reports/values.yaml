@@ -68,6 +68,11 @@ config:
   imageUrlAllowlist: ""
   # Тайм-аут загрузки одного изображения по адресу, мс.
   imageUrlTimeoutMs: 5000
+  # Электронная подпись PDF: служба меток времени RFC 3161 (http или https). Пусто — подпись без
+  # метки. API нужен исходящий доступ к службе (NetworkPolicy чарта исходящий трафик не ограничивает).
+  signTsaUrl: ""
+  # Тайм-аут обращения к службе меток, мс (1000–60000).
+  signTsaTimeoutMs: 10000
   # Прокси перед API: Ingress и nginx образа web (1–5). Без Ingress (web через LoadBalancer/NodePort)
   # поставьте 1, иначе клиент подделает X-Forwarded-For и обойдёт лимит входа по IP.
   trustedProxyHops: 2

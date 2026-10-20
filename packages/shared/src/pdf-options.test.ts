@@ -181,3 +181,25 @@ describe('защита PDF (§37.1)', () => {
     expect(SavePdfOptionsBody.parse({ pdfa: true }).pdfa).toBe(true);
   });
 });
+
+describe('PdfOptions.signature (§39.2)', () => {
+  it('по умолчанию — штамп справа', () => {
+    expect(PdfOptions.parse({ signature: {} }).signature).toEqual({ position: 'bottom-right' });
+  });
+  it('три положения, прочие — ошибка', () => {
+    for (const position of ['bottom-left', 'bottom-center', 'bottom-right'] as const)
+      expect(PdfOptions.parse({ signature: { position } }).signature?.position).toBe(position);
+    expect(PdfOptions.safeParse({ signature: { position: 'top-right' } }).success).toBe(false);
+    expect(PdfOptions.safeParse({ signature: { position: 'bottom-right', x: 1 } }).success).toBe(
+      false,
+    );
+  });
+  it('нормализация сохраняет блок', () => {
+    expect(normalizePdfOptions(PdfOptions.parse({ signature: {} })).signature).toEqual({
+      position: 'bottom-right',
+    });
+  });
+  it('нет блока — подписи нет', () => {
+    expect(PdfOptions.parse({}).signature).toBeUndefined();
+  });
+});

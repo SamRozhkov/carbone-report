@@ -78,6 +78,13 @@
       "when": 1792116676622,
       "tag": "0010_template_edit_locks",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792417075623,
+      "tag": "0011_signatures",
+      "breakpoints": true
     }
   ]
 }

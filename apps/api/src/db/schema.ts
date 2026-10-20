@@ -4,6 +4,7 @@ import type {
   ParamValue,
   PdfOptions,
   PdfPlacement,
+  PdfSignaturePosition,
   QueryMode,
   Role,
   SelectOption,
@@ -244,6 +245,8 @@ export const reportRuns = pgTable('report_runs', {
   fileDeleted: boolean('file_deleted').notNull().default(false),
   /** Запуск со снимком (§24.2): данные и копия шаблона в `reports/<id>/`. */
   snapshot: boolean('snapshot').notNull().default(false),
+  /** Положение штампа, если подпись разрешена в снимке запуска (§39.2, R16); null — подписать нельзя. */
+  signaturePosition: text('signature_position').$type<PdfSignaturePosition>(),
   durationMs: integer('duration_ms').notNull(),
   createdAt: createdAt(),
 });
@@ -261,6 +264,39 @@ export const reportRunFiles = pgTable(
   },
   (t) => [primaryKey({ columns: [t.runId, t.format] })],
 );
+
+/** Сертификат подписи пользователя (§39.1): один на пользователя; .p12 — encryptSecret(base64). */
+export const userCertificates = pgTable('user_certificates', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  p12Enc: text('p12_enc').notNull(),
+  subjectCn: text('subject_cn').notNull(),
+  issuer: text('issuer').notNull(),
+  serial: text('serial').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  keyAlg: text('key_alg').notNull(),
+  notBefore: timestamp('not_before', { withTimezone: true }).notNull(),
+  notAfter: timestamp('not_after', { withTimezone: true }).notNull(),
+  createdAt: createdAt(),
+});
+export type UserCertificateRow = typeof userCertificates.$inferSelect;
+
+/** Подпись запуска (§39.3): одна на запуск; файл — reports/<runId>/out.signed.pdf. */
+export const reportRunSignatures = pgTable('report_run_signatures', {
+  runId: uuid('run_id')
+    .primaryKey()
+    .references(() => reportRuns.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  signerCn: text('signer_cn').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  signedAt: timestamp('signed_at', { withTimezone: true }).notNull(),
+  timestamped: boolean('timestamped').notNull(),
+  filePath: text('file_path').notNull(),
+});
+export type RunSignatureRow = typeof reportRunSignatures.$inferSelect;
 
 export type UserRow = typeof users.$inferSelect;
 export type DatasourceRow = typeof datasources.$inferSelect;

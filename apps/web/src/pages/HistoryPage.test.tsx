@@ -20,6 +20,8 @@ const run = (over: Partial<RunDto>): RunDto => ({
   fileAvailable: true,
   formats: ['pdf'],
   readyFormats: ['pdf'],
+  signature: null,
+  signable: false,
   durationMs: 1200,
   createdAt: '2026-01-31T09:05:00',
   ...over,
@@ -98,6 +100,91 @@ describe('HistoryPage', () => {
     await waitFor(() => expect(spy).toHaveBeenCalledWith('blob:run', 'Счёт 2026-01-31.docx'));
     expect(calls.some((c) => c.path === '/api/runs/r1/file?format=docx')).toBe(true);
   });
+  it('подписанный запуск: значок с подсказкой и пункт «PDF с подписью»', async () => {
+    vi.spyOn(download, 'triggerDownload').mockImplementation(() => {});
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:run');
+    const { calls } = mockApi([
+      userMe,
+      { path: '/api/templates', body: [] },
+      {
+        path: '/api/runs',
+        body: page([
+          run({
+            outputFormat: null,
+            formats: ['pdf'],
+            signature: {
+              signerCn: 'Иванов Иван Иванович',
+              fingerprint: 'AB'.repeat(32),
+              signedAt: '2026-10-19T14:32:00',
+              timestamped: false,
+            },
+          }),
+        ]),
+      },
+      {
+        path: '/api/runs/r1/file',
+        raw: 'PDF',
+        headers: { 'content-disposition': 'attachment; filename="x.pdf"' },
+      },
+    ]);
+    renderRoute('/history');
+    expect(
+      await screen.findByTitle('Подписан: Иванов Иван Иванович, 19.10.2026 14:32'),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Скачать' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'PDF с подписью' }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.path === '/api/runs/r1/file?format=pdf&signed=1')).toBe(true),
+    );
+  });
+
+  it('signable: «Подписать…» открывает диалог, после подписи список обновляется', async () => {
+    const { calls } = mockApi([
+      userMe,
+      { path: '/api/templates', body: [] },
+      { path: '/api/runs', body: page([run({ outputFormat: null, signable: true })]) },
+      {
+        path: '/api/me/certificate',
+        body: {
+          certificate: {
+            subjectCn: 'Иванов Иван Иванович',
+            issuer: 'УЦ',
+            serial: '1',
+            notBefore: '2026-01-01T00:00:00.000Z',
+            notAfter: '2030-01-01T00:00:00.000Z',
+            fingerprint: 'AB'.repeat(32),
+            keyAlg: 'RSA-2048',
+          },
+        },
+      },
+      {
+        method: 'POST',
+        path: '/api/runs/r1/sign',
+        status: 201,
+        body: {
+          signerCn: 'x',
+          fingerprint: 'AB',
+          signedAt: '2026-10-19T14:32:00',
+          timestamped: false,
+        },
+      },
+    ]);
+    renderRoute('/history');
+    await userEvent.click(await screen.findByRole('button', { name: 'Скачать' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Подписать…' }));
+    await userEvent.type(await screen.findByLabelText('Пароль к ключу подписи'), 'pw');
+    const before = calls.filter((c) => c.path.startsWith('/api/runs?')).length;
+    await userEvent.click(screen.getByRole('button', { name: 'Подписать' }));
+    await waitFor(() =>
+      expect(calls.filter((c) => c.path.startsWith('/api/runs?')).length).toBeGreaterThan(before),
+    );
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Пароль к ключу подписи')).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Скачать' })).toBeInTheDocument();
+  });
+
   it('admin: колонка пользователя, фильтры из URL уходят в запрос', async () => {
     const { calls } = mockApi([
       adminMe,

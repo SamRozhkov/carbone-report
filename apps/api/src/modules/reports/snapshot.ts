@@ -5,9 +5,10 @@ import {
   TemplateExt,
   type OutputFormat,
   type PdfOptions,
+  type RunSignature,
 } from '@carbone-reports/shared';
 import { and, eq } from 'drizzle-orm';
-import { reportRunFiles, reportRuns, type RunRow } from '../../db/schema';
+import { reportRunFiles, reportRuns, type RunRow, type RunSignatureRow } from '../../db/schema';
 import type { AppDeps, TemplateFileRef } from '../../deps';
 import { createBuildFlights } from '../../lib/build-flights';
 import type { Deadline } from '../../lib/deadline';
@@ -37,6 +38,16 @@ export function snapshotPaths(runId: string, ext: TemplateExt) {
     out: (format: OutputFormat) => `${dir}/out.${format}`,
   };
 }
+
+/** Подписанный PDF запуска (§39.3). */
+export const signedPath = (runId: string) => `${runDir(runId)}/out.signed.pdf`;
+
+export const toRunSignature = (r: RunSignatureRow): RunSignature => ({
+  signerCn: r.signerCn,
+  fingerprint: r.fingerprint,
+  signedAt: r.signedAt.toISOString(),
+  timestamped: r.timestamped,
+});
 
 export const snapshotGone = () =>
   new AppError('GONE', 410, 'файл удалён — сформируйте отчёт заново');
@@ -101,7 +112,8 @@ export function snapshotTemplateRef(
 
 const isEnoent = (e: unknown) => (e as NodeJS.ErrnoException)?.code === 'ENOENT';
 
-async function readSnapshotFile(deps: AppDeps, path: string): Promise<Buffer> {
+/** Файл каталога запуска; нет файла — 410. */
+export async function readSnapshotFile(deps: AppDeps, path: string): Promise<Buffer> {
   try {
     return await deps.storage.read(path);
   } catch (e) {

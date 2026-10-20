@@ -137,7 +137,8 @@ const Env = z
     // Атрибут канонического логина в найденной записи: по нему заводится и ищется локальный
     // пользователь, даже если LDAP_USER_FILTER пускает вход по нескольким атрибутам (например,
     // логину и почте) — иначе один человек завёл бы себе два локальных аккаунта.
-    LDAP_LOGIN_ATTRIBUTE: z.string().min(1, 'не должен быть пустым').default('uid'),
+    // Не задан — логин тот, что ввёл пользователь (поведение прежних версий).
+    LDAP_LOGIN_ATTRIBUTE: z.string().min(1, 'не должен быть пустым').optional(),
     LDAP_DEFAULT_ROLE: z.enum(['admin', 'user']).default('user'),
     LDAP_TLS_REJECT_UNAUTHORIZED: z.enum(['true', 'false']).default('true'),
     // Агент бэкапа (§26.3): без адреса управление бэкапами в админке выключено.
@@ -350,8 +351,11 @@ export interface LdapConfig {
   baseDn: string;
   /** Фильтр поиска пользователя, `%s` — подставляемый логин (например, `(uid=%s)` или `(sAMAccountName=%s)`). */
   userFilter: string;
-  /** Атрибут найденной записи, значение которого — канонический локальный логин. */
-  loginAttribute: string;
+  /**
+   * Атрибут найденной записи, значение которого — канонический локальный логин.
+   * Не задан — логином считается введённая строка, атрибут из записи не читается.
+   */
+  loginAttribute?: string;
   /** Роль нового локального пользователя при первом успешном входе через LDAP. */
   defaultRole: Role;
   tlsRejectUnauthorized: boolean;
@@ -457,7 +461,7 @@ export function loadConfig(
             bindPassword: e.LDAP_BIND_PASSWORD || undefined,
             baseDn: e.LDAP_BASE_DN!,
             userFilter: e.LDAP_USER_FILTER,
-            loginAttribute: e.LDAP_LOGIN_ATTRIBUTE,
+            ...(e.LDAP_LOGIN_ATTRIBUTE ? { loginAttribute: e.LDAP_LOGIN_ATTRIBUTE } : {}),
             defaultRole: e.LDAP_DEFAULT_ROLE,
             tlsRejectUnauthorized: e.LDAP_TLS_REJECT_UNAUTHORIZED === 'true',
           }

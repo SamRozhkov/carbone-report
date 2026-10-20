@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { LdapConfig } from '../src/config';
 import { users } from '../src/db/schema';
 import { createLdapAuthenticator } from '../src/modules/auth/ldap';
+import { hashPassword } from '../src/modules/auth/password';
 import { SESSION_COOKIE } from '../src/modules/auth/session';
 import { createTestApp, type TestApp } from './helpers';
 import { LDAP_IMAGE } from './images';
@@ -97,6 +98,16 @@ describe('LDAP-аутентификатор с настоящим серверо
       { userFilter: '(|(uid=%s)(mail=%s))' },
       'fry@planetexpress.com',
       'fry',
+      'fry',
+    );
+  });
+
+  it('LDAP_LOGIN_ATTRIBUTE не задан — канонический логин = введённый (прежнее поведение)', async () => {
+    await expectLogin({ loginAttribute: undefined }, 'fry', 'fry');
+    // Вход по почте: без атрибута логином остаётся введённая почта, как до LDAP_LOGIN_ATTRIBUTE.
+    await expectLogin(
+      { loginAttribute: undefined, userFilter: '(|(uid=%s)(mail=%s))' },
+      'fry@planetexpress.com',
       'fry',
     );
   });
@@ -235,5 +246,65 @@ describe('POST /api/auth/login с настоящим LDAP', () => {
       .from(users)
       .where(eq(users.login, 'fry@planetexpress.com'));
     expect(byEmailLogin).toHaveLength(0);
+  });
+
+  it('без LDAP_LOGIN_ATTRIBUTE вход по почте заводит аккаунт с введённой почтой (прежнее поведение)', async () => {
+    await app({ loginAttribute: undefined, userFilter: '(|(uid=%s)(mail=%s))' });
+    const byMail = await login({ login: 'fry@planetexpress.com', password: 'fry' });
+    expect(byMail.statusCode).toBe(200);
+    expect(byMail.json()).toMatchObject({ login: 'fry@planetexpress.com' });
+  });
+});
+
+describe('ADMIN_LOGIN совпадает с uid записи каталога (настоящий LDAP)', () => {
+  let t: TestApp;
+  afterEach(() => t?.close());
+
+  // ADMIN_LOGIN = fry: у каталога есть запись uid=fry с паролем fry.
+  async function app(over: Partial<LdapConfig> = {}) {
+    const ldapConfig = cfg(over);
+    t = await createTestApp(
+      { ldap: createLdapAuthenticator(ldapConfig, capturingLog().log) },
+      { ldap: ldapConfig, adminLogin: 'fry' },
+    );
+    await t.deps.db.insert(users).values({
+      login: 'fry',
+      passwordHash: await hashPassword('local-admin-secret'),
+      role: 'admin',
+    });
+    return t;
+  }
+  const login = (body: { login: string; password: string }) =>
+    t.app.inject({ method: 'POST', url: '/api/auth/login', payload: body });
+  const expectNoSession = (res: Awaited<ReturnType<typeof login>>) => {
+    expect(res.statusCode).toBe(401);
+    expect(res.cookies.some((c) => c.name === SESSION_COOKIE)).toBe(false);
+  };
+
+  it.each([undefined, 'uid'])(
+    'логин в другом регистре (Fry, FRY) не даёт сессию администратора (LDAP_LOGIN_ATTRIBUTE=%s)',
+    async (loginAttribute) => {
+      await app({ loginAttribute });
+      expectNoSession(await login({ login: 'Fry', password: 'fry' }));
+      expectNoSession(await login({ login: 'FRY', password: 'fry' }));
+      // Пароль каталога и для точного написания не подходит: только локальный пароль.
+      expectNoSession(await login({ login: 'fry', password: 'fry' }));
+      const rows = await t.deps.db.select().from(users);
+      expect(rows.map((r) => r.login)).toEqual(['fry']);
+    },
+  );
+
+  it('вход по почте (канонический uid = ADMIN_LOGIN) — 401, сессии администратора нет', async () => {
+    await app({ userFilter: '(|(uid=%s)(mail=%s))', loginAttribute: 'uid' });
+    expectNoSession(await login({ login: 'fry@planetexpress.com', password: 'fry' }));
+    const rows = await t.deps.db.select().from(users);
+    expect(rows.map((r) => r.login)).toEqual(['fry']);
+  });
+
+  it('локальный пароль администратора по-прежнему работает', async () => {
+    await app({ userFilter: '(|(uid=%s)(mail=%s))', loginAttribute: 'uid' });
+    const res = await login({ login: 'fry', password: 'local-admin-secret' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ login: 'fry', role: 'admin' });
   });
 });

@@ -137,6 +137,59 @@ describe('вход через LDAP', () => {
     expect(calls).toEqual([]);
   });
 
+  it('ADMIN_LOGIN в другом регистре — LDAP не опрашивается, сессии администратора нет', async () => {
+    const calls: string[] = [];
+    t = await createTestApp(
+      {
+        ldap: {
+          authenticate: async (l) => {
+            calls.push(l);
+            return l;
+          },
+        },
+      },
+      { adminLogin: 'admin', ldap: ldapConfigDefaults },
+    );
+    await t.deps.db
+      .insert(users)
+      .values({ login: 'admin', passwordHash: await hashPassword('local-secret'), role: 'admin' });
+    for (const variant of ['Admin', 'ADMIN']) {
+      const res = await login(t, { login: variant, password: 'пароль-из-каталога' });
+      expect(res.statusCode).toBe(401);
+    }
+    expect(calls).toEqual([]);
+  });
+
+  it('канонический логин из LDAP = ADMIN_LOGIN (вход по почте) — 401 без отката на локальный пароль', async () => {
+    t = await createTestApp(
+      { ldap: fakeLdap(() => 'Admin') },
+      { adminLogin: 'admin', ldap: ldapConfigDefaults },
+    );
+    await t.deps.db
+      .insert(users)
+      .values({ login: 'admin', passwordHash: await hashPassword('local-secret'), role: 'admin' });
+    // Локальный аккаунт с введённым логином есть и пароль к нему верный, но LDAP уже
+    // сопоставил ввод с записью администратора: отказ, а не вход по локальному паролю.
+    await t.deps.db.insert(users).values({
+      login: 'admin@example.com',
+      passwordHash: await hashPassword('local-secret'),
+      role: 'user',
+    });
+    const res = await login(t, { login: 'admin@example.com', password: 'local-secret' });
+    expect(res.statusCode).toBe(401);
+    expect(res.cookies.some((c) => c.name === 'session')).toBe(false);
+  });
+
+  it('без LDAP_LOGIN_ATTRIBUTE аккаунт ищется по введённому логину (прежнее поведение)', async () => {
+    t = await createTestApp(
+      { ldap: fakeLdap(() => true) },
+      { ldap: { ...ldapConfigDefaults, loginAttribute: undefined } },
+    );
+    const res = await login(t, { login: 'ivanov@example.com', password: 'что-угодно' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ login: 'ivanov@example.com' });
+  });
+
   it('канонический логин из LDAP отличается от введённого (вход по почте) — заводит и находит один аккаунт', async () => {
     // LDAP_USER_FILTER вправе искать и по почте, но локальный логин — атрибут LDAP_LOGIN_ATTRIBUTE
     // (здесь — uid), а не то, что ввёл пользователь.

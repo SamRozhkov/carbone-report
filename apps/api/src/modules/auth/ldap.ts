@@ -3,11 +3,12 @@ import type { LdapConfig } from '../../config';
 
 export interface LdapAuthenticator {
   /**
-   * Связка логин/пароль подтверждена сервером LDAP — возвращает канонический логин
-   * (атрибут LDAP_LOGIN_ATTRIBUTE найденной записи), иначе null. Канонический логин может
-   * отличаться от того, что ввёл пользователь: LDAP_USER_FILTER вправе искать запись
-   * по нескольким атрибутам (например, по логину и по почте), а локальный аккаунт при этом
-   * должен быть один и тот же независимо от того, как человек вошёл.
+   * Связка логин/пароль подтверждена сервером LDAP — возвращает канонический логин, иначе null.
+   * Без LDAP_LOGIN_ATTRIBUTE канонический логин — введённая строка (поведение прежних версий).
+   * С ним — значение этого атрибута найденной записи: оно может отличаться от того, что ввёл
+   * пользователь, ведь LDAP_USER_FILTER вправе искать запись по нескольким атрибутам
+   * (например, по логину и по почте), а локальный аккаунт при этом должен быть один и тот же
+   * независимо от того, как человек вошёл.
    */
   authenticate(login: string, password: string): Promise<string | null>;
 }
@@ -93,24 +94,27 @@ export function createLdapAuthenticator(
         if (config.bindDn) {
           await searchClient.bind(config.bindDn, config.bindPassword ?? '');
         }
+        const attribute = config.loginAttribute;
         const { searchEntries } = await searchClient.search(config.baseDn, {
           scope: 'sub',
           filter,
-          attributes: ['dn', config.loginAttribute],
+          attributes: attribute ? ['dn', attribute] : ['dn'],
         });
         if (searchEntries.length !== 1) return null;
         const entry = searchEntries[0]!;
         userDn = entry.dn;
-        // Запись найдена (например, по почте), но без атрибута канонического логина —
-        // заводить локальный аккаунт не по чему, вход отклоняется.
-        const resolved = attributeToString(entry[config.loginAttribute]);
-        if (!resolved) {
-          log.warn(
-            `LDAP: у найденной записи нет атрибута ${config.loginAttribute} (LDAP_LOGIN_ATTRIBUTE)`,
-          );
-          return null;
+        if (attribute) {
+          // Запись найдена (например, по почте), но без атрибута канонического логина —
+          // заводить локальный аккаунт не по чему, вход отклоняется.
+          const resolved = attributeToString(entry[attribute]);
+          if (!resolved) {
+            log.warn(`LDAP: у найденной записи нет атрибута ${attribute} (LDAP_LOGIN_ATTRIBUTE)`);
+            return null;
+          }
+          canonicalLogin = resolved;
+        } else {
+          canonicalLogin = login;
         }
-        canonicalLogin = resolved;
       } catch (err) {
         log.warn(`LDAP: поиск пользователя не удался — ${(err as Error).message}`);
         return null;

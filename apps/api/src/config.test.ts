@@ -217,10 +217,25 @@ describe('loadConfig', () => {
       bindPassword: undefined,
       baseDn: 'dc=example,dc=local',
       userFilter: '(sAMAccountName=%s)',
-      loginAttribute: 'uid',
       defaultRole: 'admin',
       tlsRejectUnauthorized: false,
     });
+    // LDAP_LOGIN_ATTRIBUTE не задан — канонический логин = введённый (как в прежних версиях).
+    expect(c.ldap?.loginAttribute).toBeUndefined();
+  });
+  it('LDAP_LOGIN_ATTRIBUTE задан — попадает в настройки LDAP; пустой — ошибка', () => {
+    const ldapEnv = {
+      ...base,
+      LDAP_ENABLED: 'true',
+      LDAP_URL: 'ldap://dc:389',
+      LDAP_BASE_DN: 'dc=example,dc=local',
+    };
+    expect(
+      loadConfig({ ...ldapEnv, LDAP_LOGIN_ATTRIBUTE: 'sAMAccountName' }).ldap?.loginAttribute,
+    ).toBe('sAMAccountName');
+    expect(() => loadConfig({ ...ldapEnv, LDAP_LOGIN_ATTRIBUTE: '' })).toThrow(
+      'LDAP_LOGIN_ATTRIBUTE: не должен быть пустым',
+    );
   });
   it('LDAP_URL — только ldap:// или ldaps://', () => {
     expect(() =>

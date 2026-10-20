@@ -119,6 +119,8 @@ describe('пул: некорректный meta потока', () => {
 
   it.each([
     ['без chain', { cert: good.cert, info: good.info, digestAlg: good.digestAlg }],
+    ['cert не base64', { ...good, cert: 'не base64!' }],
+    ['chain не base64', { ...good, chain: ['AA==', '***'] }],
     ['digestAlg md5', { ...good, digestAlg: 'md5' }],
     ['info не объект', { ...good, info: null }],
     ['meta не объект', null],

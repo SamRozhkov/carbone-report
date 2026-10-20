@@ -5,7 +5,9 @@ import forge from 'node-forge';
 import * as pkijs from 'pkijs';
 
 export const MAX_P12_BYTES = 50 * 1024;
-export type DigestAlg = 'SHA-256' | 'SHA-384';
+/** Допустимые алгоритмы хеша: единый список для типа и схемы ответа потока. */
+export const DIGEST_ALGS = ['SHA-256', 'SHA-384'] as const;
+export type DigestAlg = (typeof DIGEST_ALGS)[number];
 
 /** Ошибка у поля формы загрузки сертификата (§39.1); сообщение — для пользователя, без пароля. */
 export class P12Error extends Error {

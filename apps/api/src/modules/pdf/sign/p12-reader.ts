@@ -4,14 +4,14 @@ import { z } from 'zod';
 import type { P12Reader } from '../../../deps';
 import { AppError } from '../../../lib/errors';
 import { RenderTimeoutError, TemplateRenderError, type RenderPool } from '../../render/pool';
-import { P12Error, readP12, type DigestAlg } from './p12';
+import { DIGEST_ALGS, P12Error, readP12, type DigestAlg } from './p12';
 
 /** Ответ потока проверяется: чужая или повреждённая форма не должна дойти до подписи как TypeError. */
 const P12Meta = z.object({
-  cert: z.string(),
-  chain: z.array(z.string()),
+  cert: z.base64(),
+  chain: z.array(z.base64()),
   info: CertificateInfo,
-  digestAlg: z.enum(['SHA-256', 'SHA-384']),
+  digestAlg: z.enum(DIGEST_ALGS),
 }) satisfies z.ZodType<{
   cert: string;
   chain: string[];

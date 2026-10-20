@@ -1,6 +1,6 @@
 // Разбор .p12 настоящим потоком пула (worker.ts через worker-dev.mjs): ключ из потока подписывает,
 // ошибки приходят P12Error с полем, срок истекает в очереди (§39.8).
-import { createHash, sign, verify, X509Certificate } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign, verify, X509Certificate } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RenderPool } from '../../render/pool';
 import { renderWorkerUrl } from '../../render/worker-url';
@@ -97,4 +97,42 @@ it('пул: ошибка потока без поля — не P12Error', async 
   const e = await failing(Buffer.alloc(1), 'x', new Date(), soon()).catch((x) => x);
   expect(e).toBeInstanceOf(Error);
   expect(e).not.toBeInstanceOf(P12Error);
+});
+
+describe('пул: некорректный meta потока', () => {
+  const stub = (meta: unknown, out: Buffer) =>
+    createPoolP12Reader({ run: async () => ({ out, meta }) as never });
+  const good = {
+    cert: 'AA==',
+    chain: [],
+    info: {
+      subjectCn: 'x',
+      issuer: 'y',
+      serial: '1',
+      notBefore: '2026-01-01T00:00:00.000Z',
+      notAfter: '2036-01-01T00:00:00.000Z',
+      fingerprint: 'AB',
+      keyAlg: 'RSA-2048',
+    },
+    digestAlg: 'SHA-256',
+  };
+
+  it.each([
+    ['без chain', { cert: good.cert, info: good.info, digestAlg: good.digestAlg }],
+    ['cert не base64', { ...good, cert: 'не base64!' }],
+    ['chain не base64', { ...good, chain: ['AA==', '***'] }],
+    ['digestAlg md5', { ...good, digestAlg: 'md5' }],
+    ['info не объект', { ...good, info: null }],
+    ['meta не объект', null],
+  ])('%s — обычная ошибка, не TypeError; поток затёрт нулями', async (_n, meta) => {
+    // Валидный PKCS#8: отказ должен быть именно из-за meta, а не из-за ключа.
+    const out = generateKeyPairSync('ed25519').privateKey.export({ format: 'der', type: 'pkcs8' });
+    expect(out.some((b) => b !== 0)).toBe(true);
+    const e = await stub(meta, out)(Buffer.alloc(1), 'x', new Date(), soon()).catch((x) => x);
+    expect(e).toBeInstanceOf(Error);
+    expect(e).not.toBeInstanceOf(TypeError);
+    expect(e).not.toBeInstanceOf(P12Error);
+    expect(e.message).toBe('некорректный ответ потока при разборе .p12');
+    expect(out.every((b) => b === 0)).toBe(true);
+  });
 });

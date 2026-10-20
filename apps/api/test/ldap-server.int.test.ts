@@ -6,7 +6,7 @@ import type { LdapConfig } from '../src/config';
 import { users } from '../src/db/schema';
 import { createLdapAuthenticator } from '../src/modules/auth/ldap';
 import { hashPassword } from '../src/modules/auth/password';
-import { SESSION_COOKIE } from '../src/modules/auth/session';
+import { sessionCookieName } from '../src/modules/auth/session';
 import { createTestApp, type TestApp } from './helpers';
 import { LDAP_IMAGE } from './images';
 
@@ -211,12 +211,23 @@ describe('POST /api/auth/login с настоящим LDAP', () => {
     const first = await login({ login: 'fry', password: 'fry' });
     expect(first.statusCode).toBe(200);
     expect(first.json()).toMatchObject({ login: 'fry', role: 'admin' });
-    expect(first.cookies.some((c) => c.name === SESSION_COOKIE)).toBe(true);
+    expect(first.cookies.some((c) => c.name === sessionCookieName(false))).toBe(true);
 
     const second = await login({ login: 'fry', password: 'fry' });
     expect(second.statusCode).toBe(200);
     const rows = await t.deps.db.select().from(users).where(eq(users.login, 'fry'));
     expect(rows).toHaveLength(1);
+  });
+
+  it('логин в пробелах (без loginAttribute) — тот же аккаунт, строки с пробелами не заводятся', async () => {
+    await app();
+    const padded = await login({ login: ' fry ', password: 'fry' });
+    expect(padded.statusCode).toBe(200);
+    const plain = await login({ login: 'fry', password: 'fry' });
+    expect(plain.statusCode).toBe(200);
+    expect(plain.json().id).toBe(padded.json().id);
+    const rows = await t.deps.db.select().from(users).where(eq(users.login, ' fry '));
+    expect(rows).toHaveLength(0);
   });
 
   it('неверный пароль — 401, пользователь не заводится', async () => {
@@ -258,7 +269,7 @@ describe('POST /api/auth/login с настоящим LDAP', () => {
     });
     const res = await login({ login: 'fry', password: 'fry' });
     expect(res.statusCode).toBe(401);
-    expect(res.cookies.some((c) => c.name === SESSION_COOKIE)).toBe(false);
+    expect(res.cookies.some((c) => c.name === sessionCookieName(false))).toBe(false);
   });
 
   it('первый вход через LDAP заводит аккаунт с auth_source = ldap', async () => {
@@ -298,7 +309,7 @@ describe('ADMIN_LOGIN совпадает с uid записи каталога (�
     t.app.inject({ method: 'POST', url: '/api/auth/login', payload: body });
   const expectNoSession = (res: Awaited<ReturnType<typeof login>>) => {
     expect(res.statusCode).toBe(401);
-    expect(res.cookies.some((c) => c.name === SESSION_COOKIE)).toBe(false);
+    expect(res.cookies.some((c) => c.name === sessionCookieName(false))).toBe(false);
   };
 
   it.each([undefined, 'uid'])(

@@ -14,7 +14,7 @@ import { createFastify, type App, type AppDeps } from '../../../app';
 import { users } from '../../../db/schema';
 import { AppError, registerErrorHandler } from '../../../lib/errors';
 import { makeGuards } from '../../auth/guards';
-import { SESSION_COOKIE, signSession } from '../../auth/session';
+import { sessionCookieName, signSession } from '../../auth/session';
 import { registerTemplateRoutes } from '../routes';
 import { makePdf } from '../../pdf/test-pdf';
 import { readTransferArchive, type ArchiveLimits } from './archive';
@@ -836,7 +836,7 @@ describe('POST /api/templates/import[/preview]', () => {
     const headers: Record<string, string> = { ...body.headers };
     if (role) {
       const token = await signSession({ id: 'u1', login: 'a', role }, 1, SECRET);
-      headers.cookie = `${SESSION_COOKIE}=${token}`;
+      headers.cookie = `${sessionCookieName(false)}=${token}`;
     }
     const r = await app.inject({ method: 'POST', url, headers, payload: body.payload });
     await app.close();

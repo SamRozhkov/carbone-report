@@ -74,7 +74,8 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
       if (checkedAt < cert.notBefore) throw badRequest('сертификат ещё не действует');
       if (checkedAt > cert.notAfter) throw badRequest('срок действия сертификата истёк');
       // Ранний 429 без блокировки; решающая проверка — внутри неё, перед паролем (§39.8).
-      if (await signBlocked(db, me.id, checkedAt)) throw tooMany();
+      // Окно считается по часам базы (now()), как и запись счётчика.
+      if (await signBlocked(db, me.id)) throw tooMany();
 
       // Блокировка на пользователя без ожидания (§39.8): вторая подпись того же пользователя (на любых
       // запусках и экземплярах API) — сразу 409 SIGN_BUSY, соединение runFilePool не занимается. Попытки
@@ -103,7 +104,7 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
           // Время подписи — после взятия блокировки: им проверяется срок сертификата (p12Read),
           // оно же в штампе, /M и строке подписи.
           const now = new Date();
-          if (await signBlocked(tx, me.id, now)) throw tooMany();
+          if (await signBlocked(tx, me.id)) throw tooMany();
           let p12: P12Contents;
           try {
             p12 = await deps.p12Read(
@@ -114,7 +115,7 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
             );
           } catch (e) {
             if (e instanceof P12Error && e.field === 'password') {
-              await recordSignFailure(tx, me.id, now);
+              await recordSignFailure(tx, me.id);
               return { wrongPassword: true };
             }
             if (e instanceof P12Error) throw badRequest(e.message);

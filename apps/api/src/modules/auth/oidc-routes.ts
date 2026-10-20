@@ -1,4 +1,4 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { App } from '../../app';
@@ -14,10 +14,8 @@ import {
   type OidcFlow,
 } from './oidc-client';
 import { resolveOidcUser } from './oidc-users';
-import { SESSION_COOKIE } from './session';
-import { setSessionCookie } from './routes';
+import { clearSessionCookies, setSessionCookie } from './routes';
 
-const FLOW_COOKIE = 'oidc_flow';
 const random = () => randomBytes(32).toString('base64url');
 const flowKey = (state: string) => `cr:oidc:flow:${state}`;
 export function safeOidcNext(value: unknown): string {
@@ -41,6 +39,8 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
     if (!settings || !client) throw notFound('OIDC');
     return client;
   };
+  // __Secure- требует атрибут Secure; прежний `oidc_flow` не чистим: он живёт 10 минут и привязан к пути.
+  const flowCookieName = deps.config.cookieSecure ? '__Secure-oidc_flow' : 'oidc_flow';
   const flowCookie = {
     httpOnly: true,
     secure: deps.config.cookieSecure,
@@ -69,7 +69,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
       try {
         const url = await service.begin(flow);
         await deps.redis.set(flowKey(flow.state), JSON.stringify(flow), 'EX', 600, 'NX');
-        reply.setCookie(FLOW_COOKIE, flow.browser, { ...flowCookie, maxAge: 600 });
+        reply.setCookie(flowCookieName, flow.browser, { ...flowCookie, maxAge: 600 });
         return reply.redirect(url);
       } catch {
         throw new AppError(
@@ -86,10 +86,10 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
     async (req, reply) => {
       noStore(reply);
       const service = enabled();
-      reply.clearCookie(FLOW_COOKIE, flowCookie);
+      reply.clearCookie(flowCookieName, flowCookie);
       const params = new URL(req.url, settings!.redirectUri).searchParams;
       const state = params.get('state');
-      const browser = req.cookies[FLOW_COOKIE];
+      const browser = req.cookies[flowCookieName];
       if (
         !state ||
         !/^[A-Za-z0-9_-]{43}$/.test(state) ||
@@ -128,7 +128,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
           'не удалось подтвердить вход через Keycloak',
         );
       }
-      const { user, sessionId } = await resolveOidcUser(deps, person);
+      const { user, sessionId } = await resolveOidcUser(deps, person, req.log);
       req.log.info({ userId: user.id }, 'OIDC: вход выполнен');
       await setSessionCookie(
         reply,
@@ -148,7 +148,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
         .update(oidcSessions)
         .set({ revokedAt: new Date() })
         .where(eq(oidcSessions.id, req.oidcSessionId));
-    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    clearSessionCookies(reply, deps);
     try {
       return { url: await service.logoutUrl() };
     } catch {
@@ -198,14 +198,42 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
           req.log.warn({ reason }, 'OIDC: back-channel logout отклонён');
           throw new AppError('OIDC_INVALID_LOGOUT', 400, 'неверный logout token');
         }
+        // Повтор того же logout token (jti) пропускаем: иначе перехваченный токен отзывал бы
+        // и сессии, заведённые после него. Redis недоступен — проверить нельзя: 503, Keycloak повторит.
+        const replayKey = `cr:oidc:logout-jti:${createHash('sha256').update(`${identity.issuer}\n${identity.jti}`).digest('hex')}`;
+        let fresh;
+        try {
+          if (!deps.redis) throw new Error('Redis не настроен');
+          fresh = await deps.redis.set(replayKey, '1', 'EX', 600, 'NX');
+        } catch (error) {
+          req.log.error(
+            { reason: (error as Error).message },
+            'OIDC: back-channel logout не проверен — Redis недоступен',
+          );
+          throw new AppError('OIDC_UNAVAILABLE', 503, 'Keycloak недоступен, повторите позже');
+        }
+        if (fresh !== 'OK') {
+          req.log.info('OIDC: повтор back-channel logout пропущен');
+          return reply.status(200).send();
+        }
         const criteria = [eq(oidcSessions.issuer, identity.issuer)];
         if (identity.sid) criteria.push(eq(oidcSessions.providerSid, identity.sid));
         if (identity.subject) criteria.push(eq(oidcSessions.subject, identity.subject));
-        const revoked = await deps.db
-          .update(oidcSessions)
-          .set({ revokedAt: new Date() })
-          .where(and(...criteria))
-          .returning({ userId: oidcSessions.userId });
+        let revoked;
+        try {
+          revoked = await deps.db
+            .update(oidcSessions)
+            .set({ revokedAt: new Date() })
+            .where(and(...criteria))
+            .returning({ userId: oidcSessions.userId });
+        } catch (error) {
+          // Принятая гонка: параллельная повторная доставка, пока первая падает, получит 200 как повтор;
+          // Keycloak не шлёт один и тот же токен параллельно.
+          // Отзыв не выполнен: возвращаем ключ jti, иначе повторная доставка токена Keycloak
+          // была бы пропущена как повтор и сессии остались бы действующими.
+          await deps.redis?.del(replayKey).catch(() => {});
+          throw error;
+        }
         req.log.info({ sessions: revoked.length }, 'OIDC: back-channel logout выполнен');
         return reply.status(200).send();
       },

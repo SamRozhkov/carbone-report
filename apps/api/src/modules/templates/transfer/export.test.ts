@@ -7,7 +7,7 @@ import { createFastify, type App, type AppDeps } from '../../../app';
 import { users } from '../../../db/schema';
 import { registerErrorHandler } from '../../../lib/errors';
 import { makeGuards } from '../../auth/guards';
-import { SESSION_COOKIE, signSession } from '../../auth/session';
+import { sessionCookieName, signSession } from '../../auth/session';
 import { registerTemplateRoutes } from '../routes';
 import {
   buildArchive,
@@ -230,7 +230,7 @@ describe('POST /api/templates/export', () => {
     const headers: Record<string, string> = {};
     if (role) {
       const token = await signSession({ id: 'u1', login: 'a', role }, 1, SECRET);
-      headers.cookie = `${SESSION_COOKIE}=${token}`;
+      headers.cookie = `${sessionCookieName(false)}=${token}`;
     }
     return await app.inject({ method: 'POST', url: '/api/templates/export', headers, payload });
   }

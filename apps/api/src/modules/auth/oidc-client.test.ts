@@ -2,9 +2,16 @@ import { createServer, type Server } from 'node:https';
 import { readFileSync } from 'node:fs';
 import { once } from 'node:events';
 import { createHash, randomUUID } from 'node:crypto';
-import { generateKeyPair, exportJWK, SignJWT } from 'jose';
+import { generateKeyPair, exportJWK, SignJWT, UnsecuredJWT } from 'jose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createOidcClient, type OidcFlow } from './oidc-client';
+import {
+  createOidcClient,
+  oidcUsername,
+  OidcUnavailableError,
+  OidcUsernameError,
+  type OidcFlow,
+} from './oidc-client';
+import { SESSION_TTL_SECONDS } from './session';
 import type { OidcConfig } from '../../config';
 
 // Local fake IdP: use NODE_EXTRA_CA_CERTS=test/fixtures/oidc/localhost-test-cert.pem.
@@ -13,9 +20,20 @@ let settings: OidcConfig;
 let signing: Awaited<ReturnType<typeof generateKeyPair>>;
 let jwk: object;
 let flow: OidcFlow;
-let mutation: 'none' | 'nonce' | 'audience' | 'issuer' | 'expired' | 'signature' = 'none';
+let mutation:
+  'none' | 'nonce' | 'audience' | 'issuer' | 'expired' | 'signature' | 'alg-none' | 'alg-hs256' =
+  'none';
 let calls = 0;
+let username: unknown = 'tester';
+/** Ответ /certs: 200 — набор ключей, иначе этот код (сбой провайдера). */
+let jwksStatus = 200;
 async function signed(payload: Record<string, unknown>) {
+  if (mutation === 'alg-none') return new UnsecuredJWT(payload).encode();
+  // HS256 с секретом клиента — классическая подмена алгоритма: подпись «верна», но не RS256.
+  if (mutation === 'alg-hs256')
+    return new SignJWT(payload)
+      .setProtectedHeader({ alg: 'HS256', kid: 'test' })
+      .sign(new TextEncoder().encode(settings.clientSecret));
   const key =
     mutation === 'signature' ? (await generateKeyPair('RS256')).privateKey : signing.privateKey;
   return new SignJWT(payload).setProtectedHeader({ alg: 'RS256', kid: 'test' }).sign(key);
@@ -47,7 +65,13 @@ beforeAll(async () => {
             id_token_signing_alg_values_supported: ['RS256'],
           }),
         );
-      if (req.url?.endsWith('/certs')) return res.end(JSON.stringify({ keys: [jwk] }));
+      if (req.url?.endsWith('/certs')) {
+        if (jwksStatus !== 200) {
+          res.statusCode = jwksStatus;
+          return res.end('{}');
+        }
+        return res.end(JSON.stringify({ keys: [jwk] }));
+      }
       if (req.url?.endsWith('/token')) {
         calls++;
         let body = '';
@@ -71,7 +95,7 @@ beforeAll(async () => {
           iat: now,
           exp: mutation === 'expired' ? now - 60 : now + 300,
           nonce: mutation === 'nonce' ? 'wrong-nonce' : flow.nonce,
-          preferred_username: 'tester',
+          preferred_username: username,
           sid: 'provider-session-1',
         });
         return res.end(
@@ -105,6 +129,8 @@ afterAll(async () => {
 beforeEach(() => {
   mutation = 'none';
   calls = 0;
+  username = 'tester';
+  jwksStatus = 200;
   flow = {
     state: randomUUID(),
     nonce: randomUUID(),
@@ -130,14 +156,40 @@ describe('OIDC protocol against a local HTTPS IdP', () => {
     });
     expect(calls).toBe(1);
   });
-  it.each(['nonce', 'audience', 'issuer', 'expired', 'signature'] as const)(
-    'rejects invalid %s',
-    async (kind) => {
-      mutation = kind;
-      const c = createOidcClient(settings);
-      await expect(c.complete(callback(), flow)).rejects.toThrow();
-    },
-  );
+  it('срок сессии — собственный TTL приложения, а не exp ID token (5 минут)', async () => {
+    const before = Date.now();
+    const person = await createOidcClient(settings).complete(callback(), flow);
+    const ttl = SESSION_TTL_SECONDS * 1000;
+    expect(person.expiresAt.getTime()).toBeGreaterThanOrEqual(before + ttl);
+    expect(person.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + ttl);
+  });
+  it.each([
+    ['пустой', ''],
+    ['слишком короткий', 'ab'],
+    ['длиннее 64', 'a'.repeat(65)],
+    ['не строка', 42],
+    ['zero-width', 'iva\u200Bnov'],
+    ['bidi', '\u202Eivanov'],
+    ['BOM', '\uFEFFivanov'],
+  ])('preferred_username %s — OidcUsernameError', async (_, value) => {
+    username = value;
+    await expect(createOidcClient(settings).complete(callback(), flow)).rejects.toBeInstanceOf(
+      OidcUsernameError,
+    );
+  });
+  it.each([
+    'alg-none',
+    'alg-hs256',
+    'nonce',
+    'audience',
+    'issuer',
+    'expired',
+    'signature',
+  ] as const)('rejects invalid %s', async (kind) => {
+    mutation = kind;
+    const c = createOidcClient(settings);
+    await expect(c.complete(callback(), flow)).rejects.toThrow();
+  });
   it('rejects mismatched state before exchanging code', async () => {
     const c = createOidcClient(settings);
     const u = callback();
@@ -184,4 +236,59 @@ describe('OIDC protocol against a local HTTPS IdP', () => {
     });
     await expect(createOidcClient(settings).verifyLogout(token)).rejects.toThrow();
   });
+  const logoutClaims = () => ({
+    iss: settings.issuer,
+    aud: settings.clientId,
+    iat: Math.floor(Date.now() / 1000),
+    jti: randomUUID(),
+    sid: 'provider-session-1',
+    events: { 'http://schemas.openid.net/event/backchannel-logout': {} },
+  });
+  it.each([
+    ['чужой aud', { aud: 'other-client' }],
+    ['чужой iss', { iss: 'https://other.invalid/realms/test' }],
+    ['без events', { events: undefined }],
+  ])('отклоняет logout token: %s', async (_, over) => {
+    const token = await signed({ ...logoutClaims(), ...over });
+    const err = await createOidcClient(settings)
+      .verifyLogout(token)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(OidcUnavailableError);
+  });
+  it.each(['alg-none', 'alg-hs256'] as const)('отклоняет logout token с %s', async (kind) => {
+    mutation = kind;
+    const token = await signed(logoutClaims());
+    const err = await createOidcClient(settings)
+      .verifyLogout(token)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(OidcUnavailableError);
+  });
+  it('JWKS отвечает 500 — OidcUnavailableError (сбой провайдера, не неверный токен)', async () => {
+    jwksStatus = 500;
+    const token = await signed(logoutClaims());
+    await expect(createOidcClient(settings).verifyLogout(token)).rejects.toBeInstanceOf(
+      OidcUnavailableError,
+    );
+  });
+  it('discovery недоступен — OidcUnavailableError', async () => {
+    const c = createOidcClient(settings, async () => {
+      throw new Error('ECONNREFUSED');
+    });
+    await expect(c.verifyLogout('a.b.c')).rejects.toBeInstanceOf(OidcUnavailableError);
+  });
+});
+
+describe('oidcUsername', () => {
+  it('принимает обычный логин, обрезает пробелы', () => {
+    expect(oidcUsername('  ivanov ')).toBe('ivanov');
+    expect(oidcUsername('Иванов.И')).toBe('Иванов.И');
+  });
+  it.each(['\u200C', '\u200F', '\u202A', '\u2066', '\u2069', '\u0007'])(
+    'отклоняет символ U+%s',
+    (c) => {
+      expect(oidcUsername(`iv${c}anov`)).toBeNull();
+    },
+  );
 });

@@ -1,6 +1,7 @@
 import { and, eq, isNotNull, lt } from 'drizzle-orm';
 import { reportRunFiles, reportRunSignatures, reportRuns } from '../../db/schema';
 import type { AppDeps } from '../../deps';
+import { cleanupOidcSessions } from '../auth/oidc-users';
 import { runStoragePath } from './snapshot';
 
 export async function cleanupOldReports(
@@ -45,10 +46,13 @@ export function startCleanupTimer(
   deps: AppDeps,
   log: { error(o: unknown, msg?: string): void; warn(o: unknown, msg?: string): void },
 ): () => void {
-  const tick = () =>
-    cleanupOldReports(deps, new Date(), log).catch((e) =>
+  const tick = async () => {
+    await cleanupOldReports(deps, new Date(), log).catch((e) =>
       log.error(e, 'очистка отчётов не удалась'),
     );
+    // Истёкшие и давно отозванные OIDC-сессии: таблица не растёт без предела.
+    await cleanupOidcSessions(deps).catch((e) => log.error(e, 'очистка OIDC-сессий не удалась'));
+  };
   void tick();
   const timer = setInterval(tick, 60 * 60 * 1000);
   timer.unref();

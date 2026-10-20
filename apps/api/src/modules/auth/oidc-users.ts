@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, lt, or, sql } from 'drizzle-orm';
 import type { AppDeps } from '../../deps';
 import { oidcIdentities, oidcSessions, users } from '../../db/schema';
 import { AppError } from '../../lib/errors';
@@ -74,4 +74,21 @@ export async function resolveOidcUser(deps: AppDeps, person: OidcPerson) {
     });
     return { user, sessionId };
   });
+}
+
+/**
+ * Удаляет истёкшие OIDC-сессии и отозванные больше суток назад (отозванная запись ещё сутки
+ * видна для разбора). Возвращает число удалённых строк.
+ */
+export async function cleanupOidcSessions(deps: Pick<AppDeps, 'db'>, now = new Date()) {
+  const rows = await deps.db
+    .delete(oidcSessions)
+    .where(
+      or(
+        lt(oidcSessions.expiresAt, now),
+        lt(oidcSessions.revokedAt, new Date(now.getTime() - 86_400_000)),
+      ),
+    )
+    .returning({ id: oidcSessions.id });
+  return rows.length;
 }

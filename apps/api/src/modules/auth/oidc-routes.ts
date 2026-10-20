@@ -5,8 +5,14 @@ import type { App } from '../../app';
 import type { AppDeps } from '../../deps';
 import { oidcIdentities, oidcSessions, users } from '../../db/schema';
 import { AppError, notFound, unauthorized } from '../../lib/errors';
-import type { Guards } from './guards';
-import { createOidcClient, type OidcClient, type OidcFlow } from './oidc-client';
+import { currentUser, type Guards } from './guards';
+import {
+  createOidcClient,
+  OidcUnavailableError,
+  OidcUsernameError,
+  type OidcClient,
+  type OidcFlow,
+} from './oidc-client';
 import { resolveOidcUser } from './oidc-users';
 import { SESSION_COOKIE } from './session';
 import { setSessionCookie } from './routes';
@@ -48,7 +54,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
   // No UI button is added. Administrators can test via a direct URL after configuration.
   app.get(
     '/api/auth/oidc/login',
-    { logLevel: 'silent', config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
     async (req, reply) => {
       noStore(reply);
       const service = enabled();
@@ -76,7 +82,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
   );
   app.get(
     '/api/auth/oidc/callback',
-    { logLevel: 'silent', config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
     async (req, reply) => {
       noStore(reply);
       const service = enabled();
@@ -106,8 +112,16 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
         const callback = new URL(settings!.redirectUri);
         callback.search = params.toString();
         person = await service.complete(callback, flow);
-        if (person.expiresAt.getTime() <= Date.now()) throw new Error();
-      } catch {
+        if (person.expiresAt.getTime() <= Date.now()) throw new Error('сессия уже истекла');
+      } catch (error) {
+        if (error instanceof OidcUsernameError)
+          throw new AppError(
+            'OIDC_INVALID_USERNAME',
+            403,
+            'логин из Keycloak (preferred_username) не подходит: от 3 до 64 символов, без управляющих и невидимых символов',
+          );
+        // Причина — сообщение ошибки, без кода авторизации и токенов.
+        req.log.warn({ reason: (error as Error).message }, 'OIDC: вход не подтверждён');
         throw new AppError(
           'OIDC_INVALID_RESPONSE',
           401,
@@ -115,6 +129,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
         );
       }
       const { user, sessionId } = await resolveOidcUser(deps, person);
+      req.log.info({ userId: user.id }, 'OIDC: вход выполнен');
       await setSessionCookie(
         reply,
         deps,
@@ -125,25 +140,21 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
       return reply.redirect(safeOidcNext(flow.next));
     },
   );
-  app.post(
-    '/api/auth/oidc/logout',
-    { preHandler: guards.requireUser, logLevel: 'silent' },
-    async (req, reply) => {
-      noStore(reply);
-      const service = enabled();
-      if (req.oidcSessionId)
-        await deps.db
-          .update(oidcSessions)
-          .set({ revokedAt: new Date() })
-          .where(eq(oidcSessions.id, req.oidcSessionId));
-      reply.clearCookie(SESSION_COOKIE, { path: '/' });
-      try {
-        return { url: await service.logoutUrl() };
-      } catch {
-        return { url: '/login' };
-      }
-    },
-  );
+  app.post('/api/auth/oidc/logout', { preHandler: guards.requireUser }, async (req, reply) => {
+    noStore(reply);
+    const service = enabled();
+    if (req.oidcSessionId)
+      await deps.db
+        .update(oidcSessions)
+        .set({ revokedAt: new Date() })
+        .where(eq(oidcSessions.id, req.oidcSessionId));
+    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    try {
+      return { url: await service.logoutUrl() };
+    } catch {
+      return { url: '/login' };
+    }
+  });
   // Back-channel uses the signed logout token, not browser cookies.
   app.register(async (scoped) => {
     scoped.addContentTypeParser(
@@ -159,9 +170,10 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
     scoped.post(
       '/api/auth/oidc/backchannel-logout',
       {
-        logLevel: 'silent',
         bodyLimit: 32768,
-        config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+        // Keycloak шлёт back-channel logout со своего адреса на каждую завершённую сессию:
+        // при массовом выходе 60 в минуту отбрасывали бы отзывы молча.
+        config: { rateLimit: { max: 600, timeWindow: '1 minute' } },
         schema: { body: z.object({ logout_token: z.string().min(1).max(16384) }) },
       },
       async (req, reply) => {
@@ -172,16 +184,29 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
           identity = await service.verifyLogout(
             (req.body as { logout_token: string }).logout_token,
           );
-        } catch {
+        } catch (error) {
+          // Причина — без самого токена. Сбой провайдера — 503, чтобы Keycloak и
+          // администратор видели, что отзыв не выполнен; неверный токен — 400.
+          const reason = (error as Error).message;
+          if (error instanceof OidcUnavailableError) {
+            req.log.error(
+              { reason },
+              'OIDC: back-channel logout не проверен — провайдер недоступен',
+            );
+            throw new AppError('OIDC_UNAVAILABLE', 503, 'Keycloak недоступен, повторите позже');
+          }
+          req.log.warn({ reason }, 'OIDC: back-channel logout отклонён');
           throw new AppError('OIDC_INVALID_LOGOUT', 400, 'неверный logout token');
         }
         const criteria = [eq(oidcSessions.issuer, identity.issuer)];
         if (identity.sid) criteria.push(eq(oidcSessions.providerSid, identity.sid));
         if (identity.subject) criteria.push(eq(oidcSessions.subject, identity.subject));
-        await deps.db
+        const revoked = await deps.db
           .update(oidcSessions)
           .set({ revokedAt: new Date() })
-          .where(and(...criteria));
+          .where(and(...criteria))
+          .returning({ userId: oidcSessions.userId });
+        req.log.info({ sessions: revoked.length }, 'OIDC: back-channel logout выполнен');
         return reply.status(200).send();
       },
     );
@@ -191,7 +216,6 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
     '/api/admin/auth/oidc/identities',
     {
       preHandler: guards.requireAdmin,
-      logLevel: 'silent',
       schema: { body: z.object({ subject: z.string().min(1).max(255), userId: z.uuid() }) },
     },
     async (req, reply) => {
@@ -227,6 +251,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
         );
       if (linked?.userId !== user.id)
         throw new AppError('CONFLICT', 409, 'внешняя учётная запись уже привязана');
+      req.log.info({ userId: user.id, by: currentUser(req).id }, 'OIDC: учётная запись привязана');
       return reply.status(201).send({ userId: user.id });
     },
   );
@@ -234,7 +259,6 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
     '/api/admin/auth/oidc/identities/:userId',
     {
       preHandler: guards.requireAdmin,
-      logLevel: 'silent',
       schema: { params: z.object({ userId: z.uuid() }) },
     },
     async (req, reply) => {
@@ -263,6 +287,10 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
           .set({ sessionVersion: sql`${users.sessionVersion}+1` })
           .where(eq(users.id, req.params.userId));
       });
+      req.log.info(
+        { userId: req.params.userId, by: currentUser(req).id },
+        'OIDC: привязка учётной записи снята',
+      );
       return reply.status(204).send();
     },
   );

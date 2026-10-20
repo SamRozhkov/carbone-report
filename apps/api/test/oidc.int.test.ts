@@ -1,32 +1,38 @@
 import { randomUUID } from 'node:crypto';
-import cookie from '@fastify/cookie';
-import rateLimit from '@fastify/rate-limit';
-import { Redis } from 'ioredis';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
-import pg from 'pg';
-import { createFastify } from '../../app';
-import { loadConfig } from '../../config';
-import { createDb, migrateDb } from '../../db/client';
-import { oidcIdentities, oidcSessions, users } from '../../db/schema';
-import type { AppDeps } from '../../deps';
-import { registerErrorHandler } from '../../lib/errors';
-import { makeGuards } from './guards';
-import { registerAuthRoutes } from './routes';
-import { registerOidcRoutes } from './oidc-routes';
-import { hashPassword } from './password';
-import { signSession } from './session';
-import type { OidcClient, OidcFlow } from './oidc-client';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildApp, type App } from '../src/app';
+import type { Config } from '../src/config';
+import { oidcIdentities, oidcSessions, users } from '../src/db/schema';
+import type { LdapAuthenticator } from '../src/modules/auth/ldap';
+import {
+  OidcUnavailableError,
+  OidcUsernameError,
+  type OidcClient,
+  type OidcFlow,
+} from '../src/modules/auth/oidc-client';
+import { cleanupOidcSessions } from '../src/modules/auth/oidc-users';
+import { hashPassword } from '../src/modules/auth/password';
+import { signSession } from '../src/modules/auth/session';
+import { createTestApp, type TestApp } from './helpers';
 
-const databaseEnabled = process.env.OIDC_DB_TEST === 'true';
-describe.skipIf(!databaseEnabled)('OIDC routes with isolated PostgreSQL database and Redis', () => {
-  const databaseName = 'oidc_test_' + randomUUID().replaceAll('-', '');
-  let admin: pg.Client;
-  let db: ReturnType<typeof createDb>;
-  let redis: Redis;
-  let deps: AppDeps;
-  let app: ReturnType<typeof createFastify>;
-  let disabled: ReturnType<typeof createFastify>;
+const ISSUER = 'https://keycloak.test/realms/yg';
+const oidcConfig: NonNullable<Config['oidc']> = {
+  issuer: ISSUER,
+  clientId: 'carbone',
+  clientSecret: 'test-secret',
+  redirectUri: 'https://reports.test/api/auth/oidc/callback',
+  postLogoutRedirectUri: 'https://reports.test/login',
+};
+// Каталог LDAP: любой логин с паролем ldap-pass (канонический логин — введённый).
+const ldap: LdapAuthenticator = {
+  authenticate: async (login, password) => (password === 'ldap-pass' ? login : null),
+};
+
+describe('OIDC: маршруты с PostgreSQL и Redis', () => {
+  let t: TestApp;
+  let app: App;
+  let disabled: App;
   let mock: OidcClient;
   let loginFlow: OidcFlow;
   let adminCookie: string;
@@ -34,90 +40,71 @@ describe.skipIf(!databaseEnabled)('OIDC routes with isolated PostgreSQL database
   let actualSubject = 'subject-new';
   let actualName = 'new-person';
   beforeAll(async () => {
-    const original = loadConfig({ ...process.env, OIDC_ENABLED: 'false' });
-    admin = new pg.Client({ connectionString: original.databaseUrl });
-    await admin.connect();
-    await admin.query('CREATE DATABASE ' + databaseName);
-    const url = new URL(original.databaseUrl);
-    url.pathname = '/' + databaseName;
-    db = createDb(url.href);
-    await migrateDb(db.db);
-    redis = new Redis(original.redisUrl);
-    const config = {
-      ...original,
-      databaseUrl: url.href,
-      adminLogin: 'recovery-admin',
-      oidc: {
-        issuer: 'https://keycloak.test/realms/yg',
-        clientId: 'carbone',
-        clientSecret: 'test-secret',
-        redirectUri: 'https://reports.test/api/auth/oidc/callback',
-        postLogoutRedirectUri: 'https://reports.test/login',
-      },
-    };
-    deps = { config, db: db.db, redis, backupAgent: null } as unknown as AppDeps;
     mock = {
       begin: vi.fn(async (f: OidcFlow) => {
         loginFlow = f;
         return 'https://keycloak.test/auth?state=' + f.state;
       }),
       complete: vi.fn(async () => ({
-        issuer: config.oidc.issuer,
+        issuer: ISSUER,
         subject: actualSubject,
         username: actualName,
         sid: 'provider-sid',
         expiresAt: new Date(Date.now() + 300000),
       })),
       logoutUrl: vi.fn(async () => 'https://keycloak.test/logout'),
-      verifyLogout: vi.fn(async () => ({ issuer: config.oidc.issuer, sid: 'provider-sid' })),
+      verifyLogout: vi.fn(async () => ({ issuer: ISSUER, sid: 'provider-sid' })),
     };
-    async function setup(d: AppDeps) {
-      const a = createFastify();
-      registerErrorHandler(a);
-      await a.register(cookie);
-      await a.register(rateLimit, { global: false });
-      const guards = makeGuards(d);
-      registerAuthRoutes(a, d, guards);
-      registerOidcRoutes(a, d, guards, mock);
-      await a.ready();
-      return a;
-    }
-    app = await setup(deps);
-    disabled = await setup({ ...deps, config: { ...config, oidc: null } });
-    const [a] = await db.db
+    t = await createTestApp(
+      { oidcClient: mock, ldap },
+      {
+        adminLogin: 'recovery-admin',
+        oidc: oidcConfig,
+        ldap: {
+          url: '',
+          baseDn: '',
+          userFilter: '(uid=%s)',
+          defaultRole: 'user',
+          tlsRejectUnauthorized: true,
+        },
+      },
+    );
+    app = t.app;
+    // Тот же экземпляр БД и Redis, но OIDC выключен.
+    disabled = await buildApp({ ...t.deps, config: { ...t.deps.config, oidc: null } });
+    const [a] = await t.deps.db
       .insert(users)
       .values({
-        login: config.adminLogin,
+        login: 'recovery-admin',
         role: 'admin',
         passwordHash: await hashPassword('test-local-password'),
       })
       .returning();
-    const [u] = await db.db
+    const [u] = await t.deps.db
       .insert(users)
       .values({
         login: 'existing-ldap-user',
         role: 'user',
         passwordHash: await hashPassword('test-local-password'),
+        authSource: 'ldap',
       })
       .returning();
     knownUserId = u!.id;
     adminCookie =
       'session=' +
-      (await signSession({ id: a!.id, login: a!.login, role: a!.role }, 0, config.appSecret));
-  }, 120000);
+      (await signSession(
+        { id: a!.id, login: a!.login, role: a!.role },
+        0,
+        t.deps.config.appSecret,
+      ));
+  });
   afterAll(async () => {
-    await app?.close();
     await disabled?.close();
-    await redis?.quit();
-    await db?.pool.end();
-    if (admin) {
-      await admin.query('DROP DATABASE ' + databaseName + ' WITH (FORCE)');
-      await admin.end();
-    }
+    await t?.close();
   });
   beforeEach(() => {
     actualSubject = 'subject-' + randomUUID();
-    actualName = 'new-' + randomUUID();
+    actualName = 'new-' + randomUUID().slice(0, 8);
   });
   async function begin() {
     const r = await app.inject({ url: '/api/auth/oidc/login?next=/reports' });
@@ -175,7 +162,7 @@ describe.skipIf(!databaseEnabled)('OIDC routes with isolated PostgreSQL database
     actualName = 'existing-ldap-user';
     const r = await finish(await begin());
     expect(r.statusCode).toBe(409);
-    const ids = await db.db
+    const ids = await t.deps.db
       .select()
       .from(oidcIdentities)
       .where(eq(oidcIdentities.subject, actualSubject));
@@ -224,7 +211,7 @@ describe.skipIf(!databaseEnabled)('OIDC routes with isolated PostgreSQL database
     const r = await finish(await begin());
     const sc = sessionCookie(r);
     const me = await app.inject({ url: '/api/auth/me', headers: { cookie: sc } });
-    await db.db.update(users).set({ blocked: true }).where(eq(users.id, me.json().id));
+    await t.deps.db.update(users).set({ blocked: true }).where(eq(users.id, me.json().id));
     expect((await app.inject({ url: '/api/auth/me', headers: { cookie: sc } })).statusCode).toBe(
       401,
     );
@@ -261,7 +248,7 @@ describe.skipIf(!databaseEnabled)('OIDC routes with isolated PostgreSQL database
   });
   it('expired OIDC session is rejected', async () => {
     const r = await finish(await begin());
-    await db.db
+    await t.deps.db
       .update(oidcSessions)
       .set({ expiresAt: new Date(Date.now() - 1000) })
       .where(eq(oidcSessions.subject, actualSubject));
@@ -307,5 +294,104 @@ describe.skipIf(!databaseEnabled)('OIDC routes with isolated PostgreSQL database
     expect(
       (await disabled.inject({ url: '/api/auth/me', headers: { cookie: adminCookie } })).statusCode,
     ).toBe(200);
+  });
+  it('аккаунт, заведённый через Keycloak, получает auth_source = oidc и не открывается через LDAP', async () => {
+    actualName = 'ivanov';
+    const r = await finish(await begin());
+    expect(r.statusCode).toBe(302);
+    const [row] = await t.deps.db.select().from(users).where(eq(users.login, 'ivanov'));
+    expect(row?.authSource).toBe('oidc');
+    // Запись каталога с тем же логином и верным паролем — 401, сессии нет.
+    const viaLdap = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: 'ivanov', password: 'ldap-pass' },
+    });
+    expect(viaLdap.statusCode).toBe(401);
+    expect(viaLdap.cookies.some((c) => c.name === 'session')).toBe(false);
+  });
+  it('явная привязка администратором не меняет auth_source аккаунта LDAP', async () => {
+    const link = await app.inject({
+      method: 'POST',
+      url: '/api/admin/auth/oidc/identities',
+      headers: { cookie: adminCookie },
+      payload: { userId: knownUserId, subject: actualSubject },
+    });
+    expect(link.statusCode).toBe(201);
+    const [row] = await t.deps.db.select().from(users).where(eq(users.id, knownUserId));
+    expect(row?.authSource).toBe('ldap');
+    const viaLdap = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { login: 'existing-ldap-user', password: 'ldap-pass' },
+    });
+    expect(viaLdap.statusCode).toBe(200);
+  });
+  it('неподходящий preferred_username — понятная ошибка, аккаунт не заводится', async () => {
+    vi.mocked(mock.complete).mockRejectedValueOnce(new OidcUsernameError());
+    const r = await finish(await begin());
+    expect(r.statusCode).toBe(403);
+    expect(r.json().error.code).toBe('OIDC_INVALID_USERNAME');
+    const ids = await t.deps.db
+      .select()
+      .from(oidcIdentities)
+      .where(eq(oidcIdentities.subject, actualSubject));
+    expect(ids).toHaveLength(0);
+  });
+  it('провайдер недоступен при back-channel logout — 503, а не молчаливый отказ', async () => {
+    vi.mocked(mock.verifyLogout).mockRejectedValueOnce(new OidcUnavailableError('JWKS недоступен'));
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/auth/oidc/backchannel-logout',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'logout_token=any',
+    });
+    expect(r.statusCode).toBe(503);
+    expect(r.json().error.code).toBe('OIDC_UNAVAILABLE');
+  });
+  it('лимит back-channel logout — 600 запросов в минуту с адреса', async () => {
+    const send = () =>
+      app.inject({
+        method: 'POST',
+        url: '/api/auth/oidc/backchannel-logout',
+        remoteAddress: '198.51.100.77',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: 'logout_token=validated-by-test-provider',
+      });
+    for (let i = 0; i < 600; i++) expect((await send()).statusCode).toBe(200);
+    expect((await send()).statusCode).toBe(429);
+  });
+  it('очистка удаляет истёкшие и отозванные больше суток назад OIDC-сессии', async () => {
+    const r = await finish(await begin());
+    expect(r.statusCode).toBe(302);
+    const [own] = await t.deps.db
+      .select()
+      .from(oidcSessions)
+      .where(eq(oidcSessions.subject, actualSubject));
+    const base = { issuer: ISSUER, subject: actualSubject, userId: own!.userId };
+    const now = Date.now();
+    const expired = randomUUID();
+    const oldRevoked = randomUUID();
+    const freshRevoked = randomUUID();
+    await t.deps.db.insert(oidcSessions).values([
+      { ...base, id: expired, expiresAt: new Date(now - 1000) },
+      {
+        ...base,
+        id: oldRevoked,
+        expiresAt: new Date(now + 3600_000),
+        revokedAt: new Date(now - 2 * 86_400_000),
+      },
+      {
+        ...base,
+        id: freshRevoked,
+        expiresAt: new Date(now + 3600_000),
+        revokedAt: new Date(now - 3600_000),
+      },
+    ]);
+    expect(await cleanupOidcSessions(t.deps)).toBeGreaterThanOrEqual(2);
+    const left = (
+      await t.deps.db.select().from(oidcSessions).where(eq(oidcSessions.subject, actualSubject))
+    ).map((x) => x.id);
+    expect(left.sort()).toEqual([own!.id, freshRevoked].sort());
   });
 });

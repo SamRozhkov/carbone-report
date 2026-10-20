@@ -38,6 +38,16 @@ describe('loadConfig', () => {
       /целое от 1000 до 60000/,
     );
   });
+  it('служба меток ГОСТ: SIGN_GOST_TSA_URL (§42.8)', () => {
+    expect(loadConfig(base).signGostTsaUrl).toBeNull();
+    expect(loadConfig({ ...base, SIGN_GOST_TSA_URL: '' }).signGostTsaUrl).toBeNull();
+    expect(
+      loadConfig({ ...base, SIGN_GOST_TSA_URL: 'http://tsa.example/tsp.srf' }).signGostTsaUrl,
+    ).toBe('http://tsa.example/tsp.srf');
+    expect(() => loadConfig({ ...base, SIGN_GOST_TSA_URL: 'ftp://x' })).toThrow(
+      /SIGN_GOST_TSA_URL: адрес http:\/\/ или https:\/\//,
+    );
+  });
   it('версия сборки: по умолчанию dev/unknown/unknown, пустые значения — тоже', () => {
     const c = loadConfig(base);
     expect([c.appVersion, c.appCommit, c.appBuildDate]).toEqual(['dev', 'unknown', 'unknown']);

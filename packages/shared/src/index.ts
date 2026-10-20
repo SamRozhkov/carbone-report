@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { TemplateChart } from './charts';
 import { PdfOptions, TemplateAttachment } from './pdf-options';
 import { TemplateEditingBy } from './edit-lock';
-import { RunSignature } from './signature';
+import { RunSignature, SignMethod } from './signature';
 
 z.config(z.locales.ru());
 
@@ -285,6 +285,8 @@ export const TemplateDetails = TemplateSummary.extend({
   outputFormats: z.array(OutputFormat),
   /** Шаблон разрешает подпись PDF (§39.2). */
   signatureAllowed: z.boolean(),
+  /** Способ подписи шаблона (§42.1); null — подпись не разрешена. */
+  signMethod: SignMethod.nullable(),
 });
 export type TemplateDetails = z.infer<typeof TemplateDetails>;
 
@@ -388,6 +390,8 @@ export const RunDto = z.object({
   signature: RunSignature.nullable(),
   /** Можно подписать: снимок, ok, файл есть, подпись разрешена в снимке, ещё не подписан. */
   signable: z.boolean(),
+  /** Способ подписи из снимка запуска (§42.6); null — подписать нельзя. */
+  signMethod: SignMethod.nullable(),
   durationMs: z.number(),
   createdAt: z.string(),
 });

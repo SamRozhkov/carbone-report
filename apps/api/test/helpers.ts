@@ -71,6 +71,7 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     tz: 'Europe/Moscow',
     signTsaUrl: null,
     signTsaTimeoutMs: 10_000,
+    signGostTsaUrl: null,
     port: 0,
     cookieSecure: false,
     appVersion: 'dev',

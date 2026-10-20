@@ -117,6 +117,13 @@ const Env = z
         .max(60000, 'целое от 1000 до 60000')
         .default(10000),
     ),
+    // Служба меток времени ГОСТ (§42.8): адрес передаётся плагину КриптоПро; пусто — подпись без метки.
+    SIGN_GOST_TSA_URL: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z
+        .url({ protocol: /^https?$/, error: 'SIGN_GOST_TSA_URL: адрес http:// или https://' })
+        .optional(),
+    ),
     PORT: z.coerce.number().int().default(3000),
     COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
     OIDC_ENABLED: z.enum(['true', 'false']).default('false'),
@@ -320,6 +327,8 @@ export interface Config {
   /** Служба меток времени подписи PDF (§39.6); null — без метки. */
   signTsaUrl: string | null;
   signTsaTimeoutMs: number;
+  /** Служба меток времени ГОСТ для плагина КриптоПро (§42.8); null — без метки. */
+  signGostTsaUrl: string | null;
   port: number;
   cookieSecure: boolean;
   /** Версия сборки: тег выпуска без `v` или `dev`. */
@@ -436,6 +445,7 @@ export function loadConfig(
     tz: e.TZ,
     signTsaUrl: e.SIGN_TSA_URL ?? null,
     signTsaTimeoutMs: e.SIGN_TSA_TIMEOUT_MS,
+    signGostTsaUrl: e.SIGN_GOST_TSA_URL ?? null,
     port: e.PORT,
     cookieSecure: e.COOKIE_SECURE === 'true',
     appVersion: e.APP_VERSION,

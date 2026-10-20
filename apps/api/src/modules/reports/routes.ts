@@ -127,6 +127,8 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
             filePath: snap.template,
             // R16: положение штампа из тех же настроек, что записаны в pdf-options.json снимка.
             signaturePosition: pdf.options.signature?.position ?? null,
+            // Способ подписи — из того же снимка (§42.1); нет поля — .p12.
+            signMethod: pdf.options.signature ? (pdf.options.signature.method ?? 'p12') : null,
             durationMs: Date.now() - started,
           });
           await tx
@@ -224,6 +226,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
           !run.fileDeleted &&
           run.signaturePosition !== null &&
           !signatures.has(run.id),
+        signMethod: run.signMethod,
         durationMs: run.durationMs,
         createdAt: run.createdAt.toISOString(),
       }));

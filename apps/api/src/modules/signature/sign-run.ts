@@ -68,6 +68,8 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
       const filePath = run.filePath;
       if (!run.snapshot || run.status !== 'ok' || run.fileDeleted || !filePath || !position)
         throw unavailable();
+      // Подписать можно только способом из снимка (§42.1): ГОСТ-запуск подписывает плагин КриптоПро.
+      if (run.signMethod === 'gost') throw unavailable();
       const cert = await loadUserCertificate(db, me.id);
       if (!cert) throw badRequest('загрузите сертификат на странице «Моя подпись»');
       const checkedAt = new Date();
@@ -150,6 +152,7 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
                 signedAt: now,
                 timestamped: signer.timestamped,
                 filePath: path,
+                method: 'p12',
               })
               .returning();
             return { signature: toRunSignature(row!) };

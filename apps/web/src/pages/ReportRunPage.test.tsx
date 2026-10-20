@@ -13,6 +13,7 @@ const template = {
   updatedAt: '2026-01-10T10:00:00Z',
   outputFormats: ['pdf', 'docx', 'odt'],
   signatureAllowed: false,
+  signMethod: null,
   params: [
     {
       name: 'company',
@@ -435,7 +436,10 @@ describe('ReportRunPage', () => {
     const signedAt = '2026-10-19T14:32:00';
     const base = [
       userMe,
-      { path: '/api/templates/t1', body: { ...template, signatureAllowed: true } },
+      {
+        path: '/api/templates/t1',
+        body: { ...template, signatureAllowed: true, signMethod: 'p12' },
+      },
       { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
     ];
 
@@ -454,6 +458,7 @@ describe('ReportRunPage', () => {
             fingerprint: 'AB'.repeat(32),
             signedAt,
             timestamped: false,
+            method: 'p12',
           },
         },
         {

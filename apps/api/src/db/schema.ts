@@ -8,6 +8,7 @@ import type {
   QueryMode,
   Role,
   SelectOption,
+  SignMethod,
   SslMode,
   TemplateChartConfig,
   TemplateExt,
@@ -15,6 +16,8 @@ import type {
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
+  customType,
   index,
   integer,
   jsonb,
@@ -28,6 +31,9 @@ import {
 } from 'drizzle-orm/pg-core';
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
+
+/** Двоичные данные Postgres (bytea): node-postgres отдаёт Buffer. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
 
 export type AuthSource = 'local' | 'ldap' | 'oidc';
 
@@ -294,6 +300,8 @@ export const reportRuns = pgTable('report_runs', {
   snapshot: boolean('snapshot').notNull().default(false),
   /** Положение штампа, если подпись разрешена в снимке запуска (§39.2, R16); null — подписать нельзя. */
   signaturePosition: text('signature_position').$type<PdfSignaturePosition>(),
+  /** Способ подписи из того же снимка (§42.1); null — подписать нельзя. */
+  signMethod: text('sign_method').$type<SignMethod>(),
   durationMs: integer('duration_ms').notNull(),
   createdAt: createdAt(),
 });
@@ -338,21 +346,49 @@ export const signPasswordFailures = pgTable('sign_password_failures', {
   windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
 });
 
-/** Подпись запуска (§39.3): одна на запуск; файл — reports/<runId>/out.signed.pdf. */
-export const reportRunSignatures = pgTable('report_run_signatures', {
+/**
+ * Подпись запуска (§39.3): одна на запуск; файл — reports/<runId>/out.signed.pdf.
+ * У ГОСТ (§42.5) рядом — открепленная подпись sig_path (reports/<runId>/out.signed.pdf.sig).
+ */
+export const reportRunSignatures = pgTable(
+  'report_run_signatures',
+  {
+    runId: uuid('run_id')
+      .primaryKey()
+      .references(() => reportRuns.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    signerCn: text('signer_cn').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    signedAt: timestamp('signed_at', { withTimezone: true }).notNull(),
+    timestamped: boolean('timestamped').notNull(),
+    filePath: text('file_path').notNull(),
+    method: text('method').$type<SignMethod>().notNull().default('p12'),
+    sigPath: text('sig_path'),
+  },
+  (t) => [check('report_run_signatures_method_check', sql`${t.method} in ('p12', 'gost')`)],
+);
+export type RunSignatureRow = typeof reportRunSignatures.$inferSelect;
+
+/**
+ * Начатая подпись ГОСТ (§42.2, §42.5): одна на запуск; черновик со штампом — draft_path,
+ * hash — Стрибог черновика; истёкшие удаляет ежечасная очистка.
+ */
+export const gostSignPending = pgTable('gost_sign_pending', {
   runId: uuid('run_id')
     .primaryKey()
     .references(() => reportRuns.id, { onDelete: 'cascade' }),
   userId: uuid('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
-  signerCn: text('signer_cn').notNull(),
-  fingerprint: text('fingerprint').notNull(),
-  signedAt: timestamp('signed_at', { withTimezone: true }).notNull(),
-  timestamped: boolean('timestamped').notNull(),
-  filePath: text('file_path').notNull(),
+  certDer: bytea('cert_der').notNull(),
+  hash: bytea('hash').notNull(),
+  hashAlg: text('hash_alg').$type<'streebog256' | 'streebog512'>().notNull(),
+  draftPath: text('draft_path').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
 });
-export type RunSignatureRow = typeof reportRunSignatures.$inferSelect;
+export type GostSignPendingRow = typeof gostSignPending.$inferSelect;
 
 export type UserRow = typeof users.$inferSelect;
 export type DatasourceRow = typeof datasources.$inferSelect;

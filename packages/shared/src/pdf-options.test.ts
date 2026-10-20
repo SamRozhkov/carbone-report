@@ -202,4 +202,15 @@ describe('PdfOptions.signature (§39.2)', () => {
   it('нет блока — подписи нет', () => {
     expect(PdfOptions.parse({}).signature).toBeUndefined();
   });
+  it('способ подписи (§42.1): p12 или gost, нет поля — не добавляется, прочие — ошибка', () => {
+    expect(PdfOptions.parse({ signature: { method: 'gost' } }).signature).toEqual({
+      position: 'bottom-right',
+      method: 'gost',
+    });
+    expect(
+      PdfOptions.parse({ signature: { position: 'bottom-left', method: 'p12' } }).signature,
+    ).toEqual({ position: 'bottom-left', method: 'p12' });
+    expect(PdfOptions.parse({ signature: {} }).signature).not.toHaveProperty('method');
+    expect(PdfOptions.safeParse({ signature: { method: 'x' } }).success).toBe(false);
+  });
 });

@@ -923,4 +923,45 @@ describe('перенос шаблонов между средами', () => {
     expect(r.statusCode).toBe(400);
     expect(JSON.stringify(r.json())).toContain('pdfOptions.signature');
   });
+
+  it('способ подписи ГОСТ переносится; неизвестный способ в архиве — IMPORT_INVALID (§42.1)', async () => {
+    const name = `PDFGOST ${randomUUID().slice(0, 6)}`;
+    const srcId = await createTemplate(a, adminA, dsA);
+    await a.app.inject({
+      method: 'PATCH',
+      url: `/api/templates/${srcId}`,
+      headers: { cookie: adminA },
+      payload: { name },
+    });
+    const put = await a.app.inject({
+      method: 'PUT',
+      url: `/api/templates/${srcId}/pdf-options`,
+      headers: { cookie: adminA },
+      payload: { pdfa: false, signature: { position: 'bottom-center', method: 'gost' } },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const z = await exportZip(a, adminA, [srcId]);
+    const t0 = ((await manifestOf(z)).templates as Record<string, unknown>[])[0]!;
+    expect(t0.pdfOptions).toMatchObject({
+      signature: { position: 'bottom-center', method: 'gost' },
+    });
+    const created = await apply(b, adminB, z, [{ index: 0, action: 'create', datasourceId: dsB }]);
+    expect(created.statusCode).toBe(200);
+    const newId = (created.json() as ImportResult).templates[0]!.id!;
+    const card = (
+      await b.app.inject({ url: `/api/templates/${newId}`, headers: { cookie: adminB } })
+    ).json();
+    expect(card.pdfOptions.signature).toEqual({ position: 'bottom-center', method: 'gost' });
+    expect(card.signMethod).toBe('gost');
+
+    const bad = await JSZip.loadAsync(z);
+    const bm = JSON.parse(await bad.file('manifest.json')!.async('string'));
+    bm.templates[0].pdfOptions.signature.method = 'x';
+    bad.file('manifest.json', JSON.stringify(bm));
+    const badZip = await bad.generateAsync({ type: 'nodebuffer' });
+    const r = await apply(b, adminB, badZip, [{ index: 0, action: 'copy', datasourceId: dsB }]);
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error.code).toBe('IMPORT_INVALID');
+  });
 });

@@ -47,6 +47,7 @@ export const toRunSignature = (r: RunSignatureRow): RunSignature => ({
   fingerprint: r.fingerprint,
   signedAt: r.signedAt.toISOString(),
   timestamped: r.timestamped,
+  method: r.method,
 });
 
 export const snapshotGone = () =>

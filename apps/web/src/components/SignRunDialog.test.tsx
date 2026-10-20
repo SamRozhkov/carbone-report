@@ -19,6 +19,7 @@ const signature = {
   fingerprint: 'AB'.repeat(32),
   signedAt: '2026-10-19T11:32:00.000Z',
   timestamped: false,
+  method: 'p12' as const,
 };
 const certRoute = { path: '/api/me/certificate', body: { certificate: cert } };
 

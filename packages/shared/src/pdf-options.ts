@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SignMethod } from './signature';
 
 // Модуль не импортирует ./index: index реэкспортирует его и использует схемы в TemplateAdminDetails.
 
@@ -89,9 +90,13 @@ export const PDF_SIGNATURE_PROTECTION_MESSAGE = 'Подпись несовмес
 export const PdfSignaturePosition = z.enum(['bottom-left', 'bottom-center', 'bottom-right']);
 export type PdfSignaturePosition = z.infer<typeof PdfSignaturePosition>;
 
-/** Блок есть — шаблон разрешает подпись PDF; положение — штампа на последней странице. */
+/**
+ * Блок есть — шаблон разрешает подпись PDF; положение — штампа на последней странице.
+ * Способ (§42.1): нет поля — `.p12` (шаблоны и запуски до 2.11.0).
+ */
 export const PdfSignature = z.strictObject({
   position: PdfSignaturePosition.default('bottom-right'),
+  method: SignMethod.optional(),
 });
 export type PdfSignature = z.infer<typeof PdfSignature>;
 

@@ -88,3 +88,70 @@ describe('миграция 0013_oidc', () => {
     }
   });
 });
+
+describe('миграция 0014_gost_signature', () => {
+  it('существующие подписи — method = p12; запуски с положением штампа — sign_method = p12', async () => {
+    // База в состоянии до 0014: миграции 0000–0013 из копии каталога с усечённым журналом.
+    const dir = join(import.meta.dirname, '../drizzle');
+    const before = await mkdtemp(join(tmpdir(), 'cr-mig-'));
+    try {
+      await cp(dir, before, { recursive: true });
+      const journalPath = join(before, 'meta/_journal.json');
+      const journal = JSON.parse(await readFile(journalPath, 'utf8')) as {
+        entries: { tag: string }[];
+      };
+      journal.entries = journal.entries.filter((e) => e.tag < '0014_');
+      await writeFile(journalPath, JSON.stringify(journal));
+
+      const url = await createTestDatabase();
+      const { db, pool } = createDb(url);
+      try {
+        await migrate(db, { migrationsFolder: before });
+        const [u] = (
+          await db.execute<{ id: string }>(
+            sql`insert into users (login, password_hash, role) values ('ivan', 'x', 'user') returning id`,
+          )
+        ).rows;
+        const run = (pos: string | null) =>
+          db.execute<{ id: string }>(
+            sql`insert into report_runs (template_name, template_version, user_id, params, status, snapshot, signature_position, duration_ms)
+                values ('T', 1, ${u!.id}, '{}'::jsonb, 'ok', true, ${pos}, 1) returning id`,
+          );
+        const signed = (await run('bottom-left')).rows[0]!.id;
+        const allowed = (await run('bottom-right')).rows[0]!.id;
+        const plain = (await run(null)).rows[0]!.id;
+        await db.execute(
+          sql`insert into report_run_signatures (run_id, user_id, signer_cn, fingerprint, signed_at, timestamped, file_path)
+              values (${signed}, ${u!.id}, 'CN', 'AA', now(), false, ${`reports/${signed}/out.signed.pdf`})`,
+        );
+
+        await migrate(db, { migrationsFolder: dir });
+
+        const sigs = await db.execute<{ method: string; sig_path: string | null }>(
+          sql`select method, sig_path from report_run_signatures`,
+        );
+        expect(sigs.rows).toEqual([{ method: 'p12', sig_path: null }]);
+        const runs = await db.execute<{ id: string; sign_method: string | null }>(
+          sql`select id, sign_method from report_runs`,
+        );
+        expect(Object.fromEntries(runs.rows.map((r) => [r.id, r.sign_method]))).toEqual({
+          [signed]: 'p12',
+          [allowed]: 'p12',
+          [plain]: null,
+        });
+        // Неизвестный способ отклоняется ограничением.
+        await expect(
+          db.execute(sql`update report_run_signatures set method = 'x'`),
+        ).rejects.toThrow();
+        const pending = await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from information_schema.tables where table_name = 'gost_sign_pending'`,
+        );
+        expect(pending.rows[0]!.n).toBe(1);
+      } finally {
+        await pool.end();
+      }
+    } finally {
+      await rm(before, { recursive: true, force: true });
+    }
+  });
+});

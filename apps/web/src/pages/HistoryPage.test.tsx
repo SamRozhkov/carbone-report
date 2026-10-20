@@ -22,6 +22,7 @@ const run = (over: Partial<RunDto>): RunDto => ({
   readyFormats: ['pdf'],
   signature: null,
   signable: false,
+  signMethod: null,
   durationMs: 1200,
   createdAt: '2026-01-31T09:05:00',
   ...over,
@@ -117,6 +118,7 @@ describe('HistoryPage', () => {
               fingerprint: 'AB'.repeat(32),
               signedAt: '2026-10-19T14:32:00',
               timestamped: false,
+              method: 'p12',
             },
           }),
         ]),
@@ -142,7 +144,10 @@ describe('HistoryPage', () => {
     const { calls } = mockApi([
       userMe,
       { path: '/api/templates', body: [] },
-      { path: '/api/runs', body: page([run({ outputFormat: null, signable: true })]) },
+      {
+        path: '/api/runs',
+        body: page([run({ outputFormat: null, signable: true, signMethod: 'p12' })]),
+      },
       {
         path: '/api/me/certificate',
         body: {
@@ -166,6 +171,7 @@ describe('HistoryPage', () => {
           fingerprint: 'AB',
           signedAt: '2026-10-19T14:32:00',
           timestamped: false,
+          method: 'p12',
         },
       },
     ]);

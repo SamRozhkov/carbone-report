@@ -43,6 +43,7 @@ export async function resolveOidcUser(deps: AppDeps, person: OidcPerson) {
           login: person.username,
           role: 'user',
           passwordHash: await hashPassword(randomUUID()),
+          authSource: 'oidc',
         })
         .onConflictDoNothing()
         .returning();

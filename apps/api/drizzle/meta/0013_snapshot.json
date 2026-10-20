@@ -1,5 +1,5 @@
 {
-  "id": "f0c567d8-c121-409d-bd5e-9471754dcb2d",
+  "id": "d655df5b-0d86-4eb1-b012-773ea4ad14e3",
   "prevId": "d67d2b43-e6bb-4e45-9cb2-64d8fc0227e5",
   "version": "7",
   "dialect": "postgresql",
@@ -1624,6 +1624,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "auth_source": {
+          "name": "auth_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'local'"
         },
         "created_at": {
           "name": "created_at",

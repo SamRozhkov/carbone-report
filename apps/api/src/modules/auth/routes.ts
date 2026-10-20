@@ -58,7 +58,7 @@ async function provisionLdapUser(deps: AppDeps, login: string): Promise<UserRow 
   const role = deps.config.ldap?.defaultRole ?? 'user';
   const [inserted] = await deps.db
     .insert(users)
-    .values({ login, passwordHash: await hashPassword(randomUUID()), role })
+    .values({ login, passwordHash: await hashPassword(randomUUID()), role, authSource: 'ldap' })
     .onConflictDoNothing()
     .returning();
   if (inserted) return inserted;
@@ -167,6 +167,10 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
         // Найденный (или найденный при гонке заведения) аккаунт — встроенный администратор.
         if (isAdminLogin(ldapUser.login))
           rejectLdap('логин встроенного администратора', ldapUser.login);
+        // Аккаунт заведён входом через Keycloak: запись каталога с тем же логином — не повод
+        // открывать его. LDAP-пользователю Keycloak привязывает администратор, а не наоборот.
+        if (ldapUser.authSource === 'oidc')
+          rejectLdap('аккаунт заведён через Keycloak', ldapUser.login);
         const user = { id: ldapUser.id, login: ldapUser.login, role: ldapUser.role };
         await setSessionCookie(reply, deps, user, ldapUser.sessionVersion);
         return withFeatures(user);

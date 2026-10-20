@@ -248,6 +248,26 @@ describe('POST /api/auth/login с настоящим LDAP', () => {
     expect(byEmailLogin).toHaveLength(0);
   });
 
+  it('аккаунт, заведённый через Keycloak (auth_source = oidc), через LDAP не открывается', async () => {
+    await app();
+    await t.deps.db.insert(users).values({
+      login: 'fry',
+      passwordHash: await hashPassword('unknown-random'),
+      role: 'user',
+      authSource: 'oidc',
+    });
+    const res = await login({ login: 'fry', password: 'fry' });
+    expect(res.statusCode).toBe(401);
+    expect(res.cookies.some((c) => c.name === SESSION_COOKIE)).toBe(false);
+  });
+
+  it('первый вход через LDAP заводит аккаунт с auth_source = ldap', async () => {
+    await app();
+    expect((await login({ login: 'fry', password: 'fry' })).statusCode).toBe(200);
+    const [row] = await t.deps.db.select().from(users).where(eq(users.login, 'fry'));
+    expect(row?.authSource).toBe('ldap');
+  });
+
   it('без LDAP_LOGIN_ATTRIBUTE вход по почте заводит аккаунт с введённой почтой (прежнее поведение)', async () => {
     await app({ loginAttribute: undefined, userFilter: '(|(uid=%s)(mail=%s))' });
     const byMail = await login({ login: 'fry@planetexpress.com', password: 'fry' });

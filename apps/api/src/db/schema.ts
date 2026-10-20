@@ -29,6 +29,8 @@ import {
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
+export type AuthSource = 'local' | 'ldap' | 'oidc';
+
 export const users = pgTable(
   'users',
   {
@@ -38,6 +40,10 @@ export const users = pgTable(
     role: text('role').$type<Role>().notNull(),
     blocked: boolean('blocked').notNull().default(false),
     sessionVersion: integer('session_version').notNull().default(0),
+    // Как заведён аккаунт: local — администратором или ADMIN_LOGIN, ldap — первым входом через
+    // LDAP, oidc — первым входом через Keycloak. Аккаунт oidc через LDAP не открывается: иначе
+    // запись каталога с тем же логином получила бы чужой аккаунт, заведённый через Keycloak.
+    authSource: text('auth_source').$type<AuthSource>().notNull().default('local'),
     createdAt: createdAt(),
   },
   // LDAP (особенно sAMAccountName в AD) регистр не различает: без этого индекса один

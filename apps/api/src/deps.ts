@@ -40,7 +40,6 @@ export type PdfPostprocessor = (pdf: Buffer, job: PdfPostJob, timeoutMs: number)
 /** Шифрование готового PDF (§37.2): пароль и запреты — в пределах timeoutMs. */
 export type PdfProtector = (pdf: Buffer, job: PdfProtectJob, timeoutMs: number) => Promise<Buffer>;
 
-/** Подготовка PDF к подписи (§39.4): поле, штамп, заглушки — в пределах timeoutMs. */
 /** Разбор .p12 (§39.8): в пуле рендера — главный поток не считает KDF; deadlineAt — срок, мс эпохи. */
 export type P12Reader = (
   file: Buffer,
@@ -49,6 +48,7 @@ export type P12Reader = (
   deadlineAt: number,
 ) => Promise<P12Contents>;
 
+/** Подготовка PDF к подписи (§39.4): поле, штамп, заглушки — в пределах timeoutMs. */
 export type PdfSignPreparer = (
   pdf: Buffer,
   job: SignPrepareJob,

@@ -1,8 +1,9 @@
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { reportRunSignatures, reportRuns, signPasswordFailures } from '../src/db/schema';
-import type { CarboneRenderer } from '../src/deps';
+import type { CarboneRenderer, P12Reader } from '../src/deps';
 import { cleanupOldReports } from '../src/modules/reports/cleanup';
+import { inProcessP12Reader } from '../src/modules/pdf/sign/p12-reader';
 import { fixture, FIXTURE_PASSWORD } from '../src/modules/pdf/sign/fixtures';
 import { startTestTsa, type TestTsa } from '../src/modules/pdf/sign/test-tsa';
 import { opensslVerify } from '../src/modules/pdf/sign/test-verify';
@@ -77,8 +78,8 @@ beforeEach(async () => {
   if (r.statusCode !== 201) throw new Error(r.body);
 });
 
-const render = async (cookie: string, id = templateId) => {
-  const r = await t.app.inject({
+const render = async (cookie: string, id = templateId, tt: TestApp = t) => {
+  const r = await tt.app.inject({
     method: 'POST',
     url: `/api/reports/${id}/render`,
     headers: { cookie },
@@ -87,8 +88,8 @@ const render = async (cookie: string, id = templateId) => {
   if (r.statusCode !== 201) throw new Error(r.body);
   return r.json().runId as string;
 };
-const signRun = (cookie: string, runId: string, password = FIXTURE_PASSWORD) =>
-  t.app.inject({
+const signRun = (cookie: string, runId: string, password = FIXTURE_PASSWORD, tt: TestApp = t) =>
+  tt.app.inject({
     method: 'POST',
     url: `/api/runs/${runId}/sign`,
     headers: { cookie },
@@ -151,16 +152,75 @@ describe('подпись запуска (§39.3)', () => {
   });
 
   it('две одновременные подписи разных запусков — 201 и 409 SIGN_BUSY (§39.8)', async () => {
-    const a = await render(user.cookie);
-    const b = await render(user.cookie);
-    const res = await Promise.all([signRun(user.cookie, a), signRun(user.cookie, b)]);
-    const codes = res.map((r) => r.statusCode).sort();
-    expect(codes).toEqual([201, 409]);
-    const busy = res.find((r) => r.statusCode === 409)!;
-    expect(busy.json().error).toMatchObject({
-      code: 'SIGN_BUSY',
-      message: 'другая подпись уже выполняется — повторите через несколько секунд',
-    });
+    // Первый разбор .p12 держим на «воротах»: вторая подпись гарантированно застаёт блокировку.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let entered!: () => void;
+    const enteredFirst = new Promise<void>((resolve) => (entered = resolve));
+    let gated = false; // загрузка сертификата тоже читает .p12 — ворота включаем после неё
+    const slowReader: P12Reader = async (...args) => {
+      if (gated) {
+        gated = false;
+        entered();
+        await gate;
+      }
+      return inProcessP12Reader(...args);
+    };
+    const t2 = await createTestApp({ carbone, p12Read: slowReader }, { signTsaUrl: tsa.url });
+    try {
+      const admin2 = (await loginAs(t2, 'admin')).cookie;
+      const ds = await t2.app.inject({
+        method: 'POST',
+        url: '/api/datasources',
+        headers: { cookie: admin2 },
+        payload: {
+          name: 'src',
+          host: 'localhost',
+          port: 5432,
+          database: 'x',
+          username: 'x',
+          password: 'x',
+          sslMode: 'disable',
+        },
+      });
+      const tpl2 = await createTemplate(t2, admin2, ds.json().id as string, { public: true });
+      const saved = await t2.app.inject({
+        method: 'PUT',
+        url: `/api/templates/${tpl2}/pdf-options`,
+        headers: { cookie: admin2 },
+        payload: { pdfa: false, signature: { position: 'bottom-left' } },
+      });
+      if (saved.statusCode !== 200) throw new Error(saved.body);
+      const user2 = await loginAs(t2, 'user');
+      const body = multipart(
+        { password: FIXTURE_PASSWORD },
+        { name: 'me.p12', data: fixture('rsa.p12') },
+      );
+      const up = await t2.app.inject({
+        method: 'POST',
+        url: '/api/me/certificate',
+        headers: { cookie: user2.cookie, ...body.headers },
+        payload: body.payload,
+      });
+      if (up.statusCode !== 201) throw new Error(up.body);
+      gated = true;
+      const a = await render(user2.cookie, tpl2, t2);
+      const b = await render(user2.cookie, tpl2, t2);
+
+      const first = signRun(user2.cookie, a, FIXTURE_PASSWORD, t2);
+      await enteredFirst;
+      const busy = await signRun(user2.cookie, b, FIXTURE_PASSWORD, t2);
+      expect(busy.statusCode).toBe(409);
+      expect(busy.json().error).toMatchObject({
+        code: 'SIGN_BUSY',
+        message: 'другая подпись уже выполняется — повторите через несколько секунд',
+      });
+      release();
+      expect((await first).statusCode).toBe(201);
+    } finally {
+      release();
+      await t2.close();
+    }
   });
 
   it('служба меток отказала — 502, подписи нет; повтор после восстановления — 201', async () => {
@@ -299,6 +359,12 @@ describe('подпись запуска (§39.3)', () => {
       .where(eq(signPasswordFailures.userId, user.user.id));
     expect(row!.count).toBe(1);
     expect((await signRun(user.cookie, runId)).statusCode).toBe(201);
+    // Верный пароль счётчик не сбрасывает и не увеличивает.
+    const [after] = await t.deps.db
+      .select()
+      .from(signPasswordFailures)
+      .where(eq(signPasswordFailures.userId, user.user.id));
+    expect(after!.count).toBe(1);
   });
 
   it('администратор видит чужой запуск в истории — signable: false', async () => {

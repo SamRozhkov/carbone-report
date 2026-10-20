@@ -43,7 +43,7 @@ describe.each([
     expect(got.digestAlg).toBe('SHA-384');
   }, 30_000);
 
-  it('неверный пароль — P12Error у password; не PKCS#12 — тоже; без пароля в тексте', async () => {
+  it('неверный пароль — P12Error у password; без пароля в тексте', async () => {
     const e = await reader()(fixture('rsa.p12'), 'секрет-123', new Date(), soon()).catch((x) => x);
     expect(e).toBeInstanceOf(P12Error);
     expect(e).toMatchObject({

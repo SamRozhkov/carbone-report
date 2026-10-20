@@ -54,33 +54,26 @@
     {
       "idx": 7,
       "version": "7",
-      "when": 1791960423011,
-      "tag": "0007_melted_slipstream",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
       "when": 1791967599241,
       "tag": "0007_template_charts",
       "breakpoints": true
     },
     {
-      "idx": 9,
+      "idx": 8,
       "version": "7",
       "when": 1792037291455,
       "tag": "0008_pdf_options",
       "breakpoints": true
     },
     {
-      "idx": 10,
+      "idx": 9,
       "version": "7",
       "when": 1792069812763,
       "tag": "0009_pdf_password",
       "breakpoints": true
     },
     {
-      "idx": 11,
+      "idx": 10,
       "version": "7",
       "when": 1792116676622,
       "tag": "0010_template_edit_locks",
@@ -103,8 +96,8 @@
     {
       "idx": 13,
       "version": "7",
-      "when": 1792474760196,
-      "tag": "0011_oidc",
+      "when": 1792482699265,
+      "tag": "0013_oidc",
       "breakpoints": true
     }
   ]

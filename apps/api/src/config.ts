@@ -105,6 +105,12 @@ const Env = z
     TZ: z.string().default('Europe/Moscow'),
     PORT: z.coerce.number().int().default(3000),
     COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
+    OIDC_ENABLED: z.enum(['true', 'false']).default('false'),
+    OIDC_ISSUER: z.string().optional(),
+    OIDC_CLIENT_ID: z.string().optional(),
+    OIDC_CLIENT_SECRET: z.string().optional(),
+    OIDC_REDIRECT_URI: z.string().optional(),
+    OIDC_POST_LOGOUT_REDIRECT_URI: z.string().optional(),
     LDAP_ENABLED: z.enum(['true', 'false']).default('false'),
     LDAP_URL: z.string().optional(),
     LDAP_BIND_DN: z.string().optional(),
@@ -114,6 +120,10 @@ const Env = z
       .string()
       .refine((v) => v.includes('%s'), 'должен содержать %s')
       .default('(uid=%s)'),
+    // Атрибут канонического логина в найденной записи: по нему заводится и ищется локальный
+    // пользователь, даже если LDAP_USER_FILTER пускает вход по нескольким атрибутам (например,
+    // логину и почте) — иначе один человек завёл бы себе два локальных аккаунта.
+    LDAP_LOGIN_ATTRIBUTE: z.string().min(1, 'не должен быть пустым').default('uid'),
     LDAP_DEFAULT_ROLE: z.enum(['admin', 'user']).default('user'),
     LDAP_TLS_REJECT_UNAUTHORIZED: z.enum(['true', 'false']).default('true'),
     // Агент бэкапа (§26.3): без адреса управление бэкапами в админке выключено.
@@ -125,6 +135,49 @@ const Env = z
       )
       .optional(),
     BACKUP_AGENT_TOKEN: z.string().optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.OIDC_ENABLED !== 'true') return;
+    for (const key of ['OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET'] as const) {
+      if (!v[key]?.trim())
+        ctx.addIssue({ code: 'custom', path: [key], message: 'задайте при OIDC_ENABLED=true' });
+    }
+    for (const key of [
+      'OIDC_ISSUER',
+      'OIDC_REDIRECT_URI',
+      'OIDC_POST_LOGOUT_REDIRECT_URI',
+    ] as const) {
+      try {
+        const u = new URL(v[key] ?? '');
+        if (u.protocol !== 'https:' || u.username || u.password || u.search || u.hash)
+          throw new Error();
+        if (key === 'OIDC_REDIRECT_URI' && u.pathname !== '/api/auth/oidc/callback')
+          throw new Error();
+      } catch {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message:
+            'нужен HTTPS URL без параметров и учётных данных; callback: /api/auth/oidc/callback',
+        });
+      }
+    }
+    if (!v.COOKIE_SECURE || v.COOKIE_SECURE !== 'true')
+      ctx.addIssue({
+        code: 'custom',
+        path: ['COOKIE_SECURE'],
+        message: 'OIDC требует COOKIE_SECURE=true',
+      });
+    try {
+      if (new URL(v.OIDC_REDIRECT_URI!).origin !== new URL(v.OIDC_POST_LOGOUT_REDIRECT_URI!).origin)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['OIDC_POST_LOGOUT_REDIRECT_URI'],
+          message: 'должен быть на том же origin, что callback',
+        });
+    } catch {
+      /* errors above */
+    }
   })
   .superRefine((v, ctx) => {
     if (v.LDAP_ENABLED !== 'true') return;
@@ -259,9 +312,18 @@ export interface Config {
   appBuildDate: string;
   /** Сколько прокси перед API (X-Forwarded-For): compose — 1, k8s — 2. */
   trustedProxyHops: number;
+  oidc?: OidcConfig | null;
   ldap: LdapConfig | null;
   /** Агент бэкапа; null — управление бэкапами выключено. Токен не логируется. */
   backupAgent: { url: string; token: string } | null;
+}
+
+export interface OidcConfig {
+  issuer: string;
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  postLogoutRedirectUri: string;
 }
 
 export interface LdapConfig {
@@ -271,6 +333,8 @@ export interface LdapConfig {
   baseDn: string;
   /** Фильтр поиска пользователя, `%s` — подставляемый логин (например, `(uid=%s)` или `(sAMAccountName=%s)`). */
   userFilter: string;
+  /** Атрибут найденной записи, значение которого — канонический локальный логин. */
+  loginAttribute: string;
   /** Роль нового локального пользователя при первом успешном входе через LDAP. */
   defaultRole: Role;
   tlsRejectUnauthorized: boolean;
@@ -355,6 +419,16 @@ export function loadConfig(
     appCommit: e.APP_COMMIT,
     appBuildDate: e.APP_BUILD_DATE,
     trustedProxyHops: e.TRUSTED_PROXY_HOPS,
+    oidc:
+      e.OIDC_ENABLED === 'true'
+        ? {
+            issuer: e.OIDC_ISSUER!,
+            clientId: e.OIDC_CLIENT_ID!,
+            clientSecret: e.OIDC_CLIENT_SECRET!,
+            redirectUri: e.OIDC_REDIRECT_URI!,
+            postLogoutRedirectUri: e.OIDC_POST_LOGOUT_REDIRECT_URI!,
+          }
+        : null,
     ldap:
       e.LDAP_ENABLED === 'true'
         ? {
@@ -364,6 +438,7 @@ export function loadConfig(
             bindPassword: e.LDAP_BIND_PASSWORD || undefined,
             baseDn: e.LDAP_BASE_DN!,
             userFilter: e.LDAP_USER_FILTER,
+            loginAttribute: e.LDAP_LOGIN_ATTRIBUTE,
             defaultRole: e.LDAP_DEFAULT_ROLE,
             tlsRejectUnauthorized: e.LDAP_TLS_REJECT_UNAUTHORIZED === 'true',
           }

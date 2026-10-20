@@ -203,6 +203,7 @@ describe('loadConfig', () => {
       bindPassword: undefined,
       baseDn: 'dc=example,dc=local',
       userFilter: '(sAMAccountName=%s)',
+      loginAttribute: 'uid',
       defaultRole: 'admin',
       tlsRejectUnauthorized: false,
     });

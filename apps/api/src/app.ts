@@ -12,6 +12,7 @@ import { registerErrorHandler } from './lib/errors';
 import { fallbackStore } from './lib/fallback-store';
 import { makeGuards } from './modules/auth/guards';
 import { registerAccessRoutes } from './modules/access/routes';
+import { registerOidcRoutes } from './modules/auth/oidc-routes';
 import { registerAuthRoutes } from './modules/auth/routes';
 import { registerDatasourceRoutes } from './modules/datasources/routes';
 import { registerBackupRoutes } from './modules/backups/routes';
@@ -119,6 +120,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   registerHealthRoutes(app, deps);
   registerVersionRoutes(app, deps, guards);
   registerAuthRoutes(app, deps, guards);
+  registerOidcRoutes(app, deps, guards);
   registerUserRoutes(app, deps, guards);
   registerAccessRoutes(app, deps, guards);
   registerDatasourceRoutes(app, deps, guards);

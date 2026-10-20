@@ -35,6 +35,7 @@ function cfg(over: Partial<LdapConfig> = {}): LdapConfig {
     url,
     baseDn: BASE_DN,
     userFilter: '(uid=%s)',
+    loginAttribute: 'uid',
     defaultRole: 'user',
     tlsRejectUnauthorized: true,
     ...over,
@@ -50,7 +51,7 @@ describe('LDAP-аутентификатор с настоящим серверо
   it('верный пароль — успех; поиск анонимный', async () => {
     const { warnings, log } = capturingLog();
     const auth = createLdapAuthenticator(cfg(), log);
-    expect(await auth.authenticate('fry', 'fry')).toBe(true);
+    expect(await auth.authenticate('fry', 'fry')).toBe('fry');
     expect(warnings).toEqual([]);
   });
 
@@ -59,45 +60,55 @@ describe('LDAP-аутентификатор с настоящим серверо
       cfg({ bindDn: ADMIN_DN, bindPassword: ADMIN_PASSWORD }),
       capturingLog().log,
     );
-    expect(await auth.authenticate('fry', 'fry')).toBe(true);
+    expect(await auth.authenticate('fry', 'fry')).toBe('fry');
   });
 
   it('DN с не-ASCII символами (bender) — успех', async () => {
     const auth = createLdapAuthenticator(cfg(), capturingLog().log);
-    expect(await auth.authenticate('bender', 'bender')).toBe(true);
+    expect(await auth.authenticate('bender', 'bender')).toBe('bender');
   });
 
   it('неверный пароль, неизвестный логин и пустой пароль — отказ', async () => {
     const auth = createLdapAuthenticator(cfg(), capturingLog().log);
-    expect(await auth.authenticate('fry', 'leela')).toBe(false);
-    expect(await auth.authenticate('nobody', 'fry')).toBe(false);
+    expect(await auth.authenticate('fry', 'leela')).toBeNull();
+    expect(await auth.authenticate('nobody', 'fry')).toBeNull();
     // Пустой пароль на сервере дал бы «unauthenticated bind» — успех без проверки пароля.
-    expect(await auth.authenticate('fry', '')).toBe(false);
+    expect(await auth.authenticate('fry', '')).toBeNull();
   });
 
-  it('фильтр с несколькими %s: вход по uid или по почте', async () => {
+  it('фильтр с несколькими %s: вход по uid или по почте — оба раза один канонический логин', async () => {
     const auth = createLdapAuthenticator(
       cfg({ userFilter: '(|(uid=%s)(mail=%s))' }),
       capturingLog().log,
     );
-    expect(await auth.authenticate('fry', 'fry')).toBe(true);
-    expect(await auth.authenticate('fry@planetexpress.com', 'fry')).toBe(true);
+    expect(await auth.authenticate('fry', 'fry')).toBe('fry');
+    // Вход по почте находит ту же запись, но канонический логин — всё равно uid (fry),
+    // а не введённый адрес: иначе у одного человека завелось бы два локальных аккаунта.
+    expect(await auth.authenticate('fry@planetexpress.com', 'fry')).toBe('fry');
+  });
+
+  it('LDAP_LOGIN_ATTRIBUTE не найден в записи — отказ, а не канонический логин = undefined', async () => {
+    const { warnings, log } = capturingLog();
+    const auth = createLdapAuthenticator(cfg({ loginAttribute: 'employeeNumber' }), log);
+    expect(await auth.authenticate('fry', 'fry')).toBeNull();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('employeeNumber');
   });
 
   it('фильтр нашёл больше одной записи — отказ', async () => {
     // (uid=user1*) совпадает с user1, user10, user100… из ou=large_ou.
     const auth = createLdapAuthenticator(cfg({ userFilter: '(uid=%s*)' }), capturingLog().log);
-    expect(await auth.authenticate('user1', 'user1')).toBe(false);
+    expect(await auth.authenticate('user1', 'user1')).toBeNull();
   });
 
   it('спецсимволы в логине не расширяют фильтр (LDAP-инъекция)', async () => {
     const auth = createLdapAuthenticator(cfg(), capturingLog().log);
-    expect(await auth.authenticate('*', 'fry')).toBe(false);
-    expect(await auth.authenticate('fr*', 'fry')).toBe(false);
-    expect(await auth.authenticate('fry)(uid=*', 'fry')).toBe(false);
-    expect(await auth.authenticate('*)(|(uid=*', 'fry')).toBe(false);
-    expect(await auth.authenticate('fry\\', 'fry')).toBe(false);
-    expect(await auth.authenticate('$`fry', 'fry')).toBe(false);
+    expect(await auth.authenticate('*', 'fry')).toBeNull();
+    expect(await auth.authenticate('fr*', 'fry')).toBeNull();
+    expect(await auth.authenticate('fry)(uid=*', 'fry')).toBeNull();
+    expect(await auth.authenticate('*)(|(uid=*', 'fry')).toBeNull();
+    expect(await auth.authenticate('fry\\', 'fry')).toBeNull();
+    expect(await auth.authenticate('$`fry', 'fry')).toBeNull();
   });
 
   it('неверный пароль сервисной учётной записи — отказ и предупреждение без пароля', async () => {
@@ -106,7 +117,7 @@ describe('LDAP-аутентификатор с настоящим серверо
       cfg({ bindDn: ADMIN_DN, bindPassword: 'wrong-service-password' }),
       log,
     );
-    expect(await auth.authenticate('fry', 'fry')).toBe(false);
+    expect(await auth.authenticate('fry', 'fry')).toBeNull();
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/^LDAP: поиск пользователя не удался/);
     expect(warnings[0]).not.toContain('wrong-service-password');
@@ -138,7 +149,7 @@ describe('LDAP-сервер недоступен', () => {
       connectTimeoutMs: 500,
     });
     const started = Date.now();
-    expect(await auth.authenticate('fry', 'fry')).toBe(false);
+    expect(await auth.authenticate('fry', 'fry')).toBeNull();
     expect(Date.now() - started).toBeLessThan(5_000);
     expect(warnings).toHaveLength(1);
   });
@@ -150,7 +161,7 @@ describe('LDAP-сервер недоступен', () => {
     await new Promise<void>((r) => closed.close(() => r()));
     const { warnings, log } = capturingLog();
     const auth = createLdapAuthenticator(cfg({ url: `ldap://127.0.0.1:${port}` }), log);
-    expect(await auth.authenticate('fry', 'fry')).toBe(false);
+    expect(await auth.authenticate('fry', 'fry')).toBeNull();
     expect(warnings).toHaveLength(1);
   });
 });
@@ -189,5 +200,26 @@ describe('POST /api/auth/login с настоящим LDAP', () => {
     expect(res.statusCode).toBe(401);
     const rows = await t.deps.db.select().from(users).where(eq(users.login, 'fry'));
     expect(rows).toHaveLength(0);
+  });
+
+  it('вход по uid и по почте — один и тот же локальный аккаунт (fry), не два', async () => {
+    await app({ userFilter: '(|(uid=%s)(mail=%s))' });
+    const byUid = await login({ login: 'fry', password: 'fry' });
+    expect(byUid.statusCode).toBe(200);
+    expect(byUid.json()).toMatchObject({ login: 'fry' });
+
+    const byMail = await login({ login: 'fry@planetexpress.com', password: 'fry' });
+    expect(byMail.statusCode).toBe(200);
+    // Канонический логин из LDAP (uid) — тот же аккаунт, не завёлся второй по адресу почты.
+    expect(byMail.json()).toMatchObject({ login: 'fry' });
+    expect(byMail.json()).toMatchObject({ id: byUid.json().id });
+
+    const rows = await t.deps.db.select().from(users).where(eq(users.login, 'fry'));
+    expect(rows).toHaveLength(1);
+    const byEmailLogin = await t.deps.db
+      .select()
+      .from(users)
+      .where(eq(users.login, 'fry@planetexpress.com'));
+    expect(byEmailLogin).toHaveLength(0);
   });
 });

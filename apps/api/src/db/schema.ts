@@ -28,15 +28,56 @@ import {
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
-export const users = pgTable('users', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  login: text('login').notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
-  role: text('role').$type<Role>().notNull(),
-  blocked: boolean('blocked').notNull().default(false),
-  sessionVersion: integer('session_version').notNull().default(0),
-  createdAt: createdAt(),
-});
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    login: text('login').notNull(),
+    passwordHash: text('password_hash').notNull(),
+    role: text('role').$type<Role>().notNull(),
+    blocked: boolean('blocked').notNull().default(false),
+    sessionVersion: integer('session_version').notNull().default(0),
+    createdAt: createdAt(),
+  },
+  // LDAP (особенно sAMAccountName в AD) регистр не различает: без этого индекса один
+  // человек мог бы получить два локальных аккаунта из-за расхождения регистра логина.
+  (t) => [uniqueIndex('users_login_lower_uq').on(sql`lower(${t.login})`)],
+);
+
+/** Внешняя личность не определяется почтой или изменяемым логином. */
+export const oidcIdentities = pgTable(
+  'oidc_identities',
+  {
+    issuer: text('issuer').notNull(),
+    subject: text('subject').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.issuer, t.subject] }),
+    index('oidc_identities_user_idx').on(t.userId),
+  ],
+);
+
+export const oidcSessions = pgTable(
+  'oidc_sessions',
+  {
+    id: uuid('id').primaryKey(),
+    issuer: text('issuer').notNull(),
+    subject: text('subject').notNull(),
+    providerSid: text('provider_sid'),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('oidc_sessions_provider_idx').on(t.issuer, t.providerSid),
+    index('oidc_sessions_subject_idx').on(t.issuer, t.subject),
+  ],
+);
 
 export const datasources = pgTable('datasources', {
   id: uuid('id').primaryKey().defaultRandom(),

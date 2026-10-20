@@ -1,13 +1,33 @@
-import { eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { eq, sql } from 'drizzle-orm';
 import { afterEach, describe, expect, it } from 'vitest';
 import { users } from '../src/db/schema';
 import type { LdapAuthenticator } from '../src/modules/auth/ldap';
 import { hashPassword } from '../src/modules/auth/password';
 import { createTestApp, type TestApp } from './helpers';
 
-function fakeLdap(allow: (login: string, password: string) => boolean): LdapAuthenticator {
-  return { authenticate: async (login, password) => allow(login, password) };
+/** canonicalLogin по умолчанию — login (как в большинстве тестов: находят себя же). */
+function fakeLdap(
+  allow: (login: string, password: string) => string | boolean | null,
+): LdapAuthenticator {
+  return {
+    authenticate: async (login, password) => {
+      const r = allow(login, password);
+      if (r === true) return login;
+      if (r === false || r == null) return null;
+      return r;
+    },
+  };
 }
+
+const ldapConfigDefaults = {
+  url: '',
+  baseDn: '',
+  userFilter: '(uid=%s)',
+  loginAttribute: 'uid',
+  defaultRole: 'user' as const,
+  tlsRejectUnauthorized: true,
+};
 
 const login = (t: TestApp, body: { login: string; password: string }) =>
   t.app.inject({ method: 'POST', url: '/api/auth/login', payload: body });
@@ -20,13 +40,7 @@ describe('вход через LDAP', () => {
     t = await createTestApp(
       { ldap: fakeLdap(() => true) },
       {
-        ldap: {
-          url: '',
-          baseDn: '',
-          userFilter: '(uid=%s)',
-          defaultRole: 'user',
-          tlsRejectUnauthorized: true,
-        },
+        ldap: ldapConfigDefaults,
       },
     );
     const res = await login(t, { login: 'novy', password: 'что-угодно' });
@@ -40,13 +54,7 @@ describe('вход через LDAP', () => {
     t = await createTestApp(
       { ldap: fakeLdap(() => true) },
       {
-        ldap: {
-          url: '',
-          baseDn: '',
-          userFilter: '(uid=%s)',
-          defaultRole: 'user',
-          tlsRejectUnauthorized: true,
-        },
+        ldap: ldapConfigDefaults,
       },
     );
     await t.deps.db.insert(users).values({
@@ -63,13 +71,7 @@ describe('вход через LDAP', () => {
     t = await createTestApp(
       { ldap: fakeLdap(() => false) },
       {
-        ldap: {
-          url: '',
-          baseDn: '',
-          userFilter: '(uid=%s)',
-          defaultRole: 'user',
-          tlsRejectUnauthorized: true,
-        },
+        ldap: ldapConfigDefaults,
       },
     );
     await t.deps.db
@@ -85,13 +87,7 @@ describe('вход через LDAP', () => {
     t = await createTestApp(
       { ldap: fakeLdap(() => true) },
       {
-        ldap: {
-          url: '',
-          baseDn: '',
-          userFilter: '(uid=%s)',
-          defaultRole: 'user',
-          tlsRejectUnauthorized: true,
-        },
+        ldap: ldapConfigDefaults,
       },
     );
     await t.deps.db.insert(users).values({
@@ -120,19 +116,13 @@ describe('вход через LDAP', () => {
         ldap: {
           authenticate: async (l) => {
             calls.push(l);
-            return true;
+            return l;
           },
         },
       },
       {
         adminLogin: 'admin',
-        ldap: {
-          url: '',
-          baseDn: '',
-          userFilter: '(uid=%s)',
-          defaultRole: 'user',
-          tlsRejectUnauthorized: true,
-        },
+        ldap: ldapConfigDefaults,
       },
     );
     await t.deps.db
@@ -145,5 +135,98 @@ describe('вход через LDAP', () => {
     const local = await login(t, { login: 'admin', password: 'local-secret' });
     expect(local.statusCode).toBe(200);
     expect(calls).toEqual([]);
+  });
+
+  it('ADMIN_LOGIN в другом регистре — LDAP не опрашивается, сессии администратора нет', async () => {
+    const calls: string[] = [];
+    t = await createTestApp(
+      {
+        ldap: {
+          authenticate: async (l) => {
+            calls.push(l);
+            return l;
+          },
+        },
+      },
+      { adminLogin: 'admin', ldap: ldapConfigDefaults },
+    );
+    await t.deps.db
+      .insert(users)
+      .values({ login: 'admin', passwordHash: await hashPassword('local-secret'), role: 'admin' });
+    for (const variant of ['Admin', 'ADMIN']) {
+      const res = await login(t, { login: variant, password: 'пароль-из-каталога' });
+      expect(res.statusCode).toBe(401);
+    }
+    expect(calls).toEqual([]);
+  });
+
+  it('канонический логин из LDAP = ADMIN_LOGIN (вход по почте) — 401 без отката на локальный пароль', async () => {
+    t = await createTestApp(
+      { ldap: fakeLdap(() => 'Admin') },
+      { adminLogin: 'admin', ldap: ldapConfigDefaults },
+    );
+    await t.deps.db
+      .insert(users)
+      .values({ login: 'admin', passwordHash: await hashPassword('local-secret'), role: 'admin' });
+    // Локальный аккаунт с введённым логином есть и пароль к нему верный, но LDAP уже
+    // сопоставил ввод с записью администратора: отказ, а не вход по локальному паролю.
+    await t.deps.db.insert(users).values({
+      login: 'admin@example.com',
+      passwordHash: await hashPassword('local-secret'),
+      role: 'user',
+    });
+    const res = await login(t, { login: 'admin@example.com', password: 'local-secret' });
+    expect(res.statusCode).toBe(401);
+    expect(res.cookies.some((c) => c.name === 'session')).toBe(false);
+  });
+
+  it('без LDAP_LOGIN_ATTRIBUTE аккаунт ищется по введённому логину (прежнее поведение)', async () => {
+    t = await createTestApp(
+      { ldap: fakeLdap(() => true) },
+      { ldap: { ...ldapConfigDefaults, loginAttribute: undefined } },
+    );
+    const res = await login(t, { login: 'ivanov@example.com', password: 'что-угодно' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ login: 'ivanov@example.com' });
+  });
+
+  it('канонический логин из LDAP отличается от введённого (вход по почте) — заводит и находит один аккаунт', async () => {
+    // LDAP_USER_FILTER вправе искать и по почте, но локальный логин — атрибут LDAP_LOGIN_ATTRIBUTE
+    // (здесь — uid), а не то, что ввёл пользователь.
+    t = await createTestApp({ ldap: fakeLdap(() => 'ivanov') }, { ldap: ldapConfigDefaults });
+    const first = await login(t, { login: 'ivanov@example.com', password: 'что-угодно' });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({ login: 'ivanov' });
+
+    const second = await login(t, { login: 'ivanov', password: 'другой-пароль-тоже-ок' });
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({ login: 'ivanov', id: first.json().id });
+
+    const rows = await t.deps.db.select().from(users).where(eq(users.login, 'ivanov'));
+    expect(rows).toHaveLength(1);
+    const byEmail = await t.deps.db
+      .select()
+      .from(users)
+      .where(eq(users.login, 'ivanov@example.com'));
+    expect(byEmail).toHaveLength(0);
+  });
+
+  it('канонический логин из LDAP отличается регистром от уже заведённого аккаунта — не дублирует его', async () => {
+    // Старый локальный аккаунт мог завестись в другом регистре (например, раньше каталог
+    // отдавал «petrov», теперь — «Petrov»): это по-прежнему один и тот же человек.
+    t = await createTestApp({ ldap: fakeLdap(() => 'Petrov') }, { ldap: ldapConfigDefaults });
+    const existing = await t.deps.db
+      .insert(users)
+      .values({ login: 'petrov', passwordHash: await hashPassword(randomUUID()), role: 'admin' })
+      .returning();
+    const res = await login(t, { login: 'petrov', password: 'что-угодно' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ login: 'petrov', role: 'admin', id: existing[0]!.id });
+
+    const rows = await t.deps.db
+      .select()
+      .from(users)
+      .where(sql`lower(${users.login}) = lower('petrov')`);
+    expect(rows).toHaveLength(1);
   });
 });

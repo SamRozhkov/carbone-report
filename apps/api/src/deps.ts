@@ -11,6 +11,7 @@ import type { Db } from './db/client';
 import type { RunFileGate } from './lib/run-file-gate';
 import type { Storage } from './lib/storage';
 import type { LdapAuthenticator } from './modules/auth/ldap';
+import type { OidcClient } from './modules/auth/oidc-client';
 import type { AgentClient } from './modules/backups/agent-client';
 import type { RenderHandoff } from './modules/render/handoff';
 
@@ -89,6 +90,8 @@ export interface AppDeps {
   redis: Redis | null;
   /** null, если LDAP не настроен (LDAP_ENABLED=false) — вход только по локальному паролю. */
   ldap: LdapAuthenticator | null;
+  /** Клиент Keycloak вместо настоящего (тестам); нет — создаётся по config.oidc. */
+  oidcClient?: OidcClient;
   /** Агент бэкапа (§26.3); null — управление бэкапами в админке выключено. */
   backupAgent: AgentClient | null;
   /** Разовые файлы рендера для Document Server в памяти этой реплики. */

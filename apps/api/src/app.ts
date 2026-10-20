@@ -12,6 +12,7 @@ import { registerErrorHandler } from './lib/errors';
 import { fallbackStore } from './lib/fallback-store';
 import { makeGuards } from './modules/auth/guards';
 import { registerAccessRoutes } from './modules/access/routes';
+import { registerOidcRoutes } from './modules/auth/oidc-routes';
 import { registerAuthRoutes } from './modules/auth/routes';
 import { registerDatasourceRoutes } from './modules/datasources/routes';
 import { registerBackupRoutes } from './modules/backups/routes';
@@ -30,6 +31,13 @@ export type { AppDeps };
 
 /** Токен файлового доступа передаётся в query-параметре t: в логи он не попадает. */
 export const redactToken = (url?: string) => url?.replace(/([?&])t=[^&]*/g, '$1t=***');
+
+/**
+ * URL запроса для журнала: у маршрутов OIDC query не пишется вовсе — в callback это код
+ * авторизации и state; у остальных скрыт токен файлового доступа.
+ */
+export const logUrl = (url?: string) =>
+  url?.startsWith('/api/auth/oidc/') ? url.split('?')[0] : redactToken(url);
 
 /**
  * Сколько прокси стоит перед API. Сейчас один — nginx: req.ip — последний адрес
@@ -60,7 +68,7 @@ export function createFastify(hops: number = TRUSTED_PROXY_HOPS) {
             serializers: {
               req: (req: { method?: string; url?: string }) => ({
                 method: req.method,
-                url: redactToken(req.url),
+                url: logUrl(req.url),
               }),
             },
           },
@@ -121,6 +129,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   registerHealthRoutes(app, deps);
   registerVersionRoutes(app, deps, guards);
   registerAuthRoutes(app, deps, guards);
+  registerOidcRoutes(app, deps, guards, deps.oidcClient);
   registerUserRoutes(app, deps, guards);
   registerSignatureRoutes(app, deps, guards);
   registerAccessRoutes(app, deps, guards);

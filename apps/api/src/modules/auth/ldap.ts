@@ -2,8 +2,25 @@ import { Client } from 'ldapts';
 import type { LdapConfig } from '../../config';
 
 export interface LdapAuthenticator {
-  /** true — связка логин/пароль подтверждена сервером LDAP. */
-  authenticate(login: string, password: string): Promise<boolean>;
+  /**
+   * Связка логин/пароль подтверждена сервером LDAP — возвращает канонический логин, иначе null.
+   * Без LDAP_LOGIN_ATTRIBUTE канонический логин — введённая строка (поведение прежних версий).
+   * С ним — значение этого атрибута найденной записи: оно может отличаться от того, что ввёл
+   * пользователь, ведь LDAP_USER_FILTER вправе искать запись по нескольким атрибутам
+   * (например, по логину и по почте), а локальный аккаунт при этом должен быть один и тот же
+   * независимо от того, как человек вошёл.
+   */
+  authenticate(login: string, password: string): Promise<string | null>;
+}
+
+/** Значение LDAP-атрибута к строке: ldapts отдаёт string, string[] или Buffer в зависимости от поля. */
+function attributeToString(
+  value: string | string[] | Buffer | Buffer[] | undefined,
+): string | null {
+  if (value == null) return null;
+  const first = Array.isArray(value) ? value[0] : value;
+  if (first == null) return null;
+  return Buffer.isBuffer(first) ? first.toString('utf8') : first;
 }
 
 /**
@@ -68,24 +85,39 @@ export function createLdapAuthenticator(
   });
   return {
     async authenticate(login, password) {
-      if (!isUsablePassword(password)) return false;
+      if (!isUsablePassword(password)) return null;
       const filter = buildLdapFilter(config.userFilter, login);
       const searchClient = new Client(clientOptions());
       let userDn: string;
+      let canonicalLogin: string;
       try {
         if (config.bindDn) {
           await searchClient.bind(config.bindDn, config.bindPassword ?? '');
         }
+        const attribute = config.loginAttribute;
         const { searchEntries } = await searchClient.search(config.baseDn, {
           scope: 'sub',
           filter,
-          attributes: ['dn'],
+          attributes: attribute ? ['dn', attribute] : ['dn'],
         });
-        if (searchEntries.length !== 1) return false;
-        userDn = searchEntries[0]!.dn;
+        if (searchEntries.length !== 1) return null;
+        const entry = searchEntries[0]!;
+        userDn = entry.dn;
+        if (attribute) {
+          // Запись найдена (например, по почте), но без атрибута канонического логина —
+          // заводить локальный аккаунт не по чему, вход отклоняется.
+          const resolved = attributeToString(entry[attribute]);
+          if (!resolved) {
+            log.warn(`LDAP: у найденной записи нет атрибута ${attribute} (LDAP_LOGIN_ATTRIBUTE)`);
+            return null;
+          }
+          canonicalLogin = resolved;
+        } else {
+          canonicalLogin = login;
+        }
       } catch (err) {
         log.warn(`LDAP: поиск пользователя не удался — ${(err as Error).message}`);
-        return false;
+        return null;
       } finally {
         await searchClient.unbind().catch(() => {});
       }
@@ -93,9 +125,9 @@ export function createLdapAuthenticator(
       const userClient = new Client(clientOptions());
       try {
         await userClient.bind(userDn, password);
-        return true;
+        return canonicalLogin;
       } catch {
-        return false;
+        return null;
       } finally {
         await userClient.unbind().catch(() => {});
       }

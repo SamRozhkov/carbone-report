@@ -12,10 +12,21 @@ export interface SessionUser {
 
 export interface SessionClaims extends SessionUser {
   sv: number;
+  oidcSessionId?: string;
 }
 
-export function signSession(user: SessionUser, sv: number, secret: Uint8Array): Promise<string> {
-  return new SignJWT({ login: user.login, role: user.role, sv })
+export function signSession(
+  user: SessionUser,
+  sv: number,
+  secret: Uint8Array,
+  oidcSessionId?: string,
+): Promise<string> {
+  return new SignJWT({
+    login: user.login,
+    role: user.role,
+    sv,
+    ...(oidcSessionId ? { oidcSessionId } : {}),
+  })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(user.id)
     .setIssuedAt()
@@ -33,7 +44,20 @@ export async function verifySession(
     if (!payload.sub || typeof payload.login !== 'string' || !role.success) return null;
     // Cookie, выпущенные до появления отзыва сессий, не содержат sv и недействительны.
     if (!Number.isInteger(payload.sv)) return null;
-    return { id: payload.sub, login: payload.login, role: role.data, sv: payload.sv as number };
+    if (
+      payload.oidcSessionId !== undefined &&
+      (typeof payload.oidcSessionId !== 'string' || !/^[0-9a-f-]{36}$/i.test(payload.oidcSessionId))
+    )
+      return null;
+    return {
+      id: payload.sub,
+      login: payload.login,
+      role: role.data,
+      sv: payload.sv as number,
+      ...(typeof payload.oidcSessionId === 'string'
+        ? { oidcSessionId: payload.oidcSessionId }
+        : {}),
+    };
   } catch {
     return null;
   }

@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { users } from '../../db/schema';
+import { oidcSessions, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { forbidden, unauthorized } from '../../lib/errors';
 import { SESSION_COOKIE, verifySession, type SessionUser } from './session';
@@ -9,6 +9,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     user?: SessionUser;
     sessionVersion?: number;
+    oidcSessionId?: string;
   }
 }
 
@@ -25,6 +26,21 @@ export function makeGuards(deps: AppDeps) {
     // Роль, блокировка и версия сессий берутся из БД: изменения применяются сразу, без перевыпуска cookie.
     const [row] = await deps.db.select().from(users).where(eq(users.id, session.id));
     if (!row || row.blocked || row.sessionVersion !== session.sv) throw unauthorized();
+    if (session.oidcSessionId) {
+      if (!deps.config.oidc) throw unauthorized();
+      const [external] = await deps.db
+        .select()
+        .from(oidcSessions)
+        .where(eq(oidcSessions.id, session.oidcSessionId));
+      if (
+        !external ||
+        external.userId !== row.id ||
+        external.revokedAt ||
+        external.expiresAt.getTime() <= Date.now()
+      )
+        throw unauthorized();
+      req.oidcSessionId = external.id;
+    }
     req.sessionVersion = session.sv;
     req.user = { id: row.id, login: row.login, role: row.role };
   }

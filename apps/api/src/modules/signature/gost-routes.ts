@@ -170,7 +170,8 @@ export function registerGostSignRoutes(app: App, deps: AppDeps, guards: Guards):
             throw badRequest('итоговый PDF больше 100 МБ');
           const draftPath = gostDraftPath(run.id);
           // Черновик пишется до строки: строка ожидания всегда указывает на записанный файл.
-          // Путь один на запуск — повторная подготовка перезаписывает прежний черновик.
+          // Путь у каждой подготовки свой: прежний черновик не трогается до фиксации новой строки
+          // (сбой фиксации оставит прежнюю строку с её же черновиком), затем удаляется (oldDraft).
           const values = {
             userId: me.id,
             certDer,
@@ -186,8 +187,7 @@ export function registerGostSignRoutes(app: App, deps: AppDeps, guards: Guards):
               .values({ runId: run.id, ...values })
               .onConflictDoUpdate({ target: gostSignPending.runId, set: values });
           } catch (e) {
-            // Прежняя строка (откат) не должна остаться с чужим черновиком: без файла завершение
-            // ответит «начните подписание заново», а не выдаст PDF, не совпадающий с хешем.
+            // Новый черновик не нужен ни одной строке (откат) — не оставляем сироту.
             await storage
               .remove(draftPath)
               .catch((err) => req.log.warn({ err, runId: run.id }, 'черновик ГОСТ не удалён'));
@@ -217,7 +217,7 @@ export function registerGostSignRoutes(app: App, deps: AppDeps, guards: Guards):
       const run = await loadGostRun(deps, req.params.id, me.id);
       const signature = Buffer.from(req.body.signature, 'base64');
       if (signature.length > MAX_SIGNATURE_BYTES) throw badRequest('подпись больше 64 КБ');
-      // Черновик удаляется под блокировкой пользователя: его же подготовка не перепишет файл в этот момент.
+      // Черновик удаляется под блокировкой пользователя, как и меняется строка ожидания.
       // Сбой удаления не мешает ответу — файл-сирота уйдёт с каталогом запуска.
       const removeDraft = (path: string) =>
         storage

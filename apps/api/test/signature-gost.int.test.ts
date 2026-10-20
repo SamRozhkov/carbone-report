@@ -29,8 +29,10 @@ const carbone: CarboneRenderer = {
   },
 };
 
-// Штамп не ставится: черновик = out.pdf. Ворота — для проверки одновременной подготовки (SIGN_BUSY).
+// Штамп не ставится: черновик = out.pdf. Ворота — для проверки одновременной подготовки (SIGN_BUSY);
+// altered — черновик с другими байтами (как штамп с другим временем у повторной подготовки).
 let hold: { entered: () => void; gate: Promise<void> } | null = null;
+let altered = false;
 const gostPrepare: GostPreparer = async (pdf) => {
   const h = hold;
   if (h) {
@@ -38,7 +40,8 @@ const gostPrepare: GostPreparer = async (pdf) => {
     h.entered();
     await h.gate;
   }
-  return { pdf, hash: streebog(256, pdf) };
+  const out = altered ? Buffer.concat([pdf, Buffer.from('%altered\n')]) : pdf;
+  return { pdf: out, hash: streebog(256, out) };
 };
 
 interface Env {
@@ -106,6 +109,7 @@ afterAll(async () => {
 });
 beforeEach(async () => {
   hold = null;
+  altered = false;
   user = await loginAs(env.t, 'user');
 });
 
@@ -137,7 +141,10 @@ const download = (cookie: string, runId: string, query: string, e = env) =>
   e.t.app.inject({ method: 'GET', url: `/api/runs/${runId}/file?${query}`, headers: { cookie } });
 const pendingOf = (runId: string, e = env) =>
   e.t.deps.db.select().from(gostSignPending).where(eq(gostSignPending.runId, runId));
-const draft = (runId: string) => `reports/${runId}/out.gost.pdf`;
+/** Путь черновика у каждой подготовки свой (§42.2). */
+const draftRe = (runId: string) =>
+  new RegExp(`^reports/${runId}/out\\.gost\\.[0-9a-f-]{36}\\.pdf$`);
+const draftOf = async (runId: string, e = env) => (await pendingOf(runId, e))[0]!.draftPath;
 
 describe('подготовка подписи ГОСТ (§42.2)', () => {
   it('успех: хеш черновика, строка ожидания, черновик в хранилище', async () => {
@@ -149,14 +156,14 @@ describe('подготовка подписи ГОСТ (§42.2)', () => {
     expect(row).toMatchObject({
       userId: user.user.id,
       hashAlg: 'streebog256',
-      draftPath: draft(runId),
+      draftPath: expect.stringMatching(draftRe(runId)),
     });
     expect(Buffer.from(row!.hash).toString('hex')).toBe(docHash);
     expect(Buffer.from(row!.certDer).toString('base64')).toBe(certB64('user256a.pem'));
     const ttl = row!.expiresAt.getTime() - Date.now();
     expect(ttl).toBeGreaterThan(14 * 60_000);
     expect(ttl).toBeLessThanOrEqual(15 * 60_000);
-    expect(await env.t.deps.storage.read(draft(runId))).toEqual(docPdf);
+    expect(await env.t.deps.storage.read(row!.draftPath)).toEqual(docPdf);
   });
 
   it.each([
@@ -171,7 +178,6 @@ describe('подготовка подписи ГОСТ (§42.2)', () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toMatchObject({ message });
     expect(await pendingOf(runId)).toHaveLength(0);
-    expect(await env.t.deps.storage.exists(draft(runId))).toBe(false);
   });
 
   it('чужой запуск — 404 (и для администратора); .p12-шаблон — 400', async () => {
@@ -206,16 +212,49 @@ describe('подготовка подписи ГОСТ (§42.2)', () => {
     expect((await prepare(user.cookie, runId)).statusCode).toBe(200);
     const rows = await pendingOf(runId);
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.draftPath).toBe(draft(runId));
+    expect(rows[0]!.draftPath).toMatch(draftRe(runId));
     expect(Buffer.from(rows[0]!.certDer).toString('base64')).toBe(certB64('user256a.pem'));
     expect(Buffer.from(rows[0]!.hash).toString('hex')).toBe(docHash);
     expect(await env.t.deps.storage.exists(oldDraft)).toBe(false);
-    // Тот же путь: повтор перезаписывает черновик, ожидание одно.
+    // Повтор: новый путь, прежний черновик удалён, ожидание одно.
+    const first = rows[0]!.draftPath;
     expect((await prepare(user.cookie, runId, certB64('other256.pem'))).statusCode).toBe(200);
     const again = await pendingOf(runId);
     expect(again).toHaveLength(1);
     expect(Buffer.from(again[0]!.certDer).toString('base64')).toBe(certB64('other256.pem'));
-    expect(await env.t.deps.storage.exists(draft(runId))).toBe(true);
+    expect(again[0]!.draftPath).toMatch(draftRe(runId));
+    expect(again[0]!.draftPath).not.toBe(first);
+    expect(await env.t.deps.storage.exists(first)).toBe(false);
+    expect(await env.t.deps.storage.exists(again[0]!.draftPath)).toBe(true);
+  });
+
+  it('сбой фиксации повторной подготовки: прежняя строка с нетронутым черновиком, подпись совпадает', async () => {
+    const runId = await render(user.cookie);
+    expect((await prepare(user.cookie, runId)).statusCode).toBe(200);
+    const [old] = await pendingOf(runId);
+    // Отложенный триггер падает на COMMIT — уже после записи нового черновика и upsert строки.
+    await env.t.deps.db.execute(sql`
+      CREATE FUNCTION fail_gost_pending_commit() RETURNS trigger LANGUAGE plpgsql AS
+        $$ BEGIN RAISE EXCEPTION 'test: commit failed'; END $$`);
+    await env.t.deps.db.execute(sql`
+      CREATE CONSTRAINT TRIGGER fail_gost_pending_commit AFTER UPDATE ON gost_sign_pending
+        DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION fail_gost_pending_commit()`);
+    altered = true;
+    try {
+      expect((await prepare(user.cookie, runId)).statusCode).toBe(500);
+    } finally {
+      altered = false;
+      await env.t.deps.db.execute(sql`DROP TRIGGER fail_gost_pending_commit ON gost_sign_pending`);
+      await env.t.deps.db.execute(sql`DROP FUNCTION fail_gost_pending_commit()`);
+    }
+    const [kept] = await pendingOf(runId);
+    expect(kept!.draftPath).toBe(old!.draftPath);
+    expect(Buffer.from(kept!.hash).toString('hex')).toBe(docHash);
+    expect(await env.t.deps.storage.read(kept!.draftPath)).toEqual(docPdf);
+    // Клиент с прежним хешем завершает подпись: подписанный PDF — ровно то, что покрывает .sig.
+    expect((await complete(user.cookie, runId, sigB64('bes-256a.sig'))).statusCode).toBe(201);
+    const signed = await download(user.cookie, runId, 'format=pdf&signed=1');
+    expect(Buffer.from(streebog(256, signed.rawPayload)).toString('hex')).toBe(docHash);
   });
 
   it('одновременная вторая подготовка того же пользователя — 409 SIGN_BUSY', async () => {
@@ -247,6 +286,7 @@ describe('завершение подписи ГОСТ (§42.2, §42.6)', () => 
   it('успех: 201, история, PDF и .sig скачиваются', async () => {
     const runId = await render(user.cookie);
     expect((await prepare(user.cookie, runId)).statusCode).toBe(200);
+    const draftPath = await draftOf(runId);
     const before = Date.now();
     const res = await complete(user.cookie, runId, sigB64('bes-256a.sig'));
     expect(res.statusCode).toBe(201);
@@ -259,7 +299,7 @@ describe('завершение подписи ГОСТ (§42.2, §42.6)', () => 
     expect(body.fingerprint).toMatch(/^[0-9A-F]{64}$/);
     expect(new Date(body.signedAt).getTime()).toBeGreaterThanOrEqual(before - 1000);
     expect(await pendingOf(runId)).toHaveLength(0);
-    expect(await env.t.deps.storage.exists(draft(runId))).toBe(false);
+    expect(await env.t.deps.storage.exists(draftPath)).toBe(false);
     const [sig] = await env.t.deps.db
       .select()
       .from(reportRunSignatures)
@@ -327,7 +367,7 @@ describe('завершение подписи ГОСТ (§42.2, §42.6)', () => 
     expect(bad.statusCode).toBe(400);
     expect(bad.json().error).toMatchObject({ message: 'подпись недействительна' });
     expect(await pendingOf(runId)).toHaveLength(1);
-    expect(await env.t.deps.storage.exists(draft(runId))).toBe(true);
+    expect(await env.t.deps.storage.exists(await draftOf(runId))).toBe(true);
     expect(await env.t.deps.storage.exists(`reports/${runId}/out.signed.pdf`)).toBe(false);
     expect(await env.t.deps.storage.exists(`reports/${runId}/out.signed.pdf.sig`)).toBe(false);
     expect((await complete(user.cookie, runId, sigB64('bes-256a.sig'))).statusCode).toBe(201);
@@ -355,6 +395,7 @@ describe('завершение подписи ГОСТ (§42.2, §42.6)', () => 
     expect(none.statusCode).toBe(409);
     expect(none.json().error).toMatchObject({ message: 'начните подписание заново' });
     expect((await prepare(user.cookie, runId)).statusCode).toBe(200);
+    const draftPath = await draftOf(runId);
     await env.t.deps.db.execute(
       sql`update gost_sign_pending set expires_at = now() - interval '1 minute' where run_id = ${runId}`,
     );
@@ -362,7 +403,7 @@ describe('завершение подписи ГОСТ (§42.2, §42.6)', () => 
     expect(expired.statusCode).toBe(409);
     expect(expired.json().error).toMatchObject({ message: 'начните подписание заново' });
     expect(await pendingOf(runId)).toHaveLength(0);
-    expect(await env.t.deps.storage.exists(draft(runId))).toBe(false);
+    expect(await env.t.deps.storage.exists(draftPath)).toBe(false);
   });
 
   it('вставка строки подписи упала — файлы удалены, ожидание остаётся, повтор подписывает', async () => {
@@ -379,7 +420,7 @@ describe('завершение подписи ГОСТ (§42.2, §42.6)', () => 
       expect(await env.t.deps.storage.exists(`reports/${runId}/out.signed.pdf`)).toBe(false);
       expect(await env.t.deps.storage.exists(`reports/${runId}/out.signed.pdf.sig`)).toBe(false);
       expect(await pendingOf(runId)).toHaveLength(1);
-      expect(await env.t.deps.storage.exists(draft(runId))).toBe(true);
+      expect(await env.t.deps.storage.exists(await draftOf(runId))).toBe(true);
     } finally {
       await env.t.deps.db.execute(sql`DROP TRIGGER fail_gost_insert ON report_run_signatures`);
       await env.t.deps.db.execute(sql`DROP FUNCTION fail_gost_insert()`);
@@ -396,7 +437,7 @@ describe('настоящая подготовка (штамп §42.3)', () => {
       const runId = await render(u.cookie, e.gostId, e);
       const res = await prepare(u.cookie, runId, undefined, e);
       expect(res.statusCode).toBe(200);
-      const stamped = await e.t.deps.storage.read(draft(runId));
+      const stamped = await e.t.deps.storage.read(await draftOf(runId, e));
       expect(stamped.equals(docPdf)).toBe(false);
       expect(res.json().hash).toBe(Buffer.from(streebog(256, stamped)).toString('hex'));
       expect(await e.t.deps.storage.read(`reports/${runId}/out.pdf`)).toEqual(docPdf);
@@ -436,15 +477,16 @@ describe('очистка (§42.5)', () => {
     const old = await render(user.cookie);
     expect((await prepare(user.cookie, live)).statusCode).toBe(200);
     expect((await prepare(user.cookie, old)).statusCode).toBe(200);
+    const [liveDraft, oldDraft] = [await draftOf(live), await draftOf(old)];
     await env.t.deps.db
       .update(gostSignPending)
       .set({ expiresAt: new Date(Date.now() - 1000) })
       .where(eq(gostSignPending.runId, old));
     expect(await cleanupGostPending(env.t.deps)).toBeGreaterThanOrEqual(1);
     expect(await pendingOf(old)).toHaveLength(0);
-    expect(await env.t.deps.storage.exists(draft(old))).toBe(false);
+    expect(await env.t.deps.storage.exists(oldDraft)).toBe(false);
     expect(await pendingOf(live)).toHaveLength(1);
-    expect(await env.t.deps.storage.exists(draft(live))).toBe(true);
+    expect(await env.t.deps.storage.exists(liveDraft)).toBe(true);
   });
 
   it('cleanupOldReports удаляет ожидание запуска и каталог с .sig', async () => {
@@ -453,13 +495,14 @@ describe('очистка (§42.5)', () => {
     expect((await complete(user.cookie, signed, sigB64('bes-256a.sig'))).statusCode).toBe(201);
     const waiting = await render(user.cookie);
     expect((await prepare(user.cookie, waiting)).statusCode).toBe(200);
+    const waitingDraft = await draftOf(waiting);
     await env.t.deps.db
       .update(reportRuns)
       .set({ createdAt: new Date('2000-01-01') })
       .where(sql`${reportRuns.id} in (${signed}, ${waiting})`);
     await cleanupOldReports(env.t.deps);
     expect(await pendingOf(waiting)).toHaveLength(0);
-    expect(await env.t.deps.storage.exists(draft(waiting))).toBe(false);
+    expect(await env.t.deps.storage.exists(waitingDraft)).toBe(false);
     expect(await env.t.deps.storage.exists(`reports/${signed}/out.signed.pdf.sig`)).toBe(false);
     expect(
       await env.t.deps.db

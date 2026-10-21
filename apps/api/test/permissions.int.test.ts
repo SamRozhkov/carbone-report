@@ -129,11 +129,14 @@ describe('права на шаблон (§43.1)', () => {
   });
 
   it('шаблон «доступен всем»: видящим его без права правки — 403', async () => {
-    await t.deps.db.update(templates).set({ public: true }).where(eq(templates.id, tplId));
-    expect(await rights(actors.other)).toEqual([false, 403, 403]);
-    expect(await rights(actors.accessManager)).toEqual([false, 403, 403]);
-    expect(await rights(actors.plain)).toEqual([false, 403, 403]);
-    await expect(assertTemplateEdit(t.deps.db, actors.other.user, tplId)).rejects.toMatchObject({
+    // Отдельный шаблон: общий tplId остаётся закрытым для остальных тестов.
+    const id = await insertTemplate(actors.owner.user.id);
+    await t.deps.db.update(templates).set({ public: true }).where(eq(templates.id, id));
+    expect(await rights(actors.owner, id)).toEqual([true, 200, 200]);
+    expect(await rights(actors.other, id)).toEqual([false, 403, 403]);
+    expect(await rights(actors.accessManager, id)).toEqual([false, 403, 403]);
+    expect(await rights(actors.plain, id)).toEqual([false, 403, 403]);
+    await expect(assertTemplateEdit(t.deps.db, actors.other.user, id)).rejects.toMatchObject({
       status: 403,
       message: 'нет права на правку шаблона',
     });

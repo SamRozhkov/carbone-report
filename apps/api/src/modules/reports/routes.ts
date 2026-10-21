@@ -323,7 +323,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
 
   app.post(
     '/api/templates/:id/queries/run',
-    { preHandler: guards.requireAdmin, schema: { params: IdParams, body: RunQueryBody } },
+    { preHandler: guards.requireTemplateEdit, schema: { params: IdParams, body: RunQueryBody } },
     async (req) => {
       const full = await loadTemplateFull(db, req.params.id);
       const { pool, name } = await deps.sources.get(full.row.datasourceId);
@@ -337,10 +337,9 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
 
   app.post(
     '/api/templates/:id/preview',
-    { preHandler: guards.requireAdmin, schema: { params: IdParams, body: PreviewBody } },
+    { preHandler: guards.requireTemplateEdit, schema: { params: IdParams, body: PreviewBody } },
     async (req, reply) => {
       const deadline = new Deadline(deps.config.reportTimeoutMs);
-      await assertTemplateAccess(db, currentUser(req), req.params.id);
       const full = await loadTemplateFull(db, req.params.id);
       const { data } = await collectReportData(deps, full, req.body.params, deadline);
       if (req.body.mode === 'data') return data;

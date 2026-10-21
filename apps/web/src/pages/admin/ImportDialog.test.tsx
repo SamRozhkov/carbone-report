@@ -36,6 +36,7 @@ const item = (over: Record<string, unknown>) => ({
   datasourceMatch: DS1,
   category: null,
   categoryExists: true,
+  categorySkipped: false,
   groups: [],
   missingGroups: [],
   pdfPasswordSet: false,
@@ -51,7 +52,7 @@ const preview = (templates: unknown[]) => ({
 const base = [
   adminMe,
   { path: '/api/templates', body: [] },
-  { path: '/api/datasources', body: ds },
+  { path: '/api/datasources/options', body: ds },
 ];
 
 async function openDialog(file = new File(['PK'], 'a.crt.zip')) {
@@ -389,6 +390,19 @@ describe('ImportDialog', () => {
     const dialog = await openDialog();
     expect(await within(dialog).findByText(/Архив больше 50 МБ/)).toBeInTheDocument();
   });
+  it('категория пропускается (у редактора) → «категория не будет создана» (§43.3)', async () => {
+    mockApi([
+      ...base,
+      {
+        method: 'POST',
+        path: '/api/templates/import/preview',
+        body: preview([item({ category: 'Счета', categoryExists: false, categorySkipped: true })]),
+      },
+    ]);
+    const dialog = await openDialog();
+    expect(await within(dialog).findByText(/категория не будет создана/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Будет создана категория/)).not.toBeInTheDocument();
+  });
 });
 
 describe('Выгрузка шаблонов', () => {
@@ -432,7 +446,8 @@ describe('Выгрузка шаблонов', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Выгрузить (201)' }));
     expect(await screen.findByText(/не больше 200 шаблонов, выбрано 201/)).toBeInTheDocument();
     expect(calls.some((c) => c.path === '/api/templates/export')).toBe(false);
-  });
+    // Таблица из 201 строки под нагрузкой полного прогона рисуется дольше 5 с.
+  }, 15_000);
 
   it('ошибка 400 → текст сервера в уведомлении', async () => {
     mockApi([

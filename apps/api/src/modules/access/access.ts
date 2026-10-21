@@ -5,7 +5,7 @@ import { notFound } from '../../lib/errors';
 import type { SessionUser } from '../auth/session';
 
 /** exists() из drizzle не берёт сырой sql`` в скобки (получается `exists select …`). */
-const existsSub = (subquery: SQL): SQL => sql`exists (${subquery})`;
+export const existsSub = (subquery: SQL): SQL => sql`exists (${subquery})`;
 
 /**
  * Единственное правило доступа к шаблону (§19.1). undefined — без ограничений (админ).

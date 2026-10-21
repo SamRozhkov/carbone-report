@@ -166,12 +166,22 @@ export async function withExportSlot<T>(fn: () => Promise<T>): Promise<T> {
 export function buildExport(
   deps: ExportDeps,
   ids: string[],
-  now: Date = new Date(),
+  opts: ExportOptions,
 ): Promise<ExportResult> {
-  return withExportSlot(() => runExport(deps, ids, now));
+  return withExportSlot(() => runExport(deps, ids, opts));
 }
 
-async function runExport(deps: ExportDeps, ids: string[], now: Date): Promise<ExportResult> {
+export interface ExportOptions {
+  /** Выгружать настройки подключения источника (хост, порт, база, пользователь, SSL) — только `admin` (§43.2). */
+  withConnection: boolean;
+  now?: Date;
+}
+
+async function runExport(
+  deps: ExportDeps,
+  ids: string[],
+  { withConnection, now = new Date() }: ExportOptions,
+): Promise<ExportResult> {
   const { db } = deps;
   const uniqueIds = [...new Set(ids.map((id) => id.toLowerCase()))];
   const rows = await db
@@ -264,14 +274,16 @@ async function runExport(deps: ExportDeps, ids: string[], now: Date): Promise<Ex
         public: row.public,
         category,
         groups: gs.filter((g) => g.templateId === id).map((g) => g.name),
-        datasource: {
-          name: ds.name,
-          host: ds.host,
-          port: ds.port,
-          database: ds.database,
-          username: ds.username,
-          sslMode: ds.sslMode,
-        },
+        datasource: withConnection
+          ? {
+              name: ds.name,
+              host: ds.host,
+              port: ds.port,
+              database: ds.database,
+              username: ds.username,
+              sslMode: ds.sslMode,
+            }
+          : { name: ds.name },
         queries: qs
           .filter((q) => q.templateId === id)
           .map((q): TransferQuery => ({

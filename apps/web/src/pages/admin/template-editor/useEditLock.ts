@@ -1,5 +1,6 @@
 import { EDIT_LOCK_HEARTBEAT_MS, type EditLockState } from '@carbone-reports/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ApiRequestError } from '../../../api/client';
 import { api, releaseEditLock } from '../../../api/endpoints';
 
 export interface EditLock {
@@ -10,6 +11,8 @@ export interface EditLock {
   lostTo: string | null;
   /** Три продления подряд не удались. */
   offline: boolean;
+  /** Сервер отказал в праве правки (403/404): роль понижена или право отозвано (§43.1). */
+  forbidden: boolean;
   editing: boolean;
   start(): Promise<void>;
   takeover(): Promise<void>;
@@ -26,6 +29,7 @@ export function useEditLock(templateId: string, enabled = true): EditLock {
   const [state, setState] = useState<EditLockState | null>(null);
   const [lostTo, setLostTo] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
   const stateRef = useRef<EditLockState | null>(null);
   const fails = useRef(0);
   const alive = useRef(true);
@@ -52,7 +56,12 @@ export function useEditLock(templateId: string, enabled = true): EditLock {
         if (!alive.current) return;
         setOffline(false);
         apply(next, n);
-      } catch {
+      } catch (e) {
+        // Отказ в праве — не сбой связи: редактор закрывается сразу, без трёх попыток.
+        if (e instanceof ApiRequestError && (e.status === 403 || e.status === 404)) {
+          if (alive.current) setForbidden(true);
+          return;
+        }
         fails.current += 1;
         if (alive.current && fails.current >= FAILS_BEFORE_OFFLINE) setOffline(true);
       }
@@ -93,7 +102,8 @@ export function useEditLock(templateId: string, enabled = true): EditLock {
     state,
     lostTo,
     offline,
-    editing: state?.state === 'mine',
+    forbidden,
+    editing: !forbidden && state?.state === 'mine',
     start: () => call(true),
     takeover: async () => {
       const n = ++seq.current;

@@ -233,6 +233,20 @@ describe('loadConfig', () => {
     // LDAP_LOGIN_ATTRIBUTE не задан — канонический логин = введённый (как в прежних версиях).
     expect(c.ldap?.loginAttribute).toBeUndefined();
   });
+  it('LDAP_DEFAULT_ROLE принимает все четыре роли (§43.3), неизвестная — ошибка', () => {
+    const ldapEnv = {
+      ...base,
+      LDAP_ENABLED: 'true',
+      LDAP_URL: 'ldap://dc:389',
+      LDAP_BASE_DN: 'dc=example,dc=local',
+    };
+    for (const role of ['admin', 'editor', 'access_manager', 'user'])
+      expect(loadConfig({ ...ldapEnv, LDAP_DEFAULT_ROLE: role }).ldap?.defaultRole).toBe(role);
+    expect(loadConfig(ldapEnv).ldap?.defaultRole).toBe('user');
+    expect(() => loadConfig({ ...ldapEnv, LDAP_DEFAULT_ROLE: 'owner' })).toThrow(
+      'LDAP_DEFAULT_ROLE',
+    );
+  });
   it('LDAP_LOGIN_ATTRIBUTE задан — попадает в настройки LDAP; пустой — ошибка', () => {
     const ldapEnv = {
       ...base,

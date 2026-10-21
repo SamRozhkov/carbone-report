@@ -147,6 +147,7 @@ describe('GroupsPage', () => {
       }),
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(calls.some((c) => c.path.startsWith('/api/users/directory'))).toBe(false);
   });
 
   it('удаление спрашивает подтверждение и предупреждает о потере доступа', async () => {
@@ -165,5 +166,32 @@ describe('GroupsPage', () => {
     await waitFor(() =>
       expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/groups/g1')).toBe(true),
     );
+  });
+
+  it('распорядитель доступа: участники — из справочника; заблокированного можно убрать (§43.3)', async () => {
+    const { calls } = mockApi([
+      { path: '/api/auth/me', body: { id: 'am-id', login: 'am', role: 'access_manager' } },
+      { path: '/api/groups', body: [{ ...groups[1]!, memberIds: ['u2', 'blocked-id'] }] },
+      { path: '/api/users/directory', body: users },
+      {
+        method: 'PUT',
+        path: '/api/groups/g2/members',
+        handler: ({ body }) => ({
+          body: { ...groups[1], memberIds: (body as { userIds: string[] }).userIds },
+        }),
+      },
+    ]);
+    renderRoute('/admin/groups');
+    await screen.findByText('Склад');
+    await userEvent.click(within(row('Склад')).getByRole('button', { name: 'Участники' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Участники' }));
+    await userEvent.click(await screen.findByRole('option', { name: '(заблокирован)' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ userIds: ['u2'] }),
+    );
+    expect(calls.some((c) => c.path === '/api/users/directory')).toBe(true);
+    expect(calls.some((c) => c.path === '/api/users')).toBe(false);
   });
 });

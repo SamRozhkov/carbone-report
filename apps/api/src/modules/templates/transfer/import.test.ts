@@ -541,6 +541,8 @@ describe('paramErrors', () => {
   });
 });
 
+const ADMIN = { role: 'admin' } as const;
+
 const lookup = (over: Partial<ImportLookup> = {}): ImportLookup => ({
   templatesByName: new Map(),
   datasourcesByName: new Map(),
@@ -553,7 +555,7 @@ describe('planImport', () => {
   it('pdfPasswordSet из архива; без признака — false (§37.4)', () => {
     const mm = manifestFor([DOC, DOC]);
     mm.templates[0] = { ...mm.templates[0]!, pdfPasswordSet: true };
-    expect(planImport(mm, lookup()).map((i) => i.pdfPasswordSet)).toEqual([true, false]);
+    expect(planImport(mm, lookup(), ADMIN).map((i) => i.pdfPasswordSet)).toEqual([true, false]);
   });
 
   const m = manifestFor([DOC, DOC]);
@@ -575,6 +577,7 @@ describe('planImport', () => {
         datasourcesByName: new Map([['src', ['ds1']]]),
         groupsByLower: new Map([['бухгалтерия', 'g1']]),
       }),
+      ADMIN,
     );
     expect(plan[0]).toMatchObject({
       index: 0,
@@ -582,6 +585,7 @@ describe('planImport', () => {
       datasourceMatch: 'ds1',
       category: 'Финансы',
       categoryExists: false,
+      categorySkipped: false,
       missingGroups: ['Склад'],
       errors: [],
     });
@@ -597,8 +601,19 @@ describe('planImport', () => {
         datasourcesByName: new Map([['src', ['ds1', 'ds2']]]),
         categoriesByLower: new Map([['финансы', 'c1']]),
       }),
+      ADMIN,
     );
     expect(plan[0]).toMatchObject({ datasourceMatch: null, categoryExists: true });
+  });
+
+  it('категорию, которой нет, пропускает только не-админ (§43.3)', () => {
+    const skipped = (role: 'admin' | 'editor', cats: [string, string][] = []) =>
+      planImport(m, lookup({ categoriesByLower: new Map(cats) }), { role }).map(
+        (i) => i.categorySkipped,
+      );
+    expect(skipped('admin')).toEqual([false, false]);
+    expect(skipped('editor')).toEqual([true, false]); // у второго категории нет
+    expect(skipped('editor', [['финансы', 'c1']])).toEqual([false, false]);
   });
 });
 

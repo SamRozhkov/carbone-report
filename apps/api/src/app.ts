@@ -11,6 +11,7 @@ import type { AppDeps } from './deps';
 import { registerErrorHandler } from './lib/errors';
 import { fallbackStore } from './lib/fallback-store';
 import { makeGuards } from './modules/auth/guards';
+import { registerTemplateEditorRoutes } from './modules/access/editors-routes';
 import { registerAccessRoutes } from './modules/access/routes';
 import { registerOidcRoutes } from './modules/auth/oidc-routes';
 import { registerAuthRoutes } from './modules/auth/routes';
@@ -144,6 +145,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   registerUserRoutes(app, deps, guards);
   registerSignatureRoutes(app, deps, guards);
   registerAccessRoutes(app, deps, guards);
+  registerTemplateEditorRoutes(app, deps, guards);
   registerDatasourceRoutes(app, deps, guards);
   registerTemplateRoutes(app, deps, guards);
   registerTemplatePdfRoutes(app, deps, guards);

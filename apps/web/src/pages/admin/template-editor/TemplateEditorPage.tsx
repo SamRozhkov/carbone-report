@@ -13,6 +13,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { ApiRequestError } from '../../../api/client';
 import { api, templateDownloadUrl } from '../../../api/endpoints';
 import { ErrorAlert } from '../../../components/ErrorAlert';
 import { ExportTemplatesButton } from '../ExportTemplatesButton';
@@ -48,7 +49,11 @@ export function TemplateEditorPage() {
     queryKey: templateKey(id),
     queryFn: () => api.templates.getAdmin(id),
   });
-  const t = template.data;
+  // Шаблон видим по §19, но не редактируем: API отдаёт DTO пользователя без запросов (§43.3).
+  const forbidden =
+    (!!template.data && !('queries' in template.data)) ||
+    (template.error instanceof ApiRequestError && template.error.status === 403);
+  const t = forbidden ? undefined : template.data;
   const [testParams, setTestParams] = useTestParams(id, t?.params ?? []);
   const [previewData, setPreviewData] = usePreviewData(id);
 
@@ -67,6 +72,20 @@ export function TemplateEditorPage() {
   const warned = tagWarnings.data;
 
   if (template.isPending) return <Loader />;
+  if (forbidden) {
+    return (
+      <Alert
+        theme="danger"
+        title="Не удалось открыть шаблон"
+        message="нет права на правку шаблона"
+        actions={
+          <Button view="outlined" onClick={() => navigate('/admin/templates')}>
+            К списку шаблонов
+          </Button>
+        }
+      />
+    );
+  }
   if (!t) return <ErrorAlert error={template.error} title="Не удалось открыть шаблон" />;
 
   const selectTab = (value: string) => {

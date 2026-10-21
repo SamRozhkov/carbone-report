@@ -73,7 +73,11 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
     async (req, reply) => {
       const me = currentUser(req);
       const { password, role, blocked } = req.body;
-      if (req.params.id === me.id && (blocked === true || role === 'user')) {
+      // Своя роль — только admin: иначе админ (в том числе последний) лишится доступа к админке.
+      if (
+        req.params.id === me.id &&
+        (blocked === true || (role !== undefined && role !== 'admin'))
+      ) {
         throw badRequest('нельзя заблокировать или понизить собственную учётную запись');
       }
       const patch: Partial<UserRow> = {};

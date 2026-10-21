@@ -17,7 +17,7 @@ export class AppError extends Error {
 export const badRequest = (message: string, details?: unknown) =>
   new AppError('BAD_REQUEST', 400, message, details);
 export const unauthorized = () => new AppError('UNAUTHORIZED', 401, 'требуется вход');
-export const forbidden = () => new AppError('FORBIDDEN', 403, 'недостаточно прав');
+export const forbidden = (message = 'недостаточно прав') => new AppError('FORBIDDEN', 403, message);
 export const notFound = (what: string) => new AppError('NOT_FOUND', 404, `${what} не найден`);
 export const conflict = (message: string) => new AppError('CONFLICT', 409, message);
 

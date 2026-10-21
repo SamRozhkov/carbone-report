@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { templates, users } from '../../db/schema';
+import { templateEditors, templates, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { AppError } from '../../lib/errors';
 import { isZip } from '../../lib/http';
+import { editRight, NO_EDIT_RIGHT } from '../access/permissions';
 import { discardUncommittedFile, templateFilePath } from '../templates/service';
 import { toInternalDownloadUrl } from './download-url';
 import { verifyOnlyOfficeCallback } from './jwt';
@@ -40,13 +41,44 @@ async function verifiedPayload(
   throw new AppError('FORBIDDEN', 403, 'неверная подпись OnlyOffice');
 }
 
-async function existingUserId(
+const NO_RIGHT_TO_SAVE = `изменения не сохранены: ${NO_EDIT_RIGHT}`;
+
+/**
+ * Первый из сохраняющих пользователей (id из editor-config), у кого право правки ещё есть.
+ * Роль и блокировка — из БД: понижение или отзыв права закрывает и уже открытую сессию (§43.1).
+ */
+async function authorisedSaver(
   db: Pick<AppDeps['db'], 'select'>,
-  id: string | undefined,
+  templateId: string,
+  ids: string[] | undefined,
 ): Promise<string | null> {
-  if (!id || !z.uuid().safeParse(id).success) return null;
-  const [u] = await db.select({ id: users.id }).from(users).where(eq(users.id, id));
-  return u?.id ?? null;
+  const valid = [...new Set(ids ?? [])].filter((id) => z.uuid().safeParse(id).success);
+  if (valid.length === 0) return null;
+  const [t] = await db
+    .select({ ownerId: templates.ownerId })
+    .from(templates)
+    .where(eq(templates.id, templateId));
+  if (!t) return null;
+  const found = await db
+    .select({ id: users.id, login: users.login, role: users.role })
+    .from(users)
+    .where(and(inArray(users.id, valid), eq(users.blocked, false)));
+  const granted = new Set(
+    (
+      await db
+        .select({ id: templateEditors.userId })
+        .from(templateEditors)
+        .where(
+          and(eq(templateEditors.templateId, templateId), inArray(templateEditors.userId, valid)),
+        )
+    ).map((r) => r.id),
+  );
+  // Порядок cb.users сохраняется: версию подписывает первый из имеющих право.
+  for (const id of valid) {
+    const u = found.find((f) => f.id === id);
+    if (u && editRight(u, t, granted.has(id))) return id;
+  }
+  return null;
 }
 
 export async function handleCallback(
@@ -73,14 +105,22 @@ export async function handleCallback(
 
   // Ошибка пишется, только если сессия всё ещё текущая. Метка строго растёт: повтор той же ошибки
   // в ту же миллисекунду (ISO хранит мс) всё равно отличим от прежней (§22.7).
+  const errorFields = (msg: string) => ({
+    lastSaveError: msg,
+    lastSaveErrorAt: sql`greatest(now(), ${templates.lastSaveErrorAt} + interval '1 millisecond')`,
+  });
   const setError = (msg: string) =>
     deps.db
       .update(templates)
-      .set({
-        lastSaveError: msg,
-        lastSaveErrorAt: sql`greatest(now(), ${templates.lastSaveErrorAt} + interval '1 millisecond')`,
-      })
+      .set(errorFields(msg))
       .where(and(eq(templates.id, templateId), eq(templates.docKey, cb.key)));
+
+  // Отказ в сохранении: файл не трогаем. При закрытии сессии (status 2) ключ меняется, чтобы
+  // следующее открытие взяло файл из хранилища, а не отвергнутые правки из кэша Document Server.
+  const rejectFields = () => ({
+    ...errorFields(NO_RIGHT_TO_SAVE),
+    ...(cb.status === 2 ? { docKey: randomUUID() } : {}),
+  });
 
   if (cb.status === 3 || cb.status === 7) {
     log?.warn({ templateId, status: cb.status }, SAVE_ERRORS[cb.status]);
@@ -99,7 +139,18 @@ export async function handleCallback(
     return;
   }
 
-  // Скачивание — без блокировки строки (до 60 с); ключ сверяется повторно под блокировкой.
+  // Право правки отозвано (понижение роли, удаление из редакторов, блокировка): файл не трогаем,
+  // а Document Server получает {error:0}, чтобы не повторял callback.
+  if (!(await authorisedSaver(deps.db, templateId, cb.users))) {
+    log?.warn({ templateId, status: cb.status, users: cb.users }, NO_RIGHT_TO_SAVE);
+    await deps.db
+      .update(templates)
+      .set(rejectFields())
+      .where(and(eq(templates.id, templateId), eq(templates.docKey, cb.key)));
+    return;
+  }
+
+  // Скачивание — без блокировки строки (до 60 с); ключ и право сверяются повторно под блокировкой.
   let file: Buffer;
   try {
     file = await deps.fetchFile(downloadUrl);
@@ -124,6 +175,13 @@ export async function handleCallback(
         .for('update');
       // Пока файл скачивался, сессия могла смениться (ручная замена, другой callback).
       if (!row || cb.key !== row.docKey) return;
+      // Право могли отозвать, пока файл скачивался.
+      const saver = await authorisedSaver(tx, templateId, cb.users);
+      if (!saver) {
+        log?.warn({ templateId, status: cb.status, users: cb.users }, NO_RIGHT_TO_SAVE);
+        await tx.update(templates).set(rejectFields()).where(eq(templates.id, row.id));
+        return;
+      }
       // Новая версия — новый файл: при сбое коммита строка продолжает указывать на прежний.
       written = templateFilePath(row.id, row.fileExt, row.version + 1);
       await deps.storage.write(written, file);
@@ -134,7 +192,7 @@ export async function handleCallback(
           version: row.version + 1,
           filePath: written,
           updatedAt: new Date(),
-          updatedBy: await existingUserId(tx, cb.users?.[0]),
+          updatedBy: saver,
           lastSaveError: null,
           lastSaveErrorAt: null,
           ...(cb.status === 2 ? { docKey: randomUUID() } : {}),

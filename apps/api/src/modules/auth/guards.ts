@@ -1,8 +1,10 @@
+import type { Role } from '@carbone-reports/shared';
 import { eq } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { oidcSessions, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { forbidden, unauthorized } from '../../lib/errors';
+import { assertTemplateEdit, assertTemplateOwner, AUTHOR_ROLES } from '../access/permissions';
 import { sessionCookieName, verifySession, type SessionUser } from './session';
 
 declare module 'fastify' {
@@ -45,12 +47,33 @@ export function makeGuards(deps: AppDeps) {
     req.user = { id: row.id, login: row.login, role: row.role };
   }
 
-  async function requireAdmin(req: FastifyRequest, reply: FastifyReply): Promise<void> {
-    await requireUser(req, reply);
-    if (req.user!.role !== 'admin') throw forbidden();
+  /** preHandler: вход и одна из ролей; иначе 403 (§43.3). */
+  const requireRole =
+    (...roles: Role[]) =>
+    async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      await requireUser(req, reply);
+      if (!roles.includes(req.user!.role)) throw forbidden();
+    };
+
+  const requireAdmin = requireRole('admin');
+  const requireAuthor = requireRole(...AUTHOR_ROLES);
+
+  // preHandler выполняется после проверки params схемой маршрута: id уже UUID.
+  const templateId = (req: FastifyRequest) => (req.params as { id: string }).id;
+
+  /** Маршруты конструктора с :id — право правки шаблона (§43.1). */
+  async function requireTemplateEdit(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+    await requireAuthor(req, reply);
+    await assertTemplateEdit(deps.db, req.user!, templateId(req));
   }
 
-  return { requireUser, requireAdmin };
+  /** Удаление шаблона и его редакторы — admin или владелец (§43.1). */
+  async function requireTemplateOwner(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+    await requireAuthor(req, reply);
+    await assertTemplateOwner(deps.db, req.user!, templateId(req));
+  }
+
+  return { requireUser, requireAdmin, requireRole, requireTemplateEdit, requireTemplateOwner };
 }
 
 export type Guards = ReturnType<typeof makeGuards>;

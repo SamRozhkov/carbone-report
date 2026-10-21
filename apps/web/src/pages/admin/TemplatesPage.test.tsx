@@ -23,14 +23,20 @@ const tpl = {
   fileExt: 'docx',
   defaultOutput: 'pdf',
   updatedAt: '2026-01-10T10:00:00Z',
+  ownerId: null,
+  canDelete: true,
 };
+
+function row(name: string): HTMLElement {
+  return screen.getByText(name).closest('tr')!;
+}
 
 describe('TemplatesPage', () => {
   it('создание пустого DOCX → POST JSON и переход в редактор', async () => {
     const { calls } = mockApi([
       adminMe,
       { path: '/api/templates', body: [] },
-      { path: '/api/datasources', body: ds },
+      { path: '/api/datasources/options', body: ds },
       { method: 'POST', path: '/api/templates', status: 201, body: { ...tpl, id: 'new-id' } },
     ]);
     const { router } = renderRoute('/admin/templates');
@@ -51,7 +57,7 @@ describe('TemplatesPage', () => {
     const { calls } = mockApi([
       adminMe,
       { path: '/api/templates', body: [] },
-      { path: '/api/datasources', body: ds },
+      { path: '/api/datasources/options', body: ds },
       { method: 'POST', path: '/api/templates/upload', status: 201, body: { ...tpl, id: 'up-id' } },
     ]);
     renderRoute('/admin/templates');
@@ -73,7 +79,7 @@ describe('TemplatesPage', () => {
     mockApi([
       adminMe,
       { path: '/api/templates', body: [] },
-      { path: '/api/datasources', body: [] },
+      { path: '/api/datasources/options', body: [] },
     ]);
     renderRoute('/admin/templates');
     await userEvent.click(await screen.findByRole('button', { name: 'Создать шаблон' }));
@@ -126,7 +132,7 @@ describe('TemplatesPage', () => {
     mockApi([
       adminMe,
       { path: '/api/templates', body: [] },
-      { path: '/api/datasources', body: ds },
+      { path: '/api/datasources/options', body: ds },
       {
         method: 'POST',
         path: '/api/templates/upload',
@@ -151,7 +157,7 @@ describe('TemplatesPage', () => {
     mockApi([
       adminMe,
       { path: '/api/templates', body: [] },
-      { path: '/api/datasources', body: ds },
+      { path: '/api/datasources/options', body: ds },
       {
         method: 'POST',
         path: '/api/templates',
@@ -177,7 +183,7 @@ describe('TemplatesPage', () => {
     mockApi([
       adminMe,
       { path: '/api/templates', body: [] },
-      { path: '/api/datasources', body: ds },
+      { path: '/api/datasources/options', body: ds },
     ]);
     renderRoute('/admin/templates');
     await userEvent.click(await screen.findByRole('button', { name: 'Создать шаблон' }));
@@ -199,7 +205,7 @@ describe('TemplatesPage', () => {
       adminMe,
       { path: '/api/templates', body: [] },
       {
-        path: '/api/datasources',
+        path: '/api/datasources/options',
         status: 500,
         body: { error: { code: 'INTERNAL', message: 'Сбой чтения источников' } },
       },
@@ -208,5 +214,28 @@ describe('TemplatesPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Создать шаблон' }));
     const dialog = await screen.findByRole('dialog');
     expect(await within(dialog).findByText(/Сбой чтения источников/)).toBeInTheDocument();
+  });
+
+  it('редактор: список scope=edit, «Удалить» — только при canDelete (§43.5)', async () => {
+    const { calls } = mockApi([
+      { path: '/api/auth/me', body: { id: 'ed-id', login: 'editor', role: 'editor' } },
+      {
+        path: '/api/templates',
+        body: [
+          { ...tpl, editingBy: null, ownerId: 'ed-id', canDelete: true },
+          { ...tpl, id: 't2', name: 'Акт', editingBy: null, ownerId: 'other', canDelete: false },
+        ],
+      },
+    ]);
+    renderRoute('/admin/templates');
+    await screen.findByText('Акт');
+    expect(calls.some((c) => c.method === 'GET' && c.path === '/api/templates?scope=edit')).toBe(
+      true,
+    );
+    expect(within(row('Счёт')).getByRole('button', { name: 'Удалить' })).toBeInTheDocument();
+    expect(within(row('Акт')).queryByRole('button', { name: 'Удалить' })).not.toBeInTheDocument();
+    expect(within(row('Акт')).getByRole('button', { name: 'Дублировать' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Создать шаблон' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Загрузить из архива' })).toBeInTheDocument();
   });
 });

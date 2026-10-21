@@ -630,6 +630,36 @@ describe('DocumentTab', () => {
       }
     });
 
+    it('продление получило 403: редактор закрыт, «нет права на правку шаблона»', async () => {
+      let n = 0;
+      mockApi([
+        {
+          method: 'POST',
+          path: '/api/templates/t1/edit-lock',
+          handler: () =>
+            n++ === 0
+              ? { body: { state: 'mine' } }
+              : {
+                  status: 403,
+                  body: { error: { code: 'FORBIDDEN', message: 'нет права на правку шаблона' } },
+                },
+        },
+        { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+        { path: '/api/templates/t1/editor-config', body: config },
+      ]);
+      renderWithProviders(<DocumentTab {...base} />);
+      await screen.findByTestId('oo');
+      await screen.findByText('Вы редактируете');
+      await act(() => vi.advanceTimersByTimeAsync(20_000));
+      expect(await screen.findByText(/нет права на правку шаблона/i)).toBeInTheDocument();
+      expect(screen.queryByTestId('oo')).toBeNull();
+      expect(screen.queryByText('Вы редактируете')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull();
+      expect(
+        screen.queryByText('Связь с сервером потеряна, изменения могут не сохраниться'),
+      ).toBeNull();
+    });
+
     it('три ошибки продления — предупреждение о связи', async () => {
       let n = 0;
       mockApi([

@@ -1,4 +1,5 @@
 import type {
+  AccessTemplateRow,
   BackupDto,
   BackupOperationDto,
   CertificateInfo,
@@ -9,6 +10,7 @@ import type {
   CreateUserBody,
   DatasourceBody,
   DatasourceDto,
+  DatasourceOption,
   EditLockBody,
   EditLockState,
   GostPrepareResult,
@@ -27,18 +29,22 @@ import type {
   RunQueryResult,
   RunSignature,
   RunsPage,
+  Role,
   RunsQuery,
   SavePdfOptionsBody,
   TemplateAccess,
   TemplateAdminDetails,
   TemplateChart,
   TemplateDetails,
+  TemplateEditSummary,
+  TemplateEditors,
   TemplateParam,
   TemplateQuery,
   TemplateSummary,
   TemplateTagWarnings,
   UpdateTemplateBody,
   UpdateUserBody,
+  UserDirectoryEntry,
   UserDto,
   RecoveryBody,
 } from '@carbone-reports/shared';
@@ -69,6 +75,9 @@ export const api = {
 
   users: {
     list: () => apiJson<UserDto[]>('/api/users'),
+    /** Справочник активных пользователей (§43.3): открыт и распорядителю доступа, и редактору. */
+    directory: (role?: Role) =>
+      apiJson<UserDirectoryEntry[]>(`/api/users/directory${role ? `?role=${role}` : ''}`),
     create: (body: CreateUserBody) => apiJson<UserDto>('/api/users', post(body)),
     update: (id: string, body: UpdateUserBody) => apiJson<UserDto>(`/api/users/${id}`, patch(body)),
     remove: (id: string) => apiJson<void>(`/api/users/${id}`, del),
@@ -106,6 +115,8 @@ export const api = {
 
   datasources: {
     list: () => apiJson<DatasourceDto[]>('/api/datasources'),
+    /** Только id и имя (§43.3): для выбора источника в шаблоне, доступно и редактору. */
+    options: () => apiJson<DatasourceOption[]>('/api/datasources/options'),
     create: (body: DatasourceBody) => apiJson<DatasourceDto>('/api/datasources', post(body)),
     update: (id: string, body: DatasourceBody) =>
       apiJson<DatasourceDto>(`/api/datasources/${id}`, patch(body)),
@@ -116,6 +127,8 @@ export const api = {
 
   templates: {
     list: () => apiJson<TemplateSummary[]>('/api/templates'),
+    /** Шаблоны, которые текущий пользователь может править (§43.3). */
+    listEditable: () => apiJson<TemplateEditSummary[]>('/api/templates?scope=edit'),
     get: (id: string) => apiJson<TemplateDetails>(`/api/templates/${id}`),
     getAdmin: (id: string) => apiJson<TemplateAdminDetails>(`/api/templates/${id}`),
     tagWarnings: (id: string) => apiJson<TemplateTagWarnings>(`/api/templates/${id}/tag-warnings`),
@@ -179,6 +192,16 @@ export const api = {
     getAccess: (id: string) => apiJson<TemplateAccess>(`/api/templates/${id}/access`),
     access: (id: string, body: TemplateAccess) =>
       apiJson<TemplateAccess>(`/api/templates/${id}/access`, put(body)),
+    editors: (id: string) => apiJson<TemplateEditors>(`/api/templates/${id}/editors`),
+    setEditors: (id: string, userIds: string[]) =>
+      apiJson<TemplateEditors>(`/api/templates/${id}/editors`, put({ userIds })),
+    setOwner: (id: string, userId: string) =>
+      apiJson<TemplateEditors>(`/api/templates/${id}/owner`, put({ userId })),
+  },
+
+  access: {
+    /** Все шаблоны для страницы «Доступ к отчётам» (§43.5). */
+    templates: () => apiJson<AccessTemplateRow[]>('/api/access/templates'),
   },
 
   reports: {

@@ -222,7 +222,10 @@ export const toDetails = (f: TemplateFull, withSql = false): TemplateDetails => 
   signMethod: f.pdfOptions.signature ? (f.pdfOptions.signature.method ?? 'p12') : null,
 });
 
-export const toAdminDetails = (f: TemplateFull): TemplateAdminDetails => ({
+export const toAdminDetails = (
+  f: TemplateFull,
+  rights: { canDelete: boolean; canManageEditors: boolean },
+): TemplateAdminDetails => ({
   ...toDetails(f, true),
   datasourceId: f.row.datasourceId,
   version: f.row.version,
@@ -233,6 +236,8 @@ export const toAdminDetails = (f: TemplateFull): TemplateAdminDetails => ({
   pdfPasswordSet: f.row.pdfPasswordEnc !== null,
   lastSaveError: f.row.lastSaveError,
   lastSaveErrorAt: f.row.lastSaveErrorAt?.toISOString() ?? null,
+  ownerId: f.row.ownerId,
+  ...rights,
 });
 
 export function templateFileRef(deps: AppDeps, row: TemplateRow): TemplateFileRef {

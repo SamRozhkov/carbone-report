@@ -1,4 +1,6 @@
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { users } from '../src/db/schema';
 import { createTestApp, loginAs, type TestApp } from './helpers';
 
 let t: TestApp;
@@ -98,6 +100,23 @@ describe('users', () => {
       headers: { cookie: admin.cookie },
     });
     expect([block.statusCode, demote.statusCode, del.statusCode]).toEqual([400, 400, 400]);
+  });
+
+  it('админ не может сменить себе роль на editor или access_manager (§43.3)', async () => {
+    for (const role of ['editor', 'access_manager']) {
+      const r = await t.app.inject({
+        method: 'PATCH',
+        url: `/api/users/${admin.user.id}`,
+        headers: { cookie: admin.cookie },
+        payload: { role },
+      });
+      expect(r.statusCode, role).toBe(400);
+      expect(r.json().error.message).toBe(
+        'нельзя заблокировать или понизить собственную учётную запись',
+      );
+    }
+    const [row] = await t.deps.db.select().from(users).where(eq(users.id, admin.user.id));
+    expect(row!.role).toBe('admin');
   });
 
   it('несуществующий id → 404, невалидный uuid → 400', async () => {

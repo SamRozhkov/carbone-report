@@ -2,6 +2,8 @@ import { Loader } from '@gravity-ui/uikit';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { useMe } from '../api/session';
 import { ErrorAlert } from '../components/ErrorAlert';
+import type { Permissions } from './permissions';
+import { usePermissions } from './permissions';
 
 export function FullPageLoader() {
   return (
@@ -29,8 +31,16 @@ export function RequireUser() {
   return <Outlet />;
 }
 
-export function RequireAdmin() {
-  const me = useMe();
-  if (me.data?.role !== 'admin') return <Navigate to="/reports" replace />;
+/** Раздел по праву (§43.5): без права — на `/reports`. */
+export function RequireRole({ allow }: { allow: (p: Permissions) => boolean }) {
+  const permissions = usePermissions();
+  if (!allow(permissions)) return <Navigate to="/reports" replace />;
   return <Outlet />;
+}
+
+/** Индекс `/admin`: первый раздел, доступный роли. */
+export function AdminIndex() {
+  const { canAuthor, canManageAccess } = usePermissions();
+  const to = canAuthor ? '/admin/templates' : canManageAccess ? '/admin/groups' : '/reports';
+  return <Navigate to={to} replace />;
 }

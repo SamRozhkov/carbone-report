@@ -14,6 +14,8 @@ import {
   TemplateExt,
   TemplateParam,
   TemplateQuery,
+  type TemplateEditSummary,
+  type TemplateSummary,
   type TemplateTagWarnings,
   UpdateTemplateBody,
 } from '@carbone-reports/shared';
@@ -43,9 +45,18 @@ import {
   users,
 } from '../../db/schema';
 import type { AppDeps } from '../../deps';
-import { badRequest, notFound } from '../../lib/errors';
+import { badRequest, forbidden, notFound } from '../../lib/errors';
 import { contentDisposition, isZip, MIME } from '../../lib/http';
 import { accessibleTemplates, assertTemplateAccess } from '../access/access';
+import {
+  assertTemplateEdit,
+  canEditTemplate,
+  AUTHOR_ROLES,
+  deleteRight,
+  editableTemplates,
+  NO_EDIT_RIGHT,
+  templateRights,
+} from '../access/permissions';
 import { assertNotLockedByOther, lockAlive } from '../edit-lock/service';
 import { currentUser, type Guards } from '../auth/guards';
 import { orderParams } from '../queries/param-deps';
@@ -85,7 +96,9 @@ function uniqueOrFail(values: string[], what: string): void {
 }
 
 export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards): void {
-  const admin = { preHandler: guards.requireAdmin };
+  const author = { preHandler: guards.requireRole(...AUTHOR_ROLES) };
+  const editor = { preHandler: guards.requireTemplateEdit };
+  const owner = { preHandler: guards.requireTemplateOwner };
   const anyUser = { preHandler: guards.requireUser };
   const { db, storage } = deps;
 
@@ -191,6 +204,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
             filePath,
             docKey: randomUUID(),
             updatedBy: v.userId,
+            ownerId: v.userId,
             categoryId: extra?.categoryId ?? null,
             public: extra?.public ?? false,
             ...(extra?.pdfOptions ? { pdfOptions: extra.pdfOptions } : {}),
@@ -251,34 +265,53 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     }
   }
 
-  app.get('/api/templates', anyUser, async (req) => {
-    const user = currentUser(req);
-    const lockUser = alias(users, 'lock_user');
-    const rows = await db
-      .select({
-        row: getTableColumns(templates),
-        category: categoryRefColumns,
-        lockLogin: lockUser.login,
-      })
-      .from(templates)
-      .leftJoin(categories, eq(categories.id, templates.categoryId))
-      .leftJoin(templateEditLocks, and(eq(templateEditLocks.templateId, templates.id), lockAlive))
-      .leftJoin(lockUser, eq(lockUser.id, templateEditLocks.userId))
-      .where(accessibleTemplates(user))
-      .orderBy(asc(templates.name));
-    return rows.map((r) =>
-      toSummary(
-        r.row,
-        r.category,
-        user.role === 'admin' && r.lockLogin ? { login: r.lockLogin } : null,
-      ),
-    );
-  });
+  app.get(
+    '/api/templates',
+    { ...anyUser, schema: { querystring: z.object({ scope: z.literal('edit').optional() }) } },
+    async (req): Promise<TemplateSummary[] | TemplateEditSummary[]> => {
+      const user = currentUser(req);
+      const forEdit = req.query.scope === 'edit';
+      // Список конструктора (§43.3) — только авторам шаблонов.
+      if (forEdit && !(AUTHOR_ROLES as readonly string[]).includes(user.role)) throw forbidden();
+      const lockUser = alias(users, 'lock_user');
+      const rows = await db
+        .select({
+          row: getTableColumns(templates),
+          category: categoryRefColumns,
+          lockLogin: lockUser.login,
+        })
+        .from(templates)
+        .leftJoin(categories, eq(categories.id, templates.categoryId))
+        .leftJoin(templateEditLocks, and(eq(templateEditLocks.templateId, templates.id), lockAlive))
+        .leftJoin(lockUser, eq(lockUser.id, templateEditLocks.userId))
+        .where(forEdit ? editableTemplates(user) : accessibleTemplates(user))
+        .orderBy(asc(templates.name));
+      if (forEdit) {
+        return rows.map((r) => ({
+          ...toSummary(r.row, r.category, r.lockLogin ? { login: r.lockLogin } : null),
+          ownerId: r.row.ownerId,
+          canDelete: deleteRight(user, r.row),
+        }));
+      }
+      return rows.map((r) =>
+        toSummary(
+          r.row,
+          r.category,
+          user.role === 'admin' && r.lockLogin ? { login: r.lockLogin } : null,
+        ),
+      );
+    },
+  );
 
   app.get('/api/templates/:id', { ...anyUser, schema: { params: IdParams } }, async (req) => {
-    await assertTemplateAccess(db, currentUser(req), req.params.id);
-    const full = await loadTemplateFull(db, req.params.id);
-    return currentUser(req).role === 'admin' ? toAdminDetails(full) : toDetails(full);
+    const user = currentUser(req);
+    // Кто может править — получает карточку конструктора; остальные — карточку пользователя по §19.
+    if (await canEditTemplate(db, user, req.params.id)) {
+      const full = await loadTemplateFull(db, req.params.id);
+      return toAdminDetails(full, templateRights(user, full.row));
+    }
+    await assertTemplateAccess(db, user, req.params.id);
+    return toDetails(await loadTemplateFull(db, req.params.id));
   });
 
   app.post(
@@ -288,7 +321,11 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       schema: { params: IdParams.extend({ name: z.string() }), body: ParamOptionsBody },
     },
     async (req): Promise<ParamOptionsResult> => {
-      await assertTemplateAccess(db, currentUser(req), req.params.id);
+      const user = currentUser(req);
+      // Превью конструктора: правящему шаблон группы не нужны (§43); остальным — правило §19.
+      if (!(await canEditTemplate(db, user, req.params.id))) {
+        await assertTemplateAccess(db, user, req.params.id);
+      }
       const full = await loadTemplateFull(db, req.params.id);
       return optionsForParam(deps, full, req.params.name, req.body.params);
     },
@@ -296,7 +333,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
 
   app.post(
     '/api/templates',
-    { ...admin, schema: { body: CreateTemplateBody } },
+    { ...author, schema: { body: CreateTemplateBody } },
     async (req, reply) => {
       const row = await insertTemplate({
         ...req.body,
@@ -308,7 +345,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     },
   );
 
-  app.post('/api/templates/upload', admin, async (req, reply) => {
+  app.post('/api/templates/upload', author, async (req, reply) => {
     const { fields, ext, data } = await readUpload(req);
     const meta = z
       .object({
@@ -324,7 +361,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
 
   app.get(
     '/api/templates/:id/tag-warnings',
-    { ...admin, schema: { params: IdParams } },
+    { ...editor, schema: { params: IdParams } },
     async (req): Promise<TemplateTagWarnings> => {
       const row = await loadTemplate(db, req.params.id);
       return findTagWarnings(await templateFileRef(deps, row).read(), row.fileExt);
@@ -334,7 +371,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
   app.put(
     '/api/templates/:id/file',
     // holder — вкладка «Документ» той же страницы: её собственная блокировка замене не мешает (§38.2).
-    { ...admin, schema: { params: IdParams, querystring: EditLockHolderQuery.partial() } },
+    { ...editor, schema: { params: IdParams, querystring: EditLockHolderQuery.partial() } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
       const { ext, data } = await readUpload(req);
@@ -387,13 +424,16 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           .remove(previous)
           .catch((e) => req.log.warn({ err: e }, 'старый файл шаблона не удалён'));
       }
-      return toAdminDetails(await loadTemplateFull(db, updated.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, updated.id),
+        templateRights(currentUser(req), updated),
+      );
     },
   );
 
   app.patch(
     '/api/templates/:id',
-    { ...admin, schema: { params: IdParams, body: UpdateTemplateBody } },
+    { ...editor, schema: { params: IdParams, body: UpdateTemplateBody } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
       if (
@@ -407,22 +447,27 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         .update(templates)
         .set({ ...req.body, updatedAt: new Date(), updatedBy: currentUser(req).id })
         .where(eq(templates.id, row.id));
-      return toAdminDetails(await loadTemplateFull(db, row.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, row.id),
+        templateRights(currentUser(req), row),
+      );
     },
   );
 
   app.delete(
     '/api/templates/:id',
-    { ...admin, schema: { params: IdParams } },
+    { ...owner, schema: { params: IdParams } },
     async (req, reply) => {
       const row = await loadTemplate(db, req.params.id);
       await db.transaction(async (tx) => {
         const [cur] = await tx
-          .select({ id: templates.id })
+          .select({ id: templates.id, ownerId: templates.ownerId })
           .from(templates)
           .where(eq(templates.id, row.id))
           .for('update');
         if (!cur) throw notFound('шаблон');
+        // Владельца мог сменить админ, пока запрос ждал блокировку: право проверяется ещё раз под ней.
+        if (!deleteRight(currentUser(req), cur)) throw forbidden(NO_EDIT_RIGHT);
         await assertNotLockedByOther(tx, cur.id, null);
         await tx.delete(templates).where(eq(templates.id, cur.id));
       });
@@ -436,9 +481,17 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
   // Выгрузка в архив (§33.2): доступна и в режиме обслуживания — ничего не меняет.
   app.post(
     '/api/templates/export',
-    { ...admin, schema: { body: ExportTemplatesBody } },
+    { ...author, schema: { body: ExportTemplatesBody } },
     async (req, reply) => {
-      const { filename, buffer } = await buildExport(deps, req.body.ids);
+      // Редактор выгружает только то, что может править; первый отказ — его код (§43.3).
+      const user = currentUser(req);
+      if (user.role !== 'admin') {
+        for (const id of req.body.ids) await assertTemplateEdit(db, user, id);
+      }
+      // Настройки подключения источника видит только admin; редактору — одно имя (§43.2).
+      const { filename, buffer } = await buildExport(deps, req.body.ids, {
+        withConnection: user.role === 'admin',
+      });
       return reply
         .header('content-type', 'application/zip')
         .header('cache-control', 'no-store')
@@ -448,12 +501,12 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
   );
 
   // Загрузка из архива (§33.2); в режиме обслуживания закрыта вместе с прочими изменениями.
-  app.post('/api/templates/import/preview', admin, async (req): Promise<ImportPreview> => {
+  app.post('/api/templates/import/preview', author, async (req): Promise<ImportPreview> => {
     const { data } = await readArchiveUpload(req);
-    return previewImport(deps, data);
+    return previewImport(deps, data, currentUser(req));
   });
 
-  app.post('/api/templates/import', admin, async (req): Promise<ImportResult> => {
+  app.post('/api/templates/import', author, async (req): Promise<ImportResult> => {
     const { fields, data } = await readArchiveUpload(req);
     let raw: unknown;
     try {
@@ -468,12 +521,12 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         `неверные решения по шаблонам: ${issue.path.join('.')} ${issue.message}`.trim(),
       );
     }
-    return applyImport(deps, data, decisions.data, currentUser(req).id, req.log);
+    return applyImport(deps, data, decisions.data, currentUser(req), req.log);
   });
 
   app.post(
     '/api/templates/:id/duplicate',
-    { ...admin, schema: { params: IdParams } },
+    { ...editor, schema: { params: IdParams } },
     async (req, reply) => {
       const src = await loadTemplateFull(db, req.params.id);
       const row = await insertTemplate(
@@ -513,7 +566,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
 
   app.get(
     '/api/templates/:id/download',
-    { ...admin, schema: { params: IdParams } },
+    { ...editor, schema: { params: IdParams } },
     async (req, reply) => {
       const row = await loadTemplate(db, req.params.id);
       const data = await templateFileRef(deps, row).read();
@@ -526,7 +579,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
 
   app.put(
     '/api/templates/:id/queries',
-    { ...admin, schema: { params: IdParams, body: z.array(TemplateQuery) } },
+    { ...editor, schema: { params: IdParams, body: z.array(TemplateQuery) } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
       uniqueOrFail(
@@ -548,13 +601,16 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
           .where(eq(templates.id, row.id));
       });
-      return toAdminDetails(await loadTemplateFull(db, row.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, row.id),
+        templateRights(currentUser(req), row),
+      );
     },
   );
 
   app.put(
     '/api/templates/:id/params',
-    { ...admin, schema: { params: IdParams, body: z.array(TemplateParam) } },
+    { ...editor, schema: { params: IdParams, body: z.array(TemplateParam) } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
       uniqueOrFail(
@@ -575,13 +631,16 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
           .where(eq(templates.id, row.id));
       });
-      return toAdminDetails(await loadTemplateFull(db, row.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, row.id),
+        templateRights(currentUser(req), row),
+      );
     },
   );
 
   app.put(
     '/api/templates/:id/charts',
-    { ...admin, schema: { params: IdParams, body: TemplateChartList } },
+    { ...editor, schema: { params: IdParams, body: TemplateChartList } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
       await db.transaction(async (tx) => {
@@ -604,7 +663,10 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
           .where(eq(templates.id, row.id));
       });
-      return toAdminDetails(await loadTemplateFull(db, row.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, row.id),
+        templateRights(currentUser(req), row),
+      );
     },
   );
 }

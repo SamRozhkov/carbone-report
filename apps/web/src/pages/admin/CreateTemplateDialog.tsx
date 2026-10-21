@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api } from '../../api/endpoints';
 import { fieldErrors } from '../../api/errors';
+import { usePermissions } from '../../app/permissions';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Field } from '../../components/Field';
 import { GeneralError } from '../../components/GeneralError';
@@ -21,9 +22,10 @@ type Source = 'docx' | 'xlsx' | 'upload';
 export function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { isAdmin } = usePermissions();
   const datasources = useQuery({
-    queryKey: ['datasources'],
-    queryFn: api.datasources.list,
+    queryKey: ['datasources', 'options'],
+    queryFn: api.datasources.options,
     enabled: open,
   });
   const [name, setName] = useState('');
@@ -70,10 +72,14 @@ export function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose
           <Alert
             theme="warning"
             message={
-              <>
-                Сначала добавьте источник данных в разделе{' '}
-                <Link to="/admin/datasources">«Источники данных»</Link>.
-              </>
+              isAdmin ? (
+                <>
+                  Сначала добавьте источник данных в разделе{' '}
+                  <Link to="/admin/datasources">«Источники данных»</Link>.
+                </>
+              ) : (
+                'Источников данных пока нет — попросите администратора добавить источник.'
+              )
             }
           />
         ) : (

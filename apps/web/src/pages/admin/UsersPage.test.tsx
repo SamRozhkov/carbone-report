@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { ROLE_LABELS } from '@carbone-reports/shared';
 import { adminMe, mockApi, renderRoute } from '../../test/utils';
 
 const users = [
@@ -463,6 +464,40 @@ describe('UsersPage', () => {
       expect(
         calls.some((c) => c.method === 'DELETE' && c.path === '/api/users/u2/certificate'),
       ).toBe(true),
+    );
+  });
+
+  it('роль: четыре значения с подписями из ROLE_LABELS, в списке — подпись роли (§43.5)', async () => {
+    const { calls } = mockApi([
+      adminMe,
+      {
+        path: '/api/users',
+        body: [
+          ...users,
+          { ...users[1]!, id: 'u3', login: 'sidorov', role: 'access_manager', groupIds: [] },
+        ],
+      },
+      { method: 'POST', path: '/api/users', status: 201, body: { ...users[1]!, id: 'u4' } },
+    ]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    expect(within(row('sidorov')).getByText('распорядитель доступа')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Добавить пользователя' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Логин'), 'petrov');
+    await userEvent.type(within(dialog).getByLabelText('Пароль'), 'password123');
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Роль' }));
+    const options = await screen.findAllByRole('option');
+    expect(options.map((o) => o.textContent)).toEqual([
+      ROLE_LABELS.user,
+      ROLE_LABELS.editor,
+      ROLE_LABELS.access_manager,
+      ROLE_LABELS.admin,
+    ]);
+    await userEvent.click(screen.getByRole('option', { name: 'Редактор' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Создать' }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === 'POST')?.body).toMatchObject({ role: 'editor' }),
     );
   });
 });

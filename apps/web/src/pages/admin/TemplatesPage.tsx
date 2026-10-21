@@ -1,4 +1,4 @@
-import type { TemplateSummary } from '@carbone-reports/shared';
+import type { TemplateEditSummary } from '@carbone-reports/shared';
 import { ArrowDownToLine, ArrowUpToLine, Copy, Pencil, Plus, TrashBin } from '@gravity-ui/icons';
 import type { TableColumnConfig } from '@gravity-ui/uikit';
 import { Button, Checkbox, Icon, Label, Loader, Table, Text, useToaster } from '@gravity-ui/uikit';
@@ -19,12 +19,13 @@ export function TemplatesPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { add } = useToaster();
-  const list = useQuery({ queryKey: ['templates'], queryFn: api.templates.list });
+  // Только шаблоны, которые пользователь может править (§43.3); ключ — под общим ['templates'].
+  const list = useQuery({ queryKey: ['templates', 'edit'], queryFn: api.templates.listEditable });
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [deleting, setDeleting] = useState<TemplateSummary | null>(null);
-  const [lastDeleted, setLastDeleted] = useState<TemplateSummary | null>(null);
+  const [deleting, setDeleting] = useState<TemplateEditSummary | null>(null);
+  const [lastDeleted, setLastDeleted] = useState<TemplateEditSummary | null>(null);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['templates'] });
   const fail = (e: unknown) =>
@@ -36,7 +37,7 @@ export function TemplatesPage() {
     });
 
   const duplicate = useMutation({
-    mutationFn: (t: TemplateSummary) => api.templates.duplicate(t.id),
+    mutationFn: (t: TemplateEditSummary) => api.templates.duplicate(t.id),
     onSuccess: async (copy) => {
       await refresh();
       add({
@@ -48,7 +49,7 @@ export function TemplatesPage() {
     onError: fail,
   });
   const remove = useMutation({
-    mutationFn: (t: TemplateSummary) => api.templates.remove(t.id),
+    mutationFn: (t: TemplateEditSummary) => api.templates.remove(t.id),
     onSuccess: async (_, t) => {
       queryClient.removeQueries({ queryKey: ['template', t.id] });
       queryClient.removeQueries({ queryKey: ['template-admin', t.id] });
@@ -69,7 +70,7 @@ export function TemplatesPage() {
       return n;
     });
 
-  const columns: TableColumnConfig<TemplateSummary>[] = [
+  const columns: TableColumnConfig<TemplateEditSummary>[] = [
     {
       id: 'select',
       width: 40,
@@ -149,18 +150,20 @@ export function TemplatesPage() {
           >
             <Icon data={ArrowDownToLine} />
           </Button>
-          <Button
-            view="flat-danger"
-            size="s"
-            aria-label="Удалить"
-            title="Удалить"
-            onClick={() => {
-              setLastDeleted(t);
-              setDeleting(t);
-            }}
-          >
-            <Icon data={TrashBin} />
-          </Button>
+          {t.canDelete && (
+            <Button
+              view="flat-danger"
+              size="s"
+              aria-label="Удалить"
+              title="Удалить"
+              onClick={() => {
+                setLastDeleted(t);
+                setDeleting(t);
+              }}
+            >
+              <Icon data={TrashBin} />
+            </Button>
+          )}
         </div>
       ),
     },

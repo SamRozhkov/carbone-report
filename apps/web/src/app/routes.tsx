@@ -1,7 +1,8 @@
 import type { RouteObject } from 'react-router';
 import { Navigate } from 'react-router';
-import { RequireAdmin, RequireUser } from './guards';
+import { AdminIndex, RequireRole, RequireUser } from './guards';
 import { Layout } from './Layout';
+import { AccessPage } from '../pages/admin/AccessPage';
 import { BackupsPage } from '../pages/admin/BackupsPage';
 import { CategoriesPage } from '../pages/admin/CategoriesPage';
 import { DatasourcesPage } from '../pages/admin/DatasourcesPage';
@@ -31,29 +32,44 @@ export const routes: RouteObject[] = [
           { path: 'signature', element: <SignaturePage /> },
           {
             path: 'admin',
-            element: <RequireAdmin />,
             children: [
-              { index: true, element: <Navigate to="/admin/templates" replace /> },
-              { path: 'templates', element: <TemplatesPage /> },
+              { index: true, element: <AdminIndex /> },
               {
-                path: 'templates/:id',
-                // Редактор (Monaco, OnlyOffice) — отдельный чанк.
-                lazy: async () => ({
-                  Component: (await import('../pages/admin/template-editor/TemplateEditorPage'))
-                    .TemplateEditorPage,
-                }),
+                element: <RequireRole allow={(p) => p.canAuthor} />,
+                children: [
+                  { path: 'templates', element: <TemplatesPage /> },
+                  {
+                    path: 'templates/:id',
+                    // Редактор (Monaco, OnlyOffice) — отдельный чанк.
+                    lazy: async () => ({
+                      Component: (await import('../pages/admin/template-editor/TemplateEditorPage'))
+                        .TemplateEditorPage,
+                    }),
+                  },
+                  {
+                    path: 'help',
+                    // Справка — отдельный чанк: в основном бандле она не нужна.
+                    lazy: async () => ({
+                      Component: (await import('../pages/admin/help/HelpPage')).HelpPage,
+                    }),
+                  },
+                ],
               },
-              { path: 'datasources', element: <DatasourcesPage /> },
-              { path: 'users', element: <UsersPage /> },
-              { path: 'groups', element: <GroupsPage /> },
-              { path: 'categories', element: <CategoriesPage /> },
-              { path: 'backups', element: <BackupsPage /> },
               {
-                path: 'help',
-                // Справка — отдельный чанк: в основном бандле она не нужна.
-                lazy: async () => ({
-                  Component: (await import('../pages/admin/help/HelpPage')).HelpPage,
-                }),
+                element: <RequireRole allow={(p) => p.canManageAccess} />,
+                children: [
+                  { path: 'groups', element: <GroupsPage /> },
+                  { path: 'categories', element: <CategoriesPage /> },
+                  { path: 'access', element: <AccessPage /> },
+                ],
+              },
+              {
+                element: <RequireRole allow={(p) => p.isAdmin} />,
+                children: [
+                  { path: 'datasources', element: <DatasourcesPage /> },
+                  { path: 'users', element: <UsersPage /> },
+                  { path: 'backups', element: <BackupsPage /> },
+                ],
               },
             ],
           },

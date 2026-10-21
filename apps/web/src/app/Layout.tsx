@@ -14,6 +14,7 @@ import {
   Person,
   Persons,
   PersonsLock,
+  ShieldCheck,
   Sun,
 } from '@gravity-ui/icons';
 import type { AsideHeaderItem } from '@gravity-ui/navigation';
@@ -26,6 +27,7 @@ import { api } from '../api/endpoints';
 import { meKey, useMe } from '../api/session';
 import { AboutDialog } from './AboutDialog';
 import { webBuild } from './buildInfo';
+import { usePermissions } from './permissions';
 import { ThemeContext } from './theme';
 
 /** Черновики превью и параметры тестового прогона не должны достаться следующему пользователю. */
@@ -70,18 +72,30 @@ export function Layout() {
     item('history', 'История', ClockArrowRotateLeft, '/history'),
     item('signature', 'Моя подпись', PencilToLine, '/signature'),
   ];
-  if (me?.role === 'admin') {
-    menuItems.push(
-      { id: 'admin-divider', title: '', type: 'divider' },
-      item('templates', 'Шаблоны', Layers, '/admin/templates'),
-      item('datasources', 'Источники данных', Database, '/admin/datasources'),
-      item('users', 'Пользователи', Persons, '/admin/users'),
-      item('groups', 'Группы', PersonsLock, '/admin/groups'),
-      item('categories', 'Категории', Folders, '/admin/categories'),
-      // §26.3: пункт есть, только если API настроен на агент бэкапа.
-      ...(me.features?.backups ? [item('backups', 'Бэкапы', Archive, '/admin/backups')] : []),
-      item('help', 'Справка по шаблонам', CircleQuestion, '/admin/help'),
-    );
+  const { isAdmin, canAuthor, canManageAccess } = usePermissions();
+  const sectionItems: AsideHeaderItem[] = [
+    ...(canAuthor ? [item('templates', 'Шаблоны', Layers, '/admin/templates')] : []),
+    ...(isAdmin
+      ? [
+          item('datasources', 'Источники данных', Database, '/admin/datasources'),
+          item('users', 'Пользователи', Persons, '/admin/users'),
+        ]
+      : []),
+    ...(canManageAccess
+      ? [
+          item('groups', 'Группы', PersonsLock, '/admin/groups'),
+          item('categories', 'Категории', Folders, '/admin/categories'),
+          item('access', 'Доступ к отчётам', ShieldCheck, '/admin/access'),
+        ]
+      : []),
+    // §26.3: пункт есть, только если API настроен на агент бэкапа.
+    ...(isAdmin && me?.features?.backups
+      ? [item('backups', 'Бэкапы', Archive, '/admin/backups')]
+      : []),
+    ...(canAuthor ? [item('help', 'Справка по шаблонам', CircleQuestion, '/admin/help')] : []),
+  ];
+  if (sectionItems.length > 0) {
+    menuItems.push({ id: 'admin-divider', title: '', type: 'divider' }, ...sectionItems);
   }
 
   const signOut = async (

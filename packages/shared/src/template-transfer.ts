@@ -50,14 +50,17 @@ export const ExportTemplatesBody = z.object({
 });
 export type ExportTemplatesBody = z.infer<typeof ExportTemplatesBody>;
 
-/** Источник данных — только для сведения и сопоставления; пароль и CA не выгружаются. */
+/**
+ * Источник данных — только для сведения и сопоставления по имени; пароль и CA не выгружаются.
+ * Настройки подключения выгружает только `admin`: в архиве редактора — одно имя (§43.2).
+ */
 export const TransferDatasource = z.strictObject({
   name: z.string().min(1),
-  host: z.string().min(1),
-  port: z.number().int().min(1).max(65535),
-  database: z.string().min(1),
-  username: z.string(),
-  sslMode: SslMode,
+  host: z.string().min(1).optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  database: z.string().min(1).optional(),
+  username: z.string().optional(),
+  sslMode: SslMode.optional(),
 });
 export type TransferDatasource = z.infer<typeof TransferDatasource>;
 

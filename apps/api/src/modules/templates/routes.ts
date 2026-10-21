@@ -488,7 +488,10 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       if (user.role !== 'admin') {
         for (const id of req.body.ids) await assertTemplateEdit(db, user, id);
       }
-      const { filename, buffer } = await buildExport(deps, req.body.ids);
+      // Настройки подключения источника видит только admin; редактору — одно имя (§43.2).
+      const { filename, buffer } = await buildExport(deps, req.body.ids, {
+        withConnection: user.role === 'admin',
+      });
       return reply
         .header('content-type', 'application/zip')
         .header('cache-control', 'no-store')

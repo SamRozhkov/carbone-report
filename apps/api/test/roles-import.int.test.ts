@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type {
-  ImportDecision,
-  ImportPreview,
-  ImportResult,
+import {
+  TransferManifest,
+  type ImportDecision,
+  type ImportPreview,
+  type ImportResult,
 } from '@carbone-reports/shared/template-transfer';
 import { asc, eq } from 'drizzle-orm';
+import JSZip from 'jszip';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { categories, groups, templateEditors, templateGroups, templates } from '../src/db/schema';
 import {
@@ -233,5 +235,39 @@ describe('загрузка из архива редактором (§43.3)', () 
   it('access_manager — предпросмотр и загрузка 403', async () => {
     expect((await preview(manager, zipX)).statusCode).toBe(403);
     expect((await apply(manager, zipX, [decision({ action: 'copy' })])).statusCode).toBe(403);
+  });
+});
+
+describe('выгрузка редактором: источник без настроек подключения (§43.2)', () => {
+  const manifestDs = async (zip: Buffer) => {
+    const z = await JSZip.loadAsync(zip);
+    const m = TransferManifest.parse(JSON.parse(await z.file('manifest.json')!.async('string')));
+    return m.templates[0]!.datasource;
+  };
+
+  it('редактор: в архиве только имя источника; admin — с настройками подключения', async () => {
+    const own = await createTemplate(t, editorA.cookie, dsId);
+    expect(await manifestDs(await exportZip(editorA.cookie, [own]))).toEqual({ name: 'Учёт' });
+    const full = await manifestDs(await exportZip(admin, [own]));
+    expect(Object.keys(full).sort()).toEqual(
+      ['database', 'host', 'name', 'port', 'sslMode', 'username'].sort(),
+    );
+    expect(full).toMatchObject({ name: 'Учёт', sslMode: 'disable' });
+  });
+
+  it('архив редактора загружается: источник сопоставлен по имени', async () => {
+    const own = await createTemplate(t, editorA.cookie, dsId);
+    const zip = await exportZip(editorA.cookie, [own]);
+    for (const cookie of [editorA.cookie, admin]) {
+      const p = await preview(cookie, zip);
+      expect(p.statusCode, p.body).toBe(200);
+      const item = (p.json() as ImportPreview).templates[0]!;
+      expect(item).toMatchObject({ datasource: { name: 'Учёт' }, datasourceMatch: dsId });
+      expect(item.errors).toEqual([]);
+      const r = await apply(cookie, zip, [decision({ action: 'copy' })]);
+      expect(r.statusCode, r.body).toBe(200);
+      const [res] = (r.json() as ImportResult).templates;
+      expect((await row(res!.id!)).datasourceId).toBe(dsId);
+    }
   });
 });

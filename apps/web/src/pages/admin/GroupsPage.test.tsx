@@ -168,7 +168,7 @@ describe('GroupsPage', () => {
     );
   });
 
-  it('распорядитель доступа: участники — из справочника; заблокированного можно убрать (§43.3)', async () => {
+  it('менеджер безопасности: участники — из справочника; заблокированного можно убрать (§43.3)', async () => {
     const { calls } = mockApi([
       { path: '/api/auth/me', body: { id: 'am-id', login: 'am', role: 'access_manager' } },
       { path: '/api/groups', body: [{ ...groups[1]!, memberIds: ['u2', 'blocked-id'] }] },

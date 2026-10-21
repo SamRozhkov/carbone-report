@@ -23,7 +23,7 @@ export type Role = z.infer<typeof Role>;
 export const ROLE_LABELS: Record<Role, string> = {
   admin: 'Администратор',
   editor: 'Редактор',
-  access_manager: 'Распорядитель доступа',
+  access_manager: 'Менеджер безопасности',
   user: 'Пользователь',
 };
 

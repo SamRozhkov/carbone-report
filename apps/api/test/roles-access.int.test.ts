@@ -11,7 +11,7 @@ import {
   type TestApp,
 } from './helpers';
 
-// Распорядитель доступа, редакторы и владелец шаблона, справочники (§43.2–§43.3).
+// Менеджер безопасности, редакторы и владелец шаблона, справочники (§43.2–§43.3).
 let t: TestApp;
 let admin: string;
 let manager: { cookie: string; id: string };
@@ -25,7 +25,7 @@ let dsId: string;
 let ownA: string;
 /** Публичный шаблон администратора: виден всем по §19. */
 let foreignPublic: string;
-/** Закрытый шаблон администратора: редактору и распорядителю не виден. */
+/** Закрытый шаблон администратора: редактору и менеджеру безопасности не виден. */
 let foreignClosed: string;
 
 const req = (
@@ -69,7 +69,7 @@ beforeAll(async () => {
 });
 afterAll(() => t.close());
 
-describe('распорядитель доступа', () => {
+describe('менеджер безопасности', () => {
   it('ведёт группы', async () => {
     const g = await req('POST', '/api/groups', manager.cookie, { name: 'Группа РД' });
     expect(g.statusCode, g.body).toBe(201);

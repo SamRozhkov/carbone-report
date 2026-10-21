@@ -2,6 +2,7 @@ import type { Role } from '@carbone-reports/shared';
 import os from 'node:os';
 import { z } from 'zod';
 import { hasHost, withPassword } from './lib/url-password';
+import { loadFeedbackConfig, type FeedbackSmtpConfig } from './modules/feedback/mail';
 
 /** Хост белого списка изображений: имя или IPv4, либо [IPv6], с необязательным портом. */
 const HOST = /^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:.]+\])(?::\d{1,5})?$/;
@@ -284,6 +285,7 @@ export interface S3Settings {
 }
 
 export interface Config {
+  feedback?: FeedbackSmtpConfig | null;
   databaseUrl: string;
   appSecret: Uint8Array;
   encryptionKey: Buffer;
@@ -397,6 +399,7 @@ export function loadConfig(
   const limit = e.RENDER_WORKER_MEMORY_MB === undefined ? memoryLimit() : undefined;
   const enc = new TextEncoder();
   return {
+    feedback: loadFeedbackConfig(env),
     databaseUrl: withPassword(e.DATABASE_URL, e.DATABASE_PASSWORD),
     appSecret: enc.encode(e.APP_SECRET),
     encryptionKey: Buffer.from(e.ENCRYPTION_KEY, 'base64'),

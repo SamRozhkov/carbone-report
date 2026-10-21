@@ -235,7 +235,7 @@ describe('бэкапы в админке: агент выключен или н�
       expect(r.statusCode).toBe(404);
       expect(r.json().error.code).toBe('backups_disabled');
       const me = await t.app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
-      expect(me.json().features).toEqual({ backups: false });
+      expect(me.json().features).toEqual({ backups: false, feedback: false });
     } finally {
       await t.close();
     }

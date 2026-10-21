@@ -32,6 +32,13 @@ data:
   {{- if .Values.config.renderWorkerMemoryMb }}
   RENDER_WORKER_MEMORY_MB: {{ .Values.config.renderWorkerMemoryMb | toString | quote }}
   {{- end }}
+  FEEDBACK_ENABLED: {{ .Values.config.feedback.enabled | toString | quote }}
+  FEEDBACK_TO: {{ .Values.config.feedback.to | quote }}
+  SMTP_HOST: {{ .Values.config.smtp.host | quote }}
+  SMTP_PORT: {{ .Values.config.smtp.port | toString | quote }}
+  SMTP_SECURE: {{ .Values.config.smtp.secure | toString | quote }}
+  SMTP_FROM: {{ .Values.config.smtp.from | quote }}
+  SMTP_USER: {{ .Values.config.smtp.user | quote }}
   LDAP_ENABLED: {{ .Values.config.ldap.enabled | toString | quote }}
   LDAP_URL: {{ .Values.config.ldap.url | quote }}
   LDAP_BIND_DN: {{ .Values.config.ldap.bindDn | quote }}

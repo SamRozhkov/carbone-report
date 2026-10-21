@@ -70,6 +70,7 @@ spec:
             {{- include "cr.secretEnv" (dict "root" . "env" "S3_ACCESS_KEY_ID" "key" "S3_ACCESS_KEY_ID" "optional" true) | nindent 12 }}
             {{- include "cr.secretEnv" (dict "root" . "env" "S3_SECRET_ACCESS_KEY" "key" "S3_SECRET_ACCESS_KEY" "optional" true) | nindent 12 }}
             {{- include "cr.secretEnv" (dict "root" . "env" "LDAP_BIND_PASSWORD" "key" "LDAP_BIND_PASSWORD" "optional" true) | nindent 12 }}
+            {{- include "cr.secretEnv" (dict "root" . "env" "SMTP_PASSWORD" "key" "SMTP_PASSWORD" "optional" (not (and .Values.config.feedback.enabled .Values.config.smtp.user))) | nindent 12 }}
             {{- with .Values.api.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

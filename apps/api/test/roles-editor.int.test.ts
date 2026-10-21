@@ -165,6 +165,31 @@ describe('редактор в конструкторе шаблонов', () => 
     ).toBe(404);
   });
 
+  it('варианты параметра в превью: свой закрытый шаблон — 200, чужой редактор — 404', async () => {
+    const param = {
+      name: 'city',
+      label: 'Город',
+      type: 'query',
+      required: false,
+      defaultValue: null,
+      options: null,
+      sql: "select 1 as value, 'Москва' as label",
+      multiple: false,
+    };
+    const url = (id: string) => `/api/templates/${id}/params/city/options`;
+    const p = await req('PUT', `/api/templates/${ownA}/params`, editorA.cookie, [param]);
+    expect(p.statusCode, p.body).toBe(200);
+    const a = await req('POST', url(ownA), editorA.cookie, { params: {} });
+    expect(a.statusCode, a.body).toBe(200);
+    expect(a.json()).toMatchObject({ options: [{ value: 1, label: 'Москва' }] });
+    expect((await req('POST', url(ownA), editorC.cookie, { params: {} })).statusCode).toBe(404);
+    // Пользователь с доступом по §19 по-прежнему получает варианты.
+    const pub = await req('PUT', `/api/templates/${foreignPublic}/params`, admin, [param]);
+    expect(pub.statusCode, pub.body).toBe(200);
+    const u = await req('POST', url(foreignPublic), user, { params: {} });
+    expect(u.statusCode, u.body).toBe(200);
+  });
+
   it('выданный редактор правит, но не удаляет', async () => {
     await t.deps.db.insert(templateEditors).values({ templateId: ownA, userId: editorB.id });
     const d = await req('GET', `/api/templates/${ownA}`, editorB.cookie);

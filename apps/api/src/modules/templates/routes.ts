@@ -319,7 +319,11 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       schema: { params: IdParams.extend({ name: z.string() }), body: ParamOptionsBody },
     },
     async (req): Promise<ParamOptionsResult> => {
-      await assertTemplateAccess(db, currentUser(req), req.params.id);
+      const user = currentUser(req);
+      // Превью конструктора: правящему шаблон группы не нужны (§43); остальным — правило §19.
+      if (!(await canEditTemplate(db, user, req.params.id))) {
+        await assertTemplateAccess(db, user, req.params.id);
+      }
       const full = await loadTemplateFull(db, req.params.id);
       return optionsForParam(deps, full, req.params.name, req.body.params);
     },

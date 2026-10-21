@@ -17,6 +17,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api/endpoints';
 import { conflictMessage, errorMessage, fieldErrors } from '../../api/errors';
+import { usePermissions } from '../../app/permissions';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Field } from '../../components/Field';
@@ -218,12 +219,21 @@ function GroupDialog({ group, onClose }: { group: GroupDto | null; onClose: () =
 
 function MembersDialog({ group, onClose }: { group: GroupDto; onClose: () => void }) {
   const queryClient = useQueryClient();
-  // Справочник, а не список пользователей: страница открыта и распорядителю доступа (§43.3).
-  const users = useQuery({
-    queryKey: ['users', 'directory'],
-    queryFn: () => api.users.directory(),
+  const { isAdmin } = usePermissions();
+  // Список пользователей — только администратору; распорядителю доступа — справочник активных (§43.3).
+  const users = useQuery<{ id: string; login: string }[]>({
+    queryKey: isAdmin ? ['users'] : ['users', 'directory'],
+    queryFn: isAdmin ? api.users.list : () => api.users.directory(),
   });
   const [userIds, setUserIds] = useState<string[]>(group.memberIds);
+  // Заблокированных нет в справочнике: участник остаётся в списке, чтобы его можно было убрать.
+  const known = new Set((users.data ?? []).map((u) => u.id));
+  const options = [
+    ...(users.data ?? []).map((u) => ({ value: u.id, content: u.login })),
+    ...group.memberIds
+      .filter((uid) => users.data && !known.has(uid))
+      .map((uid) => ({ value: uid, content: '(заблокирован)' })),
+  ];
   const save = useMutation({
     mutationFn: () => api.groups.setMembers(group.id, userIds),
     onSuccess: async () => {
@@ -244,7 +254,7 @@ function MembersDialog({ group, onClose }: { group: GroupDto; onClose: () => voi
               aria-label="Участники"
               value={userIds}
               onUpdate={setUserIds}
-              options={(users.data ?? []).map((u) => ({ value: u.id, content: u.login }))}
+              options={options}
               multiple
               filterable
               hasClear

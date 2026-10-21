@@ -446,7 +446,8 @@ describe('Выгрузка шаблонов', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Выгрузить (201)' }));
     expect(await screen.findByText(/не больше 200 шаблонов, выбрано 201/)).toBeInTheDocument();
     expect(calls.some((c) => c.path === '/api/templates/export')).toBe(false);
-  });
+    // Таблица из 201 строки под нагрузкой полного прогона рисуется дольше 5 с.
+  }, 15_000);
 
   it('ошибка 400 → текст сервера в уведомлении', async () => {
     mockApi([

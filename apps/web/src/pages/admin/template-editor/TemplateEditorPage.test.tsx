@@ -199,4 +199,41 @@ describe('TemplateEditorPage', () => {
     await waitFor(() => expect(calls.some((c) => c.path.endsWith('/tag-warnings'))).toBe(true));
     expect(screen.queryByText('В тегах есть русские буквы вместо латинских')).toBeNull();
   });
+
+  it('редактор без права правки: DTO пользователя → сообщение вместо вкладок (§43.3)', async () => {
+    const {
+      queries: _q,
+      charts: _c,
+      attachments: _a,
+      datasourceId: _d,
+      ...userDto
+    } = adminTemplate;
+    mockApi([
+      { path: '/api/auth/me', body: { id: 'ed-id', login: 'editor', role: 'editor' } },
+      { path: '/api/templates/t1', body: userDto },
+    ]);
+    const { router } = renderRoute('/admin/templates/t1');
+    expect(await screen.findByText('нет права на правку шаблона')).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    mockApi([
+      { path: '/api/auth/me', body: { id: 'ed-id', login: 'editor', role: 'editor' } },
+      { path: '/api/templates', body: [] },
+    ]);
+    await userEvent.click(screen.getByRole('button', { name: 'К списку шаблонов' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/templates'));
+  });
+
+  it('403 от API → «нет права на правку шаблона»', async () => {
+    mockApi([
+      { path: '/api/auth/me', body: { id: 'ed-id', login: 'editor', role: 'editor' } },
+      {
+        path: '/api/templates/t1',
+        status: 403,
+        body: { error: { code: 'FORBIDDEN', message: 'нет права на правку шаблона' } },
+      },
+    ]);
+    renderRoute('/admin/templates/t1');
+    expect(await screen.findByText('нет права на правку шаблона')).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+  });
 });

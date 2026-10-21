@@ -1,10 +1,16 @@
-import { DatasourceBody, IdParams, type DatasourceDto } from '@carbone-reports/shared';
+import {
+  DatasourceBody,
+  IdParams,
+  type DatasourceDto,
+  type DatasourceOption,
+} from '@carbone-reports/shared';
 import { asc, eq } from 'drizzle-orm';
 import type { App } from '../../app';
 import { datasources, templates, type DatasourceRow } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { encryptSecret } from '../../lib/crypto';
 import { badRequest, conflict, notFound } from '../../lib/errors';
+import { AUTHOR_ROLES } from '../access/permissions';
 import type { Guards } from '../auth/guards';
 import { connParamsFromRow, testConnection } from './pools';
 
@@ -28,6 +34,17 @@ export function registerDatasourceRoutes(app: App, deps: AppDeps, guards: Guards
     const rows = await deps.db.select().from(datasources).orderBy(asc(datasources.name));
     return rows.map(toDatasourceDto);
   });
+
+  // Редактору — только id и имя для выбора источника в конструкторе (§43.3).
+  app.get(
+    '/api/datasources/options',
+    { preHandler: guards.requireRole(...AUTHOR_ROLES) },
+    async (): Promise<DatasourceOption[]> =>
+      deps.db
+        .select({ id: datasources.id, name: datasources.name })
+        .from(datasources)
+        .orderBy(asc(datasources.name)),
+  );
 
   app.post('/api/datasources', { ...pre, schema: { body: DatasourceBody } }, async (req, reply) => {
     const { password, ...rest } = req.body;

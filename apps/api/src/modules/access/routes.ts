@@ -7,10 +7,12 @@ import {
   IdParams,
   MembersBody,
   TemplateAccess,
+  type AccessTemplateRow,
   type CategoryDto,
   type GroupDto,
 } from '@carbone-reports/shared';
 import { asc, eq, inArray, sql } from 'drizzle-orm';
+import type { FastifyRequest } from 'fastify';
 import type { App } from '../../app';
 import type { Db } from '../../db/client';
 import {
@@ -28,6 +30,7 @@ import type { AppDeps } from '../../deps';
 import { isForeignKeyViolation, isUniqueViolation } from '../../lib/db-errors';
 import { badRequest, conflict, notFound } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
+import { ACCESS_ROLES, assertTemplateEdit } from './permissions';
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
@@ -80,7 +83,10 @@ async function fkGuard<T>(fn: () => Promise<T>): Promise<T> {
 
 export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): void {
   const { db } = deps;
-  const pre = { preHandler: guards.requireAdmin };
+  // §43.3: справочники групп и категорий ведут admin и распорядитель доступа, читает и редактор.
+  const manage = { preHandler: guards.requireRole(...ACCESS_ROLES) };
+  const read = { preHandler: guards.requireRole(...ACCESS_ROLES, 'editor') };
+  const adminOnly = { preHandler: guards.requireAdmin };
 
   const memberIdsOf = async (groupId: string) =>
     (
@@ -114,7 +120,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
 
   // ---- группы ----
 
-  app.get('/api/groups', pre, async () => {
+  app.get('/api/groups', read, async () => {
     const rows = await db
       .select()
       .from(groups)
@@ -125,7 +131,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
     return rows.map((r) => toGroupDto(r, (byGroup.get(r.id) ?? []).sort()));
   });
 
-  app.post('/api/groups', { ...pre, schema: { body: GroupBody } }, async (req, reply) => {
+  app.post('/api/groups', { ...manage, schema: { body: GroupBody } }, async (req, reply) => {
     try {
       const [row] = await db.insert(groups).values(req.body).returning();
       return reply.status(201).send(toGroupDto(row!, []));
@@ -137,7 +143,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
 
   app.patch(
     '/api/groups/:id',
-    { ...pre, schema: { params: IdParams, body: GroupPatch } },
+    { ...manage, schema: { params: IdParams, body: GroupPatch } },
     async (req) => {
       if (Object.keys(req.body).length === 0) throw badRequest('нет изменений');
       try {
@@ -155,7 +161,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
     },
   );
 
-  app.delete('/api/groups/:id', { ...pre, schema: { params: IdParams } }, async (req, reply) => {
+  app.delete('/api/groups/:id', { ...manage, schema: { params: IdParams } }, async (req, reply) => {
     const [row] = await db
       .delete(groups)
       .where(eq(groups.id, req.params.id))
@@ -166,7 +172,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
 
   app.put(
     '/api/groups/:id/members',
-    { ...pre, schema: { params: IdParams, body: MembersBody } },
+    { ...manage, schema: { params: IdParams, body: MembersBody } },
     async (req) => {
       const userIds = unique(req.body.userIds);
       await fkGuard(() =>
@@ -192,7 +198,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
 
   // ---- категории ----
 
-  app.get('/api/categories', pre, async () => {
+  app.get('/api/categories', read, async () => {
     const rows = await db
       .select()
       .from(categories)
@@ -210,7 +216,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
     );
   });
 
-  app.post('/api/categories', { ...pre, schema: { body: CategoryBody } }, async (req, reply) => {
+  app.post('/api/categories', { ...manage, schema: { body: CategoryBody } }, async (req, reply) => {
     try {
       const [row] = await db.insert(categories).values(req.body).returning();
       return reply.status(201).send(toCategoryDto(row!, [], 0));
@@ -222,7 +228,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
 
   app.patch(
     '/api/categories/:id',
-    { ...pre, schema: { params: IdParams, body: CategoryPatch } },
+    { ...manage, schema: { params: IdParams, body: CategoryPatch } },
     async (req) => {
       if (Object.keys(req.body).length === 0) throw badRequest('нет изменений');
       try {
@@ -242,7 +248,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
 
   app.delete(
     '/api/categories/:id',
-    { ...pre, schema: { params: IdParams } },
+    { ...manage, schema: { params: IdParams } },
     async (req, reply) => {
       // templates.category_id и category_groups освобождаются внешними ключами (set null / cascade).
       const [row] = await db
@@ -256,7 +262,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
 
   app.put(
     '/api/categories/:id/groups',
-    { ...pre, schema: { params: IdParams, body: GroupIdsBody } },
+    { ...manage, schema: { params: IdParams, body: GroupIdsBody } },
     async (req) => {
       const groupIds = unique(req.body.groupIds);
       await fkGuard(() =>
@@ -282,6 +288,30 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
 
   // ---- доступ к шаблону ----
 
+  // Все шаблоны для страницы «Доступ к отчётам»: без запросов, параметров, файла и источника.
+  app.get('/api/access/templates', manage, async (): Promise<AccessTemplateRow[]> => {
+    const rows = await db
+      .select({
+        id: templates.id,
+        name: templates.name,
+        categoryId: templates.categoryId,
+        public: templates.public,
+      })
+      .from(templates)
+      .orderBy(asc(sql`lower(${templates.name})`), asc(templates.id));
+    const links = await db.select().from(templateGroups);
+    const byTemplate = new Map<string, string[]>();
+    for (const l of links)
+      byTemplate.set(l.templateId, [...(byTemplate.get(l.templateId) ?? []), l.groupId]);
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      categoryId: r.categoryId,
+      groupIds: (byTemplate.get(r.id) ?? []).sort(),
+      public: r.public,
+    }));
+  });
+
   const accessOf = async (templateId: string): Promise<TemplateAccess> => {
     const [t] = await db
       .select({ public: templates.public, categoryId: templates.categoryId })
@@ -295,14 +325,23 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
     return { public: t.public, categoryId: t.categoryId, groupIds: gs.map((g) => g.id).sort() };
   };
 
-  app.get('/api/templates/:id/access', { ...pre, schema: { params: IdParams } }, (req) =>
-    accessOf(req.params.id),
-  );
+  // Доступ шаблона: admin и распорядитель — любой шаблон, редактор — при праве правки (§43.3).
+  // Проверка до транзакции: невидимый шаблон — 404, видимый без права правки — 403.
+  const assertEditorRight = async (req: FastifyRequest, id: string) => {
+    const user = currentUser(req);
+    if (user.role === 'editor') await assertTemplateEdit(db, user, id);
+  };
+
+  app.get('/api/templates/:id/access', { ...read, schema: { params: IdParams } }, async (req) => {
+    await assertEditorRight(req, req.params.id);
+    return accessOf(req.params.id);
+  });
 
   app.put(
     '/api/templates/:id/access',
-    { ...pre, schema: { params: IdParams, body: TemplateAccess } },
+    { ...read, schema: { params: IdParams, body: TemplateAccess } },
     async (req) => {
+      await assertEditorRight(req, req.params.id);
       const { public: isPublic, categoryId } = req.body;
       const groupIds = unique(req.body.groupIds);
       await fkGuard(() =>
@@ -355,14 +394,14 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
     if (!u) throw notFound('пользователь');
   };
 
-  app.get('/api/users/:id/groups', { ...pre, schema: { params: IdParams } }, async (req) => {
+  app.get('/api/users/:id/groups', { ...adminOnly, schema: { params: IdParams } }, async (req) => {
     await assertUser(req.params.id);
     return userGroupIds(req.params.id);
   });
 
   app.put(
     '/api/users/:id/groups',
-    { ...pre, schema: { params: IdParams, body: GroupIdsBody } },
+    { ...adminOnly, schema: { params: IdParams, body: GroupIdsBody } },
     async (req) => {
       const groupIds = unique(req.body.groupIds);
       await fkGuard(() =>

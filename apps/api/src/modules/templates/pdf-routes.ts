@@ -41,7 +41,7 @@ const AttachmentParams = IdParams.extend({ aid: z.uuid('неверный иде�
 
 /** Настройки PDF и приложенные файлы шаблона (§36.1, §36.3); всё — под блокировкой строки шаблона. */
 export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guards): void {
-  const admin = { preHandler: guards.requireAdmin };
+  const editor = { preHandler: guards.requireTemplateEdit };
   const { db, storage } = deps;
 
   const touch = (tx: DbTx, id: string, userId: string) =>
@@ -92,7 +92,7 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
 
   app.put(
     '/api/templates/:id/pdf-options',
-    { ...admin, schema: { params: IdParams, body: SavePdfOptionsBody } },
+    { ...editor, schema: { params: IdParams, body: SavePdfOptionsBody } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
       const { password, ...rest } = req.body;
@@ -142,7 +142,7 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
 
   app.post(
     '/api/templates/:id/attachments',
-    { ...admin, schema: { params: IdParams } },
+    { ...editor, schema: { params: IdParams } },
     async (req, reply) => {
       const row = await loadTemplate(db, req.params.id);
       const { name, data, placement } = await readPdfUpload(req);
@@ -197,7 +197,7 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
 
   app.patch(
     '/api/templates/:id/attachments/:aid',
-    { ...admin, schema: { params: AttachmentParams, body: MoveAttachmentBody } },
+    { ...editor, schema: { params: AttachmentParams, body: MoveAttachmentBody } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
       await db.transaction(async (tx) => {
@@ -223,7 +223,7 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
 
   app.delete(
     '/api/templates/:id/attachments/:aid',
-    { ...admin, schema: { params: AttachmentParams } },
+    { ...editor, schema: { params: AttachmentParams } },
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
       const removed = await db.transaction(async (tx) => {

@@ -15,7 +15,7 @@ export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards
   app.get(
     '/api/templates/:id/editor-config',
     {
-      preHandler: guards.requireAdmin,
+      preHandler: guards.requireTemplateEdit,
       schema: { params: IdParams, querystring: EditLockHolderQuery },
     },
     async (req) => {
@@ -28,7 +28,7 @@ export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards
   app.post(
     '/api/templates/:id/save',
     {
-      preHandler: guards.requireAdmin,
+      preHandler: guards.requireTemplateEdit,
       schema: { params: IdParams, body: EditLockTakeoverBody },
     },
     async (req, reply) => {

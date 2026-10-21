@@ -11,11 +11,12 @@ import { currentUser, type Guards } from '../auth/guards';
 import { acquireLock, peekLock, releaseLock, takeOverLock } from './service';
 
 export function registerEditLockRoutes(app: App, deps: AppDeps, guards: Guards): void {
-  const admin = { preHandler: guards.requireAdmin };
+  // Захват, перехват и снятие — всем, кто может править шаблон (§43.1, §38).
+  const editor = { preHandler: guards.requireTemplateEdit };
 
   app.post(
     '/api/templates/:id/edit-lock',
-    { ...admin, schema: { params: IdParams, body: EditLockBody } },
+    { ...editor, schema: { params: IdParams, body: EditLockBody } },
     async (req): Promise<EditLockState> => {
       const { holder, acquire } = req.body;
       const userId = currentUser(req).id;
@@ -27,7 +28,7 @@ export function registerEditLockRoutes(app: App, deps: AppDeps, guards: Guards):
 
   app.post(
     '/api/templates/:id/edit-lock/takeover',
-    { ...admin, schema: { params: IdParams, body: EditLockTakeoverBody } },
+    { ...editor, schema: { params: IdParams, body: EditLockTakeoverBody } },
     async (req): Promise<EditLockState> => {
       const { previous, docKey } = await takeOverLock(
         deps.db,
@@ -47,7 +48,7 @@ export function registerEditLockRoutes(app: App, deps: AppDeps, guards: Guards):
 
   app.delete(
     '/api/templates/:id/edit-lock',
-    { ...admin, schema: { params: IdParams, querystring: EditLockHolderQuery } },
+    { ...editor, schema: { params: IdParams, querystring: EditLockHolderQuery } },
     async (req, reply) => {
       await releaseLock(deps.db, req.params.id, req.query.holder);
       return reply.status(204).send();

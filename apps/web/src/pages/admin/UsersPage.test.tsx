@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ROLE_LABELS } from '@carbone-reports/shared';
-import { adminMe, mockApi, renderRoute } from '../../test/utils';
+import { adminMe, mockApi, pickOption, renderRoute } from '../../test/utils';
 
 const users = [
   {
@@ -313,8 +313,7 @@ describe('UsersPage', () => {
     expect(within(dialog).getByRole('group', { name: 'Группы' })).toBeInTheDocument();
     const combo = within(dialog).getByRole('combobox', { name: 'Группы' });
     await waitFor(() => expect(combo).toHaveTextContent('Бухгалтерия'));
-    await userEvent.click(combo);
-    await userEvent.click(await screen.findByRole('option', { name: 'Юристы' }));
+    await pickOption(combo, 'Юристы');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
@@ -340,8 +339,7 @@ describe('UsersPage', () => {
     await userEvent.type(within(dialog).getByLabelText('Новый пароль'), 'newpass123');
     const combo = within(dialog).getByRole('combobox', { name: 'Группы' });
     await waitFor(() => expect(combo).toHaveTextContent('Бухгалтерия'));
-    await userEvent.click(combo);
-    await userEvent.click(await screen.findByRole('option', { name: 'Бухгалтерия' }));
+    await pickOption(combo, 'Бухгалтерия');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     const writes = calls.filter((c) => c.method === 'PATCH' || c.method === 'PUT');
@@ -407,8 +405,7 @@ describe('UsersPage', () => {
     await userEvent.type(within(dialog).getByLabelText('Новый пароль'), 'newpass123');
     const combo = within(dialog).getByRole('combobox', { name: 'Группы' });
     await waitFor(() => expect(combo).toHaveTextContent('Бухгалтерия'));
-    await userEvent.click(combo);
-    await userEvent.click(await screen.findByRole('option', { name: 'Бухгалтерия' }));
+    await pickOption(combo, 'Бухгалтерия');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
     expect(await within(dialog).findByText(/неизвестная группа/)).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();

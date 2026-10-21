@@ -1,4 +1,5 @@
 import type { UserDto } from '@carbone-reports/shared';
+import { ROLE_LABELS } from '@carbone-reports/shared';
 import { Lock, LockOpen, Pencil, PersonXmark, Plus, TrashBin } from '@gravity-ui/icons';
 import type { TableColumnConfig } from '@gravity-ui/uikit';
 import { Button, Icon, Label, Loader, Table, Text, useToaster } from '@gravity-ui/uikit';
@@ -72,12 +73,11 @@ export function UsersPage() {
     {
       id: 'role',
       name: 'Роль',
-      template: (u) =>
-        u.role === 'admin' ? (
-          <Label theme="info">администратор</Label>
-        ) : (
-          <Label>пользователь</Label>
-        ),
+      template: (u) => (
+        <Label theme={u.role === 'user' ? 'normal' : 'info'}>
+          {ROLE_LABELS[u.role].toLowerCase()}
+        </Label>
+      ),
     },
     {
       id: 'status',

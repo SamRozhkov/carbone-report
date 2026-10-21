@@ -14,7 +14,7 @@ describe('SettingsTab', () => {
   it('сохраняет название и описание', async () => {
     const { calls } = mockApi([
       {
-        path: '/api/datasources',
+        path: '/api/datasources/options',
         body: [
           {
             id: 'd1',
@@ -51,7 +51,7 @@ describe('SettingsTab', () => {
 
   it('замена файла → PUT multipart', async () => {
     const { calls } = mockApi([
-      { path: '/api/datasources', body: [] },
+      { path: '/api/datasources/options', body: [] },
       { method: 'PUT', path: '/api/templates/t1/file', body: { ...t, version: 4 } },
     ]);
     renderWithProviders(<SettingsTab template={t} />);
@@ -69,7 +69,7 @@ describe('SettingsTab', () => {
   it('замена файла с номером вкладки «Документ» → ?holder=', async () => {
     const holder = '0b6c6f0e-2b4c-4a51-9a39-1f4b2a3c4d5e';
     const { calls } = mockApi([
-      { path: '/api/datasources', body: [] },
+      { path: '/api/datasources/options', body: [] },
       { method: 'PUT', path: '/api/templates/t1/file', body: { ...t, version: 4 } },
     ]);
     renderWithProviders(<SettingsTab template={t} holder={holder} />);
@@ -84,7 +84,7 @@ describe('SettingsTab', () => {
   });
 
   it('грязное название сохраняется при обновлении шаблона', async () => {
-    mockApi([{ path: '/api/datasources', body: [] }]);
+    mockApi([{ path: '/api/datasources/options', body: [] }]);
     const next = { ...t, name: 'Новое', updatedAt: '2026-02-01T00:00:00Z' };
     function Harness() {
       const [tpl, setTpl] = useState(t);
@@ -103,7 +103,7 @@ describe('SettingsTab', () => {
   });
 
   it('без изменений сохранить нельзя; «Отменить» возвращает сохранённое состояние', async () => {
-    mockApi([{ path: '/api/datasources', body: [] }]);
+    mockApi([{ path: '/api/datasources/options', body: [] }]);
     renderWithProviders(<SettingsTab template={t} />);
     const name = await screen.findByLabelText('Название шаблона');
     const save = () => screen.getByRole('button', { name: 'Сохранить настройки' });
@@ -119,7 +119,7 @@ describe('SettingsTab', () => {
   });
 
   it('«Отменить» после обновления шаблона на сервере берёт свежую версию', async () => {
-    mockApi([{ path: '/api/datasources', body: [] }]);
+    mockApi([{ path: '/api/datasources/options', body: [] }]);
     const next = { ...t, name: 'Новое', updatedAt: '2026-02-01T00:00:00Z' };
     function Harness() {
       const [tpl, setTpl] = useState(t);
@@ -158,7 +158,7 @@ describe('SettingsTab', () => {
     const WARNING = 'Шаблон сейчас доступен только администраторам';
     const DIRTY_WARNING = 'После сохранения шаблон будет доступен только администраторам';
     const routes = (access: object): MockRoute[] => [
-      { path: '/api/datasources', body: [] },
+      { path: '/api/datasources/options', body: [] },
       { path: '/api/groups', body: groups },
       { path: '/api/categories', body: categories },
       { path: '/api/templates/t1/access', body: access },

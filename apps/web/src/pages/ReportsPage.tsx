@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../api/endpoints';
-import { useMe } from '../api/session';
+import { usePermissions } from '../app/permissions';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { PageHeader } from '../components/PageHeader';
 import { formatDate } from '../lib/format';
@@ -38,7 +38,7 @@ function sectionsOf(list: TemplateSummary[]): Section[] {
 }
 
 export function ReportsPage() {
-  const me = useMe().data;
+  const { canAuthor } = usePermissions();
   const [query, setQuery] = useState('');
   const templates = useQuery({ queryKey: ['templates'], queryFn: api.templates.list });
 
@@ -54,8 +54,7 @@ export function ReportsPage() {
   let empty: string | null = null;
   if (templates.data && items.length === 0) {
     if (all.length > 0) empty = 'Ничего не найдено.';
-    else if (me?.role === 'admin')
-      empty = 'Шаблонов пока нет — создайте первый в разделе «Шаблоны».';
+    else if (canAuthor) empty = 'Шаблонов пока нет — создайте первый в разделе «Шаблоны».';
     else empty = 'Отчётов пока нет.';
   }
 

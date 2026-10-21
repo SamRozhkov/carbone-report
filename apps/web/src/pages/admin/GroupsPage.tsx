@@ -218,7 +218,11 @@ function GroupDialog({ group, onClose }: { group: GroupDto | null; onClose: () =
 
 function MembersDialog({ group, onClose }: { group: GroupDto; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const users = useQuery({ queryKey: ['users'], queryFn: api.users.list });
+  // Справочник, а не список пользователей: страница открыта и распорядителю доступа (§43.3).
+  const users = useQuery({
+    queryKey: ['users', 'directory'],
+    queryFn: () => api.users.directory(),
+  });
   const [userIds, setUserIds] = useState<string[]>(group.memberIds);
   const save = useMutation({
     mutationFn: () => api.groups.setMembers(group.id, userIds),

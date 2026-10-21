@@ -1,4 +1,4 @@
-import type { DatasourceDto } from '@carbone-reports/shared';
+import type { DatasourceOption } from '@carbone-reports/shared';
 import {
   MAX_TRANSFER_ARCHIVE_BYTES,
   type ImportAction,
@@ -126,8 +126,8 @@ function messageOf(e: unknown): string {
 export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();
   const datasources = useQuery({
-    queryKey: ['datasources'],
-    queryFn: api.datasources.list,
+    queryKey: ['datasources', 'options'],
+    queryFn: api.datasources.options,
     enabled: open,
   });
   const [file, setFile] = useState<File | null>(null);
@@ -157,7 +157,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
       const byIndex = new Map(
         prev.preview.templates.map((item, i) => [item.index, { item, row: prev.rows[i]! }]),
       );
-      const list = queryClient.getQueryData<DatasourceDto[]>(['datasources']);
+      const list = queryClient.getQueryData<DatasourceOption[]>(['datasources', 'options']);
       const ids = list ? new Set(list.map((d) => d.id)) : null;
       setRows(p.templates.map((t) => mergeRow(t, byIndex.get(t.index), ids)));
     },
@@ -213,7 +213,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...p } : r)));
   }
 
-  const dsOptions = (datasources.data ?? []).map((d: DatasourceDto) => ({
+  const dsOptions = (datasources.data ?? []).map((d: DatasourceOption) => ({
     value: d.id,
     content: d.name,
   }));
@@ -267,11 +267,18 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
                 </Text>
               ) : null;
             })()}
-          {!t.categoryExists && t.category && (
-            <Text as="div" variant="caption-2" color="warning">
-              Будет создана категория «{t.category}»
-            </Text>
-          )}
+          {!t.categoryExists &&
+            t.category &&
+            (t.categorySkipped ? (
+              <Text as="div" variant="caption-2" color="warning">
+                Категории «{t.category}» в этой среде нет — категория не будет создана, шаблон
+                загрузится без неё
+              </Text>
+            ) : (
+              <Text as="div" variant="caption-2" color="warning">
+                Будет создана категория «{t.category}»
+              </Text>
+            ))}
         </div>
       ),
     },

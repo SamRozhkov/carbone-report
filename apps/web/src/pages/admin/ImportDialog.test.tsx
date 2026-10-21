@@ -36,6 +36,7 @@ const item = (over: Record<string, unknown>) => ({
   datasourceMatch: DS1,
   category: null,
   categoryExists: true,
+  categorySkipped: false,
   groups: [],
   missingGroups: [],
   pdfPasswordSet: false,
@@ -51,7 +52,7 @@ const preview = (templates: unknown[]) => ({
 const base = [
   adminMe,
   { path: '/api/templates', body: [] },
-  { path: '/api/datasources', body: ds },
+  { path: '/api/datasources/options', body: ds },
 ];
 
 async function openDialog(file = new File(['PK'], 'a.crt.zip')) {
@@ -388,6 +389,19 @@ describe('ImportDialog', () => {
     ]);
     const dialog = await openDialog();
     expect(await within(dialog).findByText(/Архив больше 50 МБ/)).toBeInTheDocument();
+  });
+  it('категория пропускается (у редактора) → «категория не будет создана» (§43.3)', async () => {
+    mockApi([
+      ...base,
+      {
+        method: 'POST',
+        path: '/api/templates/import/preview',
+        body: preview([item({ category: 'Счета', categoryExists: false, categorySkipped: true })]),
+      },
+    ]);
+    const dialog = await openDialog();
+    expect(await within(dialog).findByText(/категория не будет создана/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Будет создана категория/)).not.toBeInTheDocument();
   });
 });
 

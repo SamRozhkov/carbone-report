@@ -16,7 +16,7 @@ describe('TemplateEditorPage', () => {
         path: '/api/templates/t1',
         body: { ...adminTemplate, lastSaveError: 'OnlyOffice не смог сохранить документ' },
       },
-      { path: '/api/datasources', body: [] },
+      { path: '/api/datasources/options', body: [] },
     ]);
     const { router } = renderRoute('/admin/templates/t1?tab=settings');
     expect(await screen.findByText('Счёт')).toBeInTheDocument();
@@ -46,7 +46,7 @@ describe('TemplateEditorPage', () => {
           editorConfig: {},
         },
       },
-      { path: '/api/datasources', body: [] },
+      { path: '/api/datasources/options', body: [] },
     ]);
     renderRoute('/admin/templates/t1?tab=document');
     const editor = await screen.findByTestId('oo');
@@ -79,7 +79,7 @@ describe('TemplateEditorPage', () => {
           editorConfig: {},
         },
       },
-      { path: '/api/datasources', body: [] },
+      { path: '/api/datasources/options', body: [] },
     ]);
     const { router, container } = renderRoute('/admin/templates/t1?tab=document&full=1');
     await screen.findByTestId('oo');
@@ -121,7 +121,7 @@ describe('TemplateEditorPage', () => {
           },
         }),
       },
-      { path: '/api/datasources', body: [] },
+      { path: '/api/datasources/options', body: [] },
     ]);
     renderRoute('/admin/templates/t1?tab=document');
     await screen.findByTestId('oo');
@@ -150,7 +150,7 @@ describe('TemplateEditorPage', () => {
       adminMe,
       { path: '/api/templates/t1', body: adminTemplate },
       { method: 'PUT', path: '/api/templates/t1/file', body: adminTemplate },
-      { path: '/api/datasources', body: [] },
+      { path: '/api/datasources/options', body: [] },
     ]);
     renderRoute('/admin/templates/t1?tab=settings');
     await userEvent.upload(
@@ -175,7 +175,7 @@ describe('TemplateEditorPage', () => {
           total: 5,
         },
       },
-      { path: '/api/datasources', body: [] },
+      { path: '/api/datasources/options', body: [] },
     ]);
     renderRoute('/admin/templates/t1?tab=settings');
     expect(
@@ -192,7 +192,7 @@ describe('TemplateEditorPage', () => {
       adminMe,
       { path: '/api/templates/t1', body: adminTemplate },
       { path: '/api/templates/t1/tag-warnings', body: { warnings: [], total: 0 } },
-      { path: '/api/datasources', body: [] },
+      { path: '/api/datasources/options', body: [] },
     ]);
     renderRoute('/admin/templates/t1?tab=settings');
     await screen.findByText('Счёт');

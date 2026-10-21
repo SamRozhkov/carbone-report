@@ -38,7 +38,11 @@ function row(text: string): HTMLElement {
 
 describe('GroupsPage', () => {
   it('список групп с числом участников', async () => {
-    mockApi([adminMe, { path: '/api/groups', body: groups }, { path: '/api/users', body: users }]);
+    mockApi([
+      adminMe,
+      { path: '/api/groups', body: groups },
+      { path: '/api/users/directory', body: users },
+    ]);
     renderRoute('/admin/groups');
     await screen.findByText('Бухгалтерия');
     expect(screen.getByRole('columnheader', { name: 'Участники' })).toBeInTheDocument();
@@ -48,7 +52,11 @@ describe('GroupsPage', () => {
   });
 
   it('пункт меню «Группы» ведёт на страницу', async () => {
-    mockApi([adminMe, { path: '/api/groups', body: groups }, { path: '/api/users', body: users }]);
+    mockApi([
+      adminMe,
+      { path: '/api/groups', body: groups },
+      { path: '/api/users/directory', body: users },
+    ]);
     const { router } = renderRoute('/admin/users');
     await userEvent.click(await screen.findByText('Группы'));
     await waitFor(() => expect(router.state.location.pathname).toBe('/admin/groups'));
@@ -59,7 +67,7 @@ describe('GroupsPage', () => {
     const { calls } = mockApi([
       adminMe,
       { path: '/api/groups', body: groups },
-      { path: '/api/users', body: users },
+      { path: '/api/users/directory', body: users },
       {
         method: 'POST',
         path: '/api/groups',
@@ -104,7 +112,7 @@ describe('GroupsPage', () => {
     const { calls } = mockApi([
       adminMe,
       { path: '/api/groups', body: groups },
-      { path: '/api/users', body: users },
+      { path: '/api/users/directory', body: users },
       { method: 'PATCH', path: '/api/groups/g2', body: groups[1] },
     ]);
     renderRoute('/admin/groups');
@@ -122,7 +130,7 @@ describe('GroupsPage', () => {
     const { calls } = mockApi([
       adminMe,
       { path: '/api/groups', body: groups },
-      { path: '/api/users', body: users },
+      { path: '/api/users/directory', body: users },
       {
         method: 'PUT',
         path: '/api/groups/g2/members',
@@ -153,7 +161,7 @@ describe('GroupsPage', () => {
     const { calls } = mockApi([
       adminMe,
       { path: '/api/groups', body: groups },
-      { path: '/api/users', body: users },
+      { path: '/api/users/directory', body: users },
       { method: 'DELETE', path: '/api/groups/g1', status: 204 },
     ]);
     renderRoute('/admin/groups');
@@ -165,5 +173,20 @@ describe('GroupsPage', () => {
     await waitFor(() =>
       expect(calls.some((c) => c.method === 'DELETE' && c.path === '/api/groups/g1')).toBe(true),
     );
+  });
+
+  it('распорядитель доступа: участники — из справочника, без списка пользователей (§43.3)', async () => {
+    const { calls } = mockApi([
+      { path: '/api/auth/me', body: { id: 'am-id', login: 'am', role: 'access_manager' } },
+      { path: '/api/groups', body: groups },
+      { path: '/api/users/directory', body: users },
+    ]);
+    renderRoute('/admin/groups');
+    await screen.findByText('Склад');
+    await userEvent.click(within(row('Склад')).getByRole('button', { name: 'Участники' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Участники' }));
+    expect(await screen.findByRole('option', { name: 'ivanov' })).toBeInTheDocument();
+    expect(calls.some((c) => c.path === '/api/users')).toBe(false);
   });
 });

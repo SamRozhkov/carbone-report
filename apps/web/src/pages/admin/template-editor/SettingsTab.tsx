@@ -32,7 +32,10 @@ export function SettingsTab({
 }) {
   const queryClient = useQueryClient();
   const { add } = useToaster();
-  const datasources = useQuery({ queryKey: ['datasources'], queryFn: api.datasources.list });
+  const datasources = useQuery({
+    queryKey: ['datasources', 'options'],
+    queryFn: api.datasources.options,
+  });
   const pick = (t: TemplateAdminDetails) => ({
     name: t.name,
     description: t.description,

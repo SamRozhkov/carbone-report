@@ -1,4 +1,5 @@
 import type { Role, UpdateUserBody, UserDto } from '@carbone-reports/shared';
+import { ROLE_LABELS } from '@carbone-reports/shared';
 import { Button, Dialog, Select, Switch, TextInput } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -10,10 +11,11 @@ import { Field } from '../../components/Field';
 import { GeneralError } from '../../components/GeneralError';
 import { sameIds } from '../../lib/ids';
 
-const ROLE_OPTIONS = [
-  { value: 'user', content: 'Пользователь' },
-  { value: 'admin', content: 'Администратор' },
-];
+// От меньших прав к большим; подписи — общие с API (§43.5).
+const ROLE_OPTIONS = (['user', 'editor', 'access_manager', 'admin'] as const).map((value) => ({
+  value,
+  content: ROLE_LABELS[value],
+}));
 
 export function CreateUserDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient();

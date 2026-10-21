@@ -1,7 +1,8 @@
 import { ThemeProvider, Toaster, ToasterComponent, ToasterProvider } from '@gravity-ui/uikit';
 import type { QueryClient } from '@tanstack/react-query';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { render } from '@testing-library/react';
+import { render, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState, type ReactElement, type ReactNode } from 'react';
 import { createMemoryRouter } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
@@ -137,3 +138,19 @@ export const userMe = {
   path: '/api/auth/me',
   body: { id: 'user-id', login: 'ivanov', role: 'user' },
 };
+
+/**
+ * Выбор пункта в Select Gravity UI внутри диалога. Список рисуется в портале вне окна, а окно
+ * помечает всё вне себя aria-hidden (floating-ui inert) — иногда уже после открытия списка, и тогда
+ * пункты пропадают из поиска по ролям. Поэтому пункт ищется внутри самого списка (aria-controls)
+ * с учётом скрытых элементов.
+ */
+export async function pickOption(combo: HTMLElement, name: string): Promise<void> {
+  if (combo.getAttribute('aria-expanded') !== 'true') await userEvent.click(combo);
+  const option = await waitFor(() => {
+    const popup = document.getElementById(combo.getAttribute('aria-controls') ?? '');
+    if (!popup) throw new Error('список не открыт');
+    return within(popup).getByRole('option', { name, hidden: true });
+  });
+  await userEvent.click(option);
+}

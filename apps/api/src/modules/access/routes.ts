@@ -83,7 +83,7 @@ async function fkGuard<T>(fn: () => Promise<T>): Promise<T> {
 
 export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): void {
   const { db } = deps;
-  // §43.3: справочники групп и категорий ведут admin и распорядитель доступа, читает и редактор.
+  // §43.3: справочники групп и категорий ведут admin и менеджер безопасности, читает и редактор.
   const manage = { preHandler: guards.requireRole(...ACCESS_ROLES) };
   const read = { preHandler: guards.requireRole(...ACCESS_ROLES, 'editor') };
   const adminOnly = { preHandler: guards.requireAdmin };
@@ -325,7 +325,7 @@ export function registerAccessRoutes(app: App, deps: AppDeps, guards: Guards): v
     return { public: t.public, categoryId: t.categoryId, groupIds: gs.map((g) => g.id).sort() };
   };
 
-  // Доступ шаблона: admin и распорядитель — любой шаблон, редактор — при праве правки (§43.3).
+  // Доступ шаблона: admin и менеджер безопасности — любой шаблон, редактор — при праве правки (§43.3).
   // Проверка до транзакции: невидимый шаблон — 404, видимый без права правки — 403.
   const assertEditorRight = async (req: FastifyRequest, id: string) => {
     const user = currentUser(req);

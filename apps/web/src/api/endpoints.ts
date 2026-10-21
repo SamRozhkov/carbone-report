@@ -75,7 +75,7 @@ export const api = {
 
   users: {
     list: () => apiJson<UserDto[]>('/api/users'),
-    /** Справочник активных пользователей (§43.3): открыт и распорядителю доступа, и редактору. */
+    /** Справочник активных пользователей (§43.3): открыт и менеджеру безопасности, и редактору. */
     directory: (role?: Role) =>
       apiJson<UserDirectoryEntry[]>(`/api/users/directory${role ? `?role=${role}` : ''}`),
     create: (body: CreateUserBody) => apiJson<UserDto>('/api/users', post(body)),

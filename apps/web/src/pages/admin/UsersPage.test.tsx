@@ -481,7 +481,7 @@ describe('UsersPage', () => {
     ]);
     renderRoute('/admin/users');
     await screen.findByText('ivanov');
-    expect(within(row('sidorov')).getByText('распорядитель доступа')).toBeInTheDocument();
+    expect(within(row('sidorov')).getByText('менеджер безопасности')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Добавить пользователя' }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.type(within(dialog).getByLabelText('Логин'), 'petrov');

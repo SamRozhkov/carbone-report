@@ -220,7 +220,7 @@ function GroupDialog({ group, onClose }: { group: GroupDto | null; onClose: () =
 function MembersDialog({ group, onClose }: { group: GroupDto; onClose: () => void }) {
   const queryClient = useQueryClient();
   const { isAdmin } = usePermissions();
-  // Список пользователей — только администратору; распорядителю доступа — справочник активных (§43.3).
+  // Список пользователей — только администратору; менеджеру безопасности — справочник активных (§43.3).
   const users = useQuery<{ id: string; login: string }[]>({
     queryKey: isAdmin ? ['users'] : ['users', 'directory'],
     queryFn: isAdmin ? api.users.list : () => api.users.directory(),

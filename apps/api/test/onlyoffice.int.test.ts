@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { templates } from '../src/db/schema';
+import { templateEditors, templates, users } from '../src/db/schema';
 import { signOnlyOffice, verifyOnlyOffice } from '../src/modules/onlyoffice/jwt';
 import { createBlankDocument } from '../src/modules/templates/blank';
 import {
@@ -84,7 +84,9 @@ const secret = () => t.deps.config.onlyofficeJwtSecret;
 const row = async () =>
   (await t.deps.db.select().from(templates).where(eq(templates.id, tplId)))[0]!;
 
-async function callback(body: Record<string, unknown>, via: 'body' | 'header' = 'body') {
+// Document Server присылает в users id из editor-config; по умолчанию сохраняет админ.
+async function callback(raw: Record<string, unknown>, via: 'body' | 'header' = 'body') {
+  const body = { users: [adminId], ...raw };
   const headers: Record<string, string> = {};
   let payload: Record<string, unknown> = body;
   if (via === 'body')
@@ -307,6 +309,124 @@ describe('callback', () => {
     });
     expect(r.statusCode).toBe(200);
     expect(r.json()).toMatchObject({ lastSaveError: null, lastSaveErrorAt: null });
+  });
+});
+
+describe('callback: право правки сохраняющего (§43.1)', () => {
+  let editor: { id: string };
+  beforeEach(async () => {
+    editor = (await loginAs(t, 'editor')).user;
+    await t.deps.db.update(templates).set({ ownerId: editor.id }).where(eq(templates.id, tplId));
+  });
+  const changed = async () => {
+    fetched = Buffer.concat([await createBlankDocument('docx'), Buffer.from('changed')]);
+  };
+
+  it('редактор-владелец сохраняет: версия растёт, updatedBy — он', async () => {
+    await changed();
+    const before = await row();
+    const r = await callback({
+      key: before.docKey,
+      status: 6,
+      url: pub('f.docx'),
+      users: [editor.id],
+    });
+    expect(r.json()).toEqual({ error: 0 });
+    const after = await row();
+    expect(after.version).toBe(before.version + 1);
+    expect(after.updatedBy).toBe(editor.id);
+    expect(after.lastSaveError).toBeNull();
+  });
+
+  it('понижённый до user редактор: файл не меняется, lastSaveError, {error:0}', async () => {
+    await changed();
+    await t.deps.db.update(users).set({ role: 'user' }).where(eq(users.id, editor.id));
+    const before = await row();
+    const calls = fetchedUrls.length;
+    const r = await callback({
+      key: before.docKey,
+      status: 6,
+      url: pub('f.docx'),
+      users: [editor.id],
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toEqual({ error: 0 });
+    const after = await row();
+    expect(after.version).toBe(before.version);
+    expect(after.filePath).toBe(before.filePath);
+    expect(after.docKey).toBe(before.docKey);
+    expect(after.lastSaveError).toBe('изменения не сохранены: нет права на правку шаблона');
+    expect(after.lastSaveErrorAt).not.toBeNull();
+    expect(fetchedUrls.length).toBe(calls);
+  });
+
+  it('выданный редактор после отзыва права: status 2 не сохраняет и меняет ключ', async () => {
+    const granted = (await loginAs(t, 'editor')).user;
+    await t.deps.db.insert(templateEditors).values({ templateId: tplId, userId: granted.id });
+    await changed();
+    const k = (await row()).docKey;
+    await callback({ key: k, status: 6, url: pub('f.docx'), users: [granted.id] });
+    expect((await row()).updatedBy).toBe(granted.id);
+    await t.deps.db.delete(templateEditors).where(eq(templateEditors.userId, granted.id));
+    const before = await row();
+    const r = await callback({
+      key: before.docKey,
+      status: 2,
+      url: pub('f.docx'),
+      users: [granted.id],
+    });
+    expect(r.json()).toEqual({ error: 0 });
+    const after = await row();
+    expect(after.version).toBe(before.version);
+    expect(after.docKey).not.toBe(before.docKey);
+    expect(after.lastSaveError).toBe('изменения не сохранены: нет права на правку шаблона');
+  });
+
+  it('среди users есть пользователь с правом — сохраняется от его имени', async () => {
+    const stranger = (await loginAs(t, 'editor')).user;
+    await changed();
+    const before = await row();
+    await callback({
+      key: before.docKey,
+      status: 6,
+      url: pub('f.docx'),
+      users: [stranger.id, 'не-uuid', editor.id],
+    });
+    const after = await row();
+    expect(after.version).toBe(before.version + 1);
+    expect(after.updatedBy).toBe(editor.id);
+  });
+
+  it('заблокированный владелец и callback без users — не сохраняются', async () => {
+    await t.deps.db.update(users).set({ blocked: true }).where(eq(users.id, editor.id));
+    const before = await row();
+    await callback({ key: before.docKey, status: 6, url: pub('f.docx'), users: [editor.id] });
+    await callback({ key: before.docKey, status: 6, url: pub('f.docx'), users: [] });
+    expect((await row()).version).toBe(before.version);
+  });
+
+  it('право отозвано, пока файл скачивался: версия не пишется', async () => {
+    held = { started: deferred(), release: deferred() };
+    const before = await row();
+    const saving = callback({
+      key: before.docKey,
+      status: 6,
+      url: pub('held'),
+      users: [editor.id],
+    });
+    try {
+      await Promise.race([held.started.promise, saving]);
+      await t.deps.db.update(users).set({ role: 'user' }).where(eq(users.id, editor.id));
+    } finally {
+      held.release.resolve();
+    }
+    expect((await saving).json()).toEqual({ error: 0 });
+    const after = await row();
+    expect(after.version).toBe(before.version);
+    expect(after.lastSaveError).toBe('изменения не сохранены: нет права на правку шаблона');
+    expect(await t.deps.storage.exists(`templates/${tplId}/v${before.version + 1}.docx`)).toBe(
+      false,
+    );
   });
 });
 

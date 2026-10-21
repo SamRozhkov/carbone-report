@@ -62,7 +62,7 @@ export function DocumentTab({
   const config = useQuery({
     queryKey: ['editor-config', template.id, lock.holder, mode],
     queryFn: () => api.templates.editorConfig(template.id, lock.holder),
-    enabled: mode !== null,
+    enabled: mode !== null && !lock.forbidden,
     staleTime: Infinity,
     gcTime: 0,
     refetchOnMount: 'always',
@@ -327,9 +327,17 @@ export function DocumentTab({
           <Button onClick={() => void config.refetch()}>Повторить</Button>
         </div>
       )}
+      {lock.forbidden && (
+        <Alert
+          theme="danger"
+          title="Редактор закрыт"
+          message="Нет права на правку шаблона. Несохранённые изменения не будут сохранены."
+        />
+      )}
       <div className="cr-doc-body">
         <div className="cr-doc-editor">
-          {stableConfig ? (
+          {/* Право отозвано: редактор размонтируется, Document Server больше не получает правок. */}
+          {lock.forbidden ? null : stableConfig ? (
             <DocumentEditor
               id="cr-doc-editor"
               documentServerUrl="/onlyoffice/"
@@ -389,7 +397,7 @@ function LockBar({
   busy: boolean;
 }) {
   const s = lock.state;
-  if (!s) return null;
+  if (!s || lock.forbidden) return null;
   const time = (iso: string) =>
     new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   return (

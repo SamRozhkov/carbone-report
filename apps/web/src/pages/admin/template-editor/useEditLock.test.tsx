@@ -70,6 +70,31 @@ describe('useEditLock', () => {
     await waitFor(() => expect(result.current.editing).toBe(true));
   });
 
+  it('продление получило 403: forbidden сразу, правка выключена, это не «нет связи»', async () => {
+    let n = 0;
+    mockApi([
+      {
+        method: 'POST',
+        path: '/api/templates/t1/edit-lock',
+        handler: () =>
+          n++ === 0
+            ? { body: { state: 'mine' } }
+            : {
+                status: 403,
+                body: { error: { code: 'FORBIDDEN', message: 'нет права на правку шаблона' } },
+              },
+      },
+      { method: 'DELETE', path: '/api/templates/t1/edit-lock', status: 204 },
+    ]);
+    const { result } = renderHook(() => useEditLock('t1'), { wrapper });
+    await waitFor(() => expect(result.current.editing).toBe(true));
+    expect(result.current.forbidden).toBe(false);
+    await act(() => vi.advanceTimersByTimeAsync(20_000));
+    await waitFor(() => expect(result.current.forbidden).toBe(true));
+    expect(result.current.editing).toBe(false);
+    expect(result.current.offline).toBe(false);
+  });
+
   it('enabled=false: блокировка не берётся', async () => {
     const { calls } = mockApi([
       { method: 'POST', path: '/api/templates/t1/edit-lock', body: { state: 'mine' } },

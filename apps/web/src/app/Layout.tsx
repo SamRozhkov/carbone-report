@@ -14,6 +14,7 @@ import {
   Person,
   Persons,
   PersonsLock,
+  ShieldCheck,
   Sun,
 } from '@gravity-ui/icons';
 import type { AsideHeaderItem } from '@gravity-ui/navigation';
@@ -84,6 +85,7 @@ export function Layout() {
       ? [
           item('groups', 'Группы', PersonsLock, '/admin/groups'),
           item('categories', 'Категории', Folders, '/admin/categories'),
+          item('access', 'Доступ к отчётам', ShieldCheck, '/admin/access'),
         ]
       : []),
     // §26.3: пункт есть, только если API настроен на агент бэкапа.

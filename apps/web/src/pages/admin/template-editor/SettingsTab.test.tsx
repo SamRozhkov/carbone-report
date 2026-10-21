@@ -138,6 +138,28 @@ describe('SettingsTab', () => {
     expect(screen.queryByText(/Шаблон изменился на сервере/)).not.toBeInTheDocument();
   });
 
+  describe('блок «Редакторы»', () => {
+    it('не рендерится без canManageEditors', async () => {
+      const { calls } = mockApi([{ path: '/api/datasources/options', body: [] }]);
+      renderWithProviders(<SettingsTab template={{ ...t, canManageEditors: false }} />);
+      await screen.findByLabelText('Название шаблона');
+      expect(screen.queryByRole('region', { name: 'Редакторы' })).not.toBeInTheDocument();
+      expect(calls.some((c) => c.path.includes('/editors'))).toBe(false);
+    });
+
+    it('виден при canManageEditors', async () => {
+      mockApi([
+        { path: '/api/datasources/options', body: [] },
+        { path: '/api/auth/me', body: { id: 'e', login: 'e', role: 'editor' } },
+        { path: '/api/users/directory', body: [] },
+        { path: '/api/templates/t1/editors', body: { ownerId: null, userIds: [] } },
+      ]);
+      renderWithProviders(<SettingsTab template={{ ...t, canManageEditors: true }} />);
+      const b = within(await screen.findByRole('region', { name: 'Редакторы' }));
+      expect(await b.findByText('не назначен')).toBeInTheDocument();
+    });
+  });
+
   describe('раздел «Доступ»', () => {
     const groups = [
       { id: 'g1', name: 'Бухгалтерия', description: '', memberIds: [], createdAt: '' },

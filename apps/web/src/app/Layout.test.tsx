@@ -20,7 +20,7 @@ const ALL = [
   'Справка по шаблонам',
 ];
 
-/** Пункты меню (без «Доступ к отчётам» — страница появится вместе с ней). */
+/** Пункты меню раздела администрирования по ролям. */
 const MENU: Record<Role, string[]> = {
   admin: [
     'Шаблоны',
@@ -28,10 +28,11 @@ const MENU: Record<Role, string[]> = {
     'Пользователи',
     'Группы',
     'Категории',
+    'Доступ к отчётам',
     'Справка по шаблонам',
   ],
   editor: ['Шаблоны', 'Справка по шаблонам'],
-  access_manager: ['Группы', 'Категории'],
+  access_manager: ['Группы', 'Категории', 'Доступ к отчётам'],
   user: [],
 };
 
@@ -71,6 +72,9 @@ describe('Маршруты /admin по ролям', () => {
     ['access_manager', '/admin/help', '/reports'],
     ['access_manager', '/admin/users', '/reports'],
     ['access_manager', '/admin/categories', '/admin/categories'],
+    ['access_manager', '/admin/access', '/admin/access'],
+    ['editor', '/admin/access', '/reports'],
+    ['user', '/admin/access', '/reports'],
     ['user', '/admin', '/reports'],
     ['user', '/admin/groups', '/reports'],
   ] as const)('%s: %s → %s', async (role, from, to) => {

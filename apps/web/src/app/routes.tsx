@@ -2,6 +2,7 @@ import type { RouteObject } from 'react-router';
 import { Navigate } from 'react-router';
 import { AdminIndex, RequireRole, RequireUser } from './guards';
 import { Layout } from './Layout';
+import { AccessPage } from '../pages/admin/AccessPage';
 import { BackupsPage } from '../pages/admin/BackupsPage';
 import { CategoriesPage } from '../pages/admin/CategoriesPage';
 import { DatasourcesPage } from '../pages/admin/DatasourcesPage';
@@ -59,6 +60,7 @@ export const routes: RouteObject[] = [
                 children: [
                   { path: 'groups', element: <GroupsPage /> },
                   { path: 'categories', element: <CategoriesPage /> },
+                  { path: 'access', element: <AccessPage /> },
                 ],
               },
               {

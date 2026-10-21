@@ -14,9 +14,11 @@ export interface RenderJob {
   /**
    * carbone (по умолчанию) — сборка отчёта; pdf — обработка готового PDF (§36.4), template — сам PDF;
    * sign — подготовка PDF к подписи (§39.4), template — сам PDF;
-   * p12 — разбор .p12 (§39.8), template — файл, data — { password, now }.
+   * p12 — разбор .p12 (§39.8), template — файл, data — { password, now };
+   * gost-prepare — штамп без поля подписи и хеш Стрибог (§42), template — PDF;
+   * gost-verify — проверка подписи CAdES (§42.4), template — DER подписи.
    */
-  kind?: 'carbone' | 'pdf' | 'sign' | 'p12';
+  kind?: 'carbone' | 'pdf' | 'sign' | 'p12' | 'gost-prepare' | 'gost-verify';
   template: Buffer;
   ext: string;
   data: unknown;
@@ -29,7 +31,7 @@ export interface RenderJob {
 export interface RenderResult {
   out: Buffer;
   warnings: string[];
-  /** Метаданные задачи (JSON от потока): для p12 — сертификаты и сведения. */
+  /** Метаданные задачи (JSON от потока): для p12 — сертификаты и сведения; для ГОСТ — хеш, итог проверки. */
   meta?: unknown;
 }
 
@@ -54,7 +56,7 @@ export class RenderTimeoutError extends Error {
 /** Поток завершился аварийно или пул остановлен. */
 export class RenderCrashError extends Error {}
 
-/** Ошибка шаблона: message — текст Carbone; field — поле формы (ошибка .p12, §39.8). */
+/** Ошибка шаблона: message — текст Carbone; field — поле формы (ошибка .p12, §39.8) или gost (§42.4). */
 export class TemplateRenderError extends Error {
   constructor(
     message: string,

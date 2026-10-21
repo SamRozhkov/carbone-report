@@ -1,9 +1,15 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { CertificateInfo } from '@carbone-reports/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { CadesUnavailableError, loadCades } from '../lib/cades';
 import { mockApi, renderRoute, userMe } from '../test/utils';
 import { certificateState } from './SignaturePage';
+
+vi.mock('../lib/cades', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/cades')>()),
+  loadCades: vi.fn(),
+}));
 
 const cert = (over: Partial<CertificateInfo> = {}): CertificateInfo => ({
   subjectCn: 'Иванов Иван Иванович',
@@ -120,5 +126,43 @@ describe('SignaturePage (§39.1)', () => {
     expect(certificateState(cert({ notAfter: '2027-01-01T00:00:00Z' }), now)).toBe('ok');
     expect(certificateState(cert({ notAfter: '2026-11-10T00:00:00Z' }), now)).toBe('expiring');
     expect(certificateState(cert({ notAfter: '2026-10-01T00:00:00Z' }), now)).toBe('expired');
+  });
+});
+
+describe('SignaturePage: блок «КриптоПро» (§42.7)', () => {
+  it('«Проверить плагин»: версии плагина и CSP, число сертификатов ГОСТ', async () => {
+    vi.mocked(loadCades).mockResolvedValue({
+      versions: vi.fn(async () => ({ plugin: '2.0.15400', csp: '5.0.12000' })),
+      listCertificates: vi.fn(async () => [
+        {
+          thumbprint: 'A1',
+          subjectCn: 'Петров',
+          issuerCn: 'УЦ',
+          validTo: new Date('2030-01-01'),
+          certificateBase64: 'C',
+          keyBits: 256 as const,
+        },
+      ]),
+      signHash: vi.fn(),
+    });
+    mockApi([userMe, { path: '/api/me/certificate', body: { certificate: null } }]);
+    renderRoute('/signature');
+    expect(await screen.findByText('КриптоПро')).toBeInTheDocument();
+    expect(loadCades).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Проверить плагин' }));
+    expect(
+      await screen.findByText('КриптоПро ЭЦП Browser plug-in 2.0.15400, КриптоПро CSP 5.0.12000'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Действующих сертификатов ГОСТ: 1')).toBeInTheDocument();
+  });
+
+  it('«Проверить плагин»: плагина нет — текст ошибки', async () => {
+    vi.mocked(loadCades).mockRejectedValue(new CadesUnavailableError());
+    mockApi([userMe, { path: '/api/me/certificate', body: { certificate: cert() } }]);
+    renderRoute('/signature');
+    await userEvent.click(await screen.findByRole('button', { name: 'Проверить плагин' }));
+    expect(
+      await screen.findByText('Не найден КриптоПро ЭЦП Browser plug-in или КриптоПро CSP'),
+    ).toBeInTheDocument();
   });
 });

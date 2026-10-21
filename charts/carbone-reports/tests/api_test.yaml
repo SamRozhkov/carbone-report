@@ -129,6 +129,15 @@ tests:
     asserts:
       - equal: { path: data.SIGN_TSA_URL, value: 'http://timestamp.example.org/tsa' }
       - equal: { path: data.SIGN_TSA_TIMEOUT_MS, value: '5000' }
+  - it: служба меток ГОСТ — по умолчанию пусто
+    template: configmap-api.yaml
+    asserts:
+      - equal: { path: data.SIGN_GOST_TSA_URL, value: '' }
+  - it: config.signGostTsaUrl — в ConfigMap
+    template: configmap-api.yaml
+    set: { config.signGostTsaUrl: 'http://tsa.example.org/tsp/tsp.srf' }
+    asserts:
+      - equal: { path: data.SIGN_GOST_TSA_URL, value: 'http://tsa.example.org/tsp/tsp.srf' }
   - it: безопасность api — restricted
     template: api.yaml
     documentIndex: 0

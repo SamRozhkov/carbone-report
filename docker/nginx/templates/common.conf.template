@@ -80,6 +80,17 @@ location /assets/ {
 # Браузер сам запрашивает /favicon.ico; иконка — /favicon.svg, index.html вместо неё не отдаём.
 location = /favicon.ico { return 404; }
 
+# cadesplugin_api.js — скрипт КриптоПро для подписи по ГОСТ (§42.7). Его не поставляем: администратор
+# скачивает файл с сайта КриптоПро и монтирует в /usr/share/nginx/cades (compose — ./cades, Helm — ConfigMap).
+# Без файла отвечаем 404, а не index.html: иначе `location /` отдал бы HTML под видом скрипта, и браузер
+# сообщил бы о синтаксической ошибке вместо «не найден плагин»; интерфейс по 404 показывает понятный текст.
+location = /cadesplugin_api.js {
+    root /usr/share/nginx/cades;
+    try_files /cadesplugin_api.js =404;
+    add_header Cache-Control "no-cache" always;
+    include /etc/nginx/snippets/security-headers.conf;
+}
+
 location / {
     try_files $uri /index.html;
     add_header Cache-Control "no-cache" always;

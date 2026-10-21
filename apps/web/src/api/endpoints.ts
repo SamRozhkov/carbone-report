@@ -11,6 +11,7 @@ import type {
   DatasourceDto,
   EditLockBody,
   EditLockState,
+  GostPrepareResult,
   GroupBody,
   GroupDto,
   GroupPatch,
@@ -194,6 +195,10 @@ export const api = {
     },
     sign: (id: string, password: string) =>
       apiJson<RunSignature>(`/api/runs/${id}/sign`, post({ password })),
+    gostPrepare: (id: string, certificate: string) =>
+      apiJson<GostPrepareResult>(`/api/runs/${id}/sign/gost/prepare`, post({ certificate })),
+    gostComplete: (id: string, signature: string) =>
+      apiJson<RunSignature>(`/api/runs/${id}/sign/gost/complete`, post({ signature })),
   },
 
   backups: {
@@ -216,9 +221,12 @@ export const api = {
   },
 };
 
+/** Формат файла запуска: собранный формат или открепленная подпись ГОСТ (`.sig`, §42.6). */
+export type RunFileFormat = OutputFormat | 'sig';
+
 export const runFileUrl = (
   runId: string,
-  opts: { format?: OutputFormat; inline?: boolean; signed?: boolean } = {},
+  opts: { format?: RunFileFormat; inline?: boolean; signed?: boolean } = {},
 ) => {
   const sp = new URLSearchParams();
   if (opts.format) sp.set('format', opts.format);

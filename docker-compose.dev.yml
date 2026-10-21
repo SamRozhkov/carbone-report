@@ -2,7 +2,9 @@ services:
   web:
     ports: !override
       - '127.0.0.1:${WEB_DEV_PORT:-8080}:80'
-    volumes: !override []
+    # Сертификаты не нужны; скрипт КриптоПро (./cades) — для проверки подписи по ГОСТ.
+    volumes: !override
+      - ./cades:/usr/share/nginx/cades:ro
     environment:
       NGINX_MODE: dev
 

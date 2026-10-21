@@ -348,4 +348,20 @@ describe('пароль PDF в архиве (§37.4)', () => {
     ]);
     expect(TransferManifest.safeParse(ok).success).toBe(true);
   });
+
+  it('способ подписи переносится как есть; неизвестный — ошибка (§42.1)', () => {
+    const gost = manifest([
+      tpl({ pdfOptions: { pdfa: false, signature: { method: 'gost' } } } as never),
+    ]);
+    const r = TransferManifest.safeParse(gost);
+    expect(r.success).toBe(true);
+    expect(r.data!.templates[0]!.pdfOptions?.signature).toEqual({
+      position: 'bottom-right',
+      method: 'gost',
+    });
+    const bad = manifest([
+      tpl({ pdfOptions: { pdfa: false, signature: { method: 'x' } } } as never),
+    ]);
+    expect(TransferManifest.safeParse(bad).success).toBe(false);
+  });
 });

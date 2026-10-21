@@ -196,3 +196,68 @@ describe('worker.ts: обработка PDF (§36.4)', () => {
     expect(r.out.toString('latin1')).toContain('/FT /Sig');
   }, 40_000);
 });
+
+describe('worker.ts: задачи ГОСТ (§42)', () => {
+  const fx = async (n: string) => {
+    const { readFileSync } = await import('node:fs');
+    return readFileSync(new URL(`../../../test/fixtures/gost/${n}`, import.meta.url));
+  };
+  const pemDer = async (n: string) =>
+    Buffer.from(
+      (await fx(n))
+        .toString()
+        .replace(/-----[^-]+-----/g, '')
+        .replace(/\s/g, ''),
+      'base64',
+    );
+
+  it('задача gost-prepare: штамп без поля подписи, meta.hash — Стрибог-256 от выхода', async () => {
+    const { makePdf } = await import('../pdf/test-pdf');
+    const { streebog } = await import('../pdf/sign/gost/streebog');
+    const r = await pool.run(
+      {
+        kind: 'gost-prepare',
+        template: Buffer.from(await makePdf([{ label: 'R1' }])),
+        ext: 'pdf',
+        data: {
+          position: 'bottom-right',
+          lines: ['a', 'b', 'c', 'd', 'e'],
+          hashAlg: 'streebog256',
+        },
+        options: { lang: '', timezone: '' },
+      },
+      Date.now() + 30_000,
+    );
+    expect(r.out.toString('latin1')).not.toContain('/FT /Sig');
+    expect(r.meta).toEqual({ hash: Buffer.from(streebog(256, r.out)).toString('hex') });
+  }, 40_000);
+
+  it('задача gost-verify: пустой выход, meta — signedAt и timestamped', async () => {
+    const { streebog } = await import('../pdf/sign/gost/streebog');
+    const job = async (sig: string, preparedAt: string | null = null) => ({
+      kind: 'gost-verify' as const,
+      template: await fx(sig),
+      ext: 'sig',
+      data: {
+        certDer: (await pemDer('user256a.pem')).toString('base64'),
+        hash: Buffer.from(streebog(256, await fx('doc.pdf'))).toString('hex'),
+        hashAlg: 'streebog256',
+        requireTimestamp: false,
+        now: '2026-10-20T16:00:00.000Z',
+        preparedAt,
+      },
+      options: { lang: '', timezone: '' },
+    });
+    const r = await pool.run(await job('t-256a.sig'), Date.now() + 30_000);
+    expect(r.out.byteLength).toBe(0);
+    expect(r.meta).toEqual({ signedAt: '2026-10-20T15:04:15.000Z', timestamped: true });
+    const bad = await pool.run(await job('bad-value.sig'), Date.now() + 30_000).catch((e) => e);
+    expect(bad).toBeInstanceOf(TemplateRenderError);
+    expect(bad).toMatchObject({ field: 'gost', message: 'подпись недействительна' });
+    // Время подготовки — нижняя граница метки: genTime 15:04:15 раньше 15:20 − 5 мин.
+    const early = await pool
+      .run(await job('t-256a.sig', '2026-10-20T15:20:00.000Z'), Date.now() + 30_000)
+      .catch((e) => e);
+    expect(early).toMatchObject({ field: 'gost', message: 'метка времени недействительна' });
+  }, 40_000);
+});

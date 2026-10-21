@@ -25,6 +25,7 @@ data:
   REPORT_TIMEOUT_MS: {{ .Values.config.reportTimeoutMs | toString | quote }}
   SIGN_TSA_URL: {{ .Values.config.signTsaUrl | toString | quote }}
   SIGN_TSA_TIMEOUT_MS: {{ .Values.config.signTsaTimeoutMs | toString | quote }}
+  SIGN_GOST_TSA_URL: {{ .Values.config.signGostTsaUrl | toString | quote }}
   REPORT_RETENTION_DAYS: {{ .Values.config.reportRetentionDays | toString | quote }}
   {{- if .Values.config.renderWorkers }}
   RENDER_WORKERS: {{ .Values.config.renderWorkers | toString | quote }}

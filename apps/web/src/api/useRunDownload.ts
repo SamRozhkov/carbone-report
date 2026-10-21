@@ -1,12 +1,11 @@
-import type { OutputFormat } from '@carbone-reports/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { triggerDownload } from '../lib/download';
 import { apiFile } from './client';
-import { runFileUrl } from './endpoints';
+import { runFileUrl, type RunFileFormat } from './endpoints';
 
 export interface RunFileRequest {
   runId: string;
-  format: OutputFormat;
+  format: RunFileFormat;
   signed?: boolean;
 }
 

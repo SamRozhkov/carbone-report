@@ -14,6 +14,7 @@ let t: TestApp;
 let tsa: TestTsa;
 let templateId: string;
 let plainId: string;
+let gostId: string;
 let user: { cookie: string; user: { id: string } };
 let adminCookie: string;
 
@@ -57,6 +58,12 @@ beforeAll(async () => {
   plainId = await createTemplate(t, adminCookie, dsId, { public: true });
   const saved = await savePdf(templateId, { pdfa: false, signature: { position: 'bottom-left' } });
   if (saved.statusCode !== 200) throw new Error(saved.body);
+  gostId = await createTemplate(t, adminCookie, dsId, { public: true });
+  const gost = await savePdf(gostId, {
+    pdfa: false,
+    signature: { position: 'bottom-right', method: 'gost' },
+  });
+  if (gost.statusCode !== 200) throw new Error(gost.body);
 });
 afterAll(async () => {
   await t?.close();
@@ -97,7 +104,7 @@ const signRun = (cookie: string, runId: string, password = FIXTURE_PASSWORD, tt:
   });
 const runsOf = async (cookie: string) =>
   (await t.app.inject({ method: 'GET', url: '/api/runs', headers: { cookie } })).json()
-    .items as Array<{ id: string; signable: boolean; signature: unknown }>;
+    .items as Array<{ id: string; signable: boolean; signature: unknown; signMethod: unknown }>;
 
 describe('подпись запуска (§39.3)', () => {
   it('успех: 201, подписанный PDF скачивается и проверяется, история', async () => {
@@ -105,12 +112,14 @@ describe('подпись запуска (§39.3)', () => {
     expect((await runsOf(user.cookie)).find((r) => r.id === runId)).toMatchObject({
       signable: true,
       signature: null,
+      signMethod: 'p12',
     });
     const res = await signRun(user.cookie, runId);
     expect(res.statusCode).toBe(201);
     expect(res.json()).toMatchObject({
       signerCn: 'Иванов Иван Иванович (rsa)',
       timestamped: true,
+      method: 'p12',
     });
     const file = await t.app.inject({
       method: 'GET',
@@ -129,8 +138,23 @@ describe('подпись запуска (§39.3)', () => {
     expect(plain.rawPayload.includes(Buffer.from('/ETSI.CAdES.detached'))).toBe(false);
     expect((await runsOf(user.cookie)).find((r) => r.id === runId)).toMatchObject({
       signable: false,
-      signature: { timestamped: true, signerCn: 'Иванов Иван Иванович (rsa)' },
+      signMethod: 'p12',
+      signature: { timestamped: true, signerCn: 'Иванов Иван Иванович (rsa)', method: 'p12' },
     });
+  });
+
+  it('снимок со способом gost: signMethod gost, signable; подпись .p12 — 400 (§42.1)', async () => {
+    const runId = await render(user.cookie, gostId);
+    const [row] = await t.deps.db.select().from(reportRuns).where(eq(reportRuns.id, runId));
+    expect(row!.signMethod).toBe('gost');
+    expect((await runsOf(user.cookie)).find((r) => r.id === runId)).toMatchObject({
+      signable: true,
+      signature: null,
+      signMethod: 'gost',
+    });
+    const res = await signRun(user.cookie, runId);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatchObject({ message: 'подпись для этого отчёта недоступна' });
   });
 
   it('повтор — 409; два одновременных — одна подпись', async () => {
@@ -254,6 +278,7 @@ describe('подпись запуска (§39.3)', () => {
     expect((await runsOf(user.cookie)).find((r) => r.id === plainRun)).toMatchObject({
       signable: false,
       signature: null,
+      signMethod: null,
     });
     const res = await signRun(user.cookie, plainRun);
     expect(res.statusCode).toBe(400);

@@ -179,3 +179,43 @@ describe('подпись и защита (§39.2)', () => {
     expect(card.json().signatureAllowed).toBe(true);
   });
 });
+
+describe('способ подписи (§42.1)', () => {
+  const gost = { signature: { position: 'bottom-left', method: 'gost' } };
+
+  it('gost сохраняется и возвращается; карточка — signMethod', async () => {
+    const id = await newTemplate();
+    const card0 = await t.app.inject({ url: `/api/templates/${id}`, headers: { cookie: admin } });
+    expect(card0.json().signMethod).toBeNull();
+    const res = await putOptions(id, { pdfa: true, ...gost });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().pdfOptions.signature).toEqual({ position: 'bottom-left', method: 'gost' });
+    const card = await t.app.inject({ url: `/api/templates/${id}`, headers: { cookie: admin } });
+    expect(card.json()).toMatchObject({
+      signatureAllowed: true,
+      signMethod: 'gost',
+      pdfOptions: { signature: { position: 'bottom-left', method: 'gost' } },
+    });
+    // Без поля — p12 (шаблоны до 2.11.0).
+    await putOptions(id, { pdfa: false, signature: { position: 'bottom-left' } });
+    const p12 = await t.app.inject({ url: `/api/templates/${id}`, headers: { cookie: admin } });
+    expect(p12.json().signMethod).toBe('p12');
+  });
+
+  it('gost с защитой — прежняя ошибка §39.2', async () => {
+    const id = await newTemplate();
+    const res = await putOptions(id, { pdfa: false, ...gost, password: 'secret1' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.details).toContainEqual({
+      path: '/signature',
+      message: 'Подпись несовместима с паролем и ограничениями',
+    });
+  });
+
+  it('неизвестный способ — 400 VALIDATION', async () => {
+    const id = await newTemplate();
+    const res = await putOptions(id, { pdfa: false, signature: { method: 'x' } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('VALIDATION');
+  });
+});

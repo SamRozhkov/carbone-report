@@ -261,7 +261,10 @@ describe('PdfTab — электронная подпись (§39.2)', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
     await waitFor(() => expect(calls).toHaveLength(1));
-    expect(calls[0]!.body).toEqual({ pdfa: false, signature: { position: 'bottom-right' } });
+    expect(calls[0]!.body).toEqual({
+      pdfa: false,
+      signature: { position: 'bottom-right', method: 'p12' },
+    });
   });
 
   it('выбор «Внизу слева» отправляет bottom-left', async () => {
@@ -271,7 +274,10 @@ describe('PdfTab — электронная подпись (§39.2)', () => {
     await pick('Внизу слева');
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
     await waitFor(() => expect(calls).toHaveLength(1));
-    expect(calls[0]!.body).toEqual({ pdfa: false, signature: { position: 'bottom-left' } });
+    expect(calls[0]!.body).toEqual({
+      pdfa: false,
+      signature: { position: 'bottom-left', method: 'p12' },
+    });
   });
 
   it('выключение подписи — тело без signature', async () => {
@@ -285,6 +291,52 @@ describe('PdfTab — электронная подпись (§39.2)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]!.body).not.toHaveProperty('signature');
+  });
+
+  const GOST_HINT =
+    'Пользователю нужны КриптоПро CSP, КриптоПро ЭЦП Browser plug-in и сертификат ГОСТ на своём компьютере';
+
+  it('«Способ подписи»: по умолчанию .p12; выбор ГОСТ — пояснение и method в теле', async () => {
+    const { calls } = mockApi([SAVE]);
+    renderWithProviders(<PdfTab template={base} />);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Разрешить подпись PDF' }));
+    const method = screen.getByRole('combobox', { name: 'Способ подписи' });
+    expect(method).toHaveTextContent('Сертификат .p12 (подпись в PDF)');
+    expect(screen.queryByText(GOST_HINT)).not.toBeInTheDocument();
+    await userEvent.click(method);
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'ГОСТ, КриптоПро (файл .sig)' }),
+    );
+    expect(screen.getByText(GOST_HINT)).toBeInTheDocument();
+    // Положение после выбора способа не сбрасывает способ.
+    await pick('Внизу слева');
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]!.body).toEqual({
+      pdfa: false,
+      signature: { position: 'bottom-left', method: 'gost' },
+    });
+  });
+
+  it('шаблон с method: gost — загружается и сохраняется без потери способа', async () => {
+    const gost = {
+      ...base,
+      pdfOptions: { pdfa: false, signature: { position: 'bottom-center', method: 'gost' } },
+    } as TemplateAdminDetails;
+    const { calls } = mockApi([{ ...SAVE, body: gost }]);
+    renderWithProviders(<PdfTab template={gost} />);
+    expect(await screen.findByRole('combobox', { name: 'Способ подписи' })).toHaveTextContent(
+      'ГОСТ, КриптоПро (файл .sig)',
+    );
+    expect(screen.getByText(GOST_HINT)).toBeInTheDocument();
+    expect(screen.queryByText('Есть несохранённые изменения')).not.toBeInTheDocument();
+    await pick('Внизу справа');
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки PDF' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]!.body).toEqual({
+      pdfa: false,
+      signature: { position: 'bottom-right', method: 'gost' },
+    });
   });
 
   it('пояснения видны', async () => {

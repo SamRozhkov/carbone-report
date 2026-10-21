@@ -8,6 +8,7 @@ import { ApiRequestError } from '../api/client';
 import { fieldErrors } from '../api/errors';
 import { useRunDownload } from '../api/useRunDownload';
 import { ErrorAlert } from '../components/ErrorAlert';
+import { GOST_AUTHENTICITY_NOTE, SignGostDialog } from '../components/SignGostDialog';
 import { SignRunDialog } from '../components/SignRunDialog';
 import { PageHeader } from '../components/PageHeader';
 import { ParamForm } from '../components/ParamForm';
@@ -32,10 +33,12 @@ export function ReportRunPage() {
   const [signature, setSignature] = useState<RunSignature | null>(null);
   const [signOpen, setSignOpen] = useState(false);
   const [optionsLoading, setOptionsLoading] = useState(false);
+  // ГОСТ подписывается сертификатом из КриптоПро на компьютере пользователя: .p12 не нужен (§42.7).
+  const gost = t?.signMethod === 'gost';
   const cert = useQuery({
     queryKey: myCertificateKey,
     queryFn: api.signature.get,
-    enabled: t?.signatureAllowed === true,
+    enabled: t?.signatureAllowed === true && !gost,
   });
   const download = useRunDownload();
   const resetDownload = download.reset;
@@ -65,7 +68,13 @@ export function ReportRunPage() {
   if (!t) return <ErrorAlert error={template.error} title="Не удалось открыть отчёт" />;
 
   const certificate = cert.data?.certificate ?? null;
-  const canSign = certificate !== null && certificateState(certificate) !== 'expired';
+  const canSign = gost || (certificate !== null && certificateState(certificate) !== 'expired');
+  const onSigned = (s: RunSignature) => {
+    setSignature(s);
+    setSignOpen(false);
+    void queryClient.invalidateQueries({ queryKey: ['runs'] });
+  };
+  const pendingSigned = download.pending?.runId === runId ? download.pending : undefined;
   const errors = fieldErrors(render.error);
   const declared = new Set(t.params.map((p) => p.name));
   const unmatched = Object.entries(errors).filter(([k]) => !declared.has(k));
@@ -168,15 +177,40 @@ export function ReportRunPage() {
                     <>
                       <Text>
                         Подписан: {signature.signerCn}, {formatDateTime(signature.signedAt)}
+                        {signature.timestamped && ', метка времени'}
                       </Text>
-                      <Button
-                        view="outlined"
-                        size="l"
-                        loading={download.pending?.runId === runId && !!download.pending.signed}
-                        onClick={() => download.save({ runId, format: 'pdf', signed: true })}
-                      >
-                        Скачать подписанный PDF
-                      </Button>
+                      {signature.method === 'gost' ? (
+                        <>
+                          <Button
+                            view="outlined"
+                            size="l"
+                            loading={!!pendingSigned?.signed}
+                            disabled={!!download.pending && !pendingSigned?.signed}
+                            onClick={() => download.save({ runId, format: 'pdf', signed: true })}
+                          >
+                            Скачать PDF со штампом
+                          </Button>
+                          <Button
+                            view="outlined"
+                            size="l"
+                            loading={pendingSigned?.format === 'sig'}
+                            disabled={!!download.pending && pendingSigned?.format !== 'sig'}
+                            onClick={() => download.save({ runId, format: 'sig' })}
+                          >
+                            Скачать подпись (.sig)
+                          </Button>
+                          <Text color="secondary">{GOST_AUTHENTICITY_NOTE}</Text>
+                        </>
+                      ) : (
+                        <Button
+                          view="outlined"
+                          size="l"
+                          loading={!!pendingSigned?.signed}
+                          onClick={() => download.save({ runId, format: 'pdf', signed: true })}
+                        >
+                          Скачать подписанный PDF
+                        </Button>
+                      )}
                     </>
                   ) : (
                     <>
@@ -188,7 +222,7 @@ export function ReportRunPage() {
                       >
                         Подписать PDF
                       </Button>
-                      {cert.isSuccess && !certificate && (
+                      {!gost && cert.isSuccess && !certificate && (
                         <Text color="secondary">
                           Загрузите сертификат на странице «
                           <Link
@@ -208,16 +242,20 @@ export function ReportRunPage() {
                 </div>
               )}
               <ErrorAlert error={download.error} title="Не удалось сохранить файл" />
-              {signOpen && (
+              {signOpen && gost && (
+                <SignGostDialog
+                  runId={runId}
+                  open
+                  onClose={() => setSignOpen(false)}
+                  onSigned={onSigned}
+                />
+              )}
+              {signOpen && !gost && (
                 <SignRunDialog
                   runId={runId}
                   open
                   onClose={() => setSignOpen(false)}
-                  onSigned={(s) => {
-                    setSignature(s);
-                    setSignOpen(false);
-                    void queryClient.invalidateQueries({ queryKey: ['runs'] });
-                  }}
+                  onSigned={onSigned}
                 />
               )}
             </>

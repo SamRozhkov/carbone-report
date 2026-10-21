@@ -1,24 +1,43 @@
 // Поток пула рендера: собирает отчёт встроенной сборкой Carbone (формат шаблона), обрабатывает
 // готовый PDF (§36.4, задача kind = pdf) или готовит PDF к подписи (§39.4, задача kind = sign)
-// или разбирает .p12 (§39.8, задача kind = p12).
+// или разбирает .p12 (§39.8, задача kind = p12), ставит штамп и считает хеш Стрибог (§42, kind =
+// gost-prepare) или проверяет подпись CAdES по ГОСТ (§42.4, kind = gost-verify).
 // Глобальные carbone.set()/reset() не вызываем: lang, timezone и настройки загрузки изображений
 // всегда приходят в options. Предупреждения рендера (R6) уходят пулу.
 import { parentPort } from 'node:worker_threads';
 import carbone from '@carbone-reports/carbone';
+import { z } from 'zod';
 import { postprocessPdf, type PdfPostJob } from '../pdf/postprocess';
+import { CadesError, verifyCades, type GostHashAlg } from '../pdf/sign/gost/cades';
+import { streebog } from '../pdf/sign/gost/streebog';
 import { P12Error, readP12 } from '../pdf/sign/p12';
-import { prepareSignaturePdf, type SignPrepareJob } from '../pdf/sign/prepare';
+import {
+  prepareSignaturePdf,
+  prepareStampPdf,
+  type SignPrepareJob,
+  type StampJob,
+} from '../pdf/sign/prepare';
 import type { RenderOptions } from './pool';
 
 interface Request {
   id: number;
-  kind?: 'carbone' | 'pdf' | 'sign' | 'p12';
+  kind?: 'carbone' | 'pdf' | 'sign' | 'p12' | 'gost-prepare' | 'gost-verify';
   template: Uint8Array;
   ext: string;
   data: string;
   options: RenderOptions;
   extra?: Uint8Array[];
 }
+
+/** Данные задачи gost-verify (pool.ts → поток); времена — ISO-строки. */
+const GostVerifyData = z.object({
+  certDer: z.base64(),
+  hash: z.hex(),
+  hashAlg: z.enum(['streebog256', 'streebog512']),
+  requireTimestamp: z.boolean(),
+  now: z.iso.datetime(),
+  preparedAt: z.iso.datetime().nullable(),
+});
 
 type PdfJobData = Omit<PdfPostJob, 'attachments'> & {
   attachments: { placement: PdfPostJob['attachments'][number]['placement'] }[];
@@ -43,6 +62,33 @@ async function handle(
       digestAlg: p.digestAlg,
     });
     return { buffer: key, warnings: [], meta };
+  }
+  if (m.kind === 'gost-prepare') {
+    const job = JSON.parse(m.data) as StampJob & { hashAlg: GostHashAlg };
+    const buffer = await prepareStampPdf(template, { position: job.position, lines: job.lines });
+    const hash = streebog(job.hashAlg === 'streebog512' ? 512 : 256, buffer);
+    return {
+      buffer,
+      warnings: [],
+      meta: JSON.stringify({ hash: Buffer.from(hash).toString('hex') }),
+    };
+  }
+  if (m.kind === 'gost-verify') {
+    const d = GostVerifyData.parse(JSON.parse(m.data));
+    const r = await verifyCades({
+      signature: template,
+      certDer: Buffer.from(d.certDer, 'base64'),
+      hash: Buffer.from(d.hash, 'hex'),
+      hashAlg: d.hashAlg,
+      requireTimestamp: d.requireTimestamp,
+      now: new Date(d.now),
+      ...(d.preparedAt ? { preparedAt: new Date(d.preparedAt) } : {}),
+    });
+    const meta = JSON.stringify({
+      signedAt: r.signedAt?.toISOString() ?? null,
+      timestamped: r.timestamped,
+    });
+    return { buffer: new Uint8Array(0), warnings: [], meta };
   }
   if (m.kind === 'sign') {
     const buffer = await prepareSignaturePdf(template, JSON.parse(m.data) as SignPrepareJob);
@@ -79,8 +125,13 @@ port.on('message', (m: Request) => {
         id: m.id,
         ok: false,
         message: err instanceof Error ? err.message : String(err),
-        // Только у P12Error: главный поток восстанавливает её с тем же полем (§39.8).
-        ...(err instanceof P12Error ? { field: err.field } : {}),
+        // P12Error: главный поток восстанавливает её с тем же полем (§39.8);
+        // CadesError: отказ проверки ГОСТ, текст §42.4 — пользователю (поле gost).
+        ...(err instanceof P12Error
+          ? { field: err.field }
+          : err instanceof CadesError
+            ? { field: 'gost' }
+            : {}),
       });
     },
   );

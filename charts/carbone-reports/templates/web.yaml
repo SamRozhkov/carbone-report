@@ -46,10 +46,22 @@ spec:
           livenessProbe:
             httpGet: { path: /, port: http }
             periodSeconds: 20
+          {{- if .Values.web.cadesPluginConfigMap }}
+          volumeMounts:
+            - name: cades
+              mountPath: /usr/share/nginx/cades
+              readOnly: true
+          {{- end }}
           {{- with .Values.web.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+      {{- if .Values.web.cadesPluginConfigMap }}
+      volumes:
+        - name: cades
+          configMap:
+            name: {{ .Values.web.cadesPluginConfigMap | quote }}
+      {{- end }}
       {{- include "cr.scheduling" .Values.web | nindent 6 }}
 ---
 apiVersion: v1

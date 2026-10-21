@@ -62,3 +62,20 @@ tests:
     set: { ingress.enabled: false }
     asserts:
       - hasDocuments: { count: 0 }
+  - it: cadesPluginConfigMap по умолчанию пуст — тома cades нет
+    template: web.yaml
+    documentIndex: 0
+    asserts:
+      - notExists: { path: 'spec.template.spec.volumes' }
+      - notExists: { path: 'spec.template.spec.containers[0].volumeMounts' }
+  - it: cadesPluginConfigMap монтируется в /usr/share/nginx/cades только для чтения
+    template: web.yaml
+    documentIndex: 0
+    set: { web.cadesPluginConfigMap: cades }
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content: { name: cades, configMap: { name: cades } }
+      - contains:
+          path: 'spec.template.spec.containers[0].volumeMounts'
+          content: { name: cades, mountPath: /usr/share/nginx/cades, readOnly: true }

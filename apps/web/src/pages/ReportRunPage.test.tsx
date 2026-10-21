@@ -1,8 +1,14 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { loadCades } from '../lib/cades';
 import * as download from '../lib/download';
 import { mockApi, renderRoute, userMe } from '../test/utils';
+
+vi.mock('../lib/cades', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/cades')>()),
+  loadCades: vi.fn(),
+}));
 
 const template = {
   id: 't1',
@@ -13,6 +19,7 @@ const template = {
   updatedAt: '2026-01-10T10:00:00Z',
   outputFormats: ['pdf', 'docx', 'odt'],
   signatureAllowed: false,
+  signMethod: null,
   params: [
     {
       name: 'company',
@@ -435,7 +442,10 @@ describe('ReportRunPage', () => {
     const signedAt = '2026-10-19T14:32:00';
     const base = [
       userMe,
-      { path: '/api/templates/t1', body: { ...template, signatureAllowed: true } },
+      {
+        path: '/api/templates/t1',
+        body: { ...template, signatureAllowed: true, signMethod: 'p12' },
+      },
       { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
     ];
 
@@ -454,6 +464,7 @@ describe('ReportRunPage', () => {
             fingerprint: 'AB'.repeat(32),
             signedAt,
             timestamped: false,
+            method: 'p12',
           },
         },
         {
@@ -536,6 +547,86 @@ describe('ReportRunPage', () => {
       expect(screen.getByRole('link', { name: 'Моя подпись' })).toHaveAttribute(
         'href',
         '/signature',
+      );
+    });
+
+    it('ГОСТ: кнопка активна без .p12, диалог КриптоПро; после подписи — PDF со штампом и .sig', async () => {
+      const spy = vi.spyOn(download, 'triggerDownload').mockImplementation(() => {});
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:run');
+      vi.mocked(loadCades).mockResolvedValue({
+        versions: vi.fn(),
+        listCertificates: vi.fn(async () => [
+          {
+            thumbprint: 'A1',
+            subjectCn: 'Петров Пётр',
+            issuerCn: 'Тестовый УЦ',
+            validTo: new Date('2030-01-01T00:00:00Z'),
+            certificateBase64: 'CERT',
+            keyBits: 256 as const,
+          },
+        ]),
+        signHash: vi.fn(async () => 'SIG'),
+      });
+      const { calls } = mockApi([
+        userMe,
+        {
+          path: '/api/templates/t1',
+          body: { ...template, signatureAllowed: true, signMethod: 'gost' },
+        },
+        { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
+        {
+          method: 'POST',
+          path: '/api/runs/r1/sign/gost/prepare',
+          body: { hash: 'ab'.repeat(32), hashAlg: 'streebog256', tsaUrl: null },
+        },
+        {
+          method: 'POST',
+          path: '/api/runs/r1/sign/gost/complete',
+          status: 201,
+          body: {
+            signerCn: 'Петров Пётр',
+            fingerprint: 'AB'.repeat(32),
+            signedAt,
+            timestamped: true,
+            method: 'gost',
+          },
+        },
+        {
+          path: '/api/runs/r1/file',
+          raw: 'X',
+          headers: { 'content-disposition': `attachment; filename="x.pdf"` },
+        },
+      ]);
+      renderRoute('/reports/t1');
+      await formAndRender();
+      const btn = await screen.findByRole('button', { name: 'Подписать PDF' });
+      expect(btn).toBeEnabled();
+      // Сертификат .p12 для ГОСТ не нужен и не запрашивается.
+      expect(screen.queryByText(/Загрузите сертификат на странице/)).not.toBeInTheDocument();
+      await userEvent.click(btn);
+      await screen.findByRole('radio', { name: /Петров Пётр/ });
+      await userEvent.click(screen.getByRole('button', { name: 'Подписать' }));
+      expect(
+        await screen.findByText('Подписан: Петров Пётр, 19.10.2026 14:32, метка времени'),
+      ).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(calls.some((c) => c.path === '/api/me/certificate')).toBe(false);
+      expect(
+        screen.getByText(
+          'Подлинность сертификата проверяется сервисом проверки подписи (например, Госуслуги)',
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'Скачать подписанный PDF' }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Скачать PDF со штампом' }));
+      await waitFor(() =>
+        expect(calls.some((c) => c.path === '/api/runs/r1/file?format=pdf&signed=1')).toBe(true),
+      );
+      await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+      await userEvent.click(screen.getByRole('button', { name: 'Скачать подпись (.sig)' }));
+      await waitFor(() =>
+        expect(calls.some((c) => c.path === '/api/runs/r1/file?format=sig')).toBe(true),
       );
     });
 

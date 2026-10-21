@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
 import {
   hasPdfProtection,
@@ -42,11 +43,22 @@ export function snapshotPaths(runId: string, ext: TemplateExt) {
 /** Подписанный PDF запуска (§39.3). */
 export const signedPath = (runId: string) => `${runDir(runId)}/out.signed.pdf`;
 
+/** Открепленная подпись ГОСТ рядом с подписанным PDF (§42.5). */
+export const signaturePath = (runId: string) => `${runDir(runId)}/out.signed.pdf.sig`;
+
+/**
+ * Черновик подписи ГОСТ: PDF со штампом до завершения подписи (§42.2). Путь новый у каждой подготовки:
+ * новый черновик не перезаписывает прежний, пока не зафиксирована его строка ожидания, поэтому
+ * строка всегда указывает на черновик со своим хешем (сбой фиксации оставляет лишь файл-сироту).
+ */
+export const gostDraftPath = (runId: string) => `${runDir(runId)}/out.gost.${randomUUID()}.pdf`;
+
 export const toRunSignature = (r: RunSignatureRow): RunSignature => ({
   signerCn: r.signerCn,
   fingerprint: r.fingerprint,
   signedAt: r.signedAt.toISOString(),
   timestamped: r.timestamped,
+  method: r.method,
 });
 
 export const snapshotGone = () =>

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { api } from '../api/endpoints';
 import { fieldErrors } from '../api/errors';
+import { CadesCheck } from '../components/CadesCheck';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { Field } from '../components/Field';
@@ -176,6 +177,9 @@ export function SignaturePage() {
         onCancel={() => setConfirming(false)}
       />
       {remove.error && <ErrorAlert error={remove.error} />}
+      <div className="cr-form" style={{ marginTop: 24 }}>
+        <CadesCheck />
+      </div>
     </>
   );
 }

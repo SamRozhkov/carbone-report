@@ -9,6 +9,7 @@ import { AppError, badRequest, notFound } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
 import { P12Error } from '../pdf/sign/p12';
 import { loadUserCertificate, p12FieldError, toCertificateInfo } from './certificates';
+import { registerGostSignRoutes } from './gost-routes';
 import { registerSignRunRoute } from './sign-run';
 
 /** Чтение формы загрузки: лимит части — 1 МБ (сообщение о 50 КБ даёт readP12, а не плагин). */
@@ -41,6 +42,7 @@ async function readCertificateUpload(
 export function registerSignatureRoutes(app: App, deps: AppDeps, guards: Guards): void {
   const { db } = deps;
   registerSignRunRoute(app, deps, guards);
+  registerGostSignRoutes(app, deps, guards);
 
   app.get(
     '/api/me/certificate',

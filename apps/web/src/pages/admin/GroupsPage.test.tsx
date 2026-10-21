@@ -186,13 +186,12 @@ describe('GroupsPage', () => {
     await userEvent.click(within(row('Склад')).getByRole('button', { name: 'Участники' }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(within(dialog).getByRole('combobox', { name: 'Участники' }));
-    const blocked = await screen.findByRole('option', { name: '(заблокирован)' });
-    expect(screen.getByRole('option', { name: 'ivanov' })).toBeInTheDocument();
-    await userEvent.click(blocked);
+    await userEvent.click(await screen.findByRole('option', { name: '(заблокирован)' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
     await waitFor(() =>
       expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ userIds: ['u2'] }),
     );
+    expect(calls.some((c) => c.path === '/api/users/directory')).toBe(true);
     expect(calls.some((c) => c.path === '/api/users')).toBe(false);
   });
 });

@@ -284,8 +284,10 @@ export interface ImportPreviewItem {
   /** Источник этой среды с тем же именем; `null` — нет или их несколько (нужен выбор). */
   datasourceMatch: string | null;
   category: string | null;
-  /** `false` — категория будет создана; без категории — `true`. */
+  /** `false` — категории нет: будет создана (или пропущена — см. `categorySkipped`); без категории — `true`. */
   categoryExists: boolean;
+  /** `true` — категории нет, а создаёт категории только `admin`: шаблон загрузится без неё (§43.3). */
+  categorySkipped: boolean;
   groups: string[];
   /** Группы, которых нет в этой среде: при загрузке пропускаются. */
   missingGroups: string[];

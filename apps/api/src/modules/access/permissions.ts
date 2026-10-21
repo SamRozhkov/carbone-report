@@ -10,7 +10,7 @@ export const AUTHOR_ROLES = ['admin', 'editor'] as const;
 /** Роли, которые ведут доступ к шаблонам, группы и категории (§43.2). */
 export const ACCESS_ROLES = ['admin', 'access_manager'] as const;
 
-const NO_EDIT_RIGHT = 'нет права на правку шаблона';
+export const NO_EDIT_RIGHT = 'нет права на правку шаблона';
 
 /** Чистое правило §43.1: роль + владелец + список редакторов. */
 export function editRight(

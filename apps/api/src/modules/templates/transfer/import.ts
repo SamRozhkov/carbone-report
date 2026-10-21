@@ -26,7 +26,9 @@ import {
   users,
 } from '../../../db/schema';
 import type { AppDeps } from '../../../deps';
-import { AppError, badRequest, conflict } from '../../../lib/errors';
+import { AppError, badRequest, conflict, forbidden } from '../../../lib/errors';
+import type { SessionUser } from '../../auth/session';
+import { editableTemplates, NO_EDIT_RIGHT } from '../../access/permissions';
 import { activeLock, lockAlive } from '../../edit-lock/service';
 import { orderParams } from '../../queries/param-deps';
 import { checkParamDefaults } from '../../queries/params';
@@ -72,7 +74,7 @@ export function paramErrors(params: TransferParam[]): string[] {
 
 /** Что уже есть в этой среде — для сопоставления по именам. */
 export interface ImportLookup {
-  /** Шаблоны по точному имени; изменённые последними — первыми. */
+  /** Шаблоны по точному имени, которые загружающий может править; изменённые последними — первыми. */
   templatesByName: Map<string, ImportExisting[]>;
   /** id источников по точному имени. */
   datasourcesByName: Map<string, string[]>;
@@ -83,10 +85,16 @@ export interface ImportLookup {
 }
 
 /** План (предпросмотр) — чистая функция от манифеста и того, что есть в среде. */
-export function planImport(manifest: TransferManifest, lookup: ImportLookup): ImportPreviewItem[] {
+export function planImport(
+  manifest: TransferManifest,
+  lookup: ImportLookup,
+  actor: Pick<SessionUser, 'role'>,
+): ImportPreviewItem[] {
   return manifest.templates.map((t, index) => {
     const sameName = lookup.templatesByName.get(t.name) ?? [];
     const ds = lookup.datasourcesByName.get(t.datasource.name) ?? [];
+    const categoryExists =
+      t.category === null || lookup.categoriesByLower.has(t.category.toLowerCase());
     return {
       index,
       name: t.name,
@@ -97,7 +105,9 @@ export function planImport(manifest: TransferManifest, lookup: ImportLookup): Im
       // Несколько источников с одним именем — неоднозначно: пусть выберет администратор.
       datasourceMatch: ds.length === 1 ? ds[0]! : null,
       category: t.category,
-      categoryExists: t.category === null || lookup.categoriesByLower.has(t.category.toLowerCase()),
+      categoryExists,
+      // Категории создаёт только администратор (§43.3).
+      categorySkipped: actor.role !== 'admin' && !categoryExists,
       groups: t.groups,
       missingGroups: t.groups.filter((g) => !lookup.groupsByLower.has(g.toLowerCase())),
       errors: paramErrors(t.params),
@@ -205,7 +215,11 @@ export function resolveDecisions(
   });
 }
 
-async function loadLookup(deps: ImportDeps, manifest: TransferManifest): Promise<ImportLookup> {
+async function loadLookup(
+  deps: ImportDeps,
+  manifest: TransferManifest,
+  actor: SessionUser,
+): Promise<ImportLookup> {
   const { db } = deps;
   const ts = manifest.templates;
   const lower = (xs: string[]) => [...new Set(xs.map((x) => x.toLowerCase()))];
@@ -222,7 +236,10 @@ async function loadLookup(deps: ImportDeps, manifest: TransferManifest): Promise
       .from(templates)
       .leftJoin(templateEditLocks, and(eq(templateEditLocks.templateId, templates.id), lockAlive))
       .leftJoin(users, eq(users.id, templateEditLocks.userId))
-      .where(inArray(templates.name, [...new Set(ts.map((t) => t.name))]))
+      // Кандидаты на «обновить» — только шаблоны, которые загружающий может править (§43.3).
+      .where(
+        and(inArray(templates.name, [...new Set(ts.map((t) => t.name))]), editableTemplates(actor)),
+      )
       .orderBy(desc(templates.updatedAt), templates.id),
     db
       .select({ id: datasources.id, name: datasources.name })
@@ -263,13 +280,38 @@ async function loadLookup(deps: ImportDeps, manifest: TransferManifest): Promise
 }
 
 /** Предпросмотр загрузки (§33.2): ничего не меняет. */
-export async function previewImport(deps: ImportDeps, zip: Buffer): Promise<ImportPreview> {
+export async function previewImport(
+  deps: ImportDeps,
+  zip: Buffer,
+  actor: SessionUser,
+): Promise<ImportPreview> {
   const { manifest } = await readTransferArchive(zip);
   return {
     appVersion: manifest.appVersion,
     exportedAt: manifest.exportedAt,
-    templates: planImport(manifest, await loadLookup(deps, manifest)),
+    templates: planImport(manifest, await loadLookup(deps, manifest, actor), actor),
   };
+}
+
+/**
+ * Каждый обновляемый шаблон загружающий может править (§43.3); иначе — 403, в том числе для
+ * несуществующего id (не отличаем чужой от отсутствующего). Админ правит любой.
+ */
+async function assertUpdateTargets(
+  deps: ImportDeps,
+  decisions: ImportDecision[],
+  actor: SessionUser,
+): Promise<void> {
+  if (actor.role === 'admin') return;
+  const ids = [
+    ...new Set(decisions.flatMap((d) => (d.action === 'update' && d.targetId ? [d.targetId] : []))),
+  ];
+  if (!ids.length) return;
+  const rows = await deps.db
+    .select({ id: templates.id })
+    .from(templates)
+    .where(and(inArray(templates.id, ids), editableTemplates(actor)));
+  if (rows.length !== ids.length) throw forbidden(NO_EDIT_RIGHT);
 }
 
 /** Загрузки архивов выполняются по одной: имена создаваемых шаблонов проверяются под этой блокировкой. */
@@ -293,13 +335,15 @@ export async function applyImport(
   deps: ImportDeps,
   zip: Buffer,
   decisions: ImportDecision[],
-  userId: string,
+  actor: SessionUser,
   log?: Log,
 ): Promise<ImportResult> {
   const { db, storage } = deps;
   const { manifest, files, attachments } = await readTransferArchive(zip);
-  const lookup = await loadLookup(deps, manifest);
-  const plan = planImport(manifest, lookup);
+  // До записи файлов; иначе чужой шаблон не попал бы в `existing` и отказ был бы 409.
+  await assertUpdateTargets(deps, decisions, actor);
+  const lookup = await loadLookup(deps, manifest, actor);
+  const plan = planImport(manifest, lookup, actor);
 
   const wantedDs = [...new Set(decisions.flatMap((d) => (d.datasourceId ? [d.datasourceId] : [])))];
   const [dsRows, nameRows] = await Promise.all([
@@ -333,7 +377,12 @@ export async function applyImport(
       const locked = new Map(
         (targetIds.length
           ? await tx
-              .select({ ...getTableColumns(templates), updatedAtText })
+              .select({
+                ...getTableColumns(templates),
+                updatedAtText,
+                // Владелец и редакторы могли смениться после ранней проверки (§43.3).
+                editable: sql<boolean>`${editableTemplates(actor) ?? sql`true`}`,
+              })
               .from(templates)
               .where(inArray(templates.id, targetIds))
               .orderBy(asc(templates.id))
@@ -344,6 +393,7 @@ export async function applyImport(
       for (const r of resolved) {
         if (!r.targetId) continue;
         const cur = locked.get(r.targetId);
+        if (cur && !cur.editable) throw forbidden(NO_EDIT_RIGHT);
         if (cur?.name !== r.name || cur.updatedAtText !== r.targetUpdatedAt)
           throw changedSincePreview(r.name);
       }
@@ -361,9 +411,10 @@ export async function applyImport(
       });
       const work = resolved.filter((r) => r.action !== 'skip');
 
-      // Категории — по имени без учёта регистра; недостающие создаются один раз.
+      // Категории — по имени без учёта регистра; недостающие создаются один раз и только
+      // администратором — у прочих шаблон загружается без категории (§43.3).
       const categoryIds = new Map(lookup.categoriesByLower);
-      for (const r of work) {
+      for (const r of actor.role === 'admin' ? work : []) {
         const cat = manifest.templates[r.index]!.category;
         if (cat === null || categoryIds.has(cat.toLowerCase())) continue;
         const [row] = await tx.insert(categories).values({ name: cat }).returning();
@@ -379,11 +430,12 @@ export async function applyImport(
           fileExt: t.fileExt,
           defaultOutput: t.defaultOutput,
           public: t.public,
-          categoryId: t.category === null ? null : categoryIds.get(t.category.toLowerCase())!,
+          categoryId:
+            t.category === null ? null : (categoryIds.get(t.category.toLowerCase()) ?? null),
           pdfOptions: normalizePdfOptions(t.pdfOptions ?? { pdfa: false }),
           docKey: randomUUID(),
           updatedAt: new Date(),
-          updatedBy: userId,
+          updatedBy: actor.id,
         };
         let id: string;
         if (r.targetId) {
@@ -421,7 +473,9 @@ export async function applyImport(
           const path = templateFilePath(id, t.fileExt, 1);
           created.push(id);
           await storage.write(path, data);
-          await tx.insert(templates).values({ ...meta, id, name: r.name, filePath: path });
+          await tx
+            .insert(templates)
+            .values({ ...meta, id, name: r.name, filePath: path, ownerId: actor.id });
         }
         ids.set(r.index, id);
 

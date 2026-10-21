@@ -496,7 +496,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
   // Загрузка из архива (§33.2); в режиме обслуживания закрыта вместе с прочими изменениями.
   app.post('/api/templates/import/preview', author, async (req): Promise<ImportPreview> => {
     const { data } = await readArchiveUpload(req);
-    return previewImport(deps, data);
+    return previewImport(deps, data, currentUser(req));
   });
 
   app.post('/api/templates/import', author, async (req): Promise<ImportResult> => {
@@ -514,7 +514,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         `неверные решения по шаблонам: ${issue.path.join('.')} ${issue.message}`.trim(),
       );
     }
-    return applyImport(deps, data, decisions.data, currentUser(req).id, req.log);
+    return applyImport(deps, data, decisions.data, currentUser(req), req.log);
   });
 
   app.post(

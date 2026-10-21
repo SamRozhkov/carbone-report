@@ -12,9 +12,9 @@ import type { App } from '../../app';
 import type { Db } from '../../db/client';
 import { templateEditors, templates, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
-import { badRequest, notFound } from '../../lib/errors';
-import type { Guards } from '../auth/guards';
-import { ACCESS_ROLES } from './permissions';
+import { badRequest, forbidden, notFound } from '../../lib/errors';
+import { currentUser, type Guards } from '../auth/guards';
+import { ACCESS_ROLES, deleteRight, NO_EDIT_RIGHT } from './permissions';
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
@@ -79,9 +79,13 @@ export function registerTemplateEditorRoutes(app: App, deps: AppDeps, guards: Gu
       const userIds = [...new Set(req.body.userIds)];
       return db.transaction(async (tx) => {
         const t = await lockTemplate(tx, id);
+        // Владельца мог сменить админ, пока запрос ждал блокировку: право проверяется ещё раз под ней.
+        if (!deleteRight(currentUser(req), t)) throw forbidden(NO_EDIT_RIGHT);
+        const current = new Set((await editorsOf(tx, id)).userIds);
         const found = await loadUsers(tx, userIds);
         if (found.length !== userIds.length) throw badRequest(USER_NOT_FOUND);
-        if (found.some((u) => u.role !== 'editor'))
+        // Роль проверяется только у добавляемых: записи понижённых остаются, но не действуют (§43.1).
+        if (found.some((u) => !current.has(u.id) && u.role !== 'editor'))
           throw badRequest('можно выдать только пользователю с ролью «Редактор»');
         if (t.ownerId && userIds.includes(t.ownerId))
           throw badRequest('владелец уже может править шаблон');

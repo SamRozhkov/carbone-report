@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { AccessTemplateRow, UserDirectoryEntry } from '@carbone-reports/shared';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { templates, users } from '../src/db/schema';
+import { templateEditors, templates, users } from '../src/db/schema';
 import {
   createSourceDatabase,
   createTemplate,
@@ -265,6 +265,96 @@ describe('редакторы шаблона', () => {
       userIds: [editorB.id, editorC.id].sort(),
     });
     expect((await req('GET', `/api/templates/${ownA}/editors`, admin)).statusCode).toBe(200);
+  });
+});
+
+describe('редакторы шаблона: понижённые редакторы', () => {
+  it('запись понижённого редактора не мешает сохранить список и остаётся', async () => {
+    const owner = await loginAs(t, 'editor');
+    const stale = await loginAs(t, 'editor');
+    const fresh = await loginAs(t, 'editor');
+    const id = await createTemplate(t, owner.cookie, dsId);
+    const g = await req('PUT', `/api/templates/${id}/editors`, owner.cookie, {
+      userIds: [stale.user.id],
+    });
+    expect(g.statusCode, g.body).toBe(200);
+    await t.deps.db.update(users).set({ role: 'user' }).where(eq(users.id, stale.user.id));
+    const r = await req('PUT', `/api/templates/${id}/editors`, owner.cookie, {
+      userIds: [stale.user.id, fresh.user.id],
+    });
+    expect(r.statusCode, r.body).toBe(200);
+    expect(r.json().userIds).toEqual([stale.user.id, fresh.user.id].sort());
+    // Новому — по-прежнему только с ролью «Редактор».
+    const bad = await req('PUT', `/api/templates/${id}/editors`, owner.cookie, {
+      userIds: [stale.user.id, fresh.user.id, user.id],
+    });
+    expect(bad.statusCode, bad.body).toBe(400);
+    expect(bad.json().error.message).toBe('можно выдать только пользователю с ролью «Редактор»');
+    // Убрать понижённого можно.
+    const rm = await req('PUT', `/api/templates/${id}/editors`, owner.cookie, {
+      userIds: [fresh.user.id],
+    });
+    expect(rm.statusCode, rm.body).toBe(200);
+    expect(rm.json().userIds).toEqual([fresh.user.id]);
+  });
+});
+
+/**
+ * Держит строку шаблона FOR UPDATE, пока запрос не встанет в ожидание блокировки, затем меняет
+ * владельца и отпускает: запрос продолжает уже с новым владельцем (гонка «смена владельца — PUT/DELETE»).
+ */
+async function changeOwnerWhileWaiting(
+  templateId: string,
+  newOwnerId: string,
+  send: () => Promise<{ statusCode: number; body: string }>,
+) {
+  let pending!: Promise<{ statusCode: number; body: string }>;
+  await t.deps.db.transaction(async (tx) => {
+    await tx.select().from(templates).where(eq(templates.id, templateId)).for('update');
+    pending = send();
+    await expect
+      .poll(
+        async () =>
+          (
+            await t.deps.db.execute<{ n: number }>(
+              sql`select count(*)::int as n from pg_stat_activity
+                  where datname = current_database() and wait_event_type = 'Lock'`,
+            )
+          ).rows[0]!.n,
+        { timeout: 5000, interval: 20 },
+      )
+      .toBeGreaterThan(0);
+    await tx.update(templates).set({ ownerId: newOwnerId }).where(eq(templates.id, templateId));
+  });
+  return pending;
+}
+
+describe('смена владельца во время запроса прежнего владельца', () => {
+  it('PUT …/editors прежнего владельца под блокировкой — 403, себя он не выдаёт', async () => {
+    const a = await loginAs(t, 'editor');
+    const c = await loginAs(t, 'editor');
+    const id = await createTemplate(t, a.cookie, dsId);
+    const r = await changeOwnerWhileWaiting(id, c.user.id, () =>
+      req('PUT', `/api/templates/${id}/editors`, a.cookie, { userIds: [a.user.id] }),
+    );
+    expect(r.statusCode, r.body).toBe(403);
+    const rows = await t.deps.db
+      .select()
+      .from(templateEditors)
+      .where(eq(templateEditors.templateId, id));
+    expect(rows).toEqual([]);
+  });
+
+  it('DELETE прежнего владельца под блокировкой — 403, шаблон на месте', async () => {
+    const a = await loginAs(t, 'editor');
+    const c = await loginAs(t, 'editor');
+    const id = await createTemplate(t, a.cookie, dsId);
+    const r = await changeOwnerWhileWaiting(id, c.user.id, () =>
+      req('DELETE', `/api/templates/${id}`, a.cookie),
+    );
+    expect(r.statusCode, r.body).toBe(403);
+    const [row] = await t.deps.db.select().from(templates).where(eq(templates.id, id));
+    expect(row?.ownerId).toBe(c.user.id);
   });
 });
 

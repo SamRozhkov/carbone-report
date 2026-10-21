@@ -51,8 +51,10 @@ import { accessibleTemplates, assertTemplateAccess } from '../access/access';
 import {
   assertTemplateEdit,
   canEditTemplate,
+  AUTHOR_ROLES,
   deleteRight,
   editableTemplates,
+  NO_EDIT_RIGHT,
   templateRights,
 } from '../access/permissions';
 import { assertNotLockedByOther, lockAlive } from '../edit-lock/service';
@@ -94,7 +96,7 @@ function uniqueOrFail(values: string[], what: string): void {
 }
 
 export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards): void {
-  const author = { preHandler: guards.requireRole('admin', 'editor') };
+  const author = { preHandler: guards.requireRole(...AUTHOR_ROLES) };
   const editor = { preHandler: guards.requireTemplateEdit };
   const owner = { preHandler: guards.requireTemplateOwner };
   const anyUser = { preHandler: guards.requireUser };
@@ -270,7 +272,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       const user = currentUser(req);
       const forEdit = req.query.scope === 'edit';
       // Список конструктора (§43.3) — только авторам шаблонов.
-      if (forEdit && !['admin', 'editor'].includes(user.role)) throw forbidden();
+      if (forEdit && !(AUTHOR_ROLES as readonly string[]).includes(user.role)) throw forbidden();
       const lockUser = alias(users, 'lock_user');
       const rows = await db
         .select({
@@ -459,11 +461,13 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       const row = await loadTemplate(db, req.params.id);
       await db.transaction(async (tx) => {
         const [cur] = await tx
-          .select({ id: templates.id })
+          .select({ id: templates.id, ownerId: templates.ownerId })
           .from(templates)
           .where(eq(templates.id, row.id))
           .for('update');
         if (!cur) throw notFound('шаблон');
+        // Владельца мог сменить админ, пока запрос ждал блокировку: право проверяется ещё раз под ней.
+        if (!deleteRight(currentUser(req), cur)) throw forbidden(NO_EDIT_RIGHT);
         await assertNotLockedByOther(tx, cur.id, null);
         await tx.delete(templates).where(eq(templates.id, cur.id));
       });

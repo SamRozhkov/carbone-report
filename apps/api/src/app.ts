@@ -26,6 +26,7 @@ import { registerTemplateRoutes } from './modules/templates/routes';
 import { registerSignatureRoutes } from './modules/signature/routes';
 import { registerUserRoutes } from './modules/users/routes';
 import { registerVersionRoutes } from './modules/version/routes';
+import { registerFeedbackRoutes } from './modules/feedback/routes';
 
 export type { AppDeps };
 
@@ -139,6 +140,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
 
   registerHealthRoutes(app, deps);
   registerVersionRoutes(app, deps, guards);
+  registerFeedbackRoutes(app, deps, guards);
   registerAuthRoutes(app, deps, guards);
   registerOidcRoutes(app, deps, guards, deps.oidcClient);
   registerUserRoutes(app, deps, guards);

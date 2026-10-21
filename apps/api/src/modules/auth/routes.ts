@@ -82,7 +82,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
   // Признак включённых функций для меню web (§26.3): в ответах входа и /api/auth/me.
   const withFeatures = (user: SessionUser): SessionUser & { features: Features } => ({
     ...user,
-    features: { backups: deps.backupAgent !== null },
+    features: { backups: deps.backupAgent !== null, feedback: Boolean(deps.config.feedback) },
   });
 
   const loginRateLimit = {

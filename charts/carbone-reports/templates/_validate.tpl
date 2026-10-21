@@ -26,4 +26,15 @@
 {{- if or (lt $hops 1) (gt $hops 5) }}
 {{- fail "config.trustedProxyHops: целое от 1 до 5" }}
 {{- end }}
+{{- if $v.config.feedback.enabled }}
+{{- if not $v.config.feedback.to }}
+{{- fail "config.feedback.to: задайте адрес внутренней техподдержки при config.feedback.enabled=true" }}
+{{- end }}
+{{- if not $v.config.smtp.host }}
+{{- fail "config.smtp.host: задайте SMTP-сервер при config.feedback.enabled=true" }}
+{{- end }}
+{{- if not $v.config.smtp.from }}
+{{- fail "config.smtp.from: задайте адрес отправителя при config.feedback.enabled=true" }}
+{{- end }}
+{{- end }}
 {{- end }}

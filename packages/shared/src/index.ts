@@ -519,4 +519,6 @@ export type RecoveryBody = z.infer<typeof RecoveryBody>;
 /** Включённые функции — в ответах /api/auth/me и /api/auth/login. */
 export interface Features {
   backups: boolean;
+  /** Форма обращений во внутреннюю техподдержку; отсутствует у старых API. */
+  feedback?: boolean;
 }

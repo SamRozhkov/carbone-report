@@ -46,6 +46,8 @@ secrets:
   s3SecretAccessKey: ''
   # Пароль привязки LDAP (config.ldap.bindDn).
   ldapBindPassword: ''
+  # Пароль SMTP; задаётся вместе с config.smtp.user при включённой обратной связи.
+  smtpPassword: ''
 
 config:
   tz: Europe/Moscow
@@ -78,6 +80,18 @@ config:
   trustedProxyHops: 2
   # Cookie сессии только по HTTPS. false — лишь для пробной установки без TLS.
   cookieSecure: true
+  # Кнопка и форма обратной связи после входа; получатель — только из настроек сервера.
+  feedback:
+    enabled: false
+    to: ''
+  smtp:
+    host: ''
+    port: 587
+    # false — обязательный STARTTLS; true — TLS с начала соединения (обычно порт 465).
+    secure: false
+    from: ''
+    # Пусто — релей без авторизации; пароль — secrets.smtpPassword или SMTP_PASSWORD в existingSecret.
+    user: ''
   ldap:
     enabled: false
     url: ''

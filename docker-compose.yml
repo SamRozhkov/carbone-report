@@ -64,6 +64,14 @@ services:
       API_SELF_URL: http://api:3000
       REDIS_URL: redis://:${REDIS_PASSWORD:?задайте REDIS_PASSWORD в .env}@redis:6379
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
+      FEEDBACK_ENABLED: ${FEEDBACK_ENABLED:-false}
+      FEEDBACK_TO: ${FEEDBACK_TO:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       # Агент бэкапа (сервис backup) — только во внутренней сети backup, псевдоним backup-agent:
       # бэкапы и восстановление из админки.
       BACKUP_AGENT_URL: http://backup-agent:8080

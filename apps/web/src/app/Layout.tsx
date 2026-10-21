@@ -6,6 +6,7 @@ import {
   CircleQuestion,
   ClockArrowRotateLeft,
   Database,
+  Envelope,
   FileText,
   Folders,
   Layers,
@@ -24,6 +25,7 @@ import { useContext, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { api } from '../api/endpoints';
 import { meKey, useMe } from '../api/session';
+import { FeedbackDialog } from '../components/FeedbackDialog';
 import { AboutDialog } from './AboutDialog';
 import { webBuild } from './buildInfo';
 import { ThemeContext } from './theme';
@@ -51,6 +53,7 @@ export function Layout() {
   const { theme, setTheme } = useContext(ThemeContext);
   const [compact, setCompact] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const item = (
     id: string,
@@ -123,6 +126,15 @@ export function Layout() {
         headerDecoration
         renderFooter={({ compact: isCompact }) => (
           <>
+            {me?.features?.feedback && (
+              <FooterItem
+                id="feedback"
+                title="Обратная связь"
+                icon={Envelope}
+                compact={isCompact}
+                onItemClick={() => setFeedbackOpen(true)}
+              />
+            )}
             <FooterItem
               id="about"
               title={`Версия ${webBuild.version}`}
@@ -172,6 +184,7 @@ export function Layout() {
         )}
       />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} page={pathname} />
     </>
   );
 }

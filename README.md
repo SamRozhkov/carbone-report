@@ -291,19 +291,20 @@ externalS3:
 
 `existingSecret` — готовый Secret со следующими ключами (без `existingSecret` чарт создаёт его из `secrets.*`):
 
-| Ключ                    | Обязателен        | Требования                                                                                                       |
-| ----------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `APP_SECRET`            | да                | не короче 32 символов                                                                                            |
-| `ENCRYPTION_KEY`        | да                | 32 байта в base64 (`openssl rand -base64 32`)                                                                    |
-| `ONLYOFFICE_JWT_SECRET` | да                | не короче 32 символов                                                                                            |
-| `ADMIN_LOGIN`           | да                | логин первого администратора                                                                                     |
-| `ADMIN_PASSWORD`        | да                | не короче 8 символов                                                                                             |
-| `POSTGRES_PASSWORD`     | да                | любые символы                                                                                                    |
-| `REDIS_PASSWORD`        | да                | любые символы; для встроенного Redis — только шестнадцатеричные (`openssl rand -hex 32`)                         |
-| `BACKUP_AGENT_TOKEN`    | да                | не короче 32 символов                                                                                            |
-| `S3_ACCESS_KEY_ID`      | встроенный S3: да | оба ключа S3 или ни одного (внешний S3 без ключей — IRSA); для встроенного S3 только `A-Z a-z 0-9 . _ ~ + / = -` |
-| `S3_SECRET_ACCESS_KEY`  | встроенный S3: да | то же                                                                                                            |
-| `LDAP_BIND_PASSWORD`    | нет               | пароль привязки LDAP (`config.ldap.bindDn`)                                                                      |
+| Ключ                    | Обязателен           | Требования                                                                                                       |
+| ----------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `APP_SECRET`            | да                   | не короче 32 символов                                                                                            |
+| `ENCRYPTION_KEY`        | да                   | 32 байта в base64 (`openssl rand -base64 32`)                                                                    |
+| `ONLYOFFICE_JWT_SECRET` | да                   | не короче 32 символов                                                                                            |
+| `ADMIN_LOGIN`           | да                   | логин первого администратора                                                                                     |
+| `ADMIN_PASSWORD`        | да                   | не короче 8 символов                                                                                             |
+| `POSTGRES_PASSWORD`     | да                   | любые символы                                                                                                    |
+| `REDIS_PASSWORD`        | да                   | любые символы; для встроенного Redis — только шестнадцатеричные (`openssl rand -hex 32`)                         |
+| `BACKUP_AGENT_TOKEN`    | да                   | не короче 32 символов                                                                                            |
+| `S3_ACCESS_KEY_ID`      | встроенный S3: да    | оба ключа S3 или ни одного (внешний S3 без ключей — IRSA); для встроенного S3 только `A-Z a-z 0-9 . _ ~ + / = -` |
+| `S3_SECRET_ACCESS_KEY`  | встроенный S3: да    | то же                                                                                                            |
+| `LDAP_BIND_PASSWORD`    | нет                  | пароль привязки LDAP (`config.ldap.bindDn`)                                                                      |
+| `SMTP_PASSWORD`         | при SMTP-авторизации | пароль SMTP (`config.smtp.user`); без `existingSecret` — `secrets.smtpPassword`                                  |
 
 Пароли Postgres и Redis могут содержать любые символы: в URL они вставляются с кодированием.
 
@@ -383,6 +384,41 @@ API совместим с Pod Security «restricted». Web, агент, OnlyOffi
 ### Проверка чарта локально
 
 `pnpm chart:check` (lint, helm-unittest, kubeconform; нужен только Docker).
+
+## Обратная связь во внутреннюю техподдержку
+
+Опциональная кнопка «Обратная связь» открывает форму с темой, сообщением и почтой для ответа.
+Она доступна только после входа и только при включённой отправке. Получатель задаётся администратором
+на сервере: пользователь не может отправить письмо на произвольный адрес. Данные отчётов и вложения
+автоматически не прикладываются.
+
+Для Docker Compose укажите в закрытом `.env` и пересоздайте API:
+
+```dotenv
+FEEDBACK_ENABLED=true
+FEEDBACK_TO=support@example.org
+SMTP_HOST=smtp.example.org
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_FROM=reports@example.org
+SMTP_USER=reports@example.org
+SMTP_PASSWORD=<пароль почтовой учётной записи>
+```
+
+```bash
+docker compose up -d api
+```
+
+При `SMTP_SECURE=false` требуется STARTTLS; при `true` TLS устанавливается сразу (обычно порт 465).
+Сертификат почтового сервера проверяется в обоих режимах. `SMTP_USER` и `SMTP_PASSWORD` задаются вместе;
+для доверенного релея без авторизации оставьте оба пустыми. При включённой функции обязательны
+`FEEDBACK_TO` (один адрес), `SMTP_HOST` и `SMTP_FROM`. Пароль не сохраняйте в репозитории.
+
+Для Helm задайте `config.feedback.enabled: true`, `config.feedback.to` и соответствующие поля
+`config.smtp`: `host`, `port` (по умолчанию 587), `secure` (по умолчанию `false`), `from`, `user`.
+Пароль передаётся через `secrets.smtpPassword` либо ключ `SMTP_PASSWORD` в `existingSecret`;
+в ConfigMap пароля нет. API требуется исходящий доступ к почтовому серверу.
+По умолчанию функция выключена (`FEEDBACK_ENABLED=false`, `config.feedback.enabled: false`).
 
 ## Вход через LDAP/Active Directory
 

@@ -59,12 +59,26 @@ export interface VersionDto {
   builtAt: string;
 }
 
+export interface FeedbackBody {
+  subject: string;
+  message: string;
+  replyTo?: string;
+  page: string;
+}
+
+export interface FeedbackResult {
+  status: 'sent';
+  id: string;
+}
+
 export const api = {
   version: () => apiJson<VersionDto>('/api/version'),
   me: () => apiJson<SessionUser>('/api/auth/me'),
   login: (body: LoginBody) => apiJson<SessionUser>('/api/auth/login', post(body)),
   logout: () => apiJson<void>('/api/auth/logout', post()),
   logoutAll: () => apiJson<void>('/api/auth/logout-all', post()),
+
+  feedback: (body: FeedbackBody) => apiJson<FeedbackResult>('/api/feedback', post(body)),
 
   users: {
     list: () => apiJson<UserDto[]>('/api/users'),

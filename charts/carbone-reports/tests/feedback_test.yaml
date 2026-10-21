@@ -1,0 +1,98 @@
+suite: обратная связь во внутреннюю техподдержку
+templates:
+  - configmap-api.yaml
+  - secret.yaml
+  - api.yaml
+values:
+  - ../ci/external-values.yaml
+release:
+  name: cr
+tests:
+  - it: по умолчанию функция выключена и пароля в ConfigMap нет
+    template: configmap-api.yaml
+    asserts:
+      - equal: { path: data.FEEDBACK_ENABLED, value: 'false' }
+      - equal: { path: data.FEEDBACK_TO, value: '' }
+      - equal: { path: data.SMTP_PORT, value: '587' }
+      - equal: { path: data.SMTP_SECURE, value: 'false' }
+      - notExists: { path: data.SMTP_PASSWORD }
+  - it: получатель и SMTP задаются настройками установки
+    template: configmap-api.yaml
+    set:
+      config.feedback.enabled: true
+      config.feedback.to: support@example.org
+      config.smtp.host: smtp.example.org
+      config.smtp.from: reports@example.org
+    asserts:
+      - equal: { path: data.FEEDBACK_ENABLED, value: 'true' }
+      - equal: { path: data.FEEDBACK_TO, value: support@example.org }
+      - equal: { path: data.SMTP_HOST, value: smtp.example.org }
+      - equal: { path: data.SMTP_FROM, value: reports@example.org }
+      - notExists: { path: data.SMTP_PASSWORD }
+  - it: при включении нужен получатель
+    template: configmap-api.yaml
+    set: { config.feedback.enabled: true }
+    asserts:
+      - failedTemplate: { errorMessage: 'config.feedback.to: задайте адрес внутренней техподдержки при config.feedback.enabled=true' }
+  - it: при включении нужен SMTP-сервер
+    template: configmap-api.yaml
+    set:
+      config.feedback.enabled: true
+      config.feedback.to: support@example.org
+    asserts:
+      - failedTemplate: { errorMessage: 'config.smtp.host: задайте SMTP-сервер при config.feedback.enabled=true' }
+  - it: при включении нужен отправитель
+    template: configmap-api.yaml
+    set:
+      config.feedback.enabled: true
+      config.feedback.to: support@example.org
+      config.smtp.host: smtp.example.org
+    asserts:
+      - failedTemplate: { errorMessage: 'config.smtp.from: задайте адрес отправителя при config.feedback.enabled=true' }
+  - it: пароль только в Secret
+    template: secret.yaml
+    set:
+      config.feedback.enabled: true
+      config.feedback.to: support@example.org
+      config.smtp.host: smtp.example.org
+      config.smtp.from: reports@example.org
+      config.smtp.user: reports@example.org
+      secrets.smtpPassword: test-smtp-password
+    asserts:
+      - equal: { path: stringData.SMTP_PASSWORD, value: test-smtp-password }
+  - it: SMTP-логин без пароля отклоняется
+    template: secret.yaml
+    set:
+      config.feedback.enabled: true
+      config.feedback.to: support@example.org
+      config.smtp.host: smtp.example.org
+      config.smtp.from: reports@example.org
+      config.smtp.user: reports@example.org
+    asserts:
+      - failedTemplate: { errorMessage: 'config.smtp.user и secrets.smtpPassword: задаются вместе или ни один при config.feedback.enabled=true' }
+  - it: SMTP-пароль без логина отклоняется
+    template: secret.yaml
+    set:
+      config.feedback.enabled: true
+      config.feedback.to: support@example.org
+      config.smtp.host: smtp.example.org
+      config.smtp.from: reports@example.org
+      secrets.smtpPassword: test-smtp-password
+    asserts:
+      - failedTemplate: { errorMessage: 'config.smtp.user и secrets.smtpPassword: задаются вместе или ни один при config.feedback.enabled=true' }
+  - it: пароль SMTP берётся из existingSecret и обязателен при заданном логине
+    template: api.yaml
+    documentIndex: 0
+    set:
+      existingSecret: my-secret
+      config.feedback.enabled: true
+      config.feedback.to: support@example.org
+      config.smtp.host: smtp.example.org
+      config.smtp.from: reports@example.org
+      config.smtp.user: reports@example.org
+    asserts:
+      - contains:
+          path: 'spec.template.spec.containers[0].env'
+          content:
+            name: SMTP_PASSWORD
+            valueFrom: { secretKeyRef: { name: my-secret, key: SMTP_PASSWORD } }

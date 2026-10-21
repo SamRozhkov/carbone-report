@@ -46,6 +46,7 @@ import type { AppDeps } from '../../deps';
 import { badRequest, notFound } from '../../lib/errors';
 import { contentDisposition, isZip, MIME } from '../../lib/http';
 import { accessibleTemplates, assertTemplateAccess } from '../access/access';
+import { templateRights } from '../access/permissions';
 import { assertNotLockedByOther, lockAlive } from '../edit-lock/service';
 import { currentUser, type Guards } from '../auth/guards';
 import { orderParams } from '../queries/param-deps';
@@ -278,7 +279,9 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
   app.get('/api/templates/:id', { ...anyUser, schema: { params: IdParams } }, async (req) => {
     await assertTemplateAccess(db, currentUser(req), req.params.id);
     const full = await loadTemplateFull(db, req.params.id);
-    return currentUser(req).role === 'admin' ? toAdminDetails(full) : toDetails(full);
+    return currentUser(req).role === 'admin'
+      ? toAdminDetails(full, templateRights(currentUser(req), full.row))
+      : toDetails(full);
   });
 
   app.post(
@@ -387,7 +390,10 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           .remove(previous)
           .catch((e) => req.log.warn({ err: e }, 'старый файл шаблона не удалён'));
       }
-      return toAdminDetails(await loadTemplateFull(db, updated.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, updated.id),
+        templateRights(currentUser(req), updated),
+      );
     },
   );
 
@@ -407,7 +413,10 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         .update(templates)
         .set({ ...req.body, updatedAt: new Date(), updatedBy: currentUser(req).id })
         .where(eq(templates.id, row.id));
-      return toAdminDetails(await loadTemplateFull(db, row.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, row.id),
+        templateRights(currentUser(req), row),
+      );
     },
   );
 
@@ -548,7 +557,10 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
           .where(eq(templates.id, row.id));
       });
-      return toAdminDetails(await loadTemplateFull(db, row.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, row.id),
+        templateRights(currentUser(req), row),
+      );
     },
   );
 
@@ -575,7 +587,10 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
           .where(eq(templates.id, row.id));
       });
-      return toAdminDetails(await loadTemplateFull(db, row.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, row.id),
+        templateRights(currentUser(req), row),
+      );
     },
   );
 
@@ -604,7 +619,10 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           .set({ updatedAt: new Date(), updatedBy: currentUser(req).id })
           .where(eq(templates.id, row.id));
       });
-      return toAdminDetails(await loadTemplateFull(db, row.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, row.id),
+        templateRights(currentUser(req), row),
+      );
     },
   );
 }

@@ -22,6 +22,7 @@ import { templateAttachments, templates } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { encryptSecret } from '../../lib/crypto';
 import { badRequest, notFound } from '../../lib/errors';
+import { templateRights } from '../access/permissions';
 import { currentUser, type Guards } from '../auth/guards';
 import { inspectPdf, PdfInputError } from '../pdf/inspect';
 import { assertNoIssues } from './charts';
@@ -132,7 +133,10 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
           .where(eq(templates.id, row.id));
         await touch(tx, row.id, currentUser(req).id);
       });
-      return toAdminDetails(await loadTemplateFull(db, row.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, row.id),
+        templateRights(currentUser(req), row),
+      );
     },
   );
 
@@ -183,7 +187,11 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
         await discardAttachmentFile(path, req);
         throw err;
       }
-      return reply.status(201).send(toAdminDetails(await loadTemplateFull(db, row.id)));
+      return reply
+        .status(201)
+        .send(
+          toAdminDetails(await loadTemplateFull(db, row.id), templateRights(currentUser(req), row)),
+        );
     },
   );
 
@@ -206,7 +214,10 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
         await renumber(tx, target === 'start' ? [...group, ...other] : [...other, ...group]);
         await touch(tx, row.id, currentUser(req).id);
       });
-      return toAdminDetails(await loadTemplateFull(db, row.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, row.id),
+        templateRights(currentUser(req), row),
+      );
     },
   );
 
@@ -235,7 +246,10 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
       void storage
         .remove(removed.filePath)
         .catch((e) => req.log.warn({ err: e }, 'приложенный файл не удалён'));
-      return toAdminDetails(await loadTemplateFull(db, row.id));
+      return toAdminDetails(
+        await loadTemplateFull(db, row.id),
+        templateRights(currentUser(req), row),
+      );
     },
   );
 }

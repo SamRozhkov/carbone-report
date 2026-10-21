@@ -16,8 +16,16 @@ const RESERVED_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
 const notReserved = (s: string) => !RESERVED_NAMES.has(s);
 export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-export const Role = z.enum(['admin', 'user']);
+export const Role = z.enum(['admin', 'editor', 'access_manager', 'user']);
 export type Role = z.infer<typeof Role>;
+
+/** Подписи ролей в интерфейсе (§43). */
+export const ROLE_LABELS: Record<Role, string> = {
+  admin: 'Администратор',
+  editor: 'Редактор',
+  access_manager: 'Распорядитель доступа',
+  user: 'Пользователь',
+};
 
 export const TemplateExt = z.enum(['docx', 'xlsx', 'odt', 'ods', 'pptx']);
 export type TemplateExt = z.infer<typeof TemplateExt>;
@@ -147,6 +155,10 @@ export const UpdateUserBody = z.object({
 });
 export type UpdateUserBody = z.infer<typeof UpdateUserBody>;
 
+/** Пользователь в списке для выбора (`GET /api/users/directory`, §43.3). */
+export const UserDirectoryEntry = z.object({ id: z.string(), login: z.string(), role: Role });
+export type UserDirectoryEntry = z.infer<typeof UserDirectoryEntry>;
+
 export const GroupDto = z.object({
   id: z.string(),
   name: z.string(),
@@ -199,6 +211,16 @@ export const TemplateAccess = z.object({
   groupIds: z.array(z.uuid('неверный идентификатор')).max(1000),
 });
 export type TemplateAccess = z.infer<typeof TemplateAccess>;
+
+/** Шаблон на странице «Доступ к отчётам» (§43.3): без содержимого шаблона. */
+export const AccessTemplateRow = z.object({
+  id: z.string(),
+  name: z.string(),
+  categoryId: z.string().nullable(),
+  groupIds: z.array(z.string()),
+  public: z.boolean(),
+});
+export type AccessTemplateRow = z.infer<typeof AccessTemplateRow>;
 
 export const MembersBody = z.object({
   userIds: z.array(z.uuid('неверный идентификатор')).max(10000),
@@ -259,6 +281,10 @@ export const DatasourceDto = DatasourceFields.omit({ password: true }).extend({
 });
 export type DatasourceDto = z.infer<typeof DatasourceDto>;
 
+/** Источник в выборе конструктора (`GET /api/datasources/options`, §43.3). */
+export const DatasourceOption = z.object({ id: z.string(), name: z.string() });
+export type DatasourceOption = z.infer<typeof DatasourceOption>;
+
 /** Категория в карточке и списке шаблонов: достаточно для группировки каталога. */
 export const TemplateCategoryRef = z.object({
   id: z.string(),
@@ -279,6 +305,14 @@ export const TemplateSummary = z.object({
   editingBy: TemplateEditingBy.nullable(),
 });
 export type TemplateSummary = z.infer<typeof TemplateSummary>;
+
+/** Элемент списка `scope=edit` (§43.3). */
+export const TemplateEditSummary = TemplateSummary.extend({
+  /** Владелец шаблона (§43.1); null — не назначен. */
+  ownerId: z.string().nullable(),
+  canDelete: z.boolean(),
+});
+export type TemplateEditSummary = z.infer<typeof TemplateEditSummary>;
 
 export const TemplateDetails = TemplateSummary.extend({
   params: z.array(TemplateParamDto),
@@ -305,8 +339,28 @@ export const TemplateAdminDetails = TemplateDetails.extend({
   lastSaveError: z.string().nullable(),
   /** Момент последней ошибки сохранения OnlyOffice (ISO); новая ошибка — новая метка. */
   lastSaveErrorAt: z.string().nullable(),
+  /** Владелец шаблона (§43.1); null — не назначен. */
+  ownerId: z.string().nullable(),
+  /** Права текущего пользователя: удалить шаблон и вести список редакторов. */
+  canDelete: z.boolean(),
+  canManageEditors: z.boolean(),
 });
 export type TemplateAdminDetails = z.infer<typeof TemplateAdminDetails>;
+
+/** Владелец и выданные редакторы шаблона (ответ `GET`/`PUT …/editors`, §43.3). */
+export const TemplateEditors = z.object({
+  ownerId: z.string().nullable(),
+  userIds: z.array(z.string()),
+});
+export type TemplateEditors = z.infer<typeof TemplateEditors>;
+
+export const TemplateEditorsBody = z.object({
+  userIds: z.array(z.uuid('неверный идентификатор')).max(200),
+});
+export type TemplateEditorsBody = z.infer<typeof TemplateEditorsBody>;
+
+export const TemplateOwnerBody = z.object({ userId: z.uuid('неверный идентификатор') });
+export type TemplateOwnerBody = z.infer<typeof TemplateOwnerBody>;
 
 /** Тег с русскими буквами среди латинских (или русским корнем `с`/`С`): такой тег не находит данные. */
 export const TagWarning = z.object({

@@ -1,4 +1,4 @@
-import type { Role } from '@carbone-reports/shared';
+import { Role } from '@carbone-reports/shared';
 import os from 'node:os';
 import { z } from 'zod';
 import { hasHost, withPassword } from './lib/url-password';
@@ -146,7 +146,7 @@ const Env = z
     // логину и почте) — иначе один человек завёл бы себе два локальных аккаунта.
     // Не задан — логин тот, что ввёл пользователь (поведение прежних версий).
     LDAP_LOGIN_ATTRIBUTE: z.string().min(1, 'не должен быть пустым').optional(),
-    LDAP_DEFAULT_ROLE: z.enum(['admin', 'user']).default('user'),
+    LDAP_DEFAULT_ROLE: Role.default('user'),
     LDAP_TLS_REJECT_UNAUTHORIZED: z.enum(['true', 'false']).default('true'),
     // Агент бэкапа (§26.3): без адреса управление бэкапами в админке выключено.
     BACKUP_AGENT_URL: z

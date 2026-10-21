@@ -160,29 +160,35 @@ export const categoryGroups = pgTable(
   ],
 );
 
-export const templates = pgTable('templates', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),
-  description: text('description').notNull().default(''),
-  datasourceId: uuid('datasource_id')
-    .notNull()
-    .references(() => datasources.id, { onDelete: 'restrict' }),
-  fileExt: text('file_ext').$type<TemplateExt>().notNull(),
-  filePath: text('file_path').notNull(),
-  version: integer('version').notNull().default(1),
-  docKey: text('doc_key').notNull(),
-  defaultOutput: text('default_output').$type<OutputFormat>().notNull().default('pdf'),
-  lastSaveError: text('last_save_error'),
-  lastSaveErrorAt: timestamp('last_save_error_at', { withTimezone: true }),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
-  categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
-  public: boolean('public').notNull().default(false),
-  /** Настройки PDF (§36.1); {} — без настроек. */
-  pdfOptions: jsonb('pdf_options').$type<Partial<PdfOptions>>().notNull().default({}),
-  /** Пароль на открытие PDF (§37.1), encryptSecret; null — без пароля. */
-  pdfPasswordEnc: text('pdf_password_enc'),
-});
+export const templates = pgTable(
+  'templates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    datasourceId: uuid('datasource_id')
+      .notNull()
+      .references(() => datasources.id, { onDelete: 'restrict' }),
+    fileExt: text('file_ext').$type<TemplateExt>().notNull(),
+    filePath: text('file_path').notNull(),
+    version: integer('version').notNull().default(1),
+    docKey: text('doc_key').notNull(),
+    defaultOutput: text('default_output').$type<OutputFormat>().notNull().default('pdf'),
+    lastSaveError: text('last_save_error'),
+    lastSaveErrorAt: timestamp('last_save_error_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
+    public: boolean('public').notNull().default(false),
+    /** Настройки PDF (§36.1); {} — без настроек. */
+    pdfOptions: jsonb('pdf_options').$type<Partial<PdfOptions>>().notNull().default({}),
+    /** Пароль на открытие PDF (§37.1), encryptSecret; null — без пароля. */
+    pdfPasswordEnc: text('pdf_password_enc'),
+    /** Владелец (§43.1): создатель шаблона; null — не назначен (шаблоны до 2.12.0). */
+    ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'set null' }),
+  },
+  (t) => [index('templates_owner_idx').on(t.ownerId)],
+);
 
 /** Блокировка редактирования шаблона (§38.1): одна строка на шаблон; просроченная равна отсутствующей. */
 export const templateEditLocks = pgTable('template_edit_locks', {
@@ -211,6 +217,23 @@ export const templateGroups = pgTable(
   (t) => [
     primaryKey({ columns: [t.templateId, t.groupId] }),
     index('template_groups_group_id_idx').on(t.groupId),
+  ],
+);
+
+/** Выданные редакторы шаблона (§43.1); владелец сюда не входит. */
+export const templateEditors = pgTable(
+  'template_editors',
+  {
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => templates.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.templateId, t.userId] }),
+    index('template_editors_user_idx').on(t.userId),
   ],
 );
 

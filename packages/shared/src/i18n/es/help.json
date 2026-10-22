@@ -1,0 +1,21 @@
+{
+  "title": "Ayuda sobre plantillas",
+  "toc": "Índice",
+  "resultsFor": "Los resultados de los ejemplos se muestran para el idioma del informe «{{language}}». El idioma del informe se define en la pestaña «Configuración» de la plantilla.",
+  "loadFailed": "No se pudo cargar la ayuda en este idioma. Se muestra la ayuda en ruso.",
+  "label": {
+    "template": "Etiqueta en la plantilla",
+    "picture": "Etiqueta en el texto alternativo de la imagen",
+    "data": "Datos",
+    "result": "Resultado",
+    "sql": "Consulta SQL «{{key}}» ({{mode}})"
+  },
+  "mode": {
+    "list": "Lista de filas",
+    "single": "Una fila"
+  },
+  "tableHint": "en Word, inserte las etiquetas en las celdas de la tabla; | solo indica las celdas",
+  "copy": "Copiar",
+  "copyAria": "Copiar etiqueta: {{title}}",
+  "note": "Atención"
+}

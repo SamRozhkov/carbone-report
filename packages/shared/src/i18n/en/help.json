@@ -1,0 +1,21 @@
+{
+  "title": "Template help",
+  "toc": "Contents",
+  "resultsFor": "Example results are shown for the report language “{{language}}”. The report language is set on the template’s “Settings” tab.",
+  "loadFailed": "Could not load help in this language. Showing help in Russian.",
+  "label": {
+    "template": "Tag in the template",
+    "picture": "Tag in the image alt text",
+    "data": "Data",
+    "result": "Result",
+    "sql": "SQL query “{{key}}” ({{mode}})"
+  },
+  "mode": {
+    "list": "List of rows",
+    "single": "Single row"
+  },
+  "tableHint": "in Word, put the tags in table cells; | only marks the cells",
+  "copy": "Copy",
+  "copyAria": "Copy tag: {{title}}",
+  "note": "Note"
+}

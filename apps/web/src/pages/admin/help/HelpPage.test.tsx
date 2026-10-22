@@ -1,8 +1,10 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { changeLocale } from '../../../i18n';
 import { adminMe, mockApi, renderRoute, renderWithProviders, userMe } from '../../../test/utils';
-import { HELP_SECTIONS } from './content';
+import { HELP_MODULES, HELP_RU, loadHelpContent, type HelpContent } from './content';
+import { HELP_SECTIONS } from './content/ru';
 import { HelpPage } from './HelpPage';
 
 describe('HelpPage', () => {
@@ -105,5 +107,77 @@ describe('HelpPage', () => {
     const { router } = renderRoute('/admin/help');
     await waitFor(() => expect(router.state.location.pathname).toBe('/reports'));
     expect(screen.queryByText('Справка по шаблонам')).not.toBeInTheDocument();
+  });
+
+  it('пояснение: результаты — для языка отчёта «Русский»', async () => {
+    renderWithProviders(<HelpPage />);
+    expect(
+      await screen.findByText(
+        'Результаты примеров показаны для языка отчёта «Русский». Язык отчёта задаётся во вкладке «Настройки» шаблона.',
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('HelpPage: язык справки (§46)', () => {
+  const saved = { ...HELP_MODULES };
+  afterEach(() => {
+    for (const k of Object.keys(HELP_MODULES) as (keyof typeof HELP_MODULES)[])
+      delete HELP_MODULES[k];
+    Object.assign(HELP_MODULES, saved);
+  });
+
+  /** Фиктивный модуль: те же id, другие заголовки. */
+  const fake: HelpContent = {
+    HELP_INTRO: ['Intro'],
+    HELP_SECTIONS: HELP_RU.HELP_SECTIONS.map((s) => ({ ...s, title: `EN ${s.id}` })),
+  };
+
+  it('языка без модуля нет — справка на ru без сообщения об ошибке', async () => {
+    delete HELP_MODULES.de;
+    expect(await loadHelpContent('de')).toEqual({ content: HELP_RU, failed: false });
+    expect(await loadHelpContent('ru')).toEqual({ content: HELP_RU, failed: false });
+  });
+
+  it('модуль языка не загрузился — сообщение и русская справка', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    HELP_MODULES.en = () => Promise.reject(new Error('chunk'));
+    await changeLocale('en', { persist: 'none' });
+    renderWithProviders(<HelpPage />);
+    expect(
+      await screen.findByText('Could not load help in this language. Showing help in Russian.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Template help' })).toBeInTheDocument();
+    const first = HELP_SECTIONS[0]!;
+    expect(screen.getByRole('region', { name: first.title })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(
+      screen.getByText(
+        'Example results are shown for the report language “Русский”. The report language is set on the template’s “Settings” tab.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('смена языка на открытой справке — содержимое переключается, якоря на месте', async () => {
+    HELP_MODULES.en = () => Promise.resolve(fake);
+    renderWithProviders(<HelpPage />);
+    const first = HELP_SECTIONS[0]!;
+    expect(await screen.findByRole('region', { name: first.title })).toBeInTheDocument();
+    await act(() => changeLocale('en', { persist: 'none' }));
+    expect(await screen.findByRole('region', { name: `EN ${first.id}` })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(screen.queryByRole('region', { name: first.title })).not.toBeInTheDocument();
+    expect(document.getElementById('fmt-money')).not.toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'Template help' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Example results are shown for the report language “English”. The report language is set on the template’s “Settings” tab.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Could not load help in this language. Showing help in Russian.'),
+    ).not.toBeInTheDocument();
   });
 });

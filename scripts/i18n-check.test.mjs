@@ -190,9 +190,9 @@ test('кириллица в коде веба: текст JSX, строка и �
   assert.match(r.stderr, /Page\.tsx:6: Шаблон/);
 });
 
-test('кириллица в коде веба: справка, тесты, test/ и комментарии не проверяются', () => {
+test('кириллица в коде веба: русский модуль справки, тесты, test/ и комментарии не проверяются', () => {
   const r = runWeb({
-    'pages/admin/help/Help.tsx': 'export const h = <p>Справка</p>;\n',
+    'pages/admin/help/content/ru.ts': "export const HELP_INTRO = ['Справка'];\n",
     'pages/Page.test.tsx': "it('строка', () => {});\n",
     'test/fixtures.ts': "export const name = 'Отчёт';\n",
     'lib/ok.ts': [
@@ -203,4 +203,14 @@ test('кириллица в коде веба: справка, тесты, test/
     ].join('\n'),
   });
   assert.equal(r.status, 0, r.stderr);
+});
+
+test('кириллица в коде веба: страница справки и модули других языков проверяются', () => {
+  const r = runWeb({
+    'pages/admin/help/HelpPage.tsx': 'export const h = <p>Справка</p>;\n',
+    'pages/admin/help/content/en.ts': "export const HELP_INTRO = ['Справка'];\n",
+  });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /HelpPage\.tsx:1: Справка/);
+  assert.match(r.stderr, /content\/en\.ts:1: Справка/);
 });

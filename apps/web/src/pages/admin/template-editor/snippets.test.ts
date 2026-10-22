@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HELP_SECTIONS } from '../help/content';
+import { HELP_SECTIONS } from '../help/content/ru';
 import { SNIPPETS, SNIPPET_WORDS, snippetText } from './snippets';
 
 const examples = new Map(HELP_SECTIONS.flatMap((s) => s.examples).map((e) => [e.id, e]));

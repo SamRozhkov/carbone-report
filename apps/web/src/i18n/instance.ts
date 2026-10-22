@@ -19,6 +19,7 @@ const RU = import.meta.glob<Catalog>(
     '../../../../packages/shared/src/i18n/ru/admin.json',
     '../../../../packages/shared/src/i18n/ru/templates.json',
     '../../../../packages/shared/src/i18n/ru/editor.json',
+    '../../../../packages/shared/src/i18n/ru/help.json',
   ],
   { eager: true, import: 'default' },
 );
@@ -31,6 +32,7 @@ const LAZY = import.meta.glob<Catalog>(
     '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/admin.json',
     '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/templates.json',
     '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/editor.json',
+    '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/help.json',
   ],
   { import: 'default' },
 );

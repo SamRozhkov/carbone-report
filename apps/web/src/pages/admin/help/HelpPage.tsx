@@ -1,12 +1,18 @@
 import { Copy } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Link, Text } from '@gravity-ui/uikit';
-import { Fragment, type ReactNode } from 'react';
+import { LOCALE_NAMES, type Locale } from '@carbone-reports/shared/i18n';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../../../components/PageHeader';
 import { useCopy } from '../../../components/useCopy';
-import { HELP_INTRO, HELP_SECTIONS, type HelpExample, type HelpSection } from './content';
-
-const TABLE_HINT = 'в Word вставьте теги в ячейки таблицы; | — только обозначение ячеек';
-const MODE_LABEL = { list: 'Список строк', single: 'Одна строка' } as const;
+import { useLocale } from '../../../i18n';
+import {
+  HELP_RU,
+  loadHelpContent,
+  type HelpContent,
+  type HelpExample,
+  type HelpSection,
+} from './content';
 
 /** Текст, где `код` в обратных кавычках показывается моноширинным. */
 function Rich({ text }: { text: string }) {
@@ -40,6 +46,7 @@ function Block({ label, action, text }: { label: string; action?: ReactNode; tex
 }
 
 function ExampleCard({ example }: { example: HelpExample }) {
+  const { t } = useTranslation('help');
   const copy = useCopy();
   const hasTableRows = example.template.split('\n').some((l) => l.startsWith('|'));
   return (
@@ -49,40 +56,40 @@ function ExampleCard({ example }: { example: HelpExample }) {
       </Text>
       {example.sql && (
         <Block
-          label={`SQL-запрос «${example.sql.key}» (${MODE_LABEL[example.sql.mode]})`}
+          label={t('label.sql', { key: example.sql.key, mode: t(`mode.${example.sql.mode}`) })}
           text={example.sql.text}
         />
       )}
       <Block
-        label={example.picture ? 'Тег в замещающем тексте картинки' : 'Тег в шаблоне'}
+        label={example.picture ? t('label.picture') : t('label.template')}
         text={example.template}
         action={
           example.antiPattern ? undefined : (
             <span className="cr-help-actions">
               {hasTableRows && (
                 <Text variant="caption-2" color="secondary">
-                  {TABLE_HINT}
+                  {t('tableHint')}
                 </Text>
               )}
               <Button
                 view="flat"
                 size="xs"
-                aria-label={`Копировать тег: ${example.title}`}
+                aria-label={t('copyAria', { title: example.title })}
                 onClick={() => void copy(example.template, example.title)}
               >
                 <Icon data={Copy} size={12} />
-                Копировать
+                {t('copy')}
               </Button>
             </span>
           )
         }
       />
-      <Block label="Данные" text={example.data} />
-      <Block label="Результат" text={example.result} />
+      <Block label={t('label.data')} text={example.data} />
+      <Block label={t('label.result')} text={example.result} />
       {example.note && (
         <Alert
           theme={example.unavailable ? 'info' : 'warning'}
-          title="Внимание"
+          title={t('note')}
           message={<Rich text={example.note} />}
         />
       )}
@@ -117,25 +124,65 @@ function Section({ section }: { section: HelpSection }) {
   );
 }
 
+/** Загруженная справка и язык её примеров. */
+interface HelpState {
+  content: HelpContent;
+  failed: boolean;
+  /** Для какого языка отчёта посчитаны результаты примеров: ru при запасной справке (§46.1). */
+  resultsLocale: Locale;
+}
+
+/** Справка на языке интерфейса; пока модуль грузится, видна прежняя (сначала — ru, §46.2). */
+function useHelpContent(locale: Locale): HelpState {
+  const [state, setState] = useState<HelpState>({
+    content: HELP_RU,
+    failed: false,
+    resultsLocale: 'ru',
+  });
+  useEffect(() => {
+    let alive = true;
+    void loadHelpContent(locale).then(({ content, failed }) => {
+      if (!alive) return;
+      const resultsLocale: Locale = content === HELP_RU ? 'ru' : locale;
+      // То же содержимое (ru при открытии) — без лишней перерисовки всей справки.
+      setState((prev) =>
+        prev.content === content && prev.failed === failed && prev.resultsLocale === resultsLocale
+          ? prev
+          : { content, failed, resultsLocale },
+      );
+    });
+    return () => {
+      alive = false;
+    };
+  }, [locale]);
+  return state;
+}
+
 export function HelpPage() {
+  const { t } = useTranslation('help');
+  const { content, failed, resultsLocale } = useHelpContent(useLocale());
   return (
     <>
-      <PageHeader title="Справка по шаблонам" />
+      <PageHeader title={t('title')} />
       <div className="cr-help">
-        <nav className="cr-help-toc" aria-label="Оглавление">
-          {HELP_SECTIONS.map((s) => (
+        <nav className="cr-help-toc" aria-label={t('toc')}>
+          {content.HELP_SECTIONS.map((s) => (
             <Link key={s.id} href={`#${s.id}`}>
               {s.title}
             </Link>
           ))}
         </nav>
         <div className="cr-help-content">
-          {HELP_INTRO.map((p, i) => (
+          {failed && <Alert theme="warning" message={t('loadFailed')} />}
+          <Text as="p" color="secondary">
+            {t('resultsFor', { language: LOCALE_NAMES[resultsLocale] })}
+          </Text>
+          {content.HELP_INTRO.map((p, i) => (
             <Text key={i} as="p">
               <Rich text={p} />
             </Text>
           ))}
-          {HELP_SECTIONS.map((s) => (
+          {content.HELP_SECTIONS.map((s) => (
             <Section key={s.id} section={s} />
           ))}
         </div>

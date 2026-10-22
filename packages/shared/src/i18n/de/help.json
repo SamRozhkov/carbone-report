@@ -1,0 +1,21 @@
+{
+  "title": "Hilfe zu Vorlagen",
+  "toc": "Inhalt",
+  "resultsFor": "Die Ergebnisse der Beispiele werden für die Berichtssprache „{{language}}“ angezeigt. Die Berichtssprache wird auf dem Tab „Einstellungen“ der Vorlage festgelegt.",
+  "loadFailed": "Die Hilfe konnte in dieser Sprache nicht geladen werden. Die Hilfe wird auf Russisch angezeigt.",
+  "label": {
+    "template": "Tag in der Vorlage",
+    "picture": "Tag im Alternativtext des Bildes",
+    "data": "Daten",
+    "result": "Ergebnis",
+    "sql": "SQL-Abfrage „{{key}}“ ({{mode}})"
+  },
+  "mode": {
+    "list": "Liste von Zeilen",
+    "single": "Eine Zeile"
+  },
+  "tableHint": "in Word die Tags in Tabellenzellen einfügen; | kennzeichnet nur die Zellen",
+  "copy": "Kopieren",
+  "copyAria": "Tag kopieren: {{title}}",
+  "note": "Hinweis"
+}

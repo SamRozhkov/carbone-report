@@ -1,0 +1,21 @@
+{
+  "title": "模板帮助",
+  "toc": "目录",
+  "resultsFor": "示例结果按报表语言“{{language}}”显示。报表语言在模板的“设置”选项卡中设置。",
+  "loadFailed": "无法加载该语言的帮助，现显示俄语帮助。",
+  "label": {
+    "template": "模板中的标签",
+    "picture": "图片替代文字中的标签",
+    "data": "数据",
+    "result": "结果",
+    "sql": "SQL 查询“{{key}}”（{{mode}}）"
+  },
+  "mode": {
+    "list": "行列表",
+    "single": "单行"
+  },
+  "tableHint": "在 Word 中将标签插入表格单元格；| 仅表示单元格",
+  "copy": "复制",
+  "copyAria": "复制标签：{{title}}",
+  "note": "注意"
+}

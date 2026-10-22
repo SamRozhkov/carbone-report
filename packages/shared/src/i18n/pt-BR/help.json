@@ -1,0 +1,21 @@
+{
+  "title": "Ajuda sobre modelos",
+  "toc": "Sumário",
+  "resultsFor": "Os resultados dos exemplos são mostrados para o idioma do relatório “{{language}}”. O idioma do relatório é definido na aba “Configurações” do modelo.",
+  "loadFailed": "Não foi possível carregar a ajuda neste idioma. A ajuda é exibida em russo.",
+  "label": {
+    "template": "Tag no modelo",
+    "picture": "Tag no texto alternativo da imagem",
+    "data": "Dados",
+    "result": "Resultado",
+    "sql": "Consulta SQL “{{key}}” ({{mode}})"
+  },
+  "mode": {
+    "list": "Lista de linhas",
+    "single": "Uma linha"
+  },
+  "tableHint": "no Word, insira as tags nas células da tabela; | apenas indica as células",
+  "copy": "Copiar",
+  "copyAria": "Copiar tag: {{title}}",
+  "note": "Atenção"
+}

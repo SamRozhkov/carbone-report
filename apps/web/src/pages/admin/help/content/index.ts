@@ -18,6 +18,7 @@ export const HELP_MODULES: Partial<Record<Exclude<Locale, 'ru'>, () => Promise<H
   fr: () => import('./fr'),
   es: () => import('./es'),
   'pt-BR': () => import('./pt-BR'),
+  'zh-CN': () => import('./zh-CN'),
 };
 
 /** Справка на языке `locale`; модуль не загрузился — ru и `failed: true` (страница покажет сообщение). */

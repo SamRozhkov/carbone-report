@@ -284,6 +284,30 @@ describe('HelpPage: язык справки (§46)', () => {
     expect(writeText).toHaveBeenCalledWith(e.template);
   });
 
+  it('zh-CN: результаты из zh-CN.ts, «fmt-money» в юанях, «复制» копирует китайский шаблон', async () => {
+    const zh = await import('./content/zh-CN');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    await changeLocale('zh-CN', { persist: 'none' });
+    renderWithProviders(<HelpPage />);
+    const first = zh.HELP_SECTIONS[0]!;
+    expect(await screen.findByRole('region', { name: first.title })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(first.title).toBe('基础知识');
+    const all = zh.HELP_SECTIONS.flatMap((s) => s.examples);
+    // Review Focus 4: formatC() на zh-CN — валюта языка отчёта (CNY «¥»), не рубли.
+    const money = all.find((e) => e.id === 'fmt-money')!;
+    expect(money.result).toContain('¥');
+    const moneyCard = screen.getByRole('article', { name: money.title });
+    expect(within(moneyCard).getByText(money.result)).toBeInTheDocument();
+    const e = all.find((x) => x.id === 'basics-params')!;
+    expect(e.template).toBe("期间自 {d.params.from:formatD('YYYY-MM-DD')}");
+    const card = screen.getByRole('article', { name: e.title });
+    await userEvent.click(within(card).getByRole('button', { name: `复制标签：${e.title}` }));
+    expect(writeText).toHaveBeenCalledWith(e.template);
+  });
+
   it('смена языка на открытой справке — содержимое переключается, якоря на месте', async () => {
     HELP_MODULES.en = () => Promise.resolve(fake);
     renderWithProviders(<HelpPage />);

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { LoginBody, type Features } from '@carbone-reports/shared';
+import { LoginBody, type MeDto } from '@carbone-reports/shared';
+import { isLocale } from '@carbone-reports/shared/i18n';
 import { eq, sql } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { App } from '../../app';
@@ -79,10 +80,12 @@ async function provisionLdapUser(deps: AppDeps, login: string): Promise<UserRow 
 }
 
 export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): void {
-  // Признак включённых функций для меню web (§26.3): в ответах входа и /api/auth/me.
-  const withFeatures = (user: SessionUser): SessionUser & { features: Features } => ({
+  // Ответ входа и /api/auth/me: признак включённых функций для меню web (§26.3) и выбранный
+  // язык (§44.1; значение вне LOCALES — как не выбранный).
+  const toMe = (user: SessionUser, locale: string | null): MeDto => ({
     ...user,
     features: { backups: deps.backupAgent !== null },
+    locale: isLocale(locale) ? locale : null,
   });
 
   const loginRateLimit = {
@@ -184,7 +187,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
           rejectLdap('аккаунт заведён через Keycloak', ldapUser.login);
         const user = { id: ldapUser.id, login: ldapUser.login, role: ldapUser.role };
         await setSessionCookie(reply, deps, user, ldapUser.sessionVersion);
-        return withFeatures(user);
+        return toMe(user, ldapUser.locale);
       }
 
       const ok = await verifyPassword(row?.passwordHash ?? (await DUMMY_HASH_PROMISE), password);
@@ -193,7 +196,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
       }
       const user = { id: row.id, login: row.login, role: row.role };
       await setSessionCookie(reply, deps, user, row.sessionVersion);
-      return withFeatures(user);
+      return toMe(user, row.locale);
     },
   );
 
@@ -218,7 +221,12 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
     return reply.status(204).send();
   });
 
-  app.get('/api/auth/me', { preHandler: guards.requireUser }, async (req) =>
-    withFeatures(currentUser(req)),
-  );
+  app.get('/api/auth/me', { preHandler: guards.requireUser }, async (req) => {
+    const user = currentUser(req);
+    const [row] = await deps.db
+      .select({ locale: users.locale })
+      .from(users)
+      .where(eq(users.id, user.id));
+    return toMe(user, row?.locale ?? null);
+  });
 }

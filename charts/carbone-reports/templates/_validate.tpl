@@ -26,4 +26,7 @@
 {{- if or (lt $hops 1) (gt $hops 5) }}
 {{- fail "config.trustedProxyHops: целое от 1 до 5" }}
 {{- end }}
+{{- if not (has $v.config.defaultLocale (list "ru" "en" "es" "pt-BR" "fr" "de" "zh-CN")) }}
+{{- fail "config.defaultLocale: ru, en, es, pt-BR, fr, de или zh-CN" }}
+{{- end }}
 {{- end }}

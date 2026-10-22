@@ -16,6 +16,7 @@ import {
   type TransferTemplate,
 } from '@carbone-reports/shared/template-transfer';
 import { PdfOptions } from '@carbone-reports/shared';
+import { zodLocale } from '@carbone-reports/shared/i18n';
 import { asc, eq, inArray } from 'drizzle-orm';
 import JSZip from 'jszip';
 import {
@@ -108,7 +109,8 @@ export async function buildArchive(
   };
   // Архив должен загрузиться: та же схема, что при загрузке (длина имени, правила параметров
   // и запросов могли ужесточиться после сохранения шаблона).
-  const checked = TransferManifest.safeParse(manifest);
+  // Сообщение issue входит в русский текст ошибки (до перевода на ключи, §44.4).
+  const checked = TransferManifest.safeParse(manifest, { error: zodLocale('ru').localeError });
   if (!checked.success) {
     const issue = checked.error.issues[0]!;
     const [first, index, ...rest] = issue.path;

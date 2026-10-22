@@ -49,6 +49,9 @@ secrets:
 
 config:
   tz: Europe/Moscow
+  # Язык интерфейса и ответов API, если пользователь его не выбрал и браузер не предлагает
+  # подходящего: ru, en, es, pt-BR, fr, de или zh-CN.
+  defaultLocale: ru
   queryTimeoutMs: 30000
   queryMaxRows: 100000
   renderTimeoutMs: 120000

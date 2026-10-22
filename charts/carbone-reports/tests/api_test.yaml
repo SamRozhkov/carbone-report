@@ -107,6 +107,15 @@ tests:
     set: { config.renderWorkerMemoryMb: 768 }
     asserts:
       - equal: { path: data.RENDER_WORKER_MEMORY_MB, value: '768' }
+  - it: язык по умолчанию — ru, config.defaultLocale — в ConfigMap
+    template: configmap-api.yaml
+    asserts:
+      - equal: { path: data.DEFAULT_LOCALE, value: ru }
+  - it: config.defaultLocale задан — DEFAULT_LOCALE в ConfigMap
+    template: configmap-api.yaml
+    set: { config.defaultLocale: pt-BR }
+    asserts:
+      - equal: { path: data.DEFAULT_LOCALE, value: pt-BR }
   - it: изображения по адресу — по умолчанию выключены, тайм-аут 5000
     template: configmap-api.yaml
     asserts:

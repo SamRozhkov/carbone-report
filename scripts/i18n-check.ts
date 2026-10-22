@@ -17,7 +17,8 @@ const CHECK_API_ERRORS = false;
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SOURCE = 'ru';
 const PLURAL_SUFFIX = /^(.+)_(zero|one|two|few|many|other)$/;
-const PARAM = /\{\{\s*([^\s},]+)[^}]*\}\}/g;
+// {{name}}, {{name, format}} и {{- name}} (без экранирования) — параметр name.
+const PARAM = /\{\{-?\s*([^\s},]+)[^}]*\}\}/g;
 const CYRILLIC = /[Ѐ-ӿ]/;
 
 type Flat = Map<string, string>;
@@ -58,8 +59,12 @@ function group(flat: Flat): Map<string, Entry> {
 }
 
 const params = (s: string) => [...s.matchAll(PARAM)].map((m) => m[1]!).sort();
-const sameParams = (a: string[], b: string[]) =>
-  a.length === b.length && new Set([...a, ...b]).size === new Set(a).size;
+/** Параметры сравниваются как множества: повтор {{name}} в переводе допустим. */
+const sameParams = (a: string[], b: string[]) => {
+  const sa = new Set(a);
+  const sb = new Set(b);
+  return sa.size === sb.size && [...sa].every((p) => sb.has(p));
+};
 const show = (p: string[]) => `{${[...new Set(p)].join(', ')}}`;
 
 function loadNamespace(dir: string, locale: string, ns: string, errors: string[]) {

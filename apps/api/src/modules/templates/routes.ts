@@ -19,6 +19,7 @@ import {
   type TemplateTagWarnings,
   UpdateTemplateBody,
 } from '@carbone-reports/shared';
+import { zodLocale } from '@carbone-reports/shared/i18n';
 import {
   ExportTemplatesBody,
   ImportDecisions,
@@ -514,7 +515,8 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     } catch {
       throw badRequest('не переданы решения по шаблонам (decisions)');
     }
-    const decisions = ImportDecisions.safeParse(raw);
+    // Сообщение issue входит в русский текст ошибки (до перевода на ключи, §44.4).
+    const decisions = ImportDecisions.safeParse(raw, { error: zodLocale('ru').localeError });
     if (!decisions.success) {
       const issue = decisions.error.issues[0]!;
       throw badRequest(

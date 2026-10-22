@@ -12,6 +12,7 @@ import {
   TransferManifest,
 } from '@carbone-reports/shared/template-transfer';
 import { MAX_PDF_ATTACHMENT_BYTES, MAX_PDF_ATTACHMENT_PAGES } from '@carbone-reports/shared';
+import { zodLocale } from '@carbone-reports/shared/i18n';
 import { AppError } from '../../../lib/errors';
 import { isZip } from '../../../lib/http';
 import { inspectPdf, PdfInputError } from '../../pdf/inspect';
@@ -179,7 +180,8 @@ function parseManifest(raw: Buffer): TransferManifest {
       `версия формата архива ${JSON.stringify(head.formatVersion)} не поддерживается (ожидается ${TRANSFER_FORMAT_VERSION})`,
     );
   }
-  const parsed = TransferManifest.safeParse(json);
+  // Сообщение issue входит в русский текст ошибки (до перевода на ключи, §44.4).
+  const parsed = TransferManifest.safeParse(json, { error: zodLocale('ru').localeError });
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
     const [first, index, ...rest] = issue.path;

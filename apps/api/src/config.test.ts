@@ -24,6 +24,17 @@ describe('loadConfig', () => {
     expect(c.cookieSecure).toBe(false);
     expect(c.redisUrl).toBe('redis://redis:6379');
   });
+  it('DEFAULT_LOCALE: по умолчанию ru, значение из LOCALES, ошибка — по-русски', () => {
+    expect(loadConfig(base).defaultLocale).toBe('ru');
+    expect(loadConfig({ ...base, DEFAULT_LOCALE: 'zh-CN' }).defaultLocale).toBe('zh-CN');
+    expect(() => loadConfig({ ...base, DEFAULT_LOCALE: 'it' })).toThrow(
+      /^Неверная конфигурация: DEFAULT_LOCALE: Неверный вариант: ожидалось одно из/,
+    );
+    // Встроенные сообщения zod в ошибках конфигурации — тоже по-русски.
+    expect(() => loadConfig({ ...base, API_SELF_URL: 'nope' })).toThrow(
+      /API_SELF_URL: Неверный URL/,
+    );
+  });
   it('служба меток времени подписи: SIGN_TSA_*', () => {
     expect(loadConfig(base).signTsaUrl).toBeNull();
     expect(loadConfig(base).signTsaTimeoutMs).toBe(10000);

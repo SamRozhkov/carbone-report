@@ -1,4 +1,5 @@
 import { Role } from '@carbone-reports/shared';
+import { Locale, zodLocale } from '@carbone-reports/shared/i18n';
 import os from 'node:os';
 import { z } from 'zod';
 import { hasHost, withPassword } from './lib/url-password';
@@ -103,6 +104,8 @@ const Env = z
     REPORT_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
     REPORT_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
     TZ: z.string().default('Europe/Moscow'),
+    // Язык интерфейса и ответов API, если ни пользователь, ни браузер его не задали (§44.1).
+    DEFAULT_LOCALE: Locale.default('ru'),
     // Служба меток времени для подписи PDF (§39.6); пусто — подпись без метки.
     SIGN_TSA_URL: z.preprocess(
       (v) => (v === '' ? undefined : v),
@@ -324,6 +327,8 @@ export interface Config {
   reportTimeoutMs: number;
   reportRetentionDays: number;
   tz: string;
+  /** Язык по умолчанию (DEFAULT_LOCALE). */
+  defaultLocale: Locale;
   /** Служба меток времени подписи PDF (§39.6); null — без метки. */
   signTsaUrl: string | null;
   signTsaTimeoutMs: number;
@@ -396,7 +401,8 @@ export function loadConfig(
   env: NodeJS.ProcessEnv,
   memoryLimit: () => number | undefined = containerMemoryLimit,
 ): Config {
-  const r = Env.safeParse(env);
+  // Ошибки конфигурации — для оператора, по-русски (встроенные сообщения zod тоже).
+  const r = Env.safeParse(env, { error: zodLocale('ru').localeError });
   if (!r.success) {
     const msg = r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
     throw new Error(`Неверная конфигурация: ${msg}`);
@@ -443,6 +449,7 @@ export function loadConfig(
     reportTimeoutMs: e.REPORT_TIMEOUT_MS,
     reportRetentionDays: e.REPORT_RETENTION_DAYS,
     tz: e.TZ,
+    defaultLocale: e.DEFAULT_LOCALE,
     signTsaUrl: e.SIGN_TSA_URL ?? null,
     signTsaTimeoutMs: e.SIGN_TSA_TIMEOUT_MS,
     signGostTsaUrl: e.SIGN_GOST_TSA_URL ?? null,

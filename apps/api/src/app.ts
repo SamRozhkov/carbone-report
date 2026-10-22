@@ -2,14 +2,11 @@ import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
-import {
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from 'fastify-type-provider-zod';
+import { serializerCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { AppDeps } from './deps';
-import { registerErrorHandler } from './lib/errors';
+import { registerErrorHandler, validatorCompiler } from './lib/errors';
 import { fallbackStore } from './lib/fallback-store';
+import { registerRequestLocale } from './lib/locale';
 import { makeGuards } from './modules/auth/guards';
 import { registerTemplateEditorRoutes } from './modules/access/editors-routes';
 import { registerAccessRoutes } from './modules/access/routes';
@@ -27,6 +24,7 @@ import { registerTemplateRoutes } from './modules/templates/routes';
 import { registerSignatureRoutes } from './modules/signature/routes';
 import { registerUserRoutes } from './modules/users/routes';
 import { registerVersionRoutes } from './modules/version/routes';
+import { registerI18nRoutes } from './modules/i18n/routes';
 
 export type { AppDeps };
 
@@ -120,6 +118,8 @@ export function registerHealthRoutes(app: App, deps: Pick<AppDeps, 'drain'>): vo
 
 export async function buildApp(deps: AppDeps): Promise<App> {
   const app = createFastify(deps.config.trustedProxyHops);
+  // Первым: язык нужен ошибкам любых хуков, в том числе режима обслуживания.
+  registerRequestLocale(app, deps.config.defaultLocale);
   registerErrorHandler(app);
   registerInflight(app, deps);
   // До всех маршрутов: во время восстановления из бэкапа API отвечает 503 (§26.3).
@@ -141,6 +141,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   registerHealthRoutes(app, deps);
   registerVersionRoutes(app, deps, guards);
   registerAuthRoutes(app, deps, guards);
+  registerI18nRoutes(app, deps, guards);
   registerOidcRoutes(app, deps, guards, deps.oidcClient);
   registerUserRoutes(app, deps, guards);
   registerSignatureRoutes(app, deps, guards);

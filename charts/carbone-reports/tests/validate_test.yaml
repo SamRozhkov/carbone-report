@@ -32,6 +32,10 @@ tests:
     set: { config.trustedProxyHops: 0 }
     asserts:
       - failedTemplate: { errorMessage: 'config.trustedProxyHops: целое от 1 до 5' }
+  - it: defaultLocale не из списка языков
+    set: { config.defaultLocale: it }
+    asserts:
+      - failedTemplate: { errorMessage: 'config.defaultLocale: ru, en, es, pt-BR, fr, de или zh-CN' }
   - it: внешний Postgres, verify-full без CA
     set:
       externalDatabase.sslMode: verify-full

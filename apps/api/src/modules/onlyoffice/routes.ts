@@ -21,7 +21,13 @@ export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards
     async (req) => {
       const row = await loadTemplate(deps.db, req.params.id);
       const lock = await activeLock(deps.db, row.id);
-      return buildEditorConfig(deps, row, currentUser(req), lock?.holder === req.query.holder);
+      return buildEditorConfig(
+        deps,
+        row,
+        currentUser(req),
+        lock?.holder === req.query.holder,
+        req.locale,
+      );
     },
   );
 

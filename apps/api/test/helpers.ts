@@ -70,6 +70,7 @@ export function testConfig(databaseUrl: string, storageDir: string): Config {
     reportTimeoutMs: 20000,
     reportRetentionDays: 30,
     tz: 'Europe/Moscow',
+    defaultLocale: 'ru',
     signTsaUrl: null,
     signTsaTimeoutMs: 10_000,
     signGostTsaUrl: null,

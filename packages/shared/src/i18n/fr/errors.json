@@ -1,1 +1,12 @@
-{}
+{
+  "unauthorized": "connexion requise",
+  "forbidden": "droits insuffisants",
+  "internal": "erreur interne du serveur",
+  "validation": "données de la requête non valides",
+  "badRequest": "requête non valide",
+  "fileTooLarge": "le fichier dépasse {{size}} Mo",
+  "tooManyParts": "trop de fichiers ou de champs dans la requête",
+  "invalidJson": "JSON non valide dans le corps de la requête",
+  "bodyTooLarge": "le corps de la requête est trop volumineux",
+  "unsupportedMediaType": "type de contenu non pris en charge"
+}

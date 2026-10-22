@@ -3,8 +3,7 @@ import { TemplateChart } from './charts';
 import { PdfOptions, TemplateAttachment } from './pdf-options';
 import { TemplateEditingBy } from './edit-lock';
 import { RunSignature, SignMethod } from './signature';
-
-z.config(z.locales.ru());
+import { Locale } from './i18n';
 
 export * from './charts';
 export * from './pdf-options';
@@ -577,4 +576,23 @@ export type RecoveryBody = z.infer<typeof RecoveryBody>;
 /** Включённые функции — в ответах /api/auth/me и /api/auth/login. */
 export interface Features {
   backups: boolean;
+}
+
+/** Ответ /api/auth/me и /api/auth/login. */
+export interface MeDto {
+  id: string;
+  login: string;
+  role: Role;
+  features: Features;
+  /** Язык, выбранный пользователем (§44.1); null — не выбирал. */
+  locale: Locale | null;
+}
+
+/** PUT /api/me/locale; null — «Как в браузере». */
+export const LocaleBody = z.object({ locale: Locale.nullable() });
+export type LocaleBody = z.infer<typeof LocaleBody>;
+
+/** GET /api/i18n — без входа. */
+export interface I18nInfo {
+  defaultLocale: Locale;
 }

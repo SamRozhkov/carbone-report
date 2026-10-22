@@ -1,1 +1,12 @@
-{}
+{
+  "unauthorized": "需要登录",
+  "forbidden": "权限不足",
+  "internal": "服务器内部错误",
+  "validation": "请求数据无效",
+  "badRequest": "请求无效",
+  "fileTooLarge": "文件超过 {{size}} MB",
+  "tooManyParts": "请求中的文件或字段过多",
+  "invalidJson": "请求正文中的 JSON 无效",
+  "bodyTooLarge": "请求正文过大",
+  "unsupportedMediaType": "不支持的内容类型"
+}

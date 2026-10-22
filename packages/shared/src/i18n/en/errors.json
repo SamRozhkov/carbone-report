@@ -1,1 +1,12 @@
-{}
+{
+  "unauthorized": "sign-in required",
+  "forbidden": "insufficient permissions",
+  "internal": "internal server error",
+  "validation": "invalid request data",
+  "badRequest": "invalid request",
+  "fileTooLarge": "file is larger than {{size}} MB",
+  "tooManyParts": "too many files or fields in the request",
+  "invalidJson": "invalid JSON in the request body",
+  "bodyTooLarge": "request body is too large",
+  "unsupportedMediaType": "unsupported content type"
+}

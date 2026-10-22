@@ -50,6 +50,9 @@ export const users = pgTable(
     // LDAP, oidc — первым входом через Keycloak. Аккаунт oidc через LDAP не открывается: иначе
     // запись каталога с тем же логином получила бы чужой аккаунт, заведённый через Keycloak.
     authSource: text('auth_source').$type<AuthSource>().notNull().default('local'),
+    // Язык интерфейса, выбранный пользователем (§44.1); NULL — не выбирал. Значение вне
+    // LOCALES при чтении считается NULL.
+    locale: text('locale'),
     createdAt: createdAt(),
   },
   // LDAP (особенно sAMAccountName в AD) регистр не различает: без этого индекса один

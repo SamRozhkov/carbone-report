@@ -17,6 +17,7 @@ data:
   COOKIE_SECURE: {{ .Values.config.cookieSecure | toString | quote }}
   TRUSTED_PROXY_HOPS: {{ .Values.config.trustedProxyHops | toString | quote }}
   TZ: {{ .Values.config.tz | quote }}
+  DEFAULT_LOCALE: {{ .Values.config.defaultLocale | quote }}
   QUERY_TIMEOUT_MS: {{ .Values.config.queryTimeoutMs | toString | quote }}
   QUERY_MAX_ROWS: {{ .Values.config.queryMaxRows | toString | quote }}
   RENDER_TIMEOUT_MS: {{ .Values.config.renderTimeoutMs | toString | quote }}

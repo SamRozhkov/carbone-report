@@ -1,1 +1,12 @@
-{}
+{
+  "unauthorized": "es necesario iniciar sesión",
+  "forbidden": "permisos insuficientes",
+  "internal": "error interno del servidor",
+  "validation": "datos de la solicitud no válidos",
+  "badRequest": "solicitud no válida",
+  "fileTooLarge": "el archivo supera los {{size}} MB",
+  "tooManyParts": "demasiados archivos o campos en la solicitud",
+  "invalidJson": "JSON no válido en el cuerpo de la solicitud",
+  "bodyTooLarge": "el cuerpo de la solicitud es demasiado grande",
+  "unsupportedMediaType": "tipo de contenido no admitido"
+}

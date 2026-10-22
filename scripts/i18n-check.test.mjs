@@ -67,6 +67,34 @@ test('разные параметры', () => {
   assert.match(r.stderr, /fr\/common: title — параметры \{title\}, в ru \{name\}/);
 });
 
+test('параметры сравниваются как множества: повтор параметра — не ошибка', () => {
+  const r = run((c) => (c.de.common.title = 'Bericht {{name}} ({{name}})'));
+  assert.equal(r.status, 0, r.stderr);
+});
+
+test('параметр без экранирования {{- name}} — тот же name', () => {
+  const r = run((c) => {
+    c.en.common.title = 'Report {{- name}}';
+    c.fr.common.title = 'Rapport {{-name}}';
+  });
+  assert.equal(r.status, 0, r.stderr);
+});
+
+test('{{- other}} вместо {{name}} — ошибка', () => {
+  const r = run((c) => (c.es.common.title = 'Informe {{- other}}'));
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /es\/common: title — параметры \{other\}, в ru \{name\}/);
+});
+
+test('недостающий параметр при повторе другого — ошибка', () => {
+  const r = run((c) => {
+    for (const l of LOCALES) c[l].common.pair = '{{a}} {{b}}';
+    c.de.common.pair = '{{a}} {{a}}';
+  });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /de\/common: pair — параметры \{a\}, в ru \{a, b\}/);
+});
+
 test('параметры форм множественного числа сверяются с ru _other', () => {
   const r = run((c) => (c.es.common.items_many = 'muchos'));
   assert.equal(r.status, 1);

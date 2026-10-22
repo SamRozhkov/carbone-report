@@ -1,7 +1,6 @@
 import {
   hasPdfProtection,
   normalizePdfOptions,
-  PDF_PAGE_FORMAT_DEFAULT,
   type PdfMetadata,
   type PdfOptions,
   type PdfPageNumbers,
@@ -14,6 +13,7 @@ import {
   type TemplateAdminDetails,
   type TemplateAttachment,
 } from '@carbone-reports/shared';
+import { PAGE_FORMATS } from '@carbone-reports/shared/i18n';
 import { ArrowDown, ArrowUp, TrashBin } from '@gravity-ui/icons';
 import {
   Button,
@@ -74,11 +74,14 @@ function toDraft(o: PdfOptions, pageFormat: string): Draft {
     wmOn: Boolean(o.watermark),
     wm: o.watermark ?? { text: '', opacity: 20, color: 'gray', angle: 'diagonal' },
     pnOn: Boolean(o.pageNumbers),
-    pn: o.pageNumbers ?? {
-      format: pageFormat,
-      position: 'bottom-center',
-      skipFirst: false,
-    },
+    // Формат не задан — подставляется умолчание (до Task 4 §45.4: поле формата пустое с подсказкой).
+    pn: o.pageNumbers
+      ? { ...o.pageNumbers, format: o.pageNumbers.format ?? pageFormat }
+      : {
+          format: pageFormat,
+          position: 'bottom-center',
+          skipFirst: false,
+        },
     meta: o.metadata ?? { title: '', author: '', subject: '', keywords: '' },
     prot: o.protection ?? NO_PROTECTION,
     sigOn: Boolean(o.signature),
@@ -101,7 +104,7 @@ function fromDraft(d: Draft): PdfOptions {
   });
 }
 
-const canon = (o: PdfOptions) => JSON.stringify(fromDraft(toDraft(o, PDF_PAGE_FORMAT_DEFAULT)));
+const canon = (o: PdfOptions) => JSON.stringify(fromDraft(toDraft(o, PAGE_FORMATS.ru)));
 
 export function PdfTab({ template }: Pick<TabProps, 'template'>) {
   const { t } = useTranslation();

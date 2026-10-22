@@ -1,9 +1,5 @@
-import {
-  CARBONE_LANG,
-  type OutputFormat,
-  type ParamValue,
-  type ParamsInput,
-} from '@carbone-reports/shared';
+import { type OutputFormat, type ParamValue, type ParamsInput } from '@carbone-reports/shared';
+import { CARBONE_LANGS } from '@carbone-reports/shared/i18n';
 import type { AppDeps, TemplateFileRef } from '../../deps';
 import { type Deadline, reportTimeout } from '../../lib/deadline';
 import { AppError } from '../../lib/errors';
@@ -80,7 +76,8 @@ export function renderReport(
   const work = (async () => {
     const out = await deps.carbone.render(tpl, data, {
       convertTo: format,
-      lang: CARBONE_LANG,
+      // Язык отчёта подключается в Task 3 (§45.2); до того — русский, как до 2.14.0.
+      lang: CARBONE_LANGS.ru,
       timezone: deps.config.tz,
       timeoutMs: timeoutMs(),
       ...(pdfa ? { pdfa: true } : {}),

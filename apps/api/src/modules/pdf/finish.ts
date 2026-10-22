@@ -4,6 +4,7 @@ import {
   MAX_PDF_RESULT_BYTES,
   type PdfOptions,
 } from '@carbone-reports/shared';
+import { PAGE_FORMATS } from '@carbone-reports/shared/i18n';
 import type { TemplateAttachmentRow } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { decryptSecret } from '../../lib/crypto';
@@ -68,7 +69,10 @@ export function buildPdfJob(
   return {
     pdfa: o.pdfa,
     watermark: o.watermark && wmText ? { ...o.watermark, text: wmText } : null,
-    pageNumbers: o.pageNumbers ?? null,
+    // Формат не задан — по языку отчёта (§45.4); язык подключается в Task 3, до того — ru.
+    pageNumbers: o.pageNumbers
+      ? { ...o.pageNumbers, format: o.pageNumbers.format ?? PAGE_FORMATS.ru }
+      : null,
     metadata: o.metadata
       ? {
           title: fill(o.metadata.title) || p.templateName,

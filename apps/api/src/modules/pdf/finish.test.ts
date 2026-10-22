@@ -60,6 +60,13 @@ describe('buildPdfJob', () => {
     });
   });
 
+  it('заданный формат нумерации не меняется; не задан — умолчание ru (§45.4)', () => {
+    const own = buildPdfJob(tp({ pageNumbers: { format: 'Page {page}' } }), {}, NOW, []);
+    expect(own.pageNumbers?.format).toBe('Page {page}');
+    const def = buildPdfJob(tp({ pageNumbers: {} }), {}, NOW, []);
+    expect(def.pageNumbers?.format).toBe('Стр. {page} из {pages}');
+  });
+
   it('иероглифы не заменяются на «?» до выбора шрифта', () => {
     const job = buildPdfJob(
       tp({ watermark: { text: '机密 {d.name}' }, metadata: { title: '报告 {d.name}' } }),

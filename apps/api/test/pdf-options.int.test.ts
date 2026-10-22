@@ -94,11 +94,8 @@ describe('настройки PDF (§36.1)', () => {
     expect(r.json().pdfOptions).toEqual({
       pdfa: false,
       watermark: { text: 'КОПИЯ', opacity: 20, color: 'gray', angle: 'diagonal' },
-      pageNumbers: {
-        format: 'Стр. {page} из {pages}',
-        position: 'bottom-center',
-        skipFirst: false,
-      },
+      // Формат не задан — не хранится: берётся по языку отчёта (§45.4).
+      pageNumbers: { position: 'bottom-center', skipFirst: false },
     });
     expect((await putOptions(id, {}, user)).statusCode).toBe(403);
   });

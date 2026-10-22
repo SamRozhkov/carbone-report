@@ -1,0 +1,9 @@
+{
+  "stamp": {
+    "title": "DOKUMENT MIT ELEKTRONISCHER SIGNATUR SIGNIERT",
+    "certificate": "Zertifikat: {{serial}}",
+    "owner": "Eigentümer: {{owner}}",
+    "valid": "Gültig: vom {{from}} bis {{to}}",
+    "signed": "Signiert: {{date}} {{time}}"
+  }
+}

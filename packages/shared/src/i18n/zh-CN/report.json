@@ -1,0 +1,9 @@
+{
+  "stamp": {
+    "title": "文档已使用电子签名签署",
+    "certificate": "证书：{{serial}}",
+    "owner": "所有者：{{owner}}",
+    "valid": "有效期：{{from}} 至 {{to}}",
+    "signed": "签署时间：{{date}} {{time}}"
+  }
+}

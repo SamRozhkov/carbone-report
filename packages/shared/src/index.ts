@@ -3,7 +3,7 @@ import { TemplateChart } from './charts';
 import { PdfOptions, TemplateAttachment } from './pdf-options';
 import { TemplateEditingBy } from './edit-lock';
 import { RunSignature, SignMethod } from './signature';
-import { Locale } from './i18n';
+import { Locale, zodReportLocale } from './i18n';
 
 export * from './charts';
 export * from './pdf-options';
@@ -35,9 +35,6 @@ const FORMATS_BY_EXT: Record<TemplateExt, OutputFormat[]> = {
 export function outputFormatsFor(ext: TemplateExt): OutputFormat[] {
   return FORMATS_BY_EXT[ext];
 }
-
-/** Язык Carbone: `ru` даёт русские разделители чисел и рубли в formatC; `ru-ru` — нет (матрица Community, §23.4). */
-export const CARBONE_LANG = 'ru';
 
 export const ParamType = z.enum(['string', 'number', 'date', 'boolean', 'select', 'query']);
 export type ParamType = z.infer<typeof ParamType>;
@@ -324,6 +321,8 @@ export const TemplateAdminDetails = TemplateDetails.extend({
   attachments: z.array(TemplateAttachment),
   /** Задан пароль на открытие PDF (§37.1); сам пароль API не возвращает. */
   pdfPasswordSet: z.boolean(),
+  /** Язык отчёта (§45.1): язык из LOCALES или 'user'. */
+  reportLocale: zodReportLocale,
   lastSaveError: z.string().nullable(),
   /** Момент последней ошибки сохранения OnlyOffice (ISO); новая ошибка — новая метка. */
   lastSaveErrorAt: z.string().nullable(),
@@ -382,6 +381,8 @@ export const UpdateTemplateBody = z.object({
   description: z.string().optional(),
   datasourceId: z.uuid().optional(),
   defaultOutput: OutputFormat.optional(),
+  /** Язык отчёта (§45.1); менять может тот, у кого есть право правки (§43). */
+  reportLocale: zodReportLocale.optional(),
 });
 export type UpdateTemplateBody = z.infer<typeof UpdateTemplateBody>;
 

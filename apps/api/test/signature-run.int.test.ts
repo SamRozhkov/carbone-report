@@ -1,13 +1,13 @@
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { reportRunSignatures, reportRuns, signPasswordFailures } from '../src/db/schema';
+import { reportRunSignatures, reportRuns, signPasswordFailures, templates } from '../src/db/schema';
 import type { CarboneRenderer, P12Reader } from '../src/deps';
 import { cleanupOldReports } from '../src/modules/reports/cleanup';
 import { inProcessP12Reader } from '../src/modules/pdf/sign/p12-reader';
 import { fixture, FIXTURE_PASSWORD } from '../src/modules/pdf/sign/fixtures';
 import { startTestTsa, type TestTsa } from '../src/modules/pdf/sign/test-tsa';
 import { opensslVerify } from '../src/modules/pdf/sign/test-verify';
-import { makePdf } from '../src/modules/pdf/test-pdf';
+import { makePdf, stampTextOf } from '../src/modules/pdf/test-pdf';
 import { createTemplate, createTestApp, loginAs, multipart, type TestApp } from './helpers';
 import { createTranslator } from '@carbone-reports/shared/i18n/server';
 
@@ -205,6 +205,43 @@ describe('подпись запуска (§39.3)', () => {
       signMethod: 'p12',
       signature: { timestamped: true, signerCn: 'Иванов Иван Иванович (rsa)', method: 'p12' },
     });
+  });
+
+  it('штамп — на языке запуска, а не текущей настройки шаблона (§45.2)', async () => {
+    const setLocale = (reportLocale: 'de' | 'ru') =>
+      t.deps.db.update(templates).set({ reportLocale }).where(eq(templates.id, templateId));
+    await setLocale('de');
+    try {
+      const runId = await render(user.cookie);
+      await setLocale('ru');
+      expect((await signRun(user.cookie, runId)).statusCode).toBe(201);
+      const file = await t.app.inject({
+        method: 'GET',
+        url: `/api/runs/${runId}/file?format=pdf&signed=1`,
+        headers: { cookie: user.cookie },
+      });
+      const stamp = await stampTextOf(file.rawPayload);
+      expect(stamp).toContain('DOKUMENT MIT ELEKTRONISCHER SIGNATUR SIGNIERT');
+      expect(stamp).toContain('Eigentümer: Иванов Иван Иванович (rsa)');
+      expect(stamp).not.toContain('ДОКУМЕНТ ПОДПИСАН');
+      await opensslVerify(file.rawPayload);
+    } finally {
+      await setLocale('ru');
+    }
+  });
+
+  it('запуск до 2.14.0 (report_locale NULL) — штамп по-русски', async () => {
+    const runId = await render(user.cookie);
+    await t.deps.db.update(reportRuns).set({ reportLocale: null }).where(eq(reportRuns.id, runId));
+    expect((await signRun(user.cookie, runId)).statusCode).toBe(201);
+    const file = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${runId}/file?format=pdf&signed=1`,
+      headers: { cookie: user.cookie },
+    });
+    const stamp = await stampTextOf(file.rawPayload);
+    expect(stamp).toContain('ДОКУМЕНТ ПОДПИСАН ЭЛЕКТРОННОЙ ПОДПИСЬЮ');
+    expect(stamp).toContain('Владелец: Иванов Иван Иванович (rsa)');
   });
 
   it('снимок со способом gost: signMethod gost, signable; подпись .p12 — 400 (§42.1)', async () => {

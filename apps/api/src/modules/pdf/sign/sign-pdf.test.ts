@@ -1,5 +1,7 @@
 import * as pkijs from 'pkijs';
 import { afterEach, describe, expect, it } from 'vitest';
+import { LOCALES } from '@carbone-reports/shared/i18n';
+import type { SignPrepareJob } from './prepare';
 import { makePdf } from '../test-pdf';
 import { OID } from './cms';
 import { fixture, FIXTURE_PASSWORD } from './fixtures';
@@ -24,6 +26,7 @@ const sign = async (signer: CmsSigner, pdf?: Uint8Array) =>
     position: 'bottom-right',
     now: NOW,
     timeZone: 'Europe/Moscow',
+    locale: 'ru',
     deadline: Date.now() + 30_000,
     prepare: inProcessSignPreparer,
   });
@@ -87,6 +90,7 @@ describe('signPdf (§39.4)', () => {
         position: 'bottom-right',
         now: NOW,
         timeZone: 'Europe/Moscow',
+        locale: 'ru',
         deadline: Date.now() - 1,
         prepare: inProcessSignPreparer,
       }),
@@ -101,6 +105,7 @@ describe('stampLines (§39.5)', () => {
       { ...info, notBefore: '2026-01-01T00:00:00.000Z', notAfter: '2027-01-01T00:00:00.000Z' },
       NOW,
       'Europe/Moscow',
+      'ru',
     );
     expect(lines).toEqual([
       'ДОКУМЕНТ ПОДПИСАН ЭЛЕКТРОННОЙ ПОДПИСЬЮ',
@@ -109,5 +114,162 @@ describe('stampLines (§39.5)', () => {
       'Действителен: с 01.01.2026 по 01.01.2027',
       'Подписан: 19.10.2026 14:32',
     ]);
+  });
+});
+
+const CERT = () => ({
+  ...readP12(fixture('rsa.p12'), FIXTURE_PASSWORD).info,
+  notBefore: '2026-01-01T00:00:00.000Z',
+  notAfter: '2027-01-01T00:00:00.000Z',
+});
+
+describe('stampLines: язык отчёта (§45.4)', () => {
+  it('en: строки каталога, дата MM/DD/YYYY, время 24 ч', () => {
+    expect(stampLines(CERT(), NOW, 'Europe/Moscow', 'en')).toEqual([
+      'DOCUMENT SIGNED WITH AN ELECTRONIC SIGNATURE',
+      'Certificate: 1001',
+      'Owner: Иванов Иван Иванович (rsa)',
+      'Valid: from 01/01/2026 to 01/01/2027',
+      'Signed: 10/19/2026 14:32',
+    ]);
+  });
+
+  it('de: дата DD.MM.YYYY', () => {
+    expect(stampLines(CERT(), NOW, 'Europe/Moscow', 'de')).toEqual([
+      'DOKUMENT MIT ELEKTRONISCHER SIGNATUR SIGNIERT',
+      'Zertifikat: 1001',
+      'Eigentümer: Иванов Иван Иванович (rsa)',
+      'Gültig: vom 01.01.2026 bis 01.01.2027',
+      'Signiert: 19.10.2026 14:32',
+    ]);
+  });
+
+  it('zh-CN: строки каталога, дата языка', () => {
+    expect(stampLines(CERT(), NOW, 'Europe/Moscow', 'zh-CN')).toEqual([
+      '文档已使用电子签名签署',
+      '证书：1001',
+      '所有者：Иванов Иван Иванович (rsa)',
+      '有效期：2026/01/01 至 2027/01/01',
+      '签署时间：2026/10/19 14:32',
+    ]);
+  });
+
+  it('es: строки каталога, дата DD/MM/YYYY', () => {
+    expect(stampLines(CERT(), NOW, 'Europe/Moscow', 'es')).toEqual([
+      'DOCUMENTO FIRMADO CON FIRMA ELECTRÓNICA',
+      'Certificado: 1001',
+      'Propietario: Иванов Иван Иванович (rsa)',
+      'Válido: del 01/01/2026 al 01/01/2027',
+      'Firmado: 19/10/2026 14:32',
+    ]);
+  });
+
+  it('pt-BR: строки каталога, дата DD/MM/YYYY', () => {
+    expect(stampLines(CERT(), NOW, 'Europe/Moscow', 'pt-BR')).toEqual([
+      'DOCUMENTO ASSINADO COM ASSINATURA ELETRÔNICA',
+      'Certificado: 1001',
+      'Proprietário: Иванов Иван Иванович (rsa)',
+      'Válido: de 01/01/2026 a 01/01/2027',
+      'Assinado: 19/10/2026 14:32',
+    ]);
+  });
+
+  it('fr: строки каталога (неразрывный пробел перед двоеточием), дата DD/MM/YYYY', () => {
+    expect(stampLines(CERT(), NOW, 'Europe/Moscow', 'fr')).toEqual([
+      'DOCUMENT SIGNÉ PAR SIGNATURE ÉLECTRONIQUE',
+      'Certificat\u00a0: 1001',
+      'Propriétaire\u00a0: Иванов Иван Иванович (rsa)',
+      'Validité\u00a0: du 01/01/2026 au 01/01/2027',
+      'Signé\u00a0: 19/10/2026 14:32',
+    ]);
+  });
+
+  it.each(LOCALES)('%s: пять строк каталога, параметры подставлены (§45.6)', (locale) => {
+    const lines = stampLines(CERT(), NOW, 'Europe/Moscow', locale);
+    expect(lines).toHaveLength(5);
+    for (const line of lines) {
+      expect(line).not.toMatch(/report:|stamp\.|\{\{/);
+      expect(line.trim()).not.toBe('');
+    }
+    expect(lines[1]).toContain('1001');
+    expect(lines[2]).toContain('Иванов Иван Иванович (rsa)');
+    expect(lines[3]).toContain('2026');
+    expect(lines[3]).toContain('2027');
+    expect(lines[4]).toContain('14:32');
+  });
+
+  it('значения сертификата не интерпретируются i18next', () => {
+    const lines = stampLines(
+      { ...CERT(), subjectCn: '{{serial}} $t(report:stamp.title)' },
+      NOW,
+      'Europe/Moscow',
+      'en',
+    );
+    expect(lines[2]).toBe('Owner: {{serial}} $t(report:stamp.title)');
+  });
+});
+
+/** Строки штампа до 2.14.0 — дословная копия прежней реализации для сверки ru. */
+function legacyStampLines(
+  info: ReturnType<typeof CERT>,
+  now: Date,
+  timeZone: string,
+): SignPrepareJob['lines'] {
+  const date = new Intl.DateTimeFormat('ru-RU', {
+    timeZone,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+  const time = new Intl.DateTimeFormat('ru-RU', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+  return [
+    'ДОКУМЕНТ ПОДПИСАН ЭЛЕКТРОННОЙ ПОДПИСЬЮ',
+    `Сертификат: ${info.serial}`,
+    `Владелец: ${info.subjectCn}`,
+    `Действителен: с ${date.format(new Date(info.notBefore))} по ${date.format(new Date(info.notAfter))}`,
+    `Подписан: ${date.format(now)} ${time.format(now)}`,
+  ];
+}
+
+describe('штамп ru не изменился (§45.4)', () => {
+  it('подготовленный PDF .p12 на ru побайтно совпадает с прежним путём', async () => {
+    const pdf = Buffer.from(await makePdf([{ label: 'a' }, { label: 'b' }]));
+    const real = signerOf('rsa.p12');
+    const signer: CmsSigner = {
+      info: CERT(),
+      digestAlg: real.digestAlg,
+      reserveBytes: real.reserveBytes,
+      createCms: (d, dl) => real.createCms(d, dl),
+    };
+    let prepared: Buffer | undefined;
+    await signPdf(pdf, signer, {
+      position: 'bottom-right',
+      now: NOW,
+      timeZone: 'Europe/Moscow',
+      locale: 'ru',
+      deadline: Date.now() + 30_000,
+      prepare: async (p, job, ms) => {
+        prepared = Buffer.from(await inProcessSignPreparer(p, job, ms));
+        return Buffer.from(prepared);
+      },
+    });
+    const legacy = await inProcessSignPreparer(
+      pdf,
+      {
+        position: 'bottom-right',
+        lines: legacyStampLines(CERT(), NOW, 'Europe/Moscow'),
+        contentsBytes: real.reserveBytes,
+        signedAt: NOW.toISOString(),
+      },
+      30_000,
+    );
+    expect(prepared).toBeDefined();
+    // Побайтно: тот же текст штампа, те же шрифты и то же положение.
+    expect(prepared!.equals(legacy)).toBe(true);
   });
 });

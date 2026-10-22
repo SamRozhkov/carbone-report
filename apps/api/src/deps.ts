@@ -25,7 +25,10 @@ export interface TemplateFileRef {
 
 export interface RenderOptions {
   convertTo: OutputFormat;
+  /** options.lang Carbone по языку отчёта (CARBONE_LANGS, §45.3). */
   lang: string;
+  /** Регион конвертации OnlyOffice по языку отчёта (OFFICE_REGIONS, §45.3). */
+  region: string;
   timezone: string;
   timeoutMs: number;
   /** PDF/A-2b от конвертера (§36.4); действует только при convertTo = pdf. */

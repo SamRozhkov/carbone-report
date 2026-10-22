@@ -253,7 +253,6 @@
     "save": "保存参数"
   },
   "pdf": {
-    "pageFormatDefault": "第 {page} 页，共 {pages} 页",
     "color_gray": "灰色",
     "color_red": "红色",
     "color_blue": "蓝色",
@@ -362,6 +361,9 @@
     "nameAria": "模板名称",
     "datasource": "数据源",
     "defaultOutput": "默认格式",
+    "reportLocale": "报表语言",
+    "reportLocaleUser": "与用户相同",
+    "reportLocaleHint": "语言决定日期和数字格式、formatC 的默认货币、签章以及页码。模板文本不会被翻译。",
     "datasourcesLoadFailed": "无法加载数据源",
     "save": "保存设置",
     "discardAria": "放弃对设置的更改",

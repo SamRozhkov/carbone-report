@@ -155,3 +155,95 @@ describe('миграция 0014_gost_signature', () => {
     }
   });
 });
+
+describe('миграция 0017_report_locale', () => {
+  it('шаблоны — ru, прежний формат нумерации удалён, другие форматы не тронуты; у запусков — NULL', async () => {
+    // База в состоянии до 0017: миграции 0000–0016 из копии каталога с усечённым журналом.
+    const dir = join(import.meta.dirname, '../drizzle');
+    const before = await mkdtemp(join(tmpdir(), 'cr-mig-'));
+    try {
+      await cp(dir, before, { recursive: true });
+      const journalPath = join(before, 'meta/_journal.json');
+      const journal = JSON.parse(await readFile(journalPath, 'utf8')) as {
+        entries: { tag: string }[];
+      };
+      journal.entries = journal.entries.filter((e) => e.tag < '0017_');
+      await writeFile(journalPath, JSON.stringify(journal));
+
+      const url = await createTestDatabase();
+      const { db, pool } = createDb(url);
+      try {
+        await migrate(db, { migrationsFolder: before });
+        const [u] = (
+          await db.execute<{ id: string }>(
+            sql`insert into users (login, password_hash, role) values ('ivan', 'x', 'user') returning id`,
+          )
+        ).rows;
+        const [ds] = (
+          await db.execute<{ id: string }>(
+            sql`insert into datasources (name, host, port, database, username, password_enc)
+                values ('s', 'h', 5432, 'd', 'u', 'x') returning id`,
+          )
+        ).rows;
+        const options = {
+          ruDefault: {
+            pdfa: true,
+            pageNumbers: {
+              format: 'Стр. {page} из {pages}',
+              position: 'top-right',
+              skipFirst: true,
+            },
+          },
+          en: {
+            pageNumbers: { format: 'Page {page}', position: 'bottom-center', skipFirst: false },
+          },
+          ruOwn: {
+            pageNumbers: {
+              format: ' Стр. {page} из {pages} и др.',
+              position: 'bottom-right',
+              skipFirst: false,
+            },
+          },
+          none: { watermark: { text: 'КОПИЯ', opacity: 20, color: 'gray', angle: 'diagonal' } },
+          empty: {},
+        };
+        for (const [name, o] of Object.entries(options))
+          await db.execute(
+            sql`insert into templates (name, datasource_id, file_ext, file_path, doc_key, pdf_options)
+                values (${name}, ${ds!.id}, 'docx', ${`templates/${name}/v1.docx`}, ${name}, ${JSON.stringify(o)}::jsonb)`,
+          );
+        await db.execute(
+          sql`insert into report_runs (template_name, template_version, user_id, params, status, duration_ms)
+              values ('T', 1, ${u!.id}, '{}'::jsonb, 'ok', 1)`,
+        );
+
+        await migrate(db, { migrationsFolder: dir });
+
+        const tpls = await db.execute<{ name: string; report_locale: string; pdf_options: object }>(
+          sql`select name, report_locale, pdf_options from templates`,
+        );
+        expect(Object.fromEntries(tpls.rows.map((r) => [r.name, r.pdf_options]))).toEqual({
+          ...options,
+          ruDefault: { pdfa: true, pageNumbers: { position: 'top-right', skipFirst: true } },
+        });
+        expect(new Set(tpls.rows.map((r) => r.report_locale))).toEqual(new Set(['ru']));
+        const runs = await db.execute<{ report_locale: string | null }>(
+          sql`select report_locale from report_runs`,
+        );
+        expect(runs.rows).toEqual([{ report_locale: null }]);
+        // Новый шаблон без явного значения — тоже 'ru' (умолчание колонки).
+        const [fresh] = (
+          await db.execute<{ report_locale: string }>(
+            sql`insert into templates (name, datasource_id, file_ext, file_path, doc_key)
+                values ('new', ${ds!.id}, 'docx', 'templates/new/v1.docx', 'new') returning report_locale`,
+          )
+        ).rows;
+        expect(fresh!.report_locale).toBe('ru');
+      } finally {
+        await pool.end();
+      }
+    } finally {
+      await rm(before, { recursive: true, force: true });
+    }
+  });
+});

@@ -4,7 +4,7 @@ import {
   hasPdfProtection,
   MoveAttachmentBody,
   normalizePdfOptions,
-  PDF_PAGE_FORMAT_DEFAULT,
+  PdfPageNumbers,
   PdfOptions,
   PdfPassword,
   pdfStaticText,
@@ -36,9 +36,14 @@ describe('PdfOptions', () => {
     ).toEqual({
       pdfa: false,
       watermark: { text: 'КОПИЯ', opacity: 20, color: 'gray', angle: 'diagonal' },
-      pageNumbers: { format: PDF_PAGE_FORMAT_DEFAULT, position: 'bottom-center', skipFirst: false },
+      pageNumbers: { position: 'bottom-center', skipFirst: false },
       metadata: { title: '', author: '', subject: '', keywords: '' },
     });
+  });
+
+  it('формат нумерации не задан — поля нет, формат берётся по языку отчёта (§45.4)', () => {
+    expect(PdfPageNumbers.parse({})).toEqual({ position: 'bottom-center', skipFirst: false });
+    expect('format' in PdfPageNumbers.parse({})).toBe(false);
   });
 
   it('границы и ошибки', () => {
@@ -50,6 +55,7 @@ describe('PdfOptions', () => {
     expect(PdfOptions.safeParse({ watermark: { text: 'x', color: 'green' } }).success).toBe(false);
     expect(PdfOptions.safeParse({ pageNumbers: { format: 'Страница' } }).success).toBe(false);
     expect(PdfOptions.safeParse({ pageNumbers: { format: '{page}' } }).success).toBe(true);
+    expect(PdfOptions.safeParse({ pageNumbers: { format: '' } }).success).toBe(false);
     expect(PdfOptions.safeParse({ metadata: { title: 'x'.repeat(501) } }).success).toBe(false);
     expect(PdfOptions.safeParse({ extra: 1 }).success).toBe(false);
   });

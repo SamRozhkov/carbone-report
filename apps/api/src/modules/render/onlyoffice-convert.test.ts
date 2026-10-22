@@ -4,11 +4,12 @@ import { createOnlyOfficeConverter } from './onlyoffice-convert';
 
 const secret = new TextEncoder().encode('s'.repeat(32));
 const BASE = 'http://onlyoffice';
-const req = (signal = AbortSignal.timeout(5000)) => ({
+const req = (signal = AbortSignal.timeout(5000), region = 'ru-RU') => ({
   filetype: 'docx' as const,
   outputtype: 'pdf' as const,
   title: 'report.docx',
   url: 'http://10.0.0.5:3000/internal/render-files/abc?t=tok',
+  region,
   signal,
 });
 
@@ -48,6 +49,14 @@ describe('createOnlyOfficeConverter', () => {
     const { token, ...rest } = body;
     expect(await verifyOnlyOffice(token, secret)).toMatchObject(rest);
     expect(calls[1]!.url).toBe('http://onlyoffice/cache/files/data/k/output.pdf?md5=1&expires=2');
+  });
+
+  it('region — из запроса (язык отчёта, §45.3), подписан в JWT', async () => {
+    const { fn, calls } = fake({ endConvert: true, fileUrl: 'http://x/cache/files/a/output.pdf' });
+    await createOnlyOfficeConverter({ baseUrl: BASE, secret, fetch: fn })(req(undefined, 'zh-CN'));
+    const body = JSON.parse(String(calls[0]!.init!.body));
+    expect(body.region).toBe('zh-CN');
+    expect(await verifyOnlyOffice(body.token, secret)).toMatchObject({ region: 'zh-CN' });
   });
 
   it('ключ новый на каждый вызов', async () => {

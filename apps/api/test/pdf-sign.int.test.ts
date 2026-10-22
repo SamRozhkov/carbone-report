@@ -41,6 +41,7 @@ async function signed(name: string, withTsa: boolean) {
     position: 'bottom-right',
     now: new Date(),
     timeZone: 'Europe/Moscow',
+    locale: 'ru',
     deadline: Date.now() + 60_000,
     prepare: inProcessSignPreparer,
   });

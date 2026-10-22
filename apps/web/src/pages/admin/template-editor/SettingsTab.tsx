@@ -1,4 +1,5 @@
 import type { OutputFormat, TemplateAccess, TemplateAdminDetails } from '@carbone-reports/shared';
+import { LOCALE_NAMES, REPORT_LOCALES, type ReportLocale } from '@carbone-reports/shared/i18n';
 import { Button, Loader, Select, Text, TextArea, TextInput, useToaster } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
@@ -12,7 +13,7 @@ import { ACCESS_FIELDS, AccessFields, sameAccess, useSaveTemplateAccess } from '
 import { EditorsBlock } from './EditorsBlock';
 import { applyTemplate } from './editorState';
 
-const SHOWN = ['name', 'description', 'datasourceId', 'defaultOutput'];
+const SHOWN = ['name', 'description', 'datasourceId', 'defaultOutput', 'reportLocale'];
 
 export function SettingsTab({
   template,
@@ -34,14 +35,16 @@ export function SettingsTab({
     description: tpl.description,
     datasourceId: tpl.datasourceId,
     defaultOutput: tpl.defaultOutput,
+    reportLocale: tpl.reportLocale,
   });
   const [baseline, setBaseline] = useState(template);
   const [name, setName] = useState(template.name);
   const [description, setDescription] = useState(template.description);
   const [datasourceId, setDatasourceId] = useState(template.datasourceId);
   const [defaultOutput, setDefaultOutput] = useState<OutputFormat>(template.defaultOutput);
+  const [reportLocale, setReportLocale] = useState<ReportLocale>(template.reportLocale);
   const dirty =
-    JSON.stringify({ name, description, datasourceId, defaultOutput }) !==
+    JSON.stringify({ name, description, datasourceId, defaultOutput, reportLocale }) !==
     JSON.stringify(pick(baseline));
   const reseed = (tpl: TemplateAdminDetails) => {
     setBaseline(tpl);
@@ -49,6 +52,7 @@ export function SettingsTab({
     setDescription(tpl.description);
     setDatasourceId(tpl.datasourceId);
     setDefaultOutput(tpl.defaultOutput);
+    setReportLocale(tpl.reportLocale);
   };
   // Шаблон обновился на сервере: без несохранённых правок подхватываем, иначе сохраняем черновик.
   const stale = template.updatedAt !== baseline.updatedAt;
@@ -56,7 +60,13 @@ export function SettingsTab({
 
   const save = useMutation({
     mutationFn: () =>
-      api.templates.update(template.id, { name, description, datasourceId, defaultOutput }),
+      api.templates.update(template.id, {
+        name,
+        description,
+        datasourceId,
+        defaultOutput,
+        reportLocale,
+      }),
     onSuccess: (tpl) => {
       applyTemplate(queryClient, tpl);
       reseed(tpl);
@@ -118,6 +128,22 @@ export function SettingsTab({
           onUpdate={([v]) => v && setDefaultOutput(v as OutputFormat)}
           options={template.outputFormats.map((f) => ({ value: f, content: f.toUpperCase() }))}
           width="max"
+        />
+      </Field>
+      <Field
+        label={t('editor:settings.reportLocale')}
+        hint={t('editor:settings.reportLocaleHint')}
+        error={errors.reportLocale}
+      >
+        <Select
+          value={[reportLocale]}
+          onUpdate={([v]) => v && setReportLocale(v as ReportLocale)}
+          options={REPORT_LOCALES.map((l) => ({
+            value: l,
+            content: l === 'user' ? t('editor:settings.reportLocaleUser') : LOCALE_NAMES[l],
+          }))}
+          width="max"
+          aria-label={t('editor:settings.reportLocale')}
         />
       </Field>
       {datasources.error && (

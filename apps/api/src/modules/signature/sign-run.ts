@@ -16,6 +16,7 @@ import { P12Error, type P12Contents } from '../pdf/sign/p12';
 import { signPdf } from '../pdf/sign/sign-pdf';
 import { P12Signer } from '../pdf/sign/signer';
 import { createTsaClient } from '../pdf/sign/tsa';
+import { runLocale } from '../reports/report-locale';
 import {
   readSnapshotFile,
   RUN_FILE_LOCK_CLASS,
@@ -129,6 +130,8 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
             position,
             now,
             timeZone: config.tz,
+            // Язык запуска, а не текущая настройка шаблона (§45.2).
+            locale: runLocale(run),
             deadline: Date.now() + deadline.remaining(),
             prepare: deps.pdfSignPrepare,
           });

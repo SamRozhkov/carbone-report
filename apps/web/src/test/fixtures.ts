@@ -1,3 +1,4 @@
+import type { ReportLocale } from '@carbone-reports/shared/i18n';
 import type { PdfOptions, TemplateAttachment, TemplateChart } from '@carbone-reports/shared';
 
 export const adminTemplate = {
@@ -17,6 +18,7 @@ export const adminTemplate = {
   pdfOptions: { pdfa: false } as PdfOptions,
   attachments: [] as TemplateAttachment[],
   pdfPasswordSet: false,
+  reportLocale: 'ru' as ReportLocale,
   params: [
     {
       name: 'from',

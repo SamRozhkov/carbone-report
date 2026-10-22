@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { gostSignPending, reportRunSignatures, reportRuns } from '../src/db/schema';
+import { gostSignPending, reportRunSignatures, reportRuns, templates } from '../src/db/schema';
 import type { CarboneRenderer, GostPreparer } from '../src/deps';
 import { streebog } from '../src/modules/pdf/sign/gost/streebog';
 import { cleanupGostPending } from '../src/modules/signature/gost-pending';
@@ -34,7 +34,10 @@ const carbone: CarboneRenderer = {
 // altered — черновик с другими байтами (как штамп с другим временем у повторной подготовки).
 let hold: { entered: () => void; gate: Promise<void> } | null = null;
 let altered = false;
-const gostPrepare: GostPreparer = async (pdf) => {
+/** Строки штампа последней подготовки (язык запуска, §45.2). */
+let lastLines: readonly string[] = [];
+const gostPrepare: GostPreparer = async (pdf, job) => {
+  lastLines = job.lines;
   const h = hold;
   if (h) {
     hold = null;
@@ -520,6 +523,31 @@ describe('снимок решает способ (§42.1)', () => {
       await setMethod(env.gostId, 'gost');
       await setMethod(env.p12Id);
     }
+  });
+});
+
+describe('язык штампа ГОСТ (§45.2)', () => {
+  it('штамп — на языке запуска; запуск до 2.14.0 (NULL) — по-русски', async () => {
+    const setLocale = (reportLocale: 'de' | 'ru') =>
+      env.t.deps.db.update(templates).set({ reportLocale }).where(eq(templates.id, env.gostId));
+    await setLocale('de');
+    let runId: string;
+    try {
+      runId = await render(user.cookie);
+    } finally {
+      await setLocale('ru');
+    }
+    expect((await prepare(user.cookie, runId)).statusCode).toBe(200);
+    expect(lastLines[0]).toBe('DOKUMENT MIT ELEKTRONISCHER SIGNATUR SIGNIERT');
+    expect(lastLines[1]).toMatch(/^Zertifikat: /);
+
+    const legacy = await render(user.cookie);
+    await env.t.deps.db
+      .update(reportRuns)
+      .set({ reportLocale: null })
+      .where(eq(reportRuns.id, legacy));
+    expect((await prepare(user.cookie, legacy)).statusCode).toBe(200);
+    expect(lastLines[0]).toBe('ДОКУМЕНТ ПОДПИСАН ЭЛЕКТРОННОЙ ПОДПИСЬЮ');
   });
 });
 

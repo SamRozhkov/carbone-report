@@ -8,6 +8,7 @@ import {
   type PdfOptions,
   type RunSignature,
 } from '@carbone-reports/shared';
+import type { Locale } from '@carbone-reports/shared/i18n';
 import { and, eq } from 'drizzle-orm';
 import { reportRunFiles, reportRuns, type RunRow, type RunSignatureRow } from '../../db/schema';
 import type { AppDeps, TemplateFileRef } from '../../deps';
@@ -15,6 +16,7 @@ import { createBuildFlights } from '../../lib/build-flights';
 import type { Deadline } from '../../lib/deadline';
 import { AppError } from '../../lib/errors';
 import type { TemplatePdf } from '../pdf/finish';
+import { runLocale } from './report-locale';
 import { renderReport } from './service';
 
 /**
@@ -147,7 +149,8 @@ export async function writeSnapshot(
 
 /**
  * Рендер формата только из снимка: данные и шаблон читаются из каталога запуска до рендера
- * (нет файла — 410, а не «сервис генерации недоступен»).
+ * (нет файла — 410, а не «сервис генерации недоступен»). `locale` — язык запуска (§45.2), а не
+ * текущая настройка шаблона.
  */
 export async function renderFromSnapshot(
   deps: AppDeps,
@@ -155,6 +158,7 @@ export async function renderFromSnapshot(
   ext: TemplateExt,
   version: number,
   format: OutputFormat,
+  locale: Locale,
   deadline: Deadline,
   pdf?: TemplatePdf,
 ): Promise<Buffer> {
@@ -168,6 +172,7 @@ export async function renderFromSnapshot(
     snapshotTemplateRef(runId, ext, version, template),
     JSON.parse(data.toString('utf8')) as unknown,
     format,
+    locale,
     deadline,
     pdf,
   );
@@ -230,7 +235,15 @@ async function buildRunFile(
     // §37: незащищённый PDF при включённой защите не выдаётся никогда. Нет out.pdf у защищённого запуска —
     // заново не рендерим (без шифрования), а отвечаем 410. Снимок до 2.7.0 без pdf-options.json — прежнее поведение (R8).
     if (format === 'pdf') await assertNotProtected(deps, run.id, ext);
-    const file = await renderFromSnapshot(deps, run.id, ext, run.templateVersion, format, deadline);
+    const file = await renderFromSnapshot(
+      deps,
+      run.id,
+      ext,
+      run.templateVersion,
+      format,
+      runLocale(run),
+      deadline,
+    );
     const out = snapshotPaths(run.id, ext).out(format);
     await deps.storage.write(out, file);
     await tx.insert(reportRunFiles).values({ runId: run.id, format, filePath: out });

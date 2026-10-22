@@ -6,6 +6,7 @@ import deCommon from './de/common.json';
 import deEditor from './de/editor.json';
 import deErrors from './de/errors.json';
 import deHistory from './de/history.json';
+import deReport from './de/report.json';
 import deReports from './de/reports.json';
 import deSignature from './de/signature.json';
 import deTemplates from './de/templates.json';
@@ -15,6 +16,7 @@ import enCommon from './en/common.json';
 import enEditor from './en/editor.json';
 import enErrors from './en/errors.json';
 import enHistory from './en/history.json';
+import enReport from './en/report.json';
 import enReports from './en/reports.json';
 import enSignature from './en/signature.json';
 import enTemplates from './en/templates.json';
@@ -24,6 +26,7 @@ import esCommon from './es/common.json';
 import esEditor from './es/editor.json';
 import esErrors from './es/errors.json';
 import esHistory from './es/history.json';
+import esReport from './es/report.json';
 import esReports from './es/reports.json';
 import esSignature from './es/signature.json';
 import esTemplates from './es/templates.json';
@@ -33,6 +36,7 @@ import frCommon from './fr/common.json';
 import frEditor from './fr/editor.json';
 import frErrors from './fr/errors.json';
 import frHistory from './fr/history.json';
+import frReport from './fr/report.json';
 import frReports from './fr/reports.json';
 import frSignature from './fr/signature.json';
 import frTemplates from './fr/templates.json';
@@ -42,6 +46,7 @@ import ptBRCommon from './pt-BR/common.json';
 import ptBREditor from './pt-BR/editor.json';
 import ptBRErrors from './pt-BR/errors.json';
 import ptBRHistory from './pt-BR/history.json';
+import ptBRReport from './pt-BR/report.json';
 import ptBRReports from './pt-BR/reports.json';
 import ptBRSignature from './pt-BR/signature.json';
 import ptBRTemplates from './pt-BR/templates.json';
@@ -51,6 +56,7 @@ import ruCommon from './ru/common.json';
 import ruEditor from './ru/editor.json';
 import ruErrors from './ru/errors.json';
 import ruHistory from './ru/history.json';
+import ruReport from './ru/report.json';
 import ruReports from './ru/reports.json';
 import ruSignature from './ru/signature.json';
 import ruTemplates from './ru/templates.json';
@@ -60,6 +66,7 @@ import zhCNCommon from './zh-CN/common.json';
 import zhCNEditor from './zh-CN/editor.json';
 import zhCNErrors from './zh-CN/errors.json';
 import zhCNHistory from './zh-CN/history.json';
+import zhCNReport from './zh-CN/report.json';
 import zhCNReports from './zh-CN/reports.json';
 import zhCNSignature from './zh-CN/signature.json';
 import zhCNTemplates from './zh-CN/templates.json';
@@ -76,6 +83,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     editor: ruEditor,
     errors: ruErrors,
     validation: ruValidation,
+    report: ruReport,
   },
   en: {
     common: enCommon,
@@ -87,6 +95,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     editor: enEditor,
     errors: enErrors,
     validation: enValidation,
+    report: enReport,
   },
   es: {
     common: esCommon,
@@ -98,6 +107,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     editor: esEditor,
     errors: esErrors,
     validation: esValidation,
+    report: esReport,
   },
   'pt-BR': {
     common: ptBRCommon,
@@ -109,6 +119,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     editor: ptBREditor,
     errors: ptBRErrors,
     validation: ptBRValidation,
+    report: ptBRReport,
   },
   fr: {
     common: frCommon,
@@ -120,6 +131,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     editor: frEditor,
     errors: frErrors,
     validation: frValidation,
+    report: frReport,
   },
   de: {
     common: deCommon,
@@ -131,6 +143,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     editor: deEditor,
     errors: deErrors,
     validation: deValidation,
+    report: deReport,
   },
   'zh-CN': {
     common: zhCNCommon,
@@ -142,5 +155,6 @@ export const resources: Record<Locale, Record<string, object>> = {
     editor: zhCNEditor,
     errors: zhCNErrors,
     validation: zhCNValidation,
+    report: zhCNReport,
   },
 };

@@ -3,7 +3,7 @@
 //                                         (`packages/carbone`) так же, как API; стек не нужен;
 //         pnpm help:check -- --self-test — только сборка DOCX и разбор текста обратимы.
 import carbone from '@carbone-reports/carbone';
-import { CARBONE_LANG } from '@carbone-reports/shared';
+import { CARBONE_LANGS } from '@carbone-reports/shared/i18n';
 import JSZip from 'jszip';
 import { createTranslator } from '@carbone-reports/shared/i18n/server';
 import { communityError } from '../apps/api/src/modules/carbone/community';
@@ -237,7 +237,7 @@ async function liveCheck(examples: HelpExample[]): Promise<number> {
         await buildDocx(e.template, e.picture === true),
         'docx',
         JSON.parse(e.data) as unknown,
-        { lang: CARBONE_LANG, timezone },
+        { lang: CARBONE_LANGS.ru, timezone },
       );
       if (e.unavailable) {
         got = 'отчёт сформирован, а ожидалась ошибка «disabled in the Community Edition»';

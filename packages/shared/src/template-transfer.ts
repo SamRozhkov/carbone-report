@@ -18,6 +18,7 @@ import {
   TemplateQuery,
   hasPdfProtection,
 } from './index';
+import { zodReportLocale } from './i18n';
 
 // ---- Перенос шаблонов между средами (§33) ----
 
@@ -129,6 +130,8 @@ export const TransferTemplate = z
     pdfOptions: PdfOptions.optional(),
     /** В исходной среде был пароль PDF (§37.4); сам пароль не переносится. Без пароля ключа нет. */
     pdfPasswordSet: z.boolean().optional(),
+    /** Язык отчёта (§45.1); нет поля (выгрузки до 2.14.0) — при загрузке 'ru'. */
+    reportLocale: zodReportLocale.optional(),
     attachments: z.array(TransferAttachment).max(MAX_PDF_ATTACHMENTS).optional(),
     /** Путь файла шаблона в архиве. */
     file: z.string().min(1).max(200),

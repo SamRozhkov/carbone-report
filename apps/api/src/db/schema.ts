@@ -13,6 +13,7 @@ import type {
   TemplateChartConfig,
   TemplateExt,
 } from '@carbone-reports/shared';
+import type { Locale, ReportLocale } from '@carbone-reports/shared/i18n';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -189,6 +190,8 @@ export const templates = pgTable(
     pdfPasswordEnc: text('pdf_password_enc'),
     /** Владелец (§43.1): создатель шаблона; null — не назначен (шаблоны до 2.12.0). */
     ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Язык отчёта (§45.1): язык из LOCALES или 'user' — язык строящего. */
+    reportLocale: text('report_locale').$type<ReportLocale>().notNull().default('ru'),
   },
   (t) => [index('templates_owner_idx').on(t.ownerId)],
 );
@@ -328,6 +331,8 @@ export const reportRuns = pgTable('report_runs', {
   signaturePosition: text('signature_position').$type<PdfSignaturePosition>(),
   /** Способ подписи из того же снимка (§42.1); null — подписать нельзя. */
   signMethod: text('sign_method').$type<SignMethod>(),
+  /** Язык, на котором построен запуск (§45.2); null — запуск до 2.14.0, считается 'ru'. */
+  reportLocale: text('report_locale').$type<Locale>(),
   durationMs: integer('duration_ms').notNull(),
   createdAt: createdAt(),
 });

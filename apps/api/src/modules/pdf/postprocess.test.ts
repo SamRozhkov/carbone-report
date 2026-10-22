@@ -9,7 +9,7 @@ import {
   visualView,
   type PdfPostJob,
 } from './postprocess';
-import { makePdf, pageTexts } from './test-pdf';
+import { makePdf, pageTexts, pdfFontNames } from './test-pdf';
 
 const NOW = '2026-10-15T09:30:00.000Z';
 const job = (over: Partial<PdfPostJob> = {}): PdfPostJob => ({
@@ -93,6 +93,65 @@ describe('postprocessPdf', () => {
       job({ watermark: { text: '\n\t', opacity: 20, color: 'gray', angle: 'horizontal' } }),
     );
     expect((await pageTexts(b))[0]!.trim()).toBe('R1');
+  });
+
+  it('водяной знак и нумерация на кириллице — Noto Sans, без Noto Sans SC (§45.5)', async () => {
+    const out = await postprocessPdf(
+      await makePdf([{ label: 'R1' }]),
+      job({
+        watermark: { text: 'ЧЕРНОВИК 😀', opacity: 30, color: 'red', angle: 'diagonal' },
+        pageNumbers: numbers,
+      }),
+    );
+    expect((await pageTexts(out))[0]).toContain('ЧЕРНОВИК ?');
+    const fonts = await pdfFontNames(out);
+    expect(fonts).toHaveLength(1);
+    expect(fonts[0]).toMatch(/^NotoSans-Regular/);
+  });
+
+  it('водяной знак и нумерация с иероглифами — Noto Sans SC, вне шрифта — ?', async () => {
+    const out = await postprocessPdf(
+      await makePdf([{ label: 'R1' }, { label: 'R2' }]),
+      job({
+        watermark: { text: '机密 😀', opacity: 30, color: 'red', angle: 'diagonal' },
+        pageNumbers: { ...numbers, format: '第 {page} 页，共 {pages} 页' },
+      }),
+    );
+    const texts = await pageTexts(out);
+    texts.forEach((t, i) => {
+      expect(t).toContain('机密 ?');
+      expect(t).toContain(`第 ${i + 1} 页，共 2 页`);
+    });
+    const fonts = await pdfFontNames(out);
+    expect(fonts).toHaveLength(1);
+    expect(fonts[0]).toMatch(/^NotoSansSC-Regular/);
+  });
+
+  it('иероглифы только в нумерации: водяной знак — Noto Sans, нумерация — Noto Sans SC', async () => {
+    const out = await postprocessPdf(
+      await makePdf([{ label: 'R1' }]),
+      job({
+        watermark: { text: 'КОПИЯ', opacity: 20, color: 'gray', angle: 'horizontal' },
+        pageNumbers: { ...numbers, format: '第 {page} 页' },
+      }),
+    );
+    expect((await pageTexts(out))[0]).toContain('第 1 页');
+    const fonts = await pdfFontNames(out);
+    expect(fonts.map((f) => f.replace(/-\d+$/, ''))).toEqual([
+      'NotoSans-Regular',
+      'NotoSansSC-Regular',
+    ]);
+  });
+
+  it('метаданные: управляющие символы → пробел, иероглифы и эмодзи сохраняются', async () => {
+    const out = await postprocessPdf(
+      await makePdf([{ label: 'R1' }]),
+      job({ metadata: { title: '报告 😀\nX', author: '李伟', subject: '', keywords: '' } }),
+    );
+    const doc = await PDFDocument.load(out, { updateMetadata: false });
+    expect(doc.getTitle()).toBe('报告 😀 X');
+    expect(doc.getAuthor()).toBe('李伟');
+    expect(await pdfFontNames(out)).toEqual([]);
   });
 
   it('повёрнутые страницы и CropBox: текст на месте, без ошибок', async () => {

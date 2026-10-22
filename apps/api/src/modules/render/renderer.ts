@@ -110,6 +110,7 @@ export function createEmbeddedRenderer(opts: {
         outputtype: ro.convertTo === 'pdf' && ro.pdfa ? 'pdfa' : ro.convertTo,
         title: `report.${tpl.ext}`,
         url: `${selfUrl}/internal/render-files/${id}?t=${encodeURIComponent(token)}`,
+        region: ro.region,
         signal: AbortSignal.timeout(left),
       });
     } finally {

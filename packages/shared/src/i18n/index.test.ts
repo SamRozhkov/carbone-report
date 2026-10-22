@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { LOCALES, LOCALE_NAMES, Locale, NAMESPACES, isLocale, resolveLocale, zodLocale } from '.';
+import { PdfPageNumbers } from '../pdf-options';
+import {
+  CARBONE_LANGS,
+  LOCALES,
+  LOCALE_NAMES,
+  Locale,
+  NAMESPACES,
+  OFFICE_REGIONS,
+  PAGE_FORMATS,
+  REPORT_LOCALES,
+  isLocale,
+  localeTag,
+  resolveLocale,
+  zodLocale,
+  zodReportLocale,
+} from '.';
 import { createTranslator, resources } from './server';
 
 describe('LOCALES', () => {
@@ -94,5 +109,86 @@ describe('zodLocale', () => {
       }),
     );
     expect(texts.size).toBe(LOCALES.length);
+  });
+});
+
+describe('язык отчёта (§45)', () => {
+  it('таблицы покрывают все языки', () => {
+    expect(CARBONE_LANGS).toEqual({
+      ru: 'ru',
+      en: 'en-us',
+      es: 'es-es',
+      'pt-BR': 'pt-br',
+      fr: 'fr-fr',
+      de: 'de-de',
+      'zh-CN': 'zh-cn',
+    });
+    expect(OFFICE_REGIONS).toEqual({
+      ru: 'ru-RU',
+      en: 'en-US',
+      es: 'es-ES',
+      'pt-BR': 'pt-BR',
+      fr: 'fr-FR',
+      de: 'de-DE',
+      'zh-CN': 'zh-CN',
+    });
+    expect(LOCALES.map(localeTag)).toEqual([
+      'ru-RU',
+      'en-US',
+      'es-ES',
+      'pt-BR',
+      'fr-FR',
+      'de-DE',
+      'zh-CN',
+    ]);
+    for (const l of LOCALES) expect(() => new Intl.DateTimeFormat(localeTag(l))).not.toThrow();
+  });
+
+  it('zodReportLocale: семь языков и user', () => {
+    expect(REPORT_LOCALES).toEqual([...LOCALES, 'user']);
+    for (const l of REPORT_LOCALES) expect(zodReportLocale.safeParse(l).success).toBe(true);
+    expect(zodReportLocale.safeParse('pt-PT').success).toBe(false);
+    expect(zodReportLocale.safeParse('').success).toBe(false);
+  });
+
+  it('PAGE_FORMATS: ru — прежний формат, все проходят PdfPageNumbers', () => {
+    expect(PAGE_FORMATS.ru).toBe('Стр. {page} из {pages}');
+    expect(PAGE_FORMATS.en).toBe('Page {page} of {pages}');
+    expect(Object.keys(PAGE_FORMATS).sort()).toEqual([...LOCALES].sort());
+    for (const l of LOCALES) {
+      expect(PAGE_FORMATS[l]).toContain('{page}');
+      expect(PAGE_FORMATS[l]).toContain('{pages}');
+      expect(PdfPageNumbers.safeParse({ format: PAGE_FORMATS[l] }).success).toBe(true);
+    }
+  });
+
+  it('штамп ru — дословно прежние строки', () => {
+    const t = createTranslator('ru');
+    expect(t('report:stamp.title')).toBe('ДОКУМЕНТ ПОДПИСАН ЭЛЕКТРОННОЙ ПОДПИСЬЮ');
+    expect(t('report:stamp.certificate', { serial: '01AB' })).toBe('Сертификат: 01AB');
+    expect(t('report:stamp.owner', { owner: 'Иванов' })).toBe('Владелец: Иванов');
+    expect(t('report:stamp.valid', { from: '01.01.2026', to: '31.12.2026' })).toBe(
+      'Действителен: с 01.01.2026 по 31.12.2026',
+    );
+    expect(t('report:stamp.signed', { date: '22.10.2026', time: '10:05' })).toBe(
+      'Подписан: 22.10.2026 10:05',
+    );
+  });
+
+  it('штамп на всех языках: свой текст, параметры подставлены', () => {
+    const titles = new Set(LOCALES.map((l) => createTranslator(l)('report:stamp.title')));
+    expect(titles.size).toBe(LOCALES.length);
+    for (const l of LOCALES) {
+      const t = createTranslator(l);
+      expect(t('report:stamp.certificate', { serial: 'S1' })).toContain('S1');
+      expect(t('report:stamp.owner', { owner: 'O1' })).toContain('O1');
+      const valid = t('report:stamp.valid', { from: 'F1', to: 'T1' });
+      expect(valid).toContain('F1');
+      expect(valid).toContain('T1');
+      expect(t('report:stamp.signed', { date: 'D1', time: 'H1' })).toMatch(/D1.*H1/);
+    }
+    expect(createTranslator('en')('report:stamp.title')).toBe(
+      createTranslator('en')('report:stamp.title').toUpperCase(),
+    );
   });
 });

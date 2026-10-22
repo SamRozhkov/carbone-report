@@ -21,6 +21,7 @@ import type { GostHashAlg } from '../pdf/sign/gost/cades';
 import { gostPublicKeyFromSpki } from '../pdf/sign/gost/gost3410';
 import { certInfo } from '../pdf/sign/p12';
 import { stampLines } from '../pdf/sign/sign-pdf';
+import { runLocale } from '../reports/report-locale';
 import {
   gostDraftPath,
   readSnapshotFile,
@@ -161,7 +162,8 @@ export function registerGostSignRoutes(app: App, deps: AppDeps, guards: Guards):
             pdf,
             {
               position: run.signaturePosition,
-              lines: stampLines(info, now, config.tz),
+              // Язык запуска, а не текущая настройка шаблона (§45.2).
+              lines: stampLines(info, now, config.tz, runLocale(run)),
               hashAlg,
             },
             Date.now() + deadline.remaining(),

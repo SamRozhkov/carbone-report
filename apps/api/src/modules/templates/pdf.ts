@@ -22,7 +22,7 @@ function textIssue(path: string, value: string, tags: 'allowed' | 'none'): Chart
 export function pdfOptionIssues(o: PdfOptions): ChartIssue[] {
   const issues = [
     o.watermark && textIssue('/watermark/text', o.watermark.text, 'allowed'),
-    o.pageNumbers && textIssue('/pageNumbers/format', o.pageNumbers.format, 'none'),
+    o.pageNumbers?.format && textIssue('/pageNumbers/format', o.pageNumbers.format, 'none'),
     ...(['title', 'author', 'subject', 'keywords'] as const).map(
       (k) => o.metadata && textIssue(`/metadata/${k}`, o.metadata[k], 'allowed'),
     ),

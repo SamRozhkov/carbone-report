@@ -1,5 +1,5 @@
 import type { TemplateExt } from '@carbone-reports/shared';
-import type { Locale } from '@carbone-reports/shared/i18n';
+import { OFFICE_REGIONS, type Locale } from '@carbone-reports/shared/i18n';
 import type { TemplateRow } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import type { SessionUser } from '../auth/session';
@@ -11,17 +11,6 @@ const DOCUMENT_TYPE: Record<TemplateExt, 'word' | 'cell' | 'slide'> = {
   xlsx: 'cell',
   ods: 'cell',
   pptx: 'slide',
-};
-
-/** Регион редактора (форматы чисел и дат) по языку интерфейса (§44.3). */
-const REGION: Record<Locale, string> = {
-  ru: 'ru-RU',
-  en: 'en-US',
-  es: 'es-ES',
-  'pt-BR': 'pt-BR',
-  fr: 'fr-FR',
-  de: 'de-DE',
-  'zh-CN': 'zh-CN',
 };
 
 export async function buildEditorConfig(
@@ -48,7 +37,8 @@ export async function buildEditorConfig(
       callbackUrl: `${base}/internal/onlyoffice/callback/${row.id}`,
       user: { id: user.id, name: user.login },
       lang: locale,
-      region: REGION[locale],
+      // Регион редактора (форматы чисел и дат) — по языку интерфейса (§44.3).
+      region: OFFICE_REGIONS[locale],
       // Быстрый режим без переключателя: правки сразу уходят на Document Server, и forcesave по кнопке
       // «Сохранить» их видит. В строгом режиме (браузер запоминает выбор) forcesave отвечает «изменений нет».
       coEditing: { mode: 'fast', change: false },

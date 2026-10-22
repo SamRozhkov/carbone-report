@@ -16,7 +16,15 @@ import {
   type PDFFont,
   type PDFPage,
 } from 'pdf-lib';
-import { pdfFontBytes, sanitizePdfText } from './font';
+import {
+  cleanPdfMeta,
+  cleanPdfText,
+  pdfBoldFontBytes,
+  pdfCjkFontBytes,
+  pdfFontBytes,
+  pickPdfFont,
+  sanitizePdfText,
+} from './font';
 
 export const PDF_PRODUCER = 'carbone-reports';
 
@@ -130,6 +138,25 @@ function drawPageNumber(page: PDFPage, font: PDFFont, text: string, position: Pd
   });
 }
 
+/** Шрифты документа: каждый встраивается подмножеством при первой строке, которой он нужен (§45.5). */
+export function pdfFonts(doc: PDFDocument) {
+  doc.registerFontkit(fontkit);
+  const embedded = new Map<() => Buffer, Promise<PDFFont>>();
+  const get = (bytes: () => Buffer) => () => {
+    let font = embedded.get(bytes);
+    if (!font) embedded.set(bytes, (font = doc.embedFont(bytes(), { subset: true })));
+    return font;
+  };
+  return { regular: get(pdfFontBytes), bold: get(pdfBoldFontBytes), cjk: get(pdfCjkFontBytes) };
+}
+
+/** Строка постобработки: шрифт по её символам, символы вне шрифта — «?» (R2). */
+async function pdfLine(fonts: ReturnType<typeof pdfFonts>, raw: string) {
+  const kind = pickPdfFont(raw);
+  const font = await (kind === 'cjk' ? fonts.cjk() : fonts.regular());
+  return { font, text: sanitizePdfText(raw, kind) };
+}
+
 /** Словарь Info трейлера (getInfoDict в pdf-lib приватный). */
 export function infoDict(doc: PDFDocument): PDFDict | undefined {
   return doc.context.lookupMaybe(doc.context.trailerInfo.Info, PDFDict);
@@ -138,10 +165,12 @@ export function infoDict(doc: PDFDocument): PDFDict | undefined {
 function writeInfo(doc: PDFDocument, job: PdfPostJob): void {
   const m = job.metadata;
   if (m) {
-    if (m.title) doc.setTitle(sanitizePdfText(m.title));
-    if (m.author) doc.setAuthor(sanitizePdfText(m.author));
-    if (m.subject) doc.setSubject(sanitizePdfText(m.subject));
-    if (m.keywords) doc.setKeywords([sanitizePdfText(m.keywords)]);
+    // Строки Info, а не текст страницы: глифы не нужны, только без управляющих символов
+    // и символов, недопустимых в XML (XMP).
+    if (m.title) doc.setTitle(cleanPdfMeta(m.title));
+    if (m.author) doc.setAuthor(cleanPdfMeta(m.author));
+    if (m.subject) doc.setSubject(cleanPdfMeta(m.subject));
+    if (m.keywords) doc.setKeywords([cleanPdfMeta(m.keywords)]);
   }
   // Пустое значение в Info без пары в XMP нарушает эквивалентность Info/XMP (PDF/A-2, 6.6.2.3.1).
   const info = infoDict(doc);
@@ -226,21 +255,24 @@ export async function postprocessPdf(pdf: Uint8Array, job: PdfPostJob): Promise<
       else doc.addPage(p);
     }
   }
-  const watermark = job.watermark ? sanitizePdfText(job.watermark.text).trim() : '';
+  const watermark = job.watermark ? cleanPdfText(job.watermark.text).trim() : '';
   if (watermark || job.pageNumbers) {
-    doc.registerFontkit(fontkit);
-    const font = await doc.embedFont(pdfFontBytes(), { subset: true });
+    const fonts = pdfFonts(doc);
     const pages = doc.getPages();
-    if (watermark) for (const p of pages) drawWatermark(p, font, watermark, job.watermark!);
+    if (watermark) {
+      const { font, text } = await pdfLine(fonts, watermark);
+      for (const p of pages) drawWatermark(p, font, text, job.watermark!);
+    }
     const pn = job.pageNumbers;
     if (pn) {
-      pages.forEach((p, i) => {
-        if (pn.skipFirst && i === 0) return;
-        const text = sanitizePdfText(
+      for (const [i, p] of pages.entries()) {
+        if (pn.skipFirst && i === 0) continue;
+        const { font, text } = await pdfLine(
+          fonts,
           pn.format.replaceAll('{page}', String(i + 1)).replaceAll('{pages}', String(pages.length)),
         );
         drawPageNumber(p, font, text, pn.position);
-      });
+      }
     }
   }
   writeInfo(doc, job);

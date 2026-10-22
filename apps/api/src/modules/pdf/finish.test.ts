@@ -37,7 +37,7 @@ describe('needsPostprocess', () => {
 describe('buildPdfJob', () => {
   const data = { number: 42, params: { status: 'ЧЕРНОВИК' }, emoji: '😀', nl: 'а\nб' };
 
-  it('теги подставлены и очищены; пустой title — имя шаблона', () => {
+  it('теги подставлены, управляющие символы → пробел; пустой title — имя шаблона', () => {
     const job = buildPdfJob(
       tp({
         pdfa: true,
@@ -48,10 +48,12 @@ describe('buildPdfJob', () => {
       data,
       NOW,
       [],
+      'ru',
     );
     expect(job).toEqual({
       pdfa: true,
-      watermark: { text: 'ЧЕРНОВИК ?', opacity: 20, color: 'gray', angle: 'diagonal' },
+      // Символы вне шрифта заменяет постобработка по шрифту строки (§45.5).
+      watermark: { text: 'ЧЕРНОВИК 😀', opacity: 20, color: 'gray', angle: 'diagonal' },
       pageNumbers: { format: 'Стр. {page} из {pages}', position: 'bottom-center', skipFirst: true },
       metadata: { title: 'Счёт', author: 'Отдел а б', subject: '', keywords: '' },
       attachments: [],
@@ -59,15 +61,59 @@ describe('buildPdfJob', () => {
     });
   });
 
+  it('заданный формат нумерации не меняется; не задан — умолчание ru (§45.4)', () => {
+    const own = buildPdfJob(tp({ pageNumbers: { format: 'Page {page}' } }), {}, NOW, [], 'ru');
+    expect(own.pageNumbers?.format).toBe('Page {page}');
+    const def = buildPdfJob(tp({ pageNumbers: {} }), {}, NOW, [], 'ru');
+    expect(def.pageNumbers?.format).toBe('Стр. {page} из {pages}');
+  });
+
+  it('формат не задан — формат языка отчёта; заданный не зависит от языка (§45.4)', () => {
+    const job = (l: 'de' | 'en' | 'zh-CN', format?: string) =>
+      buildPdfJob(tp({ pageNumbers: format ? { format } : {} }), {}, NOW, [], l).pageNumbers
+        ?.format;
+    expect(job('de')).toBe('Seite {page} von {pages}');
+    expect(job('en')).toBe('Page {page} of {pages}');
+    expect(job('zh-CN')).toBe('第 {page} 页，共 {pages} 页');
+    expect(job('de', 'Стр. {page}')).toBe('Стр. {page}');
+  });
+
+  it('finishPdf передаёт язык отчёта в задачу постобработки', async () => {
+    const pdf = vi.fn(async (_b: Buffer, _j: unknown, _t: number) => Buffer.from('POST'));
+    await finishPdf(
+      { storage: { read: vi.fn() } as never, pdf, pdfProtect: vi.fn() },
+      Buffer.from('%PDF'),
+      tp({ pageNumbers: {} }),
+      {},
+      () => 1000,
+      'de',
+    );
+    expect((pdf.mock.calls[0]![1] as { pageNumbers: { format: string } }).pageNumbers.format).toBe(
+      'Seite {page} von {pages}',
+    );
+  });
+
+  it('иероглифы не заменяются на «?» до выбора шрифта', () => {
+    const job = buildPdfJob(
+      tp({ watermark: { text: '机密 {d.name}' }, metadata: { title: '报告 {d.name}' } }),
+      { name: '李伟' },
+      NOW,
+      [],
+      'ru',
+    );
+    expect(job.watermark?.text).toBe('机密 李伟');
+    expect(job.metadata?.title).toBe('报告 李伟');
+  });
+
   it('пустой после подстановки водяной знак не ставится', () => {
     expect(
-      buildPdfJob(tp({ watermark: { text: '{d.params.none}' } }), data, NOW, []).watermark,
+      buildPdfJob(tp({ watermark: { text: '{d.params.none}' } }), data, NOW, [], 'ru').watermark,
     ).toBeNull();
   });
 
   it('приложения — в порядке шаблона, файлы по индексу', () => {
     const files = [new Uint8Array([1]), new Uint8Array([2])];
-    const job = buildPdfJob(tp({}, [att('a', 'start'), att('b', 'end')]), data, NOW, files);
+    const job = buildPdfJob(tp({}, [att('a', 'start'), att('b', 'end')]), data, NOW, files, 'ru');
     expect(job.attachments).toEqual([
       { placement: 'start', data: files[0] },
       { placement: 'end', data: files[1] },
@@ -92,6 +138,7 @@ describe('finishPdf', () => {
       tp({ pdfa: true }),
       {},
       () => 1000,
+      'ru',
     );
     expect(out).toBe(input);
     expect(pdf).not.toHaveBeenCalled();
@@ -104,6 +151,7 @@ describe('finishPdf', () => {
       tp({}, [att('Условия.pdf', 'end')]),
       {},
       () => 1000,
+      'ru',
     ).catch((e: unknown) => e);
     expect(err).toMatchObject({
       code: 'STORAGE_ERROR',
@@ -120,6 +168,7 @@ describe('finishPdf', () => {
       tp({ pageNumbers: {} }),
       {},
       () => 1000,
+      'ru',
     ).catch((e: unknown) => e);
     expect(err).toMatchObject({ status: 400, message: 'итоговый PDF больше 100 МБ' });
   });
@@ -173,6 +222,7 @@ describe('finishPdf — шифрование', () => {
       tp({}, [], job),
       {},
       () => 1000,
+      'ru',
     );
     expect(out.toString()).toBe('ENC');
     expect(pdf).not.toHaveBeenCalled();
@@ -189,6 +239,7 @@ describe('finishPdf — шифрование', () => {
       tp({ pageNumbers: {} }, [], job),
       {},
       left,
+      'ru',
     );
     expect(pdf.mock.calls[0]![2]).toBe(1000);
     expect(pdfProtect.mock.calls[0]![2]).toBe(400);
@@ -203,6 +254,7 @@ describe('finishPdf — шифрование', () => {
       tp({ pageNumbers: {} }, [], job),
       {},
       () => 1000,
+      'ru',
     );
     expect(out.toString()).toBe('POST+ENC');
   });
@@ -215,6 +267,7 @@ describe('finishPdf — шифрование', () => {
       tp({ pageNumbers: {} }),
       {},
       () => 1000,
+      'ru',
     );
     expect(pdfProtect).not.toHaveBeenCalled();
   });
@@ -227,6 +280,7 @@ describe('finishPdf — шифрование', () => {
       tp({}, [], job),
       {},
       () => 1000,
+      'ru',
     ).catch((e: unknown) => e);
     expect(err).toMatchObject({ status: 400, message: 'итоговый PDF больше 100 МБ' });
   });

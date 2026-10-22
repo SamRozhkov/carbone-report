@@ -389,6 +389,7 @@ const ro = (convertTo: string) =>
   ({
     convertTo,
     lang: 'ru',
+    region: 'ru-RU',
     timezone: 'Europe/Moscow',
     timeoutMs: CONVERT_TIMEOUT - 5_000,
   }) as never;
@@ -549,6 +550,7 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
           filetype: 'docx',
           outputtype: 'pdf',
           title: 'warmup.docx',
+          region: 'ru-RU',
           url: `http://host.testcontainers.internal:${port}/internal/render-files/${id}?t=${encodeURIComponent(token)}`,
           signal: AbortSignal.timeout(30_000),
         });
@@ -615,6 +617,7 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
         filetype: 'docx',
         outputtype: 'odt',
         title: 'template.docx',
+        region: 'ru-RU',
         url: `http://host.testcontainers.internal:${port}/internal/render-files/${id}?t=${encodeURIComponent(token)}`,
         signal: AbortSignal.timeout(CONVERT_TIMEOUT - 5_000),
       });
@@ -890,6 +893,7 @@ describe.skipIf(!enabled)('встроенный рендер + настоящи�
           position: 'bottom-right',
           now: new Date(),
           timeZone: 'Europe/Moscow',
+          locale: 'ru',
           deadline: Date.now() + 60_000,
           prepare: inProcessSignPreparer,
         });

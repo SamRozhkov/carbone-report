@@ -104,6 +104,15 @@ describe('TransferManifest', () => {
     expect(TransferManifest.safeParse(manifest([tpl(), second])).success).toBe(true);
   });
 
+  it('язык отчёта (§45.1): необязателен, языки и user; неизвестный — ошибка', () => {
+    expect(TransferManifest.safeParse(manifest([tpl()])).success).toBe(true);
+    for (const reportLocale of ['de', 'zh-CN', 'user'] as const)
+      expect(TransferManifest.safeParse(manifest([tpl({ reportLocale })])).success).toBe(true);
+    expect(
+      TransferManifest.safeParse(manifest([tpl({ reportLocale: 'xx' as never })])).success,
+    ).toBe(false);
+  });
+
   it('формат вывода должен подходить расширению', () => {
     expect(TransferManifest.safeParse(manifest([tpl({ defaultOutput: 'ods' })])).success).toBe(
       false,

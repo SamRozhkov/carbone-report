@@ -10,7 +10,7 @@ import type {
   TransferParam,
   TransferTemplate,
 } from '@carbone-reports/shared/template-transfer';
-import { normalizePdfOptions, type TemplateParam } from '@carbone-reports/shared';
+import { normalizePdfOptions, type PdfOptions, type TemplateParam } from '@carbone-reports/shared';
 import { and, asc, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import {
   categories,
@@ -26,7 +26,7 @@ import {
   users,
 } from '../../../db/schema';
 import type { AppDeps } from '../../../deps';
-import type { Locale } from '@carbone-reports/shared/i18n';
+import { PAGE_FORMATS, type Locale } from '@carbone-reports/shared/i18n';
 import { AppError, badRequest, conflict, forbidden, translateMsg } from '../../../lib/errors';
 import type { SessionUser } from '../../auth/session';
 import { editableTemplates, NO_EDIT_RIGHT } from '../../access/permissions';
@@ -46,6 +46,17 @@ export type ImportDeps = Pick<AppDeps, 'db' | 'storage'>;
 type Log = { warn: (obj: object, msg: string) => void };
 
 const toTemplateParam = ({ sortOrder: _, ...p }: TransferParam): TemplateParam => p;
+
+/**
+ * Настройки PDF из выгрузки. Выгрузки до 2.14.0 (без языка отчёта) записывали прежний формат
+ * нумерации явно — он удаляется, как миграцией 0017, чтобы формат брался по языку отчёта (§45.4).
+ */
+function legacyPageFormat(t: TransferTemplate): PdfOptions {
+  const po = normalizePdfOptions(t.pdfOptions ?? { pdfa: false });
+  if (t.reportLocale !== undefined || po.pageNumbers?.format !== PAGE_FORMATS.ru) return po;
+  const { format: _, ...pageNumbers } = po.pageNumbers;
+  return { ...po, pageNumbers };
+}
 
 /**
  * Те же проверки параметров, что у `PUT /api/templates/:id/params`: граф ссылок и значения по
@@ -441,7 +452,9 @@ export async function applyImport(
           public: t.public,
           categoryId:
             t.category === null ? null : (categoryIds.get(t.category.toLowerCase()) ?? null),
-          pdfOptions: normalizePdfOptions(t.pdfOptions ?? { pdfa: false }),
+          pdfOptions: legacyPageFormat(t),
+          // Выгрузки до 2.14.0 без поля строились по-русски (§45.1).
+          reportLocale: t.reportLocale ?? 'ru',
           docKey: randomUUID(),
           updatedAt: new Date(),
           updatedBy: actor.id,

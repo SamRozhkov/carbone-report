@@ -10,6 +10,8 @@ export interface ConvertRequest {
   outputtype: OutputFormat | 'pdfa';
   title: string;
   url: string;
+  /** Регион форматов чисел и дат — по языку отчёта (OFFICE_REGIONS, §45.3). */
+  region: string;
   signal: AbortSignal;
 }
 
@@ -46,7 +48,7 @@ export function createOnlyOfficeConverter(opts: {
       key: randomUUID().replaceAll('-', ''),
       title: req.title,
       url: req.url,
-      region: 'ru-RU',
+      region: req.region,
     };
     // Повторный запрос с тем же ключом и телом продолжает ту же задачу конвертации.
     const payload = JSON.stringify({ ...body, token: await signOnlyOffice(body, opts.secret) });

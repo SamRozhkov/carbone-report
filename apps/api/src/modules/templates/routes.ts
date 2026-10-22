@@ -27,6 +27,7 @@ import {
   type ImportResult,
   MAX_TRANSFER_ARCHIVE_BYTES,
 } from '@carbone-reports/shared/template-transfer';
+import type { ReportLocale } from '@carbone-reports/shared/i18n';
 import { and, asc, eq, getTableColumns } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { FastifyRequest } from 'fastify';
@@ -182,6 +183,8 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       public?: boolean;
       /** Скопировать группы доступа (template_groups) этого шаблона. */
       copyGroupsFrom?: string;
+      /** Язык отчёта (§45.1): у копии — исходного шаблона; по умолчанию — DEFAULT_LOCALE. */
+      reportLocale?: ReportLocale;
     },
   ) {
     await ensureDatasource(v.datasourceId);
@@ -209,6 +212,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
             ownerId: v.userId,
             categoryId: extra?.categoryId ?? null,
             public: extra?.public ?? false,
+            reportLocale: extra?.reportLocale ?? deps.config.defaultLocale,
             ...(extra?.pdfOptions ? { pdfOptions: extra.pdfOptions } : {}),
             ...(extra?.pdfPasswordEnc ? { pdfPasswordEnc: extra.pdfPasswordEnc } : {}),
             ...(extra?.defaultOutput ? { defaultOutput: extra.defaultOutput } : {}),
@@ -572,6 +576,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           categoryId: src.row.categoryId,
           public: src.row.public,
           copyGroupsFrom: src.row.id,
+          reportLocale: src.row.reportLocale,
         },
       );
       return reply.status(201).send(toSummary(row, src.category));

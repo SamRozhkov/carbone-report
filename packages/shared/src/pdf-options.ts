@@ -10,7 +10,6 @@ export const MAX_PDF_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 /** Страниц во всех приложенных файлах шаблона. */
 export const MAX_PDF_ATTACHMENT_PAGES = 500;
 export const MAX_PDF_RESULT_BYTES = 100 * 1024 * 1024;
-export const PDF_PAGE_FORMAT_DEFAULT = 'Стр. {page} из {pages}';
 
 export const PdfColor = z.enum(['gray', 'red', 'blue']);
 export type PdfColor = z.infer<typeof PdfColor>;
@@ -31,6 +30,7 @@ export type PdfWatermark = z.infer<typeof PdfWatermark>;
 export const PdfPosition = z.enum(['bottom-center', 'bottom-right', 'top-right']);
 export type PdfPosition = z.infer<typeof PdfPosition>;
 
+/** Формат не задан — формат языка отчёта из PAGE_FORMATS (§45.4). */
 export const PdfPageNumbers = z.strictObject({
   format: z
     .string()
@@ -38,7 +38,7 @@ export const PdfPageNumbers = z.strictObject({
     .min(1)
     .max(100)
     .refine((s) => s.includes('{page}'), 'v:pdf.pageTagRequired')
-    .default(PDF_PAGE_FORMAT_DEFAULT),
+    .optional(),
   position: PdfPosition.default('bottom-center'),
   skipFirst: z.boolean().default(false),
 });

@@ -310,6 +310,7 @@ async function runExport(
           .map((c): TransferChart => ({ key: c.key, sortOrder: c.sortOrder, config: c.config })),
         pdfOptions: PdfOptions.parse(row.pdfOptions),
         ...(row.pdfPasswordEnc !== null ? { pdfPasswordSet: true } : {}),
+        reportLocale: row.reportLocale,
         attachments: ordered.map((a) => ({
           name: a.name,
           placement: a.placement,

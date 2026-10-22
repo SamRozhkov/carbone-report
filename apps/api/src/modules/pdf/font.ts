@@ -143,9 +143,10 @@ export function sanitizePdfText(s: string, font: PdfFontKind = 'base'): string {
   return out;
 }
 
-/** Символы вне шрифта — для ошибки у поля при сохранении. */
+/** Символы, которых нет ни в Noto Sans, ни в Noto Sans SC, — для ошибки у поля при сохранении (§36.2, §45.5). */
 export function unsupportedChars(s: string): string[] {
   const bad = new Set<string>();
-  for (const ch of cleanPdfText(s)) if (ch !== ' ' && !hasGlyph(ch)) bad.add(ch);
+  for (const ch of cleanPdfText(s))
+    if (ch !== ' ' && !hasGlyph(ch) && !hasGlyph(ch, 'cjk')) bad.add(ch);
   return [...bad];
 }

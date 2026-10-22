@@ -20,8 +20,9 @@ describe('шрифт PDF (Noto Sans Regular)', () => {
   it('sanitizePdfText: управляющие → пробел, вне шрифта → ?', () => {
     expect(sanitizePdfText('ЧЕРНОВИК\n😀 中\tX')).toBe('ЧЕРНОВИК ? ? X');
   });
-  it('unsupportedChars — без повторов, управляющие не считаются', () => {
-    expect(unsupportedChars('a😀b😀\n中')).toEqual(['😀', '中']);
+  it('unsupportedChars — без повторов, управляющие не считаются; иероглифы есть в SC', () => {
+    expect(unsupportedChars('a😀b😀\n中🙂')).toEqual(['😀', '🙂']);
+    expect(unsupportedChars('第{page}页，共{pages}页 机密')).toEqual([]);
     expect(unsupportedChars('Счёт № 1')).toEqual([]);
   });
 });

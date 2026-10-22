@@ -103,6 +103,24 @@ describe('настройки PDF (§36.1)', () => {
     expect((await putOptions(id, {}, user)).statusCode).toBe(403);
   });
 
+  it('водяной знак и формат нумерации на китайском сохраняются (§45.5)', async () => {
+    const id = await newTemplate();
+    const r = await putOptions(id, {
+      watermark: { text: '机密' },
+      pageNumbers: { format: '第{page}页，共{pages}页' },
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().pdfOptions).toMatchObject({
+      watermark: { text: '机密' },
+      pageNumbers: { format: '第{page}页，共{pages}页' },
+    });
+    const bad = await putOptions(id, { watermark: { text: '机密 😀' } });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error.details).toEqual([
+      { path: '/watermark/text', message: 'символ «😀» не поддерживается шрифтом PDF' },
+    ]);
+  });
+
   it('ошибки у полей', async () => {
     const id = await newTemplate();
     const r = await putOptions(id, {

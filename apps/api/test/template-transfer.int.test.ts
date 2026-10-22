@@ -985,4 +985,56 @@ describe('перенос шаблонов между средами', () => {
     expect(r.statusCode).toBe(400);
     expect(r.json().error.code).toBe('IMPORT_INVALID');
   });
+
+  it('язык отчёта: переносится; без поля (до 2.14.0) — ru; неизвестный — 400 (§45.1)', async () => {
+    const name = `LOCALE ${randomUUID().slice(0, 6)}`;
+    const srcId = await createTemplate(a, adminA, dsA);
+    const set = await a.app.inject({
+      method: 'PATCH',
+      url: `/api/templates/${srcId}`,
+      headers: { cookie: adminA },
+      payload: { name, reportLocale: 'de' },
+    });
+    expect(set.statusCode).toBe(200);
+    const z = await exportZip(a, adminA, [srcId]);
+    const t0 = ((await manifestOf(z)).templates as Record<string, unknown>[])[0]!;
+    expect(t0.reportLocale).toBe('de');
+    const localeOf = async (id: string) =>
+      (await b.deps.db.select().from(templates).where(eq(templates.id, id)))[0]!.reportLocale;
+
+    const created = await apply(b, adminB, z, [{ index: 0, action: 'create', datasourceId: dsB }]);
+    expect(created.statusCode).toBe(200);
+    const newId = (created.json() as ImportResult).templates[0]!.id!;
+    expect(await localeOf(newId)).toBe('de');
+
+    // Выгрузка до 2.14.0: поля нет — создание и обновление дают ru.
+    const old = await JSZip.loadAsync(z);
+    const om = JSON.parse(await old.file('manifest.json')!.async('string'));
+    delete om.templates[0].reportLocale;
+    old.file('manifest.json', JSON.stringify(om));
+    const oldZip = await old.generateAsync({ type: 'nodebuffer' });
+    const copy = await apply(b, adminB, oldZip, [{ index: 0, action: 'copy', datasourceId: dsB }]);
+    expect(copy.statusCode).toBe(200);
+    expect(await localeOf((copy.json() as ImportResult).templates[0]!.id!)).toBe('ru');
+    const updated = await apply(b, adminB, oldZip, [
+      {
+        index: 0,
+        action: 'update',
+        targetId: newId,
+        targetUpdatedAt: await stamp(oldZip, newId),
+        datasourceId: dsB,
+      },
+    ]);
+    expect(updated.statusCode).toBe(200);
+    expect(await localeOf(newId)).toBe('ru');
+
+    const bad = await JSZip.loadAsync(z);
+    const bm = JSON.parse(await bad.file('manifest.json')!.async('string'));
+    bm.templates[0].reportLocale = 'xx';
+    bad.file('manifest.json', JSON.stringify(bm));
+    const badZip = await bad.generateAsync({ type: 'nodebuffer' });
+    const r = await apply(b, adminB, badZip, [{ index: 0, action: 'copy', datasourceId: dsB }]);
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error.code).toBe('IMPORT_INVALID');
+  });
 });

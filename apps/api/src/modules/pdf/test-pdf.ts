@@ -1,5 +1,5 @@
 // Только для тестов: PDF с подписанными страницами и текст страниц (unpdf, pdf.js).
-import { degrees, PDFDict, PDFDocument, PDFName, StandardFonts } from 'pdf-lib';
+import { degrees, drawObject, PDFDict, PDFDocument, PDFName, PDFRef, StandardFonts } from 'pdf-lib';
 import { extractText, getDocumentProxy } from 'unpdf';
 
 export interface TestPage {
@@ -42,4 +42,22 @@ export async function pdfFontNames(pdf: Uint8Array): Promise<string[]> {
     )
     .map((d) => d.lookup(PDFName.of('FontName'), PDFName).decodeText())
     .sort();
+}
+
+/**
+ * Текст штампа подписи (§39.5): pdf.js не извлекает текст виджета — внешний вид (/AP /N) виджета
+ * подписи на последней странице выводится на страницу, и берётся текст этой страницы.
+ */
+export async function stampTextOf(pdf: Uint8Array): Promise<string> {
+  const doc = await PDFDocument.load(pdf);
+  const page = doc.getPages().at(-1)!;
+  const widget = page.node
+    .Annots()!
+    .asArray()
+    .map((r) => doc.context.lookup(r, PDFDict))
+    .find((d) => d.get(PDFName.of('FT')) === PDFName.of('Sig'))!;
+  const ap = widget.lookup(PDFName.of('AP'), PDFDict).get(PDFName.of('N')) as PDFRef;
+  page.node.setXObject(PDFName.of('StampTest'), ap);
+  page.pushOperators(drawObject('StampTest'));
+  return (await pageTexts(await doc.save())).at(-1)!;
 }

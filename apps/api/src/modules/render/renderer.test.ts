@@ -21,7 +21,7 @@ const tpl = (
   read,
 });
 const opts = (convertTo: string, timeoutMs = 5000) =>
-  ({ convertTo, lang: 'ru', timezone: 'Europe/Moscow', timeoutMs }) as never;
+  ({ convertTo, lang: 'ru', region: 'ru-RU', timezone: 'Europe/Moscow', timeoutMs }) as never;
 
 function setup(
   run: (job: RenderJob) => Promise<Buffer | RenderResult>,
@@ -65,6 +65,20 @@ describe('createEmbeddedRenderer', () => {
     const r = convert.mock.calls[0]![0] as { url: string; filetype: string; outputtype: string };
     expect(r.url).toMatch(/^http:\/\/10\.0\.0\.5:3000\/internal\/render-files\/[0-9a-f]{32}\?t=/);
     expect(r).toMatchObject({ filetype: 'docx', outputtype: 'pdf' });
+  });
+
+  it('язык отчёта: lang — в задание потока, region — в запрос конвертации (§45.3)', async () => {
+    const run = vi.fn(async (job: RenderJob) => {
+      void job;
+      return Buffer.from('OUT');
+    });
+    const { renderer, convert } = setup(run);
+    const de = { ...(opts('pdf') as object), lang: 'de-de', region: 'de-DE' } as never;
+    await renderer.render(tpl(), {}, de);
+    expect(run.mock.calls[0]![0]).toMatchObject({ options: { lang: 'de-de' } });
+    expect(convert.mock.calls[0]![0]).toMatchObject({ outputtype: 'pdf', region: 'de-DE' });
+    await renderer.render(tpl(), {}, opts('odt'));
+    expect(convert.mock.calls[1]![0]).toMatchObject({ region: 'ru-RU' });
   });
 
   it('pdfa: конвертер получает outputtype pdfa только для PDF', async () => {

@@ -12,6 +12,7 @@ import {
   type RunDto,
   type RunsPage,
 } from '@carbone-reports/shared';
+import type { Locale } from '@carbone-reports/shared/i18n';
 import { and, count, desc, eq, inArray, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import type { App } from '../../app';
@@ -32,6 +33,7 @@ import { previewQuery } from '../queries/executor';
 import { resolveParams } from '../queries/params';
 import { loadTemplateFull, templateFileRef, type TemplateFull } from '../templates/service';
 import { templatePdf } from '../pdf/finish';
+import { resolveReportLocale } from './report-locale';
 import { collectReportData, renderReport } from './service';
 import {
   ensureRunFile,
@@ -64,6 +66,14 @@ function paramsForErrorRun(full: TemplateFull, input: ParamsInput): Record<strin
 export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): void {
   const { db, storage } = deps;
 
+  /** Язык отчёта шаблона для строящего (§45.2); язык профиля читается только для 'user'. */
+  async function reportLocaleFor(full: TemplateFull, userId: string, reqLocale: Locale) {
+    const setting = full.row.reportLocale;
+    if (setting !== 'user') return resolveReportLocale(setting, null, reqLocale);
+    const [me] = await db.select({ locale: users.locale }).from(users).where(eq(users.id, userId));
+    return resolveReportLocale(setting, me?.locale ?? null, reqLocale);
+  }
+
   app.post(
     '/api/reports/:id/render',
     { preHandler: guards.requireUser, schema: { params: IdParams, body: RenderBody } },
@@ -74,6 +84,8 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
       // До загрузки и до любой записи запуска: недоступный шаблон не оставляет следов в истории.
       await assertTemplateAccess(db, user, req.params.id);
       const full = await loadTemplateFull(db, req.params.id);
+      // Язык отчёта — один раз на построение (§45.2); запуск запоминает его для подписи и сборки форматов.
+      const locale = await reportLocaleFor(full, user.id, req.locale);
       const runId = randomUUID();
       const started = Date.now();
       const ext = full.row.fileExt;
@@ -84,6 +96,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         templateName: full.row.name,
         templateVersion: full.row.version,
         userId: user.id,
+        reportLocale: locale,
       };
       let snapshotStarted = false;
       try {
@@ -114,6 +127,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
           ext,
           full.row.version,
           'pdf',
+          locale,
           deadline,
           pdf,
         );
@@ -344,11 +358,14 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
       const full = await loadTemplateFull(db, req.params.id);
       const { data } = await collectReportData(deps, full, req.body.params, deadline);
       if (req.body.mode === 'data') return data;
+      // Превью — по тому же правилу, что построение (§45.2).
+      const locale = await reportLocaleFor(full, currentUser(req).id, req.locale);
       const pdf = await renderReport(
         deps,
         templateFileRef(deps, full.row),
         data,
         'pdf',
+        locale,
         deadline,
         templatePdf(full, null),
       );

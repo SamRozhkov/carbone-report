@@ -4,7 +4,7 @@ import {
   MAX_PDF_RESULT_BYTES,
   type PdfOptions,
 } from '@carbone-reports/shared';
-import { PAGE_FORMATS } from '@carbone-reports/shared/i18n';
+import { PAGE_FORMATS, type Locale } from '@carbone-reports/shared/i18n';
 import type { TemplateAttachmentRow } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { decryptSecret } from '../../lib/crypto';
@@ -62,6 +62,8 @@ export function buildPdfJob(
   data: unknown,
   now: Date,
   files: Uint8Array[],
+  /** Язык отчёта (§45.2): формат нумерации по умолчанию. */
+  locale: Locale,
 ): PdfPostJob {
   const o = p.options;
   const fill = (s: string) => cleanPdfText(fillPdfText(s, data)).trim();
@@ -69,9 +71,9 @@ export function buildPdfJob(
   return {
     pdfa: o.pdfa,
     watermark: o.watermark && wmText ? { ...o.watermark, text: wmText } : null,
-    // Формат не задан — по языку отчёта (§45.4); язык подключается в Task 3, до того — ru.
+    // Формат не задан — по языку отчёта (§45.4): пул получает готовую строку.
     pageNumbers: o.pageNumbers
-      ? { ...o.pageNumbers, format: o.pageNumbers.format ?? PAGE_FORMATS.ru }
+      ? { ...o.pageNumbers, format: o.pageNumbers.format ?? PAGE_FORMATS[locale] }
       : null,
     metadata: o.metadata
       ? {
@@ -94,6 +96,8 @@ export async function finishPdf(
   data: unknown,
   /** Остаток срока отчёта в мс: считается заново перед каждым шагом (qpdf не должен выйти за срок). */
   timeoutMs: () => number,
+  /** Язык отчёта (§45.2). */
+  locale: Locale,
 ): Promise<Buffer> {
   const post = needsPostprocess(p);
   if (!post && !p.protection) return pdf;
@@ -114,7 +118,7 @@ export async function finishPdf(
         }
       }),
     );
-    out = await deps.pdf(out, buildPdfJob(p, data, new Date(), files), timeoutMs());
+    out = await deps.pdf(out, buildPdfJob(p, data, new Date(), files, locale), timeoutMs());
   }
   if (p.protection) out = await deps.pdfProtect(out, p.protection, timeoutMs());
   if (out.length > MAX_PDF_RESULT_BYTES) throw badRequest('pdf.resultTooLarge', { size: 100 });

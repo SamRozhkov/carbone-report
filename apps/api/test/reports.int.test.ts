@@ -1,8 +1,10 @@
 import { RUNS_PAGE_SIZE } from '@carbone-reports/shared';
+import { desc, eq } from 'drizzle-orm';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from 'vitest';
 import { AppError } from '../src/lib/errors';
-import type { CarboneRenderer } from '../src/deps';
+import { reportRuns, templates, users } from '../src/db/schema';
+import type { CarboneRenderer, RenderOptions } from '../src/deps';
 import { MIME } from '../src/lib/http';
 import { createEmbeddedRenderer } from '../src/modules/render/renderer';
 import { TemplateRenderError } from '../src/modules/render/pool';
@@ -56,9 +58,13 @@ const TEMPLATE_CARBONE_ERROR =
   'загрузка изображений по адресу выключена (IMAGE_URL_ALLOWLIST) Source: "{d.logo}"';
 const TEMPLATE_MESSAGE = `ошибка шаблона: ${TEMPLATE_CARBONE_ERROR}`;
 
+/** Опции каждого вызова Carbone — язык и регион отчёта (§45.3). */
+const seenOpts: RenderOptions[] = [];
+
 // Поддельный Carbone возвращает JSON того, что ему передали.
 const carbone: CarboneRenderer = {
   async render(tpl, data, opts) {
+    seenOpts.push(opts);
     if (carboneFails)
       throw new AppError('CARBONE_ERROR', 502, {
         key: 'render.generationError',
@@ -758,5 +764,114 @@ describe('общий срок формирования отчёта', () => {
     expect(Date.now() - started).toBeLessThan(1500);
     expect(r.statusCode).toBe(504);
     expect(r.json().error.message).toBe(MSG);
+  });
+});
+
+describe('язык отчёта (§45.2)', () => {
+  let tpl: string;
+  beforeAll(async () => {
+    tpl = await createTemplate(t, admin, dsId, { public: true });
+  });
+  const setLocale = (reportLocale: 'de' | 'ru' | 'user' | 'fr') =>
+    t.deps.db.update(templates).set({ reportLocale }).where(eq(templates.id, tpl));
+  const runRow = async (id: string) =>
+    (await t.deps.db.select().from(reportRuns).where(eq(reportRuns.id, id)))[0]!;
+  const build = async (cookie: string, headers: Record<string, string> = {}) => {
+    const r = await t.app.inject({
+      method: 'POST',
+      url: `/api/reports/${tpl}/render`,
+      headers: { cookie, ...headers },
+      payload: { params: {} },
+    });
+    expect(r.statusCode).toBe(201);
+    return r.json().runId as string;
+  };
+
+  it('шаблон de: Carbone de-de, регион de-DE, запуск помнит de', async () => {
+    await setLocale('de');
+    seenOpts.length = 0;
+    const runId = await build(userA, { 'x-locale': 'fr' });
+    expect(seenOpts.at(-1)).toMatchObject({ lang: 'de-de', region: 'de-DE' });
+    expect((await runRow(runId)).reportLocale).toBe('de');
+  });
+
+  it("'user': язык профиля; без него — язык запроса; без заголовков — DEFAULT_LOCALE", async () => {
+    await setLocale('user');
+    const en = await loginAs(t, 'user');
+    await t.deps.db.update(users).set({ locale: 'en' }).where(eq(users.id, en.user.id));
+    expect((await runRow(await build(en.cookie, { 'x-locale': 'fr' }))).reportLocale).toBe('en');
+    expect(seenOpts.at(-1)).toMatchObject({ lang: 'en-us', region: 'en-US' });
+    const none = await loginAs(t, 'user');
+    expect((await runRow(await build(none.cookie, { 'x-locale': 'fr' }))).reportLocale).toBe('fr');
+    expect((await runRow(await build(none.cookie))).reportLocale).toBe(t.deps.config.defaultLocale);
+  });
+
+  it('ошибка рендера: запуск с ошибкой тоже помнит язык', async () => {
+    await setLocale('de');
+    carboneFails = true;
+    try {
+      const r = await t.app.inject({
+        method: 'POST',
+        url: `/api/reports/${tpl}/render`,
+        headers: { cookie: userB },
+        payload: { params: {} },
+      });
+      expect(r.statusCode).toBe(502);
+    } finally {
+      carboneFails = false;
+    }
+    const [row] = await t.deps.db
+      .select()
+      .from(reportRuns)
+      .where(eq(reportRuns.templateId, tpl))
+      .orderBy(desc(reportRuns.createdAt))
+      .limit(1);
+    expect(row).toMatchObject({ status: 'error', reportLocale: 'de' });
+  });
+
+  it('другой формат из снимка — на языке запуска, а не текущей настройки шаблона', async () => {
+    await setLocale('de');
+    const runId = await build(userA);
+    await setLocale('ru');
+    seenOpts.length = 0;
+    const file = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${runId}/file?format=docx`,
+      headers: { cookie: userA },
+    });
+    expect(file.statusCode).toBe(200);
+    expect(seenOpts).toHaveLength(1);
+    expect(seenOpts[0]).toMatchObject({ convertTo: 'docx', lang: 'de-de', region: 'de-DE' });
+  });
+
+  it('запуск до 2.14.0 (report_locale NULL) собирается по-русски', async () => {
+    await setLocale('de');
+    const runId = await build(userA);
+    await t.deps.db.update(reportRuns).set({ reportLocale: null }).where(eq(reportRuns.id, runId));
+    seenOpts.length = 0;
+    const file = await t.app.inject({
+      method: 'GET',
+      url: `/api/runs/${runId}/file?format=docx`,
+      headers: { cookie: userA },
+    });
+    expect(file.statusCode).toBe(200);
+    expect(seenOpts[0]).toMatchObject({ lang: 'ru', region: 'ru-RU' });
+  });
+
+  it('превью — по тому же правилу', async () => {
+    await setLocale('user');
+    const preview = (headers: Record<string, string>) =>
+      t.app.inject({
+        method: 'POST',
+        url: `/api/templates/${tpl}/preview`,
+        headers: { cookie: admin, ...headers },
+        payload: { params: {}, mode: 'pdf' },
+      });
+    seenOpts.length = 0;
+    expect((await preview({ 'x-locale': 'zh-CN' })).statusCode).toBe(200);
+    expect(seenOpts.at(-1)).toMatchObject({ lang: 'zh-cn', region: 'zh-CN' });
+    await setLocale('fr');
+    expect((await preview({ 'x-locale': 'zh-CN' })).statusCode).toBe(200);
+    expect(seenOpts.at(-1)).toMatchObject({ lang: 'fr-fr', region: 'fr-FR' });
   });
 });

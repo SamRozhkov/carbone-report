@@ -442,6 +442,8 @@ export async function applyImport(
           categoryId:
             t.category === null ? null : (categoryIds.get(t.category.toLowerCase()) ?? null),
           pdfOptions: normalizePdfOptions(t.pdfOptions ?? { pdfa: false }),
+          // Выгрузки до 2.14.0 без поля строились по-русски (§45.1).
+          reportLocale: t.reportLocale ?? 'ru',
           docKey: randomUUID(),
           updatedAt: new Date(),
           updatedBy: actor.id,

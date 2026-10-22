@@ -234,6 +234,7 @@ export const toAdminDetails = (
   pdfOptions: f.pdfOptions,
   attachments: f.attachments.map(toAttachmentDto),
   pdfPasswordSet: f.row.pdfPasswordEnc !== null,
+  reportLocale: f.row.reportLocale,
   lastSaveError: f.row.lastSaveError,
   lastSaveErrorAt: f.row.lastSaveErrorAt?.toISOString() ?? null,
   ownerId: f.row.ownerId,

@@ -1,5 +1,5 @@
 import { type OutputFormat, type ParamValue, type ParamsInput } from '@carbone-reports/shared';
-import { CARBONE_LANGS } from '@carbone-reports/shared/i18n';
+import { CARBONE_LANGS, OFFICE_REGIONS, type Locale } from '@carbone-reports/shared/i18n';
 import type { AppDeps, TemplateFileRef } from '../../deps';
 import { type Deadline, reportTimeout } from '../../lib/deadline';
 import { AppError } from '../../lib/errors';
@@ -58,13 +58,15 @@ async function collect(
 /**
  * Рендер в Carbone. С `deadline` таймаут Carbone — не дольше остатка срока, ожидание ограничено сроком.
  * `tpl` — живой файл шаблона (предпросмотр админа) или копия из снимка запуска. `pdf` — настройки PDF
- * шаблона (§36.4): действуют только для формата pdf.
+ * шаблона (§36.4): действуют только для формата pdf. `locale` — язык отчёта, определённый один раз
+ * на построение (§45.2): форматы Carbone, регион OnlyOffice и нумерация страниц PDF.
  */
 export function renderReport(
   deps: AppDeps,
   tpl: TemplateFileRef,
   data: unknown,
   format: OutputFormat,
+  locale: Locale,
   deadline?: Deadline,
   pdf?: TemplatePdf,
 ): Promise<Buffer> {
@@ -76,14 +78,14 @@ export function renderReport(
   const work = (async () => {
     const out = await deps.carbone.render(tpl, data, {
       convertTo: format,
-      // Язык отчёта подключается в Task 3 (§45.2); до того — русский, как до 2.14.0.
-      lang: CARBONE_LANGS.ru,
+      lang: CARBONE_LANGS[locale],
+      region: OFFICE_REGIONS[locale],
       timezone: deps.config.tz,
       timeoutMs: timeoutMs(),
       ...(pdfa ? { pdfa: true } : {}),
     });
     if (format !== 'pdf' || !pdf) return out;
-    return finishPdf(deps, out, pdf, data, timeoutMs);
+    return finishPdf(deps, out, pdf, data, timeoutMs, locale);
   })();
   return deadline ? deadline.race(work) : work;
 }

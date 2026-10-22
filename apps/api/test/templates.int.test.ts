@@ -358,3 +358,70 @@ describe('templates', () => {
     expect(missing.statusCode).toBe(404);
   });
 });
+
+describe('язык отчёта шаблона (§45.1)', () => {
+  const details = async (id: string, cookie = admin, app = t) =>
+    (
+      await app.app.inject({ method: 'GET', url: `/api/templates/${id}`, headers: { cookie } })
+    ).json();
+  const patch = (id: string, cookie: string, payload: object) =>
+    t.app.inject({ method: 'PATCH', url: `/api/templates/${id}`, headers: { cookie }, payload });
+
+  it('новый шаблон получает DEFAULT_LOCALE (создание и загрузка файла)', async () => {
+    expect((await details(await createTemplate(t, admin, dsId))).reportLocale).toBe('ru');
+    const en = await createTestApp({}, { defaultLocale: 'en' });
+    try {
+      const cookie = (await loginAs(en, 'admin')).cookie;
+      const src = await createSourceDatabase('select 1');
+      const ds = await en.app.inject({
+        method: 'POST',
+        url: '/api/datasources',
+        headers: { cookie },
+        payload: { name: 'src', ...src, sslMode: 'disable' },
+      });
+      const id = await createTemplate(en, cookie, ds.json().id);
+      expect((await details(id, cookie, en)).reportLocale).toBe('en');
+      const body = multipart(
+        { name: 'Загруженный', datasourceId: ds.json().id },
+        { name: 'a.docx', data: await createBlankDocument('docx') },
+      );
+      const up = await en.app.inject({
+        method: 'POST',
+        url: '/api/templates/upload',
+        headers: { cookie, ...body.headers },
+        payload: body.payload,
+      });
+      expect(up.statusCode).toBe(201);
+      expect((await details(up.json().id, cookie, en)).reportLocale).toBe('en');
+    } finally {
+      await en.close();
+    }
+  });
+
+  it('изменение настроек: язык и user; неизвестный — 400; без права правки — 403', async () => {
+    // Открытый шаблон: редактор его видит, но права правки (§43) у него нет.
+    const id = await createTemplate(t, admin, dsId, { public: true });
+    const de = await patch(id, admin, { reportLocale: 'de' });
+    expect(de.statusCode).toBe(200);
+    expect(de.json().reportLocale).toBe('de');
+    expect((await patch(id, admin, { reportLocale: 'user' })).json().reportLocale).toBe('user');
+    const bad = await patch(id, admin, { reportLocale: 'xx' });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error.code).toBe('VALIDATION');
+    const editor = (await loginAs(t, 'editor')).cookie;
+    expect((await patch(id, editor, { reportLocale: 'fr' })).statusCode).toBe(403);
+    expect((await details(id)).reportLocale).toBe('user');
+  });
+
+  it('копия сохраняет язык исходного', async () => {
+    const id = await createTemplate(t, admin, dsId);
+    await patch(id, admin, { reportLocale: 'fr' });
+    const copy = await t.app.inject({
+      method: 'POST',
+      url: `/api/templates/${id}/duplicate`,
+      headers: { cookie: admin },
+    });
+    expect(copy.statusCode).toBe(201);
+    expect((await details(copy.json().id)).reportLocale).toBe('fr');
+  });
+});

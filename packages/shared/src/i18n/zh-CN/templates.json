@@ -1,0 +1,92 @@
+{
+  "list": {
+    "selectAll": "选择所有模板",
+    "select": "选择“{{name}}”",
+    "editingBy": "{{login}} 正在编辑",
+    "type": "类型",
+    "updatedAt": "修改时间",
+    "open": "打开",
+    "duplicate": "创建副本",
+    "download": "下载",
+    "exportSelected": "导出（{{n}}）",
+    "import": "从压缩包导入",
+    "create": "创建模板",
+    "empty": "暂无模板",
+    "duplicated": "已创建副本“{{name}}”",
+    "deleteTitle": "删除模板？",
+    "deleteText": "模板“{{name}}”及其查询和参数将被删除。运行历史记录将保留。"
+  },
+  "export": {
+    "button": "导出",
+    "failed": "导出失败",
+    "tooMany": "模板过多",
+    "tooManyText": "一次最多可导出 {{max}} 个模板，已选择 {{selected}} 个。"
+  },
+  "create": {
+    "title": "新建模板",
+    "noDatasourcesAdmin": "请先在<page>“数据源”</page>中添加数据源。",
+    "noDatasources": "暂无数据源，请联系管理员添加。",
+    "datasource": "数据源",
+    "file": "文件",
+    "blankDocx": "空白 DOCX",
+    "blankXlsx": "空白 XLSX",
+    "upload": "上传文件",
+    "fileAria": "模板文件"
+  },
+  "importAction": {
+    "create": "创建",
+    "update": "更新",
+    "copy": "副本",
+    "skip": "跳过"
+  },
+  "importResult": {
+    "create": "已创建",
+    "update": "已更新",
+    "copy": "已创建副本",
+    "skip": "已跳过"
+  },
+  "import": {
+    "title": "从压缩包导入模板",
+    "tooBig": "压缩包超过 50 MB，无法上传。",
+    "tooBigFile": "压缩包超过 50 MB，无法上传。文件“{{name}}”的大小：{{size}} MB。",
+    "noteUnavailable": "“{{was}}”已不可用，已改选“{{now}}”，请检查",
+    "noteTargetGone": "所选要更新的模板已被删除或重命名，请检查选择",
+    "noteTargetChanged": "模板在上次预览后已被修改，请确认是否可以替换",
+    "noteDatasourceGone": "所选数据源已被删除",
+    "notesTwo": "{{first}}。{{second}}",
+    "template": "模板",
+    "action": "操作",
+    "datasource": "数据源",
+    "result": "结果",
+    "missingGroups": "缺少用户组：{{groups}}，将不会授予访问权限",
+    "pdfPassword": "PDF 密码不会迁移：新模板将没有密码，更新时保留当前模板的密码",
+    "lockedBy": "{{login}} 正在编辑该模板：编辑器打开期间，更新将被拒绝",
+    "categorySkipped": "此环境中没有类别“{{category}}”，不会创建该类别，模板将在无类别的情况下导入",
+    "categoryCreated": "将创建类别“{{category}}”",
+    "actionAria": "操作：{{name}}",
+    "targetAria": "要更新的模板：{{name}}",
+    "targetUpdatedAt": "修改于 {{date}}",
+    "updateNote": "文件、查询、参数、访问用户组、类别、“所有人可用”设置和数据源将被压缩包中的数据替换",
+    "datasourceAria": "数据源：{{name}}",
+    "chooseDatasource": "选择数据源",
+    "inArchive": "压缩包中：“{{name}}”——{{problem}}",
+    "inArchiveHost": "压缩包中：“{{name}}”（{{host}}）——{{problem}}",
+    "datasourceAmbiguous": "找到多个同名数据源，请选择",
+    "datasourceNotFound": "此环境中未找到",
+    "fileAria": "压缩包文件",
+    "datasourcesFailed": "无法获取数据源列表",
+    "rejected": "压缩包未被接受",
+    "archiveInfo": "压缩包中的应用版本：{{version}}，导出时间：{{date}}",
+    "applyFailed": "导入失败",
+    "retry": "重新预览",
+    "apply": "导入"
+  },
+  "access": {
+    "noCategory": "无类别",
+    "groupsHint": "除通过类别获得的访问权限外，还可查看该模板的用户组",
+    "adminOnlyAfterSave": "保存后，该模板将仅对管理员可用",
+    "adminOnlyNow": "该模板目前仅对管理员可用",
+    "saved": "访问权限已保存",
+    "dialogTitle": "模板“{{name}}”的访问权限"
+  }
+}

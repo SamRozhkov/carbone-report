@@ -2,6 +2,7 @@ import { ArrowDownToSquare } from '@gravity-ui/icons';
 import { Button, Icon, useToaster } from '@gravity-ui/uikit';
 import { useMutation } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MAX_TRANSFER_TEMPLATES } from '@carbone-reports/shared/template-transfer';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/errors';
@@ -11,12 +12,13 @@ import { triggerDownload } from '../../lib/download';
 export function ExportTemplatesButton({
   ids,
   view = 'outlined',
-  children = 'Выгрузить',
+  children,
 }: {
   ids: string[];
   view?: 'outlined' | 'flat';
   children?: ReactNode;
 }) {
+  const { t } = useTranslation();
   const { add } = useToaster();
   const exp = useMutation({
     mutationFn: async () => {
@@ -29,7 +31,7 @@ export function ExportTemplatesButton({
     onError: (e) =>
       add({
         name: `tpl-export-${Date.now()}`,
-        title: 'Не удалось выгрузить',
+        title: t('templates:export.failed'),
         content: errorMessage(e),
         theme: 'danger',
       }),
@@ -43,8 +45,11 @@ export function ExportTemplatesButton({
         if (ids.length > MAX_TRANSFER_TEMPLATES) {
           add({
             name: `tpl-export-limit-${Date.now()}`,
-            title: 'Слишком много шаблонов',
-            content: `За один раз можно выгрузить не больше ${MAX_TRANSFER_TEMPLATES} шаблонов, выбрано ${ids.length}.`,
+            title: t('templates:export.tooMany'),
+            content: t('templates:export.tooManyText', {
+              max: MAX_TRANSFER_TEMPLATES,
+              selected: ids.length,
+            }),
             theme: 'warning',
           });
           return;
@@ -53,7 +58,7 @@ export function ExportTemplatesButton({
       }}
     >
       <Icon data={ArrowDownToSquare} />
-      {children}
+      {children ?? t('templates:export.button')}
     </Button>
   );
 }

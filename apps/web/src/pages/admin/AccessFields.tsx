@@ -1,6 +1,7 @@
 import type { TemplateAccess } from '@carbone-reports/shared';
 import { Alert, Checkbox, Select, useToaster } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api/endpoints';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Field } from '../../components/Field';
@@ -29,6 +30,7 @@ export function AccessFields({
   errors: Record<string, string>;
   dirty: boolean;
 }) {
+  const { t } = useTranslation();
   const categories = useQuery({ queryKey: ['categories'], queryFn: api.categories.list });
   const groups = useQuery({ queryKey: ['groups'], queryFn: api.groups.list });
 
@@ -46,16 +48,16 @@ export function AccessFields({
   return (
     <>
       {categories.error && (
-        <ErrorAlert error={categories.error} title="Не удалось загрузить категории" />
+        <ErrorAlert error={categories.error} title={t('admin:loadFailed.categories')} />
       )}
-      {groups.error && <ErrorAlert error={groups.error} title="Не удалось загрузить группы" />}
-      <Field label="Категория" error={errors.categoryId}>
+      {groups.error && <ErrorAlert error={groups.error} title={t('admin:loadFailed.groups')} />}
+      <Field label={t('admin:field.category')} error={errors.categoryId}>
         <Select
-          aria-label="Категория"
+          aria-label={t('admin:field.category')}
           value={[value.categoryId ?? NO_CATEGORY]}
           onUpdate={([v]) => onChange({ categoryId: !v || v === NO_CATEGORY ? null : v })}
           options={[
-            { value: NO_CATEGORY, content: 'Без категории' },
+            { value: NO_CATEGORY, content: t('templates:access.noCategory') },
             ...(categories.data ?? []).map((c) => ({ value: c.id, content: c.name })),
           ]}
           loading={categories.isPending}
@@ -63,20 +65,16 @@ export function AccessFields({
           width="max"
         />
       </Field>
-      <Field label="Видимость" error={errors.public} group>
+      <Field label={t('admin:field.visibility')} error={errors.public} group>
         <Checkbox
           checked={value.public}
           onUpdate={(v) => onChange({ public: v })}
-          content="Доступно всем"
+          content={t('admin:field.public')}
         />
       </Field>
-      <Field
-        label="Группы"
-        hint="группы, которым виден шаблон, помимо доступа через категорию"
-        group
-      >
+      <Field label={t('admin:field.groups')} hint={t('templates:access.groupsHint')} group>
         <Select
-          aria-label="Группы"
+          aria-label={t('admin:field.groups')}
           value={value.groupIds}
           onUpdate={(v) => onChange({ groupIds: v })}
           options={(groups.data ?? []).map((g) => ({ value: g.id, content: g.name }))}
@@ -84,7 +82,7 @@ export function AccessFields({
           filterable
           hasClear
           loading={groups.isPending}
-          placeholder="нет групп"
+          placeholder={t('admin:noGroups')}
           width="max"
         />
       </Field>
@@ -92,9 +90,7 @@ export function AccessFields({
         <Alert
           theme="warning"
           message={
-            dirty
-              ? 'После сохранения шаблон будет доступен только администраторам'
-              : 'Шаблон сейчас доступен только администраторам'
+            dirty ? t('templates:access.adminOnlyAfterSave') : t('templates:access.adminOnlyNow')
           }
         />
       )}
@@ -107,6 +103,7 @@ export function useSaveTemplateAccess(
   templateId: string,
   onSaved: (saved: TemplateAccess) => void,
 ) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { add } = useToaster();
   return useMutation({
@@ -114,7 +111,11 @@ export function useSaveTemplateAccess(
     onSuccess: async (saved) => {
       queryClient.setQueryData(['template-access', templateId], saved);
       onSaved(saved);
-      add({ name: `tpl-access-${Date.now()}`, title: 'Доступ сохранён', theme: 'success' });
+      add({
+        name: `tpl-access-${Date.now()}`,
+        title: t('templates:access.saved'),
+        theme: 'success',
+      });
       await Promise.all(
         [['templates'], ['categories']].map((queryKey) =>
           queryClient.invalidateQueries({ queryKey }),

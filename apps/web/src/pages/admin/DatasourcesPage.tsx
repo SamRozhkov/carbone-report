@@ -4,6 +4,7 @@ import type { TableColumnConfig } from '@gravity-ui/uikit';
 import { Button, Icon, Label, Loader, Table, useToaster } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/errors';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -12,6 +13,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { DatasourceDialog } from './DatasourceDialog';
 
 export function DatasourcesPage() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const list = useQuery({ queryKey: ['datasources'], queryFn: api.datasources.list });
@@ -29,7 +31,7 @@ export function DatasourcesPage() {
       setDeleting(null);
       add({
         name: `ds-delete-${Date.now()}`,
-        title: 'Не удалось удалить',
+        title: t('admin:deleteFailed'),
         content: errorMessage(e),
         theme: 'danger',
       });
@@ -37,9 +39,13 @@ export function DatasourcesPage() {
   });
 
   const columns: TableColumnConfig<DatasourceDto>[] = [
-    { id: 'name', name: 'Название', template: (d) => d.name },
-    { id: 'address', name: 'Адрес', template: (d) => `${d.host}:${d.port}/${d.database}` },
-    { id: 'username', name: 'Пользователь БД', template: (d) => d.username },
+    { id: 'name', name: t('admin:field.name'), template: (d) => d.name },
+    {
+      id: 'address',
+      name: t('admin:datasources.address'),
+      template: (d) => `${d.host}:${d.port}/${d.database}`,
+    },
+    { id: 'username', name: t('admin:datasources.dbUser'), template: (d) => d.username },
     {
       id: 'ssl',
       name: 'SSL',
@@ -48,7 +54,7 @@ export function DatasourcesPage() {
           '—'
         ) : (
           <Label theme={d.sslMode === 'verify' ? 'success' : 'info'}>
-            {d.sslMode === 'verify' ? 'SSL, проверка' : 'SSL'}
+            {d.sslMode === 'verify' ? t('admin:datasources.sslVerified') : 'SSL'}
           </Label>
         ),
     },
@@ -61,8 +67,8 @@ export function DatasourcesPage() {
           <Button
             view="flat"
             size="s"
-            aria-label="Изменить"
-            title="Изменить"
+            aria-label={t('common:action.edit')}
+            title={t('common:action.edit')}
             onClick={() => setDialog({ ds: d })}
           >
             <Icon data={Pencil} />
@@ -70,8 +76,8 @@ export function DatasourcesPage() {
           <Button
             view="flat-danger"
             size="s"
-            aria-label="Удалить"
-            title="Удалить"
+            aria-label={t('common:action.delete')}
+            title={t('common:action.delete')}
             onClick={() => {
               setLastDeleted(d);
               setDeleting(d);
@@ -87,11 +93,11 @@ export function DatasourcesPage() {
   return (
     <>
       <PageHeader
-        title="Источники данных"
+        title={t('common:nav.datasources')}
         actions={
           <Button view="action" onClick={() => setDialog({ ds: null })}>
             <Icon data={Plus} />
-            Добавить источник
+            {t('admin:datasources.add')}
           </Button>
         }
       />
@@ -103,7 +109,7 @@ export function DatasourcesPage() {
           data={list.data ?? []}
           columns={columns}
           getRowDescriptor={(d) => ({ id: d.id })}
-          emptyMessage="Источников пока нет"
+          emptyMessage={t('admin:datasources.empty')}
           width="max"
         />
       )}
@@ -117,9 +123,9 @@ export function DatasourcesPage() {
       )}
       <ConfirmDialog
         open={!!deleting}
-        title="Удалить источник данных?"
-        text={`Источник «${(deleting ?? lastDeleted)?.name ?? ''}» будет удалён. Если его используют шаблоны, сервер откажет в удалении.`}
-        confirmText="Удалить"
+        title={t('admin:datasources.deleteTitle')}
+        text={t('admin:datasources.deleteText', { name: (deleting ?? lastDeleted)?.name ?? '' })}
+        confirmText={t('common:action.delete')}
         danger
         loading={remove.isPending}
         onConfirm={() => deleting && remove.mutate(deleting)}

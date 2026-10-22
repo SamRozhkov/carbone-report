@@ -112,6 +112,13 @@
     "s": "{{value}} 秒",
     "min": "{{min}} 分 {{sec}} 秒"
   },
+  "size": {
+    "b": "{{value}} B",
+    "kb": "{{value}} KB",
+    "mb": "{{value}} MB",
+    "gb": "{{value}} GB",
+    "tb": "{{value}} TB"
+  },
   "param": {
     "multipleHint": "多个值以逗号分隔",
     "waitingFor": "请先选择：{{names}}",

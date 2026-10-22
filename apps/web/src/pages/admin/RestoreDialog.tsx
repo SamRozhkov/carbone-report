@@ -2,11 +2,10 @@ import type { BackupDto } from '@carbone-reports/shared';
 import { Alert, Dialog, TextInput } from '@gravity-ui/uikit';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { api } from '../../api/endpoints';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { Field } from '../../components/Field';
-
-const CONFIRM_LABEL = 'Введите имя бэкапа для подтверждения';
 
 /** Подтверждение восстановления точным именем бэкапа (§26.5). */
 export function RestoreDialog({
@@ -18,6 +17,8 @@ export function RestoreDialog({
   onClose: () => void;
   onStarted: () => void;
 }) {
+  const { t } = useTranslation();
+  const confirmLabel = t('admin:restore.confirmLabel');
   const [typed, setTyped] = useState('');
   const name = backup?.name ?? '';
   const restore = useMutation({
@@ -36,28 +37,23 @@ export function RestoreDialog({
 
   return (
     <Dialog open={backup !== null} onClose={close} aria-labelledby="cr-restore-title" size="m">
-      <Dialog.Header caption="Восстановление из бэкапа" id="cr-restore-title" />
+      <Dialog.Header caption={t('admin:restore.title')} id="cr-restore-title" />
       <Dialog.Body>
         <div className="cr-form">
           <Alert
             theme="warning"
-            title="База данных и файлы заменяются"
+            title={t('admin:restore.warningTitle')}
             message={
-              <>
-                Данные приложения будут заменены состоянием из бэкапа <b>{name}</b>. Перед
-                восстановлением будет сделан бэкап текущего состояния (pre-restore-…) — к нему можно
-                вернуться. Пользователей, в том числе вас, может разлогинить: понадобится войти
-                заново.
-              </>
+              <Trans i18nKey="admin:restore.warning" values={{ name }} components={{ b: <b /> }} />
             }
           />
-          <Field label={CONFIRM_LABEL} hint={name}>
+          <Field label={confirmLabel} hint={name}>
             <TextInput
               value={typed}
               onUpdate={setTyped}
               placeholder={name}
               autoComplete="off"
-              controlProps={{ 'aria-label': CONFIRM_LABEL }}
+              controlProps={{ 'aria-label': confirmLabel }}
             />
           </Field>
           <ErrorAlert error={restore.error} />
@@ -66,8 +62,8 @@ export function RestoreDialog({
       <Dialog.Footer
         onClickButtonApply={() => restore.mutate(name)}
         onClickButtonCancel={close}
-        textButtonApply="Восстановить"
-        textButtonCancel="Отмена"
+        textButtonApply={t('admin:backups.restore')}
+        textButtonCancel={t('common:action.cancel')}
         loading={restore.isPending}
         propsButtonApply={{ view: 'outlined-danger', disabled: name === '' || typed !== name }}
       />

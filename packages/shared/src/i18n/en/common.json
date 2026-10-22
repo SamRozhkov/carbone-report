@@ -113,6 +113,13 @@
     "s": "{{value}} s",
     "min": "{{min}} min {{sec}} s"
   },
+  "size": {
+    "b": "{{value}} B",
+    "kb": "{{value}} KB",
+    "mb": "{{value}} MB",
+    "gb": "{{value}} GB",
+    "tb": "{{value}} TB"
+  },
   "param": {
     "multipleHint": "several values — separated by commas",
     "waitingFor": "select first: {{names}}",

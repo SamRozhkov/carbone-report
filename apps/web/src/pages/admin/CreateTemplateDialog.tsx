@@ -9,6 +9,7 @@ import {
 } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
 import { api } from '../../api/endpoints';
 import { fieldErrors } from '../../api/errors';
@@ -20,6 +21,7 @@ import { GeneralError } from '../../components/GeneralError';
 type Source = 'docx' | 'xlsx' | 'upload';
 
 export function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { isAdmin } = usePermissions();
@@ -66,45 +68,45 @@ export function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose
       onClose={create.isPending ? () => {} : onClose}
       aria-labelledby="cr-tpl-create"
     >
-      <Dialog.Header caption="Новый шаблон" id="cr-tpl-create" />
+      <Dialog.Header caption={t('templates:create.title')} id="cr-tpl-create" />
       <Dialog.Body>
         {noDatasources ? (
           <Alert
             theme="warning"
             message={
               isAdmin ? (
-                <>
-                  Сначала добавьте источник данных в разделе{' '}
-                  <Link to="/admin/datasources">«Источники данных»</Link>.
-                </>
+                <Trans
+                  i18nKey="templates:create.noDatasourcesAdmin"
+                  components={{ page: <Link to="/admin/datasources" /> }}
+                />
               ) : (
-                'Источников данных пока нет — попросите администратора добавить источник.'
+                t('templates:create.noDatasources')
               )
             }
           />
         ) : (
           <div className="cr-form">
             <ErrorAlert error={datasources.error} />
-            <Field label="Название">
+            <Field label={t('admin:field.name')}>
               <TextInput
                 value={name}
                 onUpdate={setName}
                 validationState={errors.name ? 'invalid' : undefined}
                 errorMessage={errors.name}
-                controlProps={{ 'aria-label': 'Название' }}
+                controlProps={{ 'aria-label': t('admin:field.name') }}
               />
             </Field>
-            <Field label="Описание">
+            <Field label={t('admin:field.description')}>
               <TextArea
-                controlProps={{ 'aria-label': 'Описание' }}
+                controlProps={{ 'aria-label': t('admin:field.description') }}
                 value={description}
                 onUpdate={setDescription}
                 minRows={2}
               />
             </Field>
-            <Field label="Источник данных">
+            <Field label={t('templates:create.datasource')}>
               <Select
-                aria-label="Источник данных"
+                aria-label={t('templates:create.datasource')}
                 disabled={datasources.isPending}
                 value={datasourceId ? [datasourceId] : []}
                 onUpdate={([v]) => setDatasourceId(v ?? '')}
@@ -113,7 +115,7 @@ export function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose
               />
             </Field>
             <div className="cr-field">
-              <Text variant="subheader-1">Файл</Text>
+              <Text variant="subheader-1">{t('templates:create.file')}</Text>
               <SegmentedRadioGroup
                 value={source}
                 onUpdate={(v) => {
@@ -121,16 +123,16 @@ export function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose
                   setFile(null);
                 }}
                 options={[
-                  { value: 'docx', content: 'Пустой DOCX' },
-                  { value: 'xlsx', content: 'Пустой XLSX' },
-                  { value: 'upload', content: 'Загрузить файл' },
+                  { value: 'docx', content: t('templates:create.blankDocx') },
+                  { value: 'xlsx', content: t('templates:create.blankXlsx') },
+                  { value: 'upload', content: t('templates:create.upload') },
                 ]}
               />
             </div>
             {source === 'upload' && (
               <input
                 type="file"
-                aria-label="Файл шаблона"
+                aria-label={t('templates:create.fileAria')}
                 accept=".docx,.xlsx,.odt,.ods,.pptx"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
@@ -142,8 +144,8 @@ export function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose
       <Dialog.Footer
         onClickButtonApply={() => create.mutate()}
         onClickButtonCancel={create.isPending ? () => {} : onClose}
-        textButtonApply="Создать"
-        textButtonCancel="Отмена"
+        textButtonApply={t('admin:create')}
+        textButtonCancel={t('common:action.cancel')}
         loading={create.isPending}
         propsButtonApply={{
           disabled: noDatasources || !name || !datasourceId || (source === 'upload' && !file),

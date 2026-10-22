@@ -11,24 +11,14 @@ import type { TableColumnConfig } from '@gravity-ui/uikit';
 import { Alert, Button, Dialog, Loader, Select, Table, Text } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api/endpoints';
 import { ApiRequestError } from '../../api/client';
 import { errorMessage } from '../../api/errors';
-import { formatDateTime } from '../../lib/format';
+import { i18n } from '../../i18n';
+import { formatDateTime, formatTenths } from '../../lib/format';
 
-const ACTION_LABELS: Record<ImportAction, string> = {
-  create: 'создать',
-  update: 'обновить',
-  copy: 'копия',
-  skip: 'пропустить',
-};
-const RESULT_LABELS: Record<ImportAction, string> = {
-  create: 'создан',
-  update: 'обновлён',
-  copy: 'создана копия',
-  skip: 'пропущен',
-};
-const TOO_BIG = 'Архив больше 50 МБ — такой файл загрузить нельзя.';
+const actionLabel = (a: ImportAction) => i18n.t(`templates:importAction.${a}`);
 
 /** Выбор по строке предпросмотра. */
 interface Row {
@@ -70,7 +60,10 @@ function mergeRow(
   if (!actionsFor(t).includes(p.action)) {
     return {
       ...d,
-      note: `«${ACTION_LABELS[p.action]}» больше недоступно — выбрано «${ACTION_LABELS[d.action]}», проверьте`,
+      note: i18n.t('templates:import.noteUnavailable', {
+        was: actionLabel(p.action),
+        now: actionLabel(d.action),
+      }),
     };
   }
   const notes: string[] = [];
@@ -80,20 +73,24 @@ function mergeRow(
     if (!now) {
       return {
         ...d,
-        note: 'Выбранный для обновления шаблон удалён или переименован — проверьте выбор',
+        note: i18n.t('templates:import.noteTargetGone'),
       };
     }
     targetId = p.targetId;
     const before = prev.item.existing.find((e) => e.id === p.targetId);
     if (before && before.updatedAt !== now.updatedAt)
-      notes.push('Шаблон изменён после прошлого предпросмотра — проверьте, что его можно заменить');
+      notes.push(i18n.t('templates:import.noteTargetChanged'));
   }
   let datasourceId = p.datasourceId;
   if (datasourceId && datasourceIds && !datasourceIds.has(datasourceId)) {
     datasourceId = d.datasourceId;
-    notes.push('Выбранный источник данных удалён');
+    notes.push(i18n.t('templates:import.noteDatasourceGone'));
   }
-  return { action: p.action, datasourceId, targetId, note: notes.join('. ') || undefined };
+  const note =
+    notes.length > 1
+      ? i18n.t('templates:import.notesTwo', { first: notes[0], second: notes[1] })
+      : notes[0];
+  return { action: p.action, datasourceId, targetId, note };
 }
 
 function rowReady(r: Row): boolean {
@@ -118,12 +115,14 @@ function toDecision(t: ImportPreviewItem, r: Row): ImportDecision {
 }
 
 function messageOf(e: unknown): string {
-  if (e instanceof ApiRequestError && e.status === 413) return TOO_BIG;
+  if (e instanceof ApiRequestError && e.status === 413) return i18n.t('templates:import.tooBig');
   return errorMessage(e);
 }
 
 /** Загрузка шаблонов из архива (§33.3): файл → предпросмотр → решения по строкам → итог. */
 export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  // `t` — строка предпросмотра, поэтому функция перевода — `tr`.
+  const { t: tr } = useTranslation();
   const queryClient = useQueryClient();
   const datasources = useQuery({
     queryKey: ['datasources', 'options'],
@@ -196,7 +195,12 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     reset();
     if (!f) return;
     if (f.size > MAX_TRANSFER_ARCHIVE_BYTES) {
-      setSizeError(`${TOO_BIG} Размер файла «${f.name}»: ${(f.size / 1024 / 1024).toFixed(1)} МБ.`);
+      setSizeError(
+        tr('templates:import.tooBigFile', {
+          name: f.name,
+          size: formatTenths(f.size / 1024 / 1024),
+        }),
+      );
       return;
     }
     setFile(f);
@@ -229,7 +233,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
   const columns: TableColumnConfig<ImportPreviewItem>[] = [
     {
       id: 'name',
-      name: 'Шаблон',
+      name: tr('templates:import.template'),
       template: (t, i) => (
         <div data-changed={rows[i]?.note ? 'true' : undefined}>
           <Text>{t.name}</Text>
@@ -248,13 +252,12 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
           ))}
           {t.missingGroups.length > 0 && (
             <Text as="div" variant="caption-2" color="warning">
-              Нет групп: {t.missingGroups.join(', ')} — доступ не будет выдан
+              {tr('templates:import.missingGroups', { groups: t.missingGroups.join(', ') })}
             </Text>
           )}
           {t.pdfPasswordSet && (
             <Text as="div" variant="caption-2" color="warning">
-              Пароль PDF не переносится: новый шаблон будет без пароля, при обновлении останется
-              пароль текущего шаблона
+              {tr('templates:import.pdfPassword')}
             </Text>
           )}
           {rows[i]?.action === 'update' &&
@@ -262,8 +265,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
               const target = t.existing.find((e) => e.id === rows[i]!.targetId);
               return target?.lockedBy ? (
                 <Text as="div" variant="caption-2" color="warning">
-                  Шаблон редактирует {target.lockedBy.login}: обновление будет отклонено, пока
-                  редактор открыт
+                  {tr('templates:import.lockedBy', { login: target.lockedBy.login })}
                 </Text>
               ) : null;
             })()}
@@ -271,12 +273,11 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
             t.category &&
             (t.categorySkipped ? (
               <Text as="div" variant="caption-2" color="warning">
-                Категории «{t.category}» в этой среде нет — категория не будет создана, шаблон
-                загрузится без неё
+                {tr('templates:import.categorySkipped', { category: t.category })}
               </Text>
             ) : (
               <Text as="div" variant="caption-2" color="warning">
-                Будет создана категория «{t.category}»
+                {tr('templates:import.categoryCreated', { category: t.category })}
               </Text>
             ))}
         </div>
@@ -284,7 +285,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     },
     {
       id: 'action',
-      name: 'Действие',
+      name: tr('templates:import.action'),
       width: 220,
       template: (t, i) => {
         const r = rows[i];
@@ -292,17 +293,17 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
         return (
           <div style={{ display: 'grid', gap: 4 }}>
             <Select
-              aria-label={`Действие: ${t.name}`}
+              aria-label={tr('templates:import.actionAria', { name: t.name })}
               value={[r.action]}
               disabled={busy}
               onUpdate={([v]) => v && patch(i, { action: v as ImportAction, note: undefined })}
-              options={actionsFor(t).map((a) => ({ value: a, content: ACTION_LABELS[a] }))}
+              options={actionsFor(t).map((a) => ({ value: a, content: actionLabel(a) }))}
               width="max"
             />
             {r.action === 'update' &&
               (t.existing.length > 1 ? (
                 <Select
-                  aria-label={`Какой шаблон обновить: ${t.name}`}
+                  aria-label={tr('templates:import.targetAria', { name: t.name })}
                   value={r.targetId ? [r.targetId] : []}
                   disabled={busy}
                   onUpdate={([v]) => patch(i, { targetId: v ?? '', note: undefined })}
@@ -314,13 +315,14 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
                 />
               ) : (
                 <Text variant="caption-2" color="secondary">
-                  изменён {formatDateTime(t.existing[0]!.updatedAt)}
+                  {tr('templates:import.targetUpdatedAt', {
+                    date: formatDateTime(t.existing[0]!.updatedAt),
+                  })}
                 </Text>
               ))}
             {r.action === 'update' && (
               <Text variant="caption-2" color="secondary">
-                Файл, запросы, параметры, группы доступа, категория, публичность и источник будут
-                заменены данными из архива
+                {tr('templates:import.updateNote')}
               </Text>
             )}
           </div>
@@ -329,7 +331,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     },
     {
       id: 'datasource',
-      name: 'Источник данных',
+      name: tr('templates:import.datasource'),
       width: 240,
       template: (t, i) => {
         const r = rows[i];
@@ -338,8 +340,8 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
         return (
           <div style={{ display: 'grid', gap: 4 }}>
             <Select
-              aria-label={`Источник данных: ${t.name}`}
-              placeholder="Выберите источник"
+              aria-label={tr('templates:import.datasourceAria', { name: t.name })}
+              placeholder={tr('templates:import.chooseDatasource')}
               validationState={r.datasourceId ? undefined : 'invalid'}
               value={r.datasourceId ? [r.datasourceId] : []}
               disabled={busy || datasources.isLoading}
@@ -349,11 +351,20 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
             />
             {!t.datasourceMatch && (
               <Text variant="caption-2" color="secondary">
-                В архиве: «{t.datasource.name}»{t.datasource.host ? ` (${t.datasource.host})` : ''}{' '}
-                —{' '}
-                {(datasources.data ?? []).filter((d) => d.name === t.datasource.name).length > 1
-                  ? 'найдено несколько источников с этим именем — выберите'
-                  : 'в этой среде не найден'}
+                {tr(
+                  t.datasource.host
+                    ? 'templates:import.inArchiveHost'
+                    : 'templates:import.inArchive',
+                  {
+                    name: t.datasource.name,
+                    host: t.datasource.host,
+                    problem:
+                      (datasources.data ?? []).filter((d) => d.name === t.datasource.name).length >
+                      1
+                        ? tr('templates:import.datasourceAmbiguous')
+                        : tr('templates:import.datasourceNotFound'),
+                  },
+                )}
               </Text>
             )}
           </div>
@@ -369,15 +380,19 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
       aria-labelledby="cr-import-title"
       size="l"
     >
-      <Dialog.Header caption="Загрузка шаблонов из архива" id="cr-import-title" />
+      <Dialog.Header caption={tr('templates:import.title')} id="cr-import-title" />
       <Dialog.Body>
         <div className="cr-form">
           {result ? (
             <Table
               data={result.templates}
               columns={[
-                { id: 'name', name: 'Шаблон', template: (r) => r.name },
-                { id: 'action', name: 'Итог', template: (r) => RESULT_LABELS[r.action] },
+                { id: 'name', name: tr('templates:import.template'), template: (r) => r.name },
+                {
+                  id: 'action',
+                  name: tr('templates:import.result'),
+                  template: (r) => tr(`templates:importResult.${r.action}`),
+                },
               ]}
               getRowDescriptor={(r) => ({ id: String(r.index) })}
               width="max"
@@ -386,7 +401,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
             <>
               <input
                 type="file"
-                aria-label="Файл архива"
+                aria-label={tr('templates:import.fileAria')}
                 accept=".zip,.crt.zip"
                 disabled={busy}
                 onChange={(e) => choose(e.target.files?.[0] ?? null)}
@@ -396,18 +411,24 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
               {datasources.error && (
                 <Alert
                   theme="danger"
-                  title="Не удалось получить список источников данных"
+                  title={tr('templates:import.datasourcesFailed')}
                   message={errorMessage(datasources.error)}
                 />
               )}
               {previewM.error && (
-                <Alert theme="danger" title="Архив не принят" message={messageOf(previewM.error)} />
+                <Alert
+                  theme="danger"
+                  title={tr('templates:import.rejected')}
+                  message={messageOf(previewM.error)}
+                />
               )}
               {preview && (
                 <>
                   <Text variant="caption-2" color="secondary">
-                    Версия приложения в архиве: {preview.appVersion}, выгружено{' '}
-                    {formatDateTime(preview.exportedAt)}
+                    {tr('templates:import.archiveInfo', {
+                      version: preview.appVersion,
+                      date: formatDateTime(preview.exportedAt),
+                    })}
                   </Text>
                   <Table
                     data={preview.templates}
@@ -420,12 +441,12 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
               {apply.error && (
                 <Alert
                   theme="danger"
-                  title="Не удалось загрузить"
+                  title={tr('templates:import.applyFailed')}
                   message={messageOf(apply.error)}
                   actions={
                     conflict ? (
                       <Button view="outlined" onClick={retry}>
-                        Повторить предпросмотр
+                        {tr('templates:import.retry')}
                       </Button>
                     ) : undefined
                   }
@@ -436,13 +457,13 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
         </div>
       </Dialog.Body>
       {result ? (
-        <Dialog.Footer onClickButtonCancel={close} textButtonCancel="Закрыть" />
+        <Dialog.Footer onClickButtonCancel={close} textButtonCancel={tr('common:action.close')} />
       ) : (
         <Dialog.Footer
           onClickButtonApply={() => apply.mutate()}
           onClickButtonCancel={busy ? () => {} : close}
-          textButtonApply="Загрузить"
-          textButtonCancel="Отмена"
+          textButtonApply={tr('templates:import.apply')}
+          textButtonCancel={tr('common:action.cancel')}
           loading={apply.isPending}
           propsButtonApply={{ disabled: !ready || previewM.isPending }}
         />

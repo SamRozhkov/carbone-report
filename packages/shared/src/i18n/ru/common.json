@@ -115,6 +115,13 @@
     "s": "{{value}} с",
     "min": "{{min}} мин {{sec}} с"
   },
+  "size": {
+    "b": "{{value}} Б",
+    "kb": "{{value}} КБ",
+    "mb": "{{value}} МБ",
+    "gb": "{{value}} ГБ",
+    "tb": "{{value}} ТБ"
+  },
   "param": {
     "multipleHint": "несколько значений — через запятую",
     "waitingFor": "сначала выберите: {{names}}",

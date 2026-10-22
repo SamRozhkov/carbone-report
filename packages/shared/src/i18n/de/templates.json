@@ -1,0 +1,92 @@
+{
+  "list": {
+    "selectAll": "Alle Vorlagen auswählen",
+    "select": "„{{name}}“ auswählen",
+    "editingBy": "Wird von {{login}} bearbeitet",
+    "type": "Typ",
+    "updatedAt": "Geändert",
+    "open": "Öffnen",
+    "duplicate": "Duplizieren",
+    "download": "Herunterladen",
+    "exportSelected": "Exportieren ({{n}})",
+    "import": "Aus Archiv importieren",
+    "create": "Vorlage erstellen",
+    "empty": "Noch keine Vorlagen",
+    "duplicated": "Kopie „{{name}}“ erstellt",
+    "deleteTitle": "Vorlage löschen?",
+    "deleteText": "Die Vorlage „{{name}}“ wird zusammen mit ihren Abfragen und Parametern gelöscht. Der Ausführungsverlauf bleibt erhalten."
+  },
+  "export": {
+    "button": "Exportieren",
+    "failed": "Export fehlgeschlagen",
+    "tooMany": "Zu viele Vorlagen",
+    "tooManyText": "Es können höchstens {{max}} Vorlagen auf einmal exportiert werden, ausgewählt: {{selected}}."
+  },
+  "create": {
+    "title": "Neue Vorlage",
+    "noDatasourcesAdmin": "Fügen Sie zuerst im Bereich <page>„Datenquellen“</page> eine Datenquelle hinzu.",
+    "noDatasources": "Noch keine Datenquellen — bitten Sie einen Administrator, eine hinzuzufügen.",
+    "datasource": "Datenquelle",
+    "file": "Datei",
+    "blankDocx": "Leeres DOCX",
+    "blankXlsx": "Leeres XLSX",
+    "upload": "Datei hochladen",
+    "fileAria": "Vorlagendatei"
+  },
+  "importAction": {
+    "create": "erstellen",
+    "update": "aktualisieren",
+    "copy": "Kopie",
+    "skip": "überspringen"
+  },
+  "importResult": {
+    "create": "erstellt",
+    "update": "aktualisiert",
+    "copy": "Kopie erstellt",
+    "skip": "übersprungen"
+  },
+  "import": {
+    "title": "Vorlagen aus Archiv importieren",
+    "tooBig": "Das Archiv ist größer als 50 MB — diese Datei kann nicht hochgeladen werden.",
+    "tooBigFile": "Das Archiv ist größer als 50 MB — diese Datei kann nicht hochgeladen werden. Größe der Datei „{{name}}“: {{size}} MB.",
+    "noteUnavailable": "„{{was}}“ ist nicht mehr verfügbar — „{{now}}“ wurde ausgewählt, bitte prüfen",
+    "noteTargetGone": "Die zur Aktualisierung gewählte Vorlage wurde gelöscht oder umbenannt — prüfen Sie die Auswahl",
+    "noteTargetChanged": "Die Vorlage wurde nach der letzten Vorschau geändert — prüfen Sie, ob sie ersetzt werden kann",
+    "noteDatasourceGone": "Die ausgewählte Datenquelle wurde gelöscht",
+    "notesTwo": "{{first}}. {{second}}",
+    "template": "Vorlage",
+    "action": "Aktion",
+    "datasource": "Datenquelle",
+    "result": "Ergebnis",
+    "missingGroups": "Fehlende Gruppen: {{groups}} — der Zugriff wird nicht gewährt",
+    "pdfPassword": "Das PDF-Passwort wird nicht übernommen: Eine neue Vorlage hat kein Passwort, bei einer Aktualisierung bleibt das Passwort der vorhandenen Vorlage erhalten",
+    "lockedBy": "{{login}} bearbeitet die Vorlage: Die Aktualisierung wird abgelehnt, solange der Editor geöffnet ist",
+    "categorySkipped": "Die Kategorie „{{category}}“ gibt es in dieser Umgebung nicht — sie wird nicht angelegt, die Vorlage wird ohne Kategorie importiert",
+    "categoryCreated": "Die Kategorie „{{category}}“ wird angelegt",
+    "actionAria": "Aktion: {{name}}",
+    "targetAria": "Zu aktualisierende Vorlage: {{name}}",
+    "targetUpdatedAt": "geändert am {{date}}",
+    "updateNote": "Datei, Abfragen, Parameter, Zugriffsgruppen, Kategorie, Verfügbarkeit für alle und Datenquelle werden durch die Daten aus dem Archiv ersetzt",
+    "datasourceAria": "Datenquelle: {{name}}",
+    "chooseDatasource": "Datenquelle auswählen",
+    "inArchive": "Im Archiv: „{{name}}“ — {{problem}}",
+    "inArchiveHost": "Im Archiv: „{{name}}“ ({{host}}) — {{problem}}",
+    "datasourceAmbiguous": "mehrere Datenquellen mit diesem Namen gefunden — bitte auswählen",
+    "datasourceNotFound": "in dieser Umgebung nicht gefunden",
+    "fileAria": "Archivdatei",
+    "datasourcesFailed": "Liste der Datenquellen konnte nicht abgerufen werden",
+    "rejected": "Archiv nicht angenommen",
+    "archiveInfo": "App-Version im Archiv: {{version}}, exportiert am {{date}}",
+    "applyFailed": "Import fehlgeschlagen",
+    "retry": "Vorschau wiederholen",
+    "apply": "Importieren"
+  },
+  "access": {
+    "noCategory": "Ohne Kategorie",
+    "groupsHint": "Gruppen, die die Vorlage zusätzlich zum Zugriff über die Kategorie sehen",
+    "adminOnlyAfterSave": "Nach dem Speichern ist die Vorlage nur für Administratoren verfügbar",
+    "adminOnlyNow": "Die Vorlage ist derzeit nur für Administratoren verfügbar",
+    "saved": "Zugriff gespeichert",
+    "dialogTitle": "Zugriff auf die Vorlage „{{name}}“"
+  }
+}

@@ -101,7 +101,7 @@
   },
   "copy": {
     "done": "Kopiert: {{label}}",
-    "failed": "Kopieren fehlgeschlagen — markieren Sie den Tag manuell"
+    "failed": "Kopieren fehlgeschlagen — markieren Sie das Tag manuell"
   },
   "error": {
     "unknown": "unbekannter Fehler",
@@ -112,6 +112,13 @@
     "ms": "{{value}} ms",
     "s": "{{value}} s",
     "min": "{{min}} min {{sec}} s"
+  },
+  "size": {
+    "b": "{{value}} B",
+    "kb": "{{value}} KB",
+    "mb": "{{value}} MB",
+    "gb": "{{value}} GB",
+    "tb": "{{value}} TB"
   },
   "param": {
     "multipleHint": "mehrere Werte — durch Kommas getrennt",

@@ -114,6 +114,13 @@
     "s": "{{value}} s",
     "min": "{{min}} min {{sec}} s"
   },
+  "size": {
+    "b": "{{value}} o",
+    "kb": "{{value}} Ko",
+    "mb": "{{value}} Mo",
+    "gb": "{{value}} Go",
+    "tb": "{{value}} To"
+  },
   "param": {
     "multipleHint": "plusieurs valeurs — séparées par des virgules",
     "waitingFor": "sélectionnez d’abord : {{names}}",

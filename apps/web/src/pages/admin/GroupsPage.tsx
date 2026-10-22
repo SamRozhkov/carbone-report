@@ -15,6 +15,7 @@ import {
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api/endpoints';
 import { conflictMessage, errorMessage, fieldErrors } from '../../api/errors';
 import { usePermissions } from '../../app/permissions';
@@ -33,6 +34,7 @@ const invalidateAccess = (queryClient: QueryClient) =>
   );
 
 export function GroupsPage() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const list = useQuery({ queryKey: ['groups'], queryFn: api.groups.list });
@@ -51,7 +53,7 @@ export function GroupsPage() {
       setDeleting(null);
       add({
         name: `group-delete-${Date.now()}`,
-        title: 'Не удалось удалить',
+        title: t('admin:deleteFailed'),
         content: errorMessage(e),
         theme: 'danger',
       });
@@ -59,9 +61,18 @@ export function GroupsPage() {
   });
 
   const columns: TableColumnConfig<GroupDto>[] = [
-    { id: 'name', name: 'Название', template: (g) => g.name },
-    { id: 'description', name: 'Описание', template: (g) => g.description || '—' },
-    { id: 'members', name: 'Участники', align: 'end', template: (g) => g.memberIds.length },
+    { id: 'name', name: t('admin:field.name'), template: (g) => g.name },
+    {
+      id: 'description',
+      name: t('admin:field.description'),
+      template: (g) => g.description || '—',
+    },
+    {
+      id: 'members',
+      name: t('admin:groups.members'),
+      align: 'end',
+      template: (g) => g.memberIds.length,
+    },
     {
       id: 'actions',
       name: '',
@@ -71,8 +82,8 @@ export function GroupsPage() {
           <Button
             view="flat"
             size="s"
-            aria-label="Участники"
-            title="Участники"
+            aria-label={t('admin:groups.members')}
+            title={t('admin:groups.members')}
             onClick={() => setMembers(g)}
           >
             <Icon data={Persons} />
@@ -80,8 +91,8 @@ export function GroupsPage() {
           <Button
             view="flat"
             size="s"
-            aria-label="Изменить"
-            title="Изменить"
+            aria-label={t('common:action.edit')}
+            title={t('common:action.edit')}
             onClick={() => setDialog({ group: g })}
           >
             <Icon data={Pencil} />
@@ -89,8 +100,8 @@ export function GroupsPage() {
           <Button
             view="flat-danger"
             size="s"
-            aria-label="Удалить"
-            title="Удалить"
+            aria-label={t('common:action.delete')}
+            title={t('common:action.delete')}
             onClick={() => {
               setLastDeleted(g);
               setDeleting(g);
@@ -106,11 +117,11 @@ export function GroupsPage() {
   return (
     <>
       <PageHeader
-        title="Группы"
+        title={t('common:nav.groups')}
         actions={
           <Button view="action" onClick={() => setDialog({ group: null })}>
             <Icon data={Plus} />
-            Добавить группу
+            {t('admin:groups.add')}
           </Button>
         }
       />
@@ -122,7 +133,7 @@ export function GroupsPage() {
           data={list.data ?? []}
           columns={columns}
           getRowDescriptor={(g) => ({ id: g.id })}
-          emptyMessage="Групп пока нет"
+          emptyMessage={t('admin:groups.empty')}
           width="max"
         />
       )}
@@ -138,9 +149,9 @@ export function GroupsPage() {
       )}
       <ConfirmDialog
         open={!!deleting}
-        title="Удалить группу?"
-        text={`Группа «${(deleting ?? lastDeleted)?.name ?? ''}» будет удалена. Участники потеряют доступ, выданный через эту группу.`}
-        confirmText="Удалить"
+        title={t('admin:groups.deleteTitle')}
+        text={t('admin:groups.deleteText', { name: (deleting ?? lastDeleted)?.name ?? '' })}
+        confirmText={t('common:action.delete')}
         danger
         loading={remove.isPending}
         onConfirm={() => deleting && remove.mutate(deleting)}
@@ -151,6 +162,7 @@ export function GroupsPage() {
 }
 
 function GroupDialog({ group, onClose }: { group: GroupDto | null; onClose: () => void }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [name, setName] = useState(group?.name ?? '');
   const [description, setDescription] = useState(group?.description ?? '');
@@ -176,10 +188,13 @@ function GroupDialog({ group, onClose }: { group: GroupDto | null; onClose: () =
 
   return (
     <Dialog open onClose={onClose} aria-labelledby="cr-group-dialog">
-      <Dialog.Header caption={group ? 'Группа' : 'Новая группа'} id="cr-group-dialog" />
+      <Dialog.Header
+        caption={group ? t('admin:groups.dialogEdit') : t('admin:groups.dialogNew')}
+        id="cr-group-dialog"
+      />
       <Dialog.Body>
         <div className="cr-form">
-          <Field label="Название" error={nameError}>
+          <Field label={t('admin:field.name')} error={nameError}>
             <TextInput
               value={name}
               onUpdate={(v) => {
@@ -187,15 +202,15 @@ function GroupDialog({ group, onClose }: { group: GroupDto | null; onClose: () =
                 setName(v);
               }}
               validationState={nameError ? 'invalid' : undefined}
-              controlProps={{ 'aria-label': 'Название' }}
+              controlProps={{ 'aria-label': t('admin:field.name') }}
             />
           </Field>
-          <Field label="Описание" error={errors.description}>
+          <Field label={t('admin:field.description')} error={errors.description}>
             <TextArea
               value={description}
               onUpdate={setDescription}
               minRows={2}
-              controlProps={{ 'aria-label': 'Описание' }}
+              controlProps={{ 'aria-label': t('admin:field.description') }}
             />
           </Field>
           <GeneralError
@@ -208,8 +223,8 @@ function GroupDialog({ group, onClose }: { group: GroupDto | null; onClose: () =
       <Dialog.Footer
         onClickButtonApply={() => save.mutate()}
         onClickButtonCancel={onClose}
-        textButtonApply={group ? 'Сохранить' : 'Создать'}
-        textButtonCancel="Отмена"
+        textButtonApply={group ? t('common:action.save') : t('admin:create')}
+        textButtonCancel={t('common:action.cancel')}
         loading={save.isPending}
         propsButtonApply={{ disabled: !name.trim() }}
       />
@@ -218,6 +233,7 @@ function GroupDialog({ group, onClose }: { group: GroupDto | null; onClose: () =
 }
 
 function MembersDialog({ group, onClose }: { group: GroupDto; onClose: () => void }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { isAdmin } = usePermissions();
   // Список пользователей — только администратору; менеджеру безопасности — справочник активных (§43.3).
@@ -232,7 +248,7 @@ function MembersDialog({ group, onClose }: { group: GroupDto; onClose: () => voi
     ...(users.data ?? []).map((u) => ({ value: u.id, content: u.login })),
     ...group.memberIds
       .filter((uid) => users.data && !known.has(uid))
-      .map((uid) => ({ value: uid, content: '(заблокирован)' })),
+      .map((uid) => ({ value: uid, content: t('admin:groups.blockedMember') })),
   ];
   const save = useMutation({
     mutationFn: () => api.groups.setMembers(group.id, userIds),
@@ -246,12 +262,15 @@ function MembersDialog({ group, onClose }: { group: GroupDto; onClose: () => voi
 
   return (
     <Dialog open onClose={onClose} aria-labelledby="cr-group-members">
-      <Dialog.Header caption={`Участники группы ${group.name}`} id="cr-group-members" />
+      <Dialog.Header
+        caption={t('admin:groups.membersTitle', { name: group.name })}
+        id="cr-group-members"
+      />
       <Dialog.Body>
         <div className="cr-form">
-          <Field label="Участники" group>
+          <Field label={t('admin:groups.members')} group>
             <Select
-              aria-label="Участники"
+              aria-label={t('admin:groups.members')}
               value={userIds}
               onUpdate={setUserIds}
               options={options}
@@ -259,21 +278,19 @@ function MembersDialog({ group, onClose }: { group: GroupDto; onClose: () => voi
               filterable
               hasClear
               loading={users.isPending}
-              placeholder="нет участников"
+              placeholder={t('admin:groups.noMembers')}
               width="max"
             />
           </Field>
-          {users.error && (
-            <ErrorAlert error={users.error} title="Не удалось загрузить пользователей" />
-          )}
+          {users.error && <ErrorAlert error={users.error} title={t('admin:loadFailed.users')} />}
           <ErrorAlert error={save.error} />
         </div>
       </Dialog.Body>
       <Dialog.Footer
         onClickButtonApply={() => save.mutate()}
         onClickButtonCancel={onClose}
-        textButtonApply="Сохранить"
-        textButtonCancel="Отмена"
+        textButtonApply={t('common:action.save')}
+        textButtonCancel={t('common:action.cancel')}
         loading={save.isPending}
         propsButtonApply={{ disabled: !users.data }}
       />

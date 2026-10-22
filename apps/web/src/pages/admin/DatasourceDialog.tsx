@@ -10,6 +10,7 @@ import {
 } from '@gravity-ui/uikit';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api/endpoints';
 import { fieldErrors } from '../../api/errors';
 import { ErrorAlert } from '../../components/ErrorAlert';
@@ -27,6 +28,7 @@ export function DatasourceDialog({
   datasource: DatasourceDto | null;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const editing = !!datasource;
   const [form, setForm] = useState({
@@ -43,7 +45,8 @@ export function DatasourceDialog({
   const [portMissing, setPortMissing] = useState(false);
   const body = (): DatasourceBody => {
     const { password, sslCa, port, ...rest } = form;
-    if (port === null) throw new Error('порт не указан'); // withPort не пускает сюда без порта
+    // withPort не пускает сюда без порта
+    if (port === null) throw new Error(t('admin:dsDialog.portRequired'));
     const base = {
       ...rest,
       port,
@@ -104,14 +107,17 @@ export function DatasourceDialog({
   return (
     <Dialog open={open} onClose={onClose} aria-labelledby="cr-ds-dialog">
       <Dialog.Header
-        caption={editing ? 'Источник данных' : 'Новый источник данных'}
+        caption={editing ? t('admin:dsDialog.titleEdit') : t('admin:dsDialog.titleNew')}
         id="cr-ds-dialog"
       />
       <Dialog.Body>
         <div className="cr-form">
-          {text('name', 'Название')}
-          {text('host', 'Хост')}
-          <Field label="Порт" error={portMissing ? 'укажите порт' : errors.port}>
+          {text('name', t('admin:field.name'))}
+          {text('host', t('admin:dsDialog.host'))}
+          <Field
+            label={t('admin:dsDialog.port')}
+            error={portMissing ? t('admin:dsDialog.portRequired') : errors.port}
+          >
             <NumberInput
               value={form.port}
               onUpdate={(v) => {
@@ -121,18 +127,18 @@ export function DatasourceDialog({
               min={1}
               max={65535}
               validationState={portMissing || errors.port ? 'invalid' : undefined}
-              controlProps={{ 'aria-label': 'Порт' }}
+              controlProps={{ 'aria-label': t('admin:dsDialog.port') }}
             />
           </Field>
-          {text('database', 'База данных')}
-          {text('username', 'Пользователь БД')}
-          <Field label="Пароль" error={errors.password}>
+          {text('database', t('admin:dsDialog.database'))}
+          {text('username', t('admin:datasources.dbUser'))}
+          <Field label={t('admin:field.password')} error={errors.password}>
             <TextInput
               type="password"
               value={form.password}
               onUpdate={(v) => set('password', v)}
-              placeholder={editing ? 'не менять' : ''}
-              controlProps={{ 'aria-label': 'Пароль' }}
+              placeholder={editing ? t('admin:field.keepPassword') : ''}
+              controlProps={{ 'aria-label': t('admin:field.password') }}
             />
           </Field>
           <Field label="SSL" error={errors.sslMode} group>
@@ -141,17 +147,17 @@ export function DatasourceDialog({
               value={form.sslMode}
               onUpdate={(v) => set('sslMode', v as SslMode)}
               options={[
-                { value: 'disable', content: 'Без SSL' },
-                { value: 'require', content: 'SSL без проверки сертификата' },
-                { value: 'verify', content: 'SSL с проверкой сертификата' },
+                { value: 'disable', content: t('admin:dsDialog.sslNone') },
+                { value: 'require', content: t('admin:dsDialog.sslRequire') },
+                { value: 'verify', content: t('admin:dsDialog.sslVerify') },
               ]}
             />
           </Field>
           {form.sslMode === 'verify' && (
             <Field
-              label="CA-сертификат (PEM)"
+              label={t('admin:dsDialog.ca')}
               error={errors.sslCa}
-              hint="Пусто — проверка по системным корневым сертификатам"
+              hint={t('admin:dsDialog.caHint')}
             >
               <TextArea
                 value={form.sslCa}
@@ -159,7 +165,7 @@ export function DatasourceDialog({
                 minRows={4}
                 placeholder="-----BEGIN CERTIFICATE-----"
                 validationState={errors.sslCa ? 'invalid' : undefined}
-                controlProps={{ 'aria-label': 'CA-сертификат (PEM)' }}
+                controlProps={{ 'aria-label': t('admin:dsDialog.ca') }}
               />
             </Field>
           )}
@@ -169,16 +175,16 @@ export function DatasourceDialog({
               loading={test.isPending}
               disabled={savedOnly && connDirty}
             >
-              Проверить соединение
+              {t('admin:dsDialog.test')}
             </Button>
           </div>
           {savedOnly && !connDirty && (
-            <Alert theme="info" message="Проверяются сохранённые параметры источника." />
+            <Alert theme="info" message={t('admin:dsDialog.testSaved')} />
           )}
           {savedOnly && connDirty && (
-            <Alert theme="warning" message="Введите пароль, чтобы проверить изменённые параметры" />
+            <Alert theme="warning" message={t('admin:dsDialog.testNeedsPassword')} />
           )}
-          {test.data?.ok === true && <Alert theme="success" message="Соединение установлено" />}
+          {test.data?.ok === true && <Alert theme="success" message={t('admin:dsDialog.testOk')} />}
           {test.data?.ok === false && <Alert theme="danger" message={test.data.message} />}
           <ErrorAlert error={test.error} />
           <GeneralError
@@ -191,8 +197,8 @@ export function DatasourceDialog({
       <Dialog.Footer
         onClickButtonApply={withPort(() => save.mutate())}
         onClickButtonCancel={onClose}
-        textButtonApply="Сохранить"
-        textButtonCancel="Отмена"
+        textButtonApply={t('common:action.save')}
+        textButtonCancel={t('common:action.cancel')}
         loading={save.isPending}
       />
     </Dialog>

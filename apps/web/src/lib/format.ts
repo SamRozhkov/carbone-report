@@ -31,8 +31,8 @@ export function formatDateTime(iso: string): string {
 export const formatDate = (iso: string) => formattersOf(currentLocale()).date.format(new Date(iso));
 
 const tenthsFormats = new Map<Locale, Intl.NumberFormat>();
-/** Секунды с одним знаком после запятой — разделитель по языку (ru — «12,3»). */
-function formatTenths(value: number): string {
+/** Число с одним знаком после запятой — разделитель по языку (ru — «12,3»). */
+export function formatTenths(value: number): string {
   const locale = currentLocale();
   let f = tenthsFormats.get(locale);
   if (!f) {

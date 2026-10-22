@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { changeLocale } from '../../i18n';
 import { adminMe, mockApi, pickOption, renderRoute } from '../../test/utils';
 
 const users = [
@@ -495,5 +496,50 @@ describe('UsersPage', () => {
     await waitFor(() =>
       expect(calls.find((c) => c.method === 'POST')?.body).toMatchObject({ role: 'editor' }),
     );
+  });
+});
+
+describe('UsersPage: язык интерфейса', () => {
+  const latinGroups = [
+    { id: 'g1', name: 'Accounting', description: '', memberIds: ['u2'], createdAt: '' },
+    { id: 'g2', name: 'Warehouse', description: '', memberIds: ['u2'], createdAt: '' },
+  ];
+
+  it('на ru роль в таблице — строчными (ключ admin:roleInTable)', async () => {
+    mockApi([adminMe, { path: '/api/users', body: users }, { path: '/api/groups', body: groups }]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    expect(within(row('admin (вы)')).getByText('администратор')).toBeInTheDocument();
+    expect(within(row('ivanov')).getByText('пользователь')).toBeInTheDocument();
+  });
+
+  // §44.6: моки на латинице — кириллица на странице могла бы прийти только из кода.
+  it('на de страница без кириллицы: колонки, роли, статусы, действия', async () => {
+    await changeLocale('de', { persist: 'none' });
+    mockApi([
+      adminMe,
+      {
+        path: '/api/users',
+        body: [
+          users[0],
+          { ...users[1], blocked: true, certificateNotAfter: '2030-01-31T00:00:00Z' },
+        ],
+      },
+      { path: '/api/groups', body: latinGroups },
+    ]);
+    renderRoute('/admin/users');
+    await screen.findByText('ivanov');
+    expect(screen.getByRole('heading', { level: 1, name: 'Benutzer' })).toBeInTheDocument();
+    for (const name of ['Benutzername', 'Rolle', 'Status', 'Gruppen', 'Signatur', 'Erstellt'])
+      expect(screen.getByRole('columnheader', { name })).toBeInTheDocument();
+    expect(within(row('admin (Sie)')).getByText('Administrator')).toBeInTheDocument();
+    const ivanov = row('ivanov');
+    expect(within(ivanov).getByText('Benutzer')).toBeInTheDocument();
+    expect(within(ivanov).getByText('gesperrt')).toBeInTheDocument();
+    expect(within(ivanov).getByText('Accounting, Warehouse')).toBeInTheDocument();
+    expect(within(ivanov).getByText('bis 31.01.2030')).toBeInTheDocument();
+    expect(within(ivanov).getByRole('button', { name: 'Entsperren' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Benutzer hinzufügen' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/[Ѐ-ӿ]/);
   });
 });

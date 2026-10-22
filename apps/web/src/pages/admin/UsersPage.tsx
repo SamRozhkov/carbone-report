@@ -8,7 +8,6 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/errors';
 import { useMe } from '../../api/session';
-import { useLocale } from '../../i18n';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { PageHeader } from '../../components/PageHeader';
@@ -17,12 +16,8 @@ import { CreateUserDialog, EditUserDialog } from './UserDialogs';
 
 export function UsersPage() {
   const { t } = useTranslation();
-  const locale = useLocale();
-  // В русской таблице роль — строчными, как раньше; в других языках — как название (глоссарий).
-  const roleLabel = (role: UserDto['role']) => {
-    const label = t(`common:role.${role}`);
-    return locale === 'ru' ? label.toLocaleLowerCase('ru') : label;
-  };
+  // Подпись роли в таблице — свой ключ: в ru строчными, как раньше; в других языках — как название.
+  const roleLabel = (role: UserDto['role']) => t(`admin:roleInTable.${role}`);
   const me = useMe().data;
   const queryClient = useQueryClient();
   const { add } = useToaster();
@@ -38,7 +33,7 @@ export function UsersPage() {
   const fail = (e: unknown) =>
     add({
       name: `users-error-${Date.now()}`,
-      title: 'Ошибка',
+      title: t('common:status.error'),
       content: errorMessage(e),
       theme: 'danger',
     });
@@ -65,7 +60,7 @@ export function UsersPage() {
       setRevoking(null);
       add({
         name: `users-revoked-${u.id}`,
-        title: `Сессии пользователя ${u.login} завершены`,
+        title: t('admin:users.sessionsRevoked', { login: u.login }),
         theme: 'success',
       });
     },
@@ -75,29 +70,29 @@ export function UsersPage() {
   const columns: TableColumnConfig<UserDto>[] = [
     {
       id: 'login',
-      name: 'Логин',
-      template: (u) => (u.id === me?.id ? `${u.login} (вы)` : u.login),
+      name: t('admin:field.login'),
+      template: (u) => (u.id === me?.id ? t('admin:users.you', { login: u.login }) : u.login),
     },
     {
       id: 'role',
-      name: 'Роль',
+      name: t('admin:field.role'),
       template: (u) => (
         <Label theme={u.role === 'user' ? 'normal' : 'info'}>{roleLabel(u.role)}</Label>
       ),
     },
     {
       id: 'status',
-      name: 'Статус',
+      name: t('admin:field.status'),
       template: (u) =>
         u.blocked ? (
-          <Label theme="danger">заблокирован</Label>
+          <Label theme="danger">{t('admin:users.blocked')}</Label>
         ) : (
-          <Label theme="success">активен</Label>
+          <Label theme="success">{t('admin:users.active')}</Label>
         ),
     },
     {
       id: 'groups',
-      name: 'Группы',
+      name: t('admin:field.groups'),
       template: (u) =>
         groups.isPending && u.groupIds.length > 0
           ? '…'
@@ -108,19 +103,23 @@ export function UsersPage() {
     },
     {
       id: 'certificate',
-      name: 'Подпись',
+      name: t('admin:users.signature'),
       template: (u) =>
         u.certificateNotAfter ? (
           <Text
             color={new Date(u.certificateNotAfter).getTime() <= Date.now() ? 'danger' : undefined}
           >
-            до {formatDate(u.certificateNotAfter)}
+            {t('admin:users.certUntil', { date: formatDate(u.certificateNotAfter) })}
           </Text>
         ) : (
           '—'
         ),
     },
-    { id: 'createdAt', name: 'Создан', template: (u) => formatDate(u.createdAt) },
+    {
+      id: 'createdAt',
+      name: t('admin:users.createdAt'),
+      template: (u) => formatDate(u.createdAt),
+    },
     {
       id: 'actions',
       name: '',
@@ -132,8 +131,8 @@ export function UsersPage() {
             <Button
               view="flat"
               size="s"
-              aria-label="Изменить"
-              title="Изменить"
+              aria-label={t('common:action.edit')}
+              title={t('common:action.edit')}
               onClick={() => setEditing(u)}
             >
               <Icon data={Pencil} />
@@ -142,8 +141,8 @@ export function UsersPage() {
               <Button
                 view="flat"
                 size="s"
-                aria-label="Завершить сессии"
-                title="Завершить сессии"
+                aria-label={t('admin:users.revokeSessions')}
+                title={t('admin:users.revokeSessions')}
                 onClick={() => setRevoking(u)}
               >
                 <Icon data={PersonXmark} />
@@ -153,8 +152,8 @@ export function UsersPage() {
               <Button
                 view="flat"
                 size="s"
-                aria-label={u.blocked ? 'Разблокировать' : 'Заблокировать'}
-                title={u.blocked ? 'Разблокировать' : 'Заблокировать'}
+                aria-label={u.blocked ? t('admin:users.unblock') : t('admin:users.block')}
+                title={u.blocked ? t('admin:users.unblock') : t('admin:users.block')}
                 loading={toggleBlock.isPending && toggleBlock.variables?.id === u.id}
                 onClick={() => toggleBlock.mutate(u)}
               >
@@ -165,8 +164,8 @@ export function UsersPage() {
               <Button
                 view="flat-danger"
                 size="s"
-                aria-label="Удалить"
-                title="Удалить"
+                aria-label={t('common:action.delete')}
+                title={t('common:action.delete')}
                 onClick={() => {
                   setDeleteTarget(u);
                   setDeleting(u);
@@ -184,16 +183,16 @@ export function UsersPage() {
   return (
     <>
       <PageHeader
-        title="Пользователи"
+        title={t('common:nav.users')}
         actions={
           <Button view="action" onClick={() => setCreateOpen(true)}>
             <Icon data={Plus} />
-            Добавить пользователя
+            {t('admin:users.add')}
           </Button>
         }
       />
       <ErrorAlert error={users.error} />
-      {groups.error && <ErrorAlert error={groups.error} title="Не удалось загрузить группы" />}
+      {groups.error && <ErrorAlert error={groups.error} title={t('admin:loadFailed.groups')} />}
       {users.isPending ? (
         <Loader />
       ) : (
@@ -215,16 +214,15 @@ export function UsersPage() {
       )}
       <ConfirmDialog
         open={!!deleting}
-        title="Удалить пользователя?"
+        title={t('admin:users.deleteTitle')}
         text={
           <>
-            Пользователь «{deleteTarget?.login}» будет удалён вместе с историей его запусков и
-            файлами отчётов.
+            {t('admin:users.deleteText', { login: deleteTarget?.login ?? '' })}
             <br />
-            Если историю нужно сохранить, заблокируйте пользователя вместо удаления.
+            {t('admin:users.deleteHint')}
           </>
         }
-        confirmText="Удалить"
+        confirmText={t('common:action.delete')}
         danger
         loading={remove.isPending}
         onConfirm={() => deleting && remove.mutate(deleting)}
@@ -232,9 +230,9 @@ export function UsersPage() {
       />
       <ConfirmDialog
         open={!!revoking}
-        title="Завершить сессии"
-        text={`Пользователю ${revoking?.login ?? ''} придётся войти заново на всех устройствах.`}
-        confirmText="Завершить"
+        title={t('admin:users.revokeSessions')}
+        text={t('admin:users.revokeText', { login: revoking?.login ?? '' })}
+        confirmText={t('admin:users.revokeConfirm')}
         loading={revoke.isPending}
         onConfirm={() => revoking && revoke.mutate(revoking)}
         onCancel={() => setRevoking(null)}

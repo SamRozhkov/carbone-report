@@ -19,6 +19,7 @@ function useRoleOptions() {
 }
 
 export function CreateUserDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const roleOptions = useRoleOptions();
   const queryClient = useQueryClient();
   const [login, setLogin] = useState('');
@@ -43,27 +44,31 @@ export function CreateUserDialog({ open, onClose }: { open: boolean; onClose: ()
 
   return (
     <Dialog open={open} onClose={close} aria-labelledby="cr-user-create">
-      <Dialog.Header caption="Новый пользователь" id="cr-user-create" />
+      <Dialog.Header caption={t('admin:userDialog.createTitle')} id="cr-user-create" />
       <Dialog.Body>
         <div className="cr-form">
-          <Field label="Логин" error={errors.login}>
+          <Field label={t('admin:field.login')} error={errors.login}>
             <TextInput
               value={login}
               onUpdate={setLogin}
               validationState={errors.login ? 'invalid' : undefined}
-              controlProps={{ 'aria-label': 'Логин' }}
+              controlProps={{ 'aria-label': t('admin:field.login') }}
             />
           </Field>
-          <Field label="Пароль" hint="не короче 8 символов" error={errors.password}>
+          <Field
+            label={t('admin:field.password')}
+            hint={t('admin:userDialog.passwordHint')}
+            error={errors.password}
+          >
             <TextInput
               type="password"
               value={password}
               onUpdate={setPassword}
               validationState={errors.password ? 'invalid' : undefined}
-              controlProps={{ 'aria-label': 'Пароль' }}
+              controlProps={{ 'aria-label': t('admin:field.password') }}
             />
           </Field>
-          <Field label="Роль">
+          <Field label={t('admin:field.role')}>
             <Select
               value={[role]}
               options={roleOptions}
@@ -77,8 +82,8 @@ export function CreateUserDialog({ open, onClose }: { open: boolean; onClose: ()
       <Dialog.Footer
         onClickButtonApply={() => create.mutate()}
         onClickButtonCancel={close}
-        textButtonApply="Создать"
-        textButtonCancel="Отмена"
+        textButtonApply={t('admin:create')}
+        textButtonCancel={t('common:action.cancel')}
         loading={create.isPending}
         propsButtonApply={{ disabled: !login || !password }}
       />
@@ -95,6 +100,7 @@ export function EditUserDialog({
   isSelf: boolean;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const roleOptions = useRoleOptions();
   const queryClient = useQueryClient();
   const groups = useQuery({ queryKey: ['groups'], queryFn: api.groups.list });
@@ -140,38 +146,41 @@ export function EditUserDialog({
 
   return (
     <Dialog open={!!user} onClose={onClose} aria-labelledby="cr-user-edit">
-      <Dialog.Header caption={`Пользователь ${user?.login ?? ''}`} id="cr-user-edit" />
+      <Dialog.Header
+        caption={t('admin:userDialog.editTitle', { login: user?.login ?? '' })}
+        id="cr-user-edit"
+      />
       <Dialog.Body>
         <div className="cr-form">
-          <Field label="Роль">
+          <Field label={t('admin:field.role')}>
             <Select
               value={[role]}
               options={roleOptions}
               onUpdate={([v]) => setRole((v as Role) ?? role)}
               disabled={isSelf}
-              aria-label="Роль"
+              aria-label={t('admin:field.role')}
               width="max"
             />
           </Field>
-          <Field label="Новый пароль" error={errors.password}>
+          <Field label={t('admin:userDialog.newPassword')} error={errors.password}>
             <TextInput
               type="password"
               value={password}
               onUpdate={setPassword}
-              placeholder="не менять"
+              placeholder={t('admin:field.keepPassword')}
               validationState={errors.password ? 'invalid' : undefined}
-              controlProps={{ 'aria-label': 'Новый пароль' }}
+              controlProps={{ 'aria-label': t('admin:userDialog.newPassword') }}
             />
           </Field>
           <Switch
             checked={blocked}
             onUpdate={setBlocked}
             disabled={isSelf}
-            content="Заблокирован"
+            content={t('admin:userDialog.blocked')}
           />
-          <Field label="Группы" group>
+          <Field label={t('admin:field.groups')} group>
             <Select
-              aria-label="Группы"
+              aria-label={t('admin:field.groups')}
               value={groupIds}
               onUpdate={setGroupIds}
               options={(groups.data ?? []).map((g) => ({ value: g.id, content: g.name }))}
@@ -179,23 +188,23 @@ export function EditUserDialog({
               filterable
               hasClear
               loading={groups.isPending}
-              placeholder="нет групп"
+              placeholder={t('admin:noGroups')}
               width="max"
             />
           </Field>
-          {groups.error && <ErrorAlert error={groups.error} title="Не удалось загрузить группы" />}
+          {groups.error && <ErrorAlert error={groups.error} title={t('admin:loadFailed.groups')} />}
           {user?.certificateNotAfter && (
             <Button view="outlined-danger" onClick={() => setConfirmCert(true)}>
-              Удалить сертификат подписи
+              {t('admin:userDialog.removeCert')}
             </Button>
           )}
           <GeneralError error={save.error} errors={errors} shown={['password']} />
         </div>
         <ConfirmDialog
           open={confirmCert}
-          title="Удалить сертификат подписи?"
-          text={`Пользователь ${user?.login ?? ''} не сможет подписывать PDF, пока не загрузит новый сертификат.`}
-          confirmText="Удалить"
+          title={t('admin:userDialog.removeCertTitle')}
+          text={t('admin:userDialog.removeCertText', { login: user?.login ?? '' })}
+          confirmText={t('common:action.delete')}
           danger
           loading={removeCert.isPending}
           onConfirm={() => removeCert.mutate()}
@@ -206,8 +215,8 @@ export function EditUserDialog({
       <Dialog.Footer
         onClickButtonApply={() => save.mutate()}
         onClickButtonCancel={onClose}
-        textButtonApply="Сохранить"
-        textButtonCancel="Отмена"
+        textButtonApply={t('common:action.save')}
+        textButtonCancel={t('common:action.cancel')}
         loading={save.isPending}
       />
     </Dialog>

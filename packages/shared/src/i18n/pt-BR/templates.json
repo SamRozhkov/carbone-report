@@ -1,0 +1,92 @@
+{
+  "list": {
+    "selectAll": "Selecionar todos os modelos",
+    "select": "Selecionar “{{name}}”",
+    "editingBy": "Em edição por {{login}}",
+    "type": "Tipo",
+    "updatedAt": "Alterado em",
+    "open": "Abrir",
+    "duplicate": "Duplicar",
+    "download": "Baixar",
+    "exportSelected": "Exportar ({{n}})",
+    "import": "Importar de arquivo ZIP",
+    "create": "Criar modelo",
+    "empty": "Ainda não há modelos",
+    "duplicated": "Cópia “{{name}}” criada",
+    "deleteTitle": "Excluir o modelo?",
+    "deleteText": "O modelo “{{name}}” será excluído junto com as consultas e os parâmetros. O histórico de execuções será mantido."
+  },
+  "export": {
+    "button": "Exportar",
+    "failed": "Não foi possível exportar",
+    "tooMany": "Modelos demais",
+    "tooManyText": "É possível exportar no máximo {{max}} modelos por vez; selecionados: {{selected}}."
+  },
+  "create": {
+    "title": "Novo modelo",
+    "noDatasourcesAdmin": "Primeiro adicione uma fonte de dados na seção <page>“Fontes de dados”</page>.",
+    "noDatasources": "Ainda não há fontes de dados — peça a um administrador para adicionar uma.",
+    "datasource": "Fonte de dados",
+    "file": "Arquivo",
+    "blankDocx": "DOCX em branco",
+    "blankXlsx": "XLSX em branco",
+    "upload": "Enviar arquivo",
+    "fileAria": "Arquivo do modelo"
+  },
+  "importAction": {
+    "create": "criar",
+    "update": "atualizar",
+    "copy": "cópia",
+    "skip": "ignorar"
+  },
+  "importResult": {
+    "create": "criado",
+    "update": "atualizado",
+    "copy": "cópia criada",
+    "skip": "ignorado"
+  },
+  "import": {
+    "title": "Importar modelos de arquivo ZIP",
+    "tooBig": "O arquivo ZIP tem mais de 50 MB e não pode ser enviado.",
+    "tooBigFile": "O arquivo ZIP tem mais de 50 MB e não pode ser enviado. Tamanho do arquivo “{{name}}”: {{size}} MB.",
+    "noteUnavailable": "“{{was}}” não está mais disponível — “{{now}}” foi selecionado, verifique",
+    "noteTargetGone": "O modelo escolhido para atualização foi excluído ou renomeado — verifique a escolha",
+    "noteTargetChanged": "O modelo foi alterado após a pré-visualização anterior — verifique se ele pode ser substituído",
+    "noteDatasourceGone": "A fonte de dados selecionada foi excluída",
+    "notesTwo": "{{first}}. {{second}}",
+    "template": "Modelo",
+    "action": "Ação",
+    "datasource": "Fonte de dados",
+    "result": "Resultado",
+    "missingGroups": "Grupos inexistentes: {{groups}} — o acesso não será concedido",
+    "pdfPassword": "A senha do PDF não é transferida: um novo modelo ficará sem senha; na atualização, permanece a senha do modelo atual",
+    "lockedBy": "{{login}} está editando o modelo: a atualização será recusada enquanto o editor estiver aberto",
+    "categorySkipped": "A categoria “{{category}}” não existe neste ambiente — ela não será criada, e o modelo será importado sem ela",
+    "categoryCreated": "A categoria “{{category}}” será criada",
+    "actionAria": "Ação: {{name}}",
+    "targetAria": "Modelo a atualizar: {{name}}",
+    "targetUpdatedAt": "alterado em {{date}}",
+    "updateNote": "O arquivo, as consultas, os parâmetros, os grupos de acesso, a categoria, a disponibilidade para todos e a fonte serão substituídos pelos dados do arquivo ZIP",
+    "datasourceAria": "Fonte de dados: {{name}}",
+    "chooseDatasource": "Selecione uma fonte",
+    "inArchive": "No arquivo ZIP: “{{name}}” — {{problem}}",
+    "inArchiveHost": "No arquivo ZIP: “{{name}}” ({{host}}) — {{problem}}",
+    "datasourceAmbiguous": "foram encontradas várias fontes com este nome — escolha uma",
+    "datasourceNotFound": "não encontrada neste ambiente",
+    "fileAria": "Arquivo ZIP",
+    "datasourcesFailed": "Não foi possível obter a lista de fontes de dados",
+    "rejected": "Arquivo ZIP recusado",
+    "archiveInfo": "Versão do aplicativo no arquivo ZIP: {{version}}, exportado em {{date}}",
+    "applyFailed": "Não foi possível importar",
+    "retry": "Repetir a pré-visualização",
+    "apply": "Importar"
+  },
+  "access": {
+    "noCategory": "Sem categoria",
+    "groupsHint": "grupos que veem o modelo além do acesso pela categoria",
+    "adminOnlyAfterSave": "Após salvar, o modelo ficará disponível apenas para administradores",
+    "adminOnlyNow": "No momento, o modelo está disponível apenas para administradores",
+    "saved": "Acesso salvo",
+    "dialogTitle": "Acesso ao modelo “{{name}}”"
+  }
+}

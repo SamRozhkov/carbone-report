@@ -16,6 +16,8 @@ const RU = import.meta.glob<Catalog>(
     '../../../../packages/shared/src/i18n/ru/reports.json',
     '../../../../packages/shared/src/i18n/ru/history.json',
     '../../../../packages/shared/src/i18n/ru/signature.json',
+    '../../../../packages/shared/src/i18n/ru/admin.json',
+    '../../../../packages/shared/src/i18n/ru/templates.json',
   ],
   { eager: true, import: 'default' },
 );
@@ -25,6 +27,8 @@ const LAZY = import.meta.glob<Catalog>(
     '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/reports.json',
     '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/history.json',
     '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/signature.json',
+    '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/admin.json',
+    '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/templates.json',
   ],
   { import: 'default' },
 );

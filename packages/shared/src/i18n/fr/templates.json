@@ -1,0 +1,92 @@
+{
+  "list": {
+    "selectAll": "Sélectionner tous les modèles",
+    "select": "Sélectionner « {{name}} »",
+    "editingBy": "En cours de modification par {{login}}",
+    "type": "Type",
+    "updatedAt": "Modifié",
+    "open": "Ouvrir",
+    "duplicate": "Dupliquer",
+    "download": "Télécharger",
+    "exportSelected": "Exporter ({{n}})",
+    "import": "Importer depuis une archive",
+    "create": "Créer un modèle",
+    "empty": "Aucun modèle pour l’instant",
+    "duplicated": "Copie « {{name}} » créée",
+    "deleteTitle": "Supprimer le modèle ?",
+    "deleteText": "Le modèle « {{name}} » sera supprimé avec ses requêtes et ses paramètres. L’historique des exécutions sera conservé."
+  },
+  "export": {
+    "button": "Exporter",
+    "failed": "Impossible d’exporter",
+    "tooMany": "Trop de modèles",
+    "tooManyText": "Vous pouvez exporter au plus {{max}} modèles à la fois ; sélectionnés : {{selected}}."
+  },
+  "create": {
+    "title": "Nouveau modèle",
+    "noDatasourcesAdmin": "Ajoutez d’abord une source de données dans la section <page>« Sources de données »</page>.",
+    "noDatasources": "Aucune source de données pour l’instant — demandez à un administrateur d’en ajouter une.",
+    "datasource": "Source de données",
+    "file": "Fichier",
+    "blankDocx": "DOCX vide",
+    "blankXlsx": "XLSX vide",
+    "upload": "Téléverser un fichier",
+    "fileAria": "Fichier du modèle"
+  },
+  "importAction": {
+    "create": "créer",
+    "update": "mettre à jour",
+    "copy": "copie",
+    "skip": "ignorer"
+  },
+  "importResult": {
+    "create": "créé",
+    "update": "mis à jour",
+    "copy": "copie créée",
+    "skip": "ignoré"
+  },
+  "import": {
+    "title": "Importer des modèles depuis une archive",
+    "tooBig": "L’archive dépasse 50 Mo : ce fichier ne peut pas être téléversé.",
+    "tooBigFile": "L’archive dépasse 50 Mo : ce fichier ne peut pas être téléversé. Taille du fichier « {{name}} » : {{size}} Mo.",
+    "noteUnavailable": "« {{was}} » n’est plus disponible — « {{now}} » a été sélectionné, vérifiez",
+    "noteTargetGone": "Le modèle choisi pour la mise à jour a été supprimé ou renommé — vérifiez votre choix",
+    "noteTargetChanged": "Le modèle a été modifié depuis l’aperçu précédent — vérifiez qu’il peut être remplacé",
+    "noteDatasourceGone": "La source de données sélectionnée a été supprimée",
+    "notesTwo": "{{first}}. {{second}}",
+    "template": "Modèle",
+    "action": "Action",
+    "datasource": "Source de données",
+    "result": "Résultat",
+    "missingGroups": "Groupes absents : {{groups}} — l’accès ne sera pas accordé",
+    "pdfPassword": "Le mot de passe PDF n’est pas transféré : un nouveau modèle n’aura pas de mot de passe ; lors d’une mise à jour, le mot de passe du modèle actuel est conservé",
+    "lockedBy": "{{login}} modifie le modèle : la mise à jour sera refusée tant que l’éditeur est ouvert",
+    "categorySkipped": "La catégorie « {{category}} » n’existe pas dans cet environnement — elle ne sera pas créée et le modèle sera importé sans catégorie",
+    "categoryCreated": "La catégorie « {{category}} » sera créée",
+    "actionAria": "Action : {{name}}",
+    "targetAria": "Modèle à mettre à jour : {{name}}",
+    "targetUpdatedAt": "modifié le {{date}}",
+    "updateNote": "Le fichier, les requêtes, les paramètres, les groupes d’accès, la catégorie, l’accès pour tous et la source seront remplacés par les données de l’archive",
+    "datasourceAria": "Source de données : {{name}}",
+    "chooseDatasource": "Choisissez une source",
+    "inArchive": "Dans l’archive : « {{name}} » — {{problem}}",
+    "inArchiveHost": "Dans l’archive : « {{name}} » ({{host}}) — {{problem}}",
+    "datasourceAmbiguous": "plusieurs sources portent ce nom — choisissez-en une",
+    "datasourceNotFound": "introuvable dans cet environnement",
+    "fileAria": "Fichier d’archive",
+    "datasourcesFailed": "Impossible d’obtenir la liste des sources de données",
+    "rejected": "Archive refusée",
+    "archiveInfo": "Version de l’application dans l’archive : {{version}}, exportée le {{date}}",
+    "applyFailed": "Impossible d’importer",
+    "retry": "Relancer l’aperçu",
+    "apply": "Importer"
+  },
+  "access": {
+    "noCategory": "Sans catégorie",
+    "groupsHint": "groupes qui voient le modèle en plus de l’accès via la catégorie",
+    "adminOnlyAfterSave": "Après l’enregistrement, le modèle ne sera accessible qu’aux administrateurs",
+    "adminOnlyNow": "Le modèle n’est actuellement accessible qu’aux administrateurs",
+    "saved": "Accès enregistré",
+    "dialogTitle": "Accès au modèle « {{name}} »"
+  }
+}

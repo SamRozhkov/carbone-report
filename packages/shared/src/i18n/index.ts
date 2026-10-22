@@ -23,6 +23,8 @@ export const NAMESPACES = [
   'reports',
   'history',
   'signature',
+  'admin',
+  'templates',
   'errors',
   'validation',
 ] as const;

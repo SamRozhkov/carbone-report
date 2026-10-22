@@ -1499,7 +1499,7 @@ scripts/smoke.ts            сквозная проверка работающе
 - Колонка `templates.pdf_options jsonb` (миграция 0008), по умолчанию `{}`; схема `PdfOptions` в `packages/shared/src/pdf-options.ts` (zod, строгая, все блоки необязательны):
   - `pdfa` — `false` (по умолчанию) или `true`: PDF/A-2b.
   - `watermark` — `{ text, opacity, color, angle }`: `text` — 1–200 символов (с тегами); `opacity` — 10–50 (%), по умолчанию 20; `color` — `gray|red|blue`, по умолчанию `gray` (`#808080`, `#C00000`, `#1F4E9A`); `angle` — `diagonal|horizontal`, по умолчанию `diagonal`. Размер шрифта подбирается так, чтобы строка занимала 80 % диагонали (или ширины для `horizontal`) страницы, не больше 120 пт.
-  - `pageNumbers` — `{ format, position, skipFirst }`: `format` — 1–100 символов, по умолчанию `Стр. {page} из {pages}`, обязателен `{page}`; `position` — `bottom-center|bottom-right|top-right`, по умолчанию `bottom-center`; `skipFirst` — по умолчанию `false`. Шрифт 9 пт, цвет `#404040`, отступ от края 24 пт (с учётом CropBox).
+  - `pageNumbers` — `{ format, position, skipFirst }`: `format` — 1–100 символов, обязателен `{page}`; не задан — формат языка отчёта (`PAGE_FORMATS`, с 2.14.0, §45.4); `position` — `bottom-center|bottom-right|top-right`, по умолчанию `bottom-center`; `skipFirst` — по умолчанию `false`. Шрифт 9 пт, цвет `#404040`, отступ от края 24 пт (с учётом CropBox).
   - `metadata` — `{ title, author, subject, keywords }`, каждое до 500 символов (с тегами); пустой `title` — имя шаблона.
 - Символы, которых нет ни в Noto Sans Regular, ни в Noto Sans SC Regular (с 2.14.0, §45.5), в постоянном тексте полей — ошибка `400 VALIDATION` у поля «символ … не поддерживается шрифтом PDF» (проверка по cmap шрифта в API).
 - `PUT /api/templates/:id/pdf-options` (администратор) — сохраняет весь объект, возвращает `TemplateAdminDetails` с `pdfOptions` и `attachments`.
@@ -1523,8 +1523,8 @@ scripts/smoke.ts            сквозная проверка работающе
 - Если `pdf_options` пуст (нет `watermark`, `pageNumbers`, `metadata`) и приложений нет — обработки нет, результат байт в байт как в 2.6.0 (при `pdfa` без остального — тоже без обработки).
 - Иначе — `postprocessPdf(pdf, { attachments, watermark, pageNumbers, metadata, pdfa })` в `apps/api/src/modules/pdf/` (`pdf-lib` MIT, `@pdf-lib/fontkit` MIT), в пуле рабочих потоков рендера, в пределах срока отчёта (`deadline`):
   1. приложения копируются (`copyPages`) в начало и конец;
-  2. водяной знак — на каждой странице поверх содержимого, по центру видимой области (CropBox, иначе MediaBox) с учётом `/Rotate`; шрифт Noto Sans Regular встраивается подмножеством (файлы из `packages/carbone/assets/fonts`); прозрачность — ExtGState `ca`;
-  3. нумерация — тем же шрифтом, `skipFirst` пропускает первую страницу итогового документа, номера сквозные;
+  2. водяной знак — на каждой странице поверх содержимого, по центру видимой области (CropBox, иначе MediaBox) с учётом `/Rotate`; шрифт Noto Sans Regular (строка с символами, которых в нём нет, но есть в Noto Sans SC, — Noto Sans SC Regular, §45.5) встраивается подмножеством (файлы из `packages/carbone/assets/fonts`); прозрачность — ExtGState `ca`;
+  3. нумерация — по тому же правилу выбора шрифта, `skipFirst` пропускает первую страницу итогового документа, номера сквозные;
   4. метаданные — Info (`Title`, `Author`, `Subject`, `Keywords`, `Producer: carbone-reports`, даты создания и изменения) и XMP с теми же значениями; при `pdfa` в XMP сохраняются `pdfaid:part=2`, `pdfaid:conformance=B`; OutputIntent отчёта и `/ID` трейлера сохраняются.
 - Результат больше 100 МБ — ошибка `400` «итоговый PDF больше 100 МБ». Файл приложения не читается из S3 — `502` «приложенный файл «{name}» недоступен».
 - Где действует: предпросмотр администратора, формирование отчёта (`out.pdf` снимка), скачивание PDF. Прочие форматы («Сохранить как DOCX/XLSX…», предпросмотр данных) — без настроек PDF.

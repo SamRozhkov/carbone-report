@@ -1,0 +1,34 @@
+{
+  "role": {
+    "admin": "Администратор",
+    "editor": "Редактор",
+    "access_manager": "Менеджер безопасности",
+    "user": "Пользователь"
+  },
+  "locale": {
+    "ru": "Русский",
+    "en": "English",
+    "es": "Español",
+    "pt-BR": "Português (Brasil)",
+    "fr": "Français",
+    "de": "Deutsch",
+    "zh-CN": "简体中文",
+    "browser": "Как в браузере"
+  },
+  "action": {
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "close": "Закрыть",
+    "edit": "Изменить",
+    "add": "Добавить"
+  },
+  "status": {
+    "loading": "Загрузка…",
+    "error": "Ошибка"
+  },
+  "items_one": "{{count}} элемент",
+  "items_few": "{{count}} элемента",
+  "items_many": "{{count}} элементов",
+  "items_other": "{{count}} элемента"
+}

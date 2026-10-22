@@ -6,13 +6,17 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./template-transfer": "./src/template-transfer.ts"
+    "./template-transfer": "./src/template-transfer.ts",
+    "./i18n": "./src/i18n/index.ts",
+    "./i18n/server": "./src/i18n/server.ts",
+    "./i18n/catalogs/*.json": "./src/i18n/*.json"
   },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "i18next": "^26.5.4",
     "zod": "^4.6.5"
   },
   "devDependencies": {

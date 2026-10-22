@@ -260,6 +260,30 @@ describe('HelpPage: язык справки (§46)', () => {
     expect(writeText).toHaveBeenCalledWith(e.template);
   });
 
+  it('pt-BR: результаты из pt-BR.ts, «fmt-money» в реалах, «Copiar» копирует португальский шаблон', async () => {
+    const pt = await import('./content/pt-BR');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    await changeLocale('pt-BR', { persist: 'none' });
+    renderWithProviders(<HelpPage />);
+    const first = pt.HELP_SECTIONS[0]!;
+    expect(await screen.findByRole('region', { name: first.title })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(first.title).toBe('Conceitos básicos');
+    const all = pt.HELP_SECTIONS.flatMap((s) => s.examples);
+    // Review Focus 4: formatC() на pt-BR — валюта языка отчёта (BRL), не рубли.
+    const money = all.find((e) => e.id === 'fmt-money')!;
+    expect(money.result).toContain('R$');
+    const moneyCard = screen.getByRole('article', { name: money.title });
+    expect(within(moneyCard).getByText(money.result)).toBeInTheDocument();
+    const e = all.find((x) => x.id === 'basics-params')!;
+    expect(e.template).toBe("Período a partir de {d.params.from:formatD('DD/MM/YYYY')}");
+    const card = screen.getByRole('article', { name: e.title });
+    await userEvent.click(within(card).getByRole('button', { name: `Copiar tag: ${e.title}` }));
+    expect(writeText).toHaveBeenCalledWith(e.template);
+  });
+
   it('смена языка на открытой справке — содержимое переключается, якоря на месте', async () => {
     HELP_MODULES.en = () => Promise.resolve(fake);
     renderWithProviders(<HelpPage />);

@@ -9,10 +9,11 @@ export type { HelpContent, HelpExample, HelpLimit, HelpSection } from './types';
 export const HELP_RU: HelpContent = ru;
 
 /**
- * Модули языков, кроме ru: по строке на язык (`en: () => import('./en')`). Языка нет в таблице —
- * справка на ru. Записи изменяемы: тест подменяет загрузку чанка.
+ * Модули языков, кроме ru: по строке на язык (`en: () => import('./en')`). Тип — полный `Record`:
+ * язык, добавленный в `LOCALES` без модуля, не пройдёт `pnpm typecheck`. Записи изменяемы: тест
+ * подменяет загрузку чанка.
  */
-export const HELP_MODULES: Partial<Record<Exclude<Locale, 'ru'>, () => Promise<HelpContent>>> = {
+export const HELP_MODULES: Record<Exclude<Locale, 'ru'>, () => Promise<HelpContent>> = {
   en: () => import('./en'),
   de: () => import('./de'),
   fr: () => import('./fr'),
@@ -25,7 +26,7 @@ export const HELP_MODULES: Partial<Record<Exclude<Locale, 'ru'>, () => Promise<H
 export async function loadHelpContent(
   locale: Locale,
 ): Promise<{ content: HelpContent; failed: boolean }> {
-  const load = locale === 'ru' ? undefined : HELP_MODULES[locale];
+  const load = locale === 'ru' ? undefined : (HELP_MODULES as Partial<typeof HELP_MODULES>)[locale];
   if (!load) return { content: HELP_RU, failed: false };
   try {
     return { content: await load(), failed: false };

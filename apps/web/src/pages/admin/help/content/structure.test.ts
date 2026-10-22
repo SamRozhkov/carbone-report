@@ -52,6 +52,19 @@ const flags = (e: HelpExample) => ({
   rich: e.rich,
 });
 
+/** Что у модуля «пропало» относительно ru: заметки, абзацы введения раздела и общего введения. */
+const proseMismatches = (mod: HelpContent) => {
+  const map = new Map(examplesOf(mod).map((e) => [e.id, e]));
+  const bad: string[] = [];
+  if (mod.HELP_INTRO.length !== HELP_RU.HELP_INTRO.length) bad.push('HELP_INTRO');
+  const sections = new Map(mod.HELP_SECTIONS.map((s) => [s.id, s]));
+  for (const s of HELP_RU.HELP_SECTIONS)
+    if (sections.get(s.id)?.intro.length !== s.intro.length) bad.push(`intro:${s.id}`);
+  for (const e of examplesOf(HELP_RU))
+    if (!!map.get(e.id)?.note !== !!e.note) bad.push(`note:${e.id}`);
+  return bad;
+};
+
 describe('структура модулей справки', () => {
   it('таблица модулей: только языки интерфейса, кроме ru; каждый модуль загружается', () => {
     const allowed = LOCALES.filter((l) => l !== 'ru') as string[];
@@ -80,6 +93,29 @@ describe('структура модулей справки', () => {
     expect(formatters("{d.x:ifEmpty('—'):formatD('DD.MM.YYYY')}")).toEqual(
       formatters("{d.x:ifEmpty('n/a: x'):formatD('MM/DD/YYYY')}"),
     );
+  });
+});
+
+describe('самопроверка: заметки и абзацы', () => {
+  it('потерянная заметка, абзац введения раздела или общего введения — расхождение', () => {
+    const withNote = examplesOf(HELP_RU).find((e) => e.note)!;
+    expect(proseMismatches({ ...HELP_RU })).toEqual([]);
+    const dropNote: HelpContent = {
+      HELP_INTRO: HELP_RU.HELP_INTRO,
+      HELP_SECTIONS: HELP_RU.HELP_SECTIONS.map((s) => ({
+        ...s,
+        examples: s.examples.map((e) => (e.id === withNote.id ? { ...e, note: undefined } : e)),
+      })),
+    };
+    expect(proseMismatches(dropNote)).toEqual([`note:${withNote.id}`]);
+    const sec = HELP_RU.HELP_SECTIONS.find((s) => s.intro.length > 0)!;
+    const dropIntro: HelpContent = {
+      HELP_INTRO: HELP_RU.HELP_INTRO.slice(1),
+      HELP_SECTIONS: HELP_RU.HELP_SECTIONS.map((s) =>
+        s.id === sec.id ? { ...s, intro: s.intro.slice(1) } : s,
+      ),
+    };
+    expect(proseMismatches(dropIntro)).toEqual(['HELP_INTRO', `intro:${sec.id}`]);
   });
 });
 
@@ -119,6 +155,10 @@ describe.each(OTHERS)('структура справки %s совпадает �
       expect(dataPaths(o.template), e.id).toEqual(dataPaths(e.template));
       expect(formatters(o.template), e.id).toEqual(formatters(e.template));
     }
+  });
+
+  it('заметки (есть/нет) и число абзацев введений — как в ru', () => {
+    expect(proseMismatches(mod)).toEqual([]);
   });
 
   it('data — корректный JSON с теми же ключами', () => {

@@ -121,9 +121,10 @@ describe('HelpPage', () => {
 
 describe('HelpPage: язык справки (§46)', () => {
   const saved = { ...HELP_MODULES };
+  // Тип таблицы — полный Record (§46.4); тесту нужно «языка без модуля» — через Partial.
+  const modules: Partial<typeof HELP_MODULES> = HELP_MODULES;
   afterEach(() => {
-    for (const k of Object.keys(HELP_MODULES) as (keyof typeof HELP_MODULES)[])
-      delete HELP_MODULES[k];
+    for (const k of Object.keys(modules) as (keyof typeof HELP_MODULES)[]) delete modules[k];
     Object.assign(HELP_MODULES, saved);
   });
 
@@ -134,7 +135,7 @@ describe('HelpPage: язык справки (§46)', () => {
   };
 
   it('языка без модуля нет — справка на ru без сообщения об ошибке', async () => {
-    delete HELP_MODULES.de;
+    delete modules.de;
     expect(await loadHelpContent('de')).toEqual({ content: HELP_RU, failed: false });
     expect(await loadHelpContent('ru')).toEqual({ content: HELP_RU, failed: false });
   });

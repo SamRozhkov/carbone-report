@@ -255,6 +255,7 @@
     "save": "Enregistrer les paramètres"
   },
   "pdf": {
+    "pageFormatDefault": "Page {page} sur {pages}",
     "color_gray": "Gris",
     "color_red": "Rouge",
     "color_blue": "Bleu",

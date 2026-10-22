@@ -254,6 +254,7 @@
     "save": "Save parameters"
   },
   "pdf": {
+    "pageFormatDefault": "Page {page} of {pages}",
     "color_gray": "Gray",
     "color_red": "Red",
     "color_blue": "Blue",

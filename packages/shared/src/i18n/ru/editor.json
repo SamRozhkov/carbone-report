@@ -256,6 +256,7 @@
     "save": "Сохранить параметры"
   },
   "pdf": {
+    "pageFormatDefault": "Стр. {page} из {pages}",
     "color_gray": "Серый",
     "color_red": "Красный",
     "color_blue": "Синий",

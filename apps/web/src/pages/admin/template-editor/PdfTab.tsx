@@ -68,14 +68,14 @@ interface Draft {
   sig: PdfSignature;
 }
 
-function toDraft(o: PdfOptions): Draft {
+function toDraft(o: PdfOptions, pageFormat: string): Draft {
   return {
     pdfa: o.pdfa,
     wmOn: Boolean(o.watermark),
     wm: o.watermark ?? { text: '', opacity: 20, color: 'gray', angle: 'diagonal' },
     pnOn: Boolean(o.pageNumbers),
     pn: o.pageNumbers ?? {
-      format: PDF_PAGE_FORMAT_DEFAULT,
+      format: pageFormat,
       position: 'bottom-center',
       skipFirst: false,
     },
@@ -101,10 +101,12 @@ function fromDraft(d: Draft): PdfOptions {
   });
 }
 
-const canon = (o: PdfOptions) => JSON.stringify(fromDraft(toDraft(o)));
+const canon = (o: PdfOptions) => JSON.stringify(fromDraft(toDraft(o, PDF_PAGE_FORMAT_DEFAULT)));
 
 export function PdfTab({ template }: Pick<TabProps, 'template'>) {
   const { t } = useTranslation();
+  // Единые скобки {page}/{pages} подставляет рендер PDF, не i18next.
+  const pageFormat = t('editor:pdf.pageFormatDefault');
   const options = <V extends string>(field: string, values: readonly V[]) =>
     values.map((value) => ({ value, content: t(`editor:pdf.${field}_${value}`) }));
   const kb = (n: number) => t('common:size.kb', { value: Math.max(1, Math.round(n / 1024)) });
@@ -112,7 +114,7 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
   const { add } = useToaster();
   const fileRef = useRef<HTMLInputElement>(null);
   const [baseline, setBaseline] = useState(template.pdfOptions);
-  const [draft, setDraft] = useState<Draft>(() => toDraft(template.pdfOptions));
+  const [draft, setDraft] = useState<Draft>(() => toDraft(template.pdfOptions, pageFormat));
   const [placement, setPlacement] = useState<'start' | 'end'>('end');
   const [removing, setRemoving] = useState<TemplateAttachment | null>(null);
   const [pw, setPw] = useState<PwState>(() => ({
@@ -140,7 +142,7 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
   const stale = canon(template.pdfOptions) !== canon(baseline);
   const reseed = (tpl: TemplateAdminDetails) => {
     setBaseline(tpl.pdfOptions);
-    setDraft(toDraft(tpl.pdfOptions));
+    setDraft(toDraft(tpl.pdfOptions, pageFormat));
   };
   if (stale && !dirty) reseed(template);
 

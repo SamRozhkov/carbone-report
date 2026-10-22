@@ -253,6 +253,7 @@
     "save": "保存参数"
   },
   "pdf": {
+    "pageFormatDefault": "第 {page} 页，共 {pages} 页",
     "color_gray": "灰色",
     "color_red": "红色",
     "color_blue": "蓝色",

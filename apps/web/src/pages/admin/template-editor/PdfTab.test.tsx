@@ -435,6 +435,14 @@ describe('PdfTab — электронная подпись (§39.2)', () => {
 
 // §44.6: моки на латинице — кириллица на вкладке могла бы прийти только из кода.
 describe('PdfTab на en', () => {
+  it('включение нумерации подставляет английский формат из каталога', async () => {
+    await changeLocale('en', { persist: 'none' });
+    mockApi([]);
+    renderWithProviders(<PdfTab template={{ ...t, pdfOptions: { pdfa: false } }} />);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Page numbers' }));
+    expect(screen.getByDisplayValue('Page {page} of {pages}')).toBeInTheDocument();
+  });
+
   it('все блоки включены — подписи и приложения без кириллицы', async () => {
     await changeLocale('en', { persist: 'none' });
     mockApi([]);

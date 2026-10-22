@@ -1,6 +1,8 @@
 import type { Role } from '@carbone-reports/shared';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { changeLocale } from '../i18n';
 import { mockApi, pickOption, renderRoute } from '../test/utils';
 import { permissionsOf } from './permissions';
 
@@ -115,5 +117,54 @@ describe('Layout: язык интерфейса (§44.1)', () => {
       body: { locale: null },
     });
     // Два выбора в списке на полном маршруте — дольше стандартных 5 с на загруженном раннере.
+  }, 15_000);
+
+  it('выбор со страницы входа виден в меню; «Как в браузере» сбрасывает его (I1)', async () => {
+    localStorage.setItem('cr.locale', 'es');
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['de-AT']);
+    // Как после входа: LocaleSync применил выбор со страницы входа (me.locale = null).
+    await changeLocale('es', { persist: 'none' });
+    const { calls } = mockApi([
+      { path: '/api/auth/me', body: { id: 'u', login: 'u', role: 'user', locale: null } },
+      { path: '/api/templates', body: [] },
+      { method: 'PUT', path: '/api/me/locale', status: 204 },
+    ]);
+    renderRoute('/reports');
+    const item = await screen.findByRole('button', { name: 'Idioma' });
+    await userEvent.click(item);
+    const popup = await waitFor(() => {
+      const el = document.getElementById(item.getAttribute('aria-controls') ?? '');
+      if (!el) throw new Error('список не открыт');
+      return el;
+    });
+    expect(within(popup).getByRole('option', { name: 'Español', hidden: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await pickOption(item, 'Según el navegador');
+    expect(await screen.findByText('Berichte')).toBeInTheDocument();
+    expect(localStorage.getItem('cr.locale')).toBeNull();
+    expect(calls.filter((c) => c.method === 'PUT')).toEqual([
+      { method: 'PUT', path: '/api/me/locale', body: { locale: null } },
+    ]);
+  }, 15_000);
+
+  it('пункт «Язык» работает с клавиатуры (I2)', async () => {
+    const { calls } = mockApi([
+      meAs('user'),
+      { path: '/api/templates', body: [] },
+      { method: 'PUT', path: '/api/me/locale', status: 204 },
+    ]);
+    renderRoute('/reports');
+    const item = await screen.findByRole('button', { name: 'Язык' });
+    item.focus();
+    await userEvent.keyboard('{ArrowDown}');
+    await waitFor(() => expect(item).toHaveAttribute('aria-expanded', 'true'));
+    // Активен выбранный пункт «Как в браузере»; вниз: Русский, English.
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+    expect(await screen.findByText('Reports')).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === 'PUT')).toEqual([
+      { method: 'PUT', path: '/api/me/locale', body: { locale: 'en' } },
+    ]);
   }, 15_000);
 });

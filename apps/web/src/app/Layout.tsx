@@ -160,7 +160,8 @@ export function Layout() {
             <LocaleSwitcher
               persist="server"
               renderControl={({ ref, triggerProps }) => (
-                <div ref={ref as Ref<HTMLDivElement>}>
+                // Клавиши (стрелки, Enter, Esc) от кнопки пункта всплывают сюда — как у обычного Select.
+                <div ref={ref as Ref<HTMLDivElement>} onKeyDown={triggerProps.onKeyDown}>
                   <FooterItem
                     id="locale"
                     title={t('common:locale.title')}

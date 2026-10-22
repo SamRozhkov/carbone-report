@@ -11,15 +11,16 @@ type Catalog = Record<string, unknown>;
 
 // Каталоги shared: ru — в основном бандле, остальные языки — отдельные чанки (§44.3).
 // Шаблоны — литералы (требование Vite), по строке на пространство имён веба; errors и validation
-// переводит API, вебу они не нужны. Исключения «!…» не годятся: Vitest не применяет их к путям вне пакета.
-// ru попадает и во второй список, но уже статически импортирован — отдельного чанка у него нет.
+// переводит API, вебу они не нужны. Языки второго списка перечислены явно: исключения «!…» Vitest
+// не применяет к путям вне пакета, а ru в обоих списках даёт предупреждение сборки.
 const RU = import.meta.glob<Catalog>(['../../../../packages/shared/src/i18n/ru/common.json'], {
   eager: true,
   import: 'default',
 });
-const LAZY = import.meta.glob<Catalog>(['../../../../packages/shared/src/i18n/*/common.json'], {
-  import: 'default',
-});
+const LAZY = import.meta.glob<Catalog>(
+  ['../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/common.json'],
+  { import: 'default' },
+);
 
 /** «…/i18n/<locale>/<ns>.json» → [locale, ns]. */
 function parsePath(path: string): [string, string] {
@@ -152,29 +153,36 @@ export async function loadLocale(locale: Locale): Promise<void> {
   );
 }
 
-/** Локаль дат: сбой загрузки чанка dayjs не должен ломать смену языка — оставляем прежнюю. */
-async function applyDateLocale(locale: Locale): Promise<void> {
-  const dl = DATE_LOCALES[locale];
+/** Чанк локали дат; сбой не должен ломать смену языка — тогда остаётся прежняя локаль дат. */
+async function loadDateLocale(locale: Locale): Promise<boolean> {
   try {
-    await settings.loadLocale(dl);
-    settings.setLocale(dl);
+    await settings.loadLocale(DATE_LOCALES[locale]);
+    return true;
   } catch (e) {
     console.error('Не удалось загрузить локаль дат', e);
+    return false;
   }
 }
+
+/** Номер последнего вызова changeLocale: побеждает последний выбор, а не последний загруженный чанк. */
+let latestChange = 0;
 
 /**
  * Смена языка (§44.3): каталоги, затем i18next, `<html lang>`, uikit, date-utils и X-Locale.
  * `null` — «Как в браузере»: язык браузера (или по умолчанию), выбор сбрасывается.
  * Сохранение: server — `PUT /api/me/locale`, local — `localStorage` (страница входа), none — нет.
+ * Если пока грузились чанки, начался более новый вызов, этот ничего не меняет и не сохраняет.
  */
 export async function changeLocale(
   choice: Locale | null,
   opts: { persist: 'server' | 'local' | 'none' },
 ): Promise<void> {
+  const call = ++latestChange;
   const locale = choice ?? resolveLocale(browserLanguages(), fallbackLocale);
   await loadLocale(locale);
-  await applyDateLocale(locale);
+  const dateLoaded = await loadDateLocale(locale);
+  if (call !== latestChange) return;
+  if (dateLoaded) settings.setLocale(DATE_LOCALES[locale]);
   await i18n.changeLanguage(locale);
   document.documentElement.lang = locale;
   // uikit и navigation знают только ru и en.

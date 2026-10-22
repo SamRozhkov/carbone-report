@@ -26,8 +26,10 @@ export function LocaleSwitcher({
   const toaster = useToaster();
   const queryClient = useQueryClient();
   const me = useMe().data;
+  // В меню выбор на странице входа действует, пока пользователь не выбрал язык (§44.1):
+  // его и показываем, иначе «Как в браузере» нельзя было бы выбрать.
   const [chosen, setChosen] = useState<Locale | null>(() =>
-    persist === 'server' ? (me?.locale ?? null) : storedLocale(),
+    persist === 'server' ? (me?.locale ?? storedLocale()) : storedLocale(),
   );
   const [busy, setBusy] = useState(false);
 

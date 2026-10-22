@@ -59,4 +59,20 @@ describe('changeLocale', () => {
     expect(i18n.t('common:nav.reports')).toBe('Отчёты');
     expect(calls).toEqual([]);
   });
+
+  it('побеждает последний выбор: медленный чанк прежнего вызова его не перебивает', async () => {
+    i18n.removeResourceBundle('fr', 'common');
+    const load = catalogChunks.load.bind(catalogChunks);
+    vi.spyOn(catalogChunks, 'load').mockImplementation(async (locale, ns) => {
+      if (locale === 'fr') await new Promise((r) => setTimeout(r, 100));
+      return load(locale, ns);
+    });
+    const { calls } = mockApi([{ method: 'PUT', path: '/api/me/locale', status: 204 }]);
+    const slow = changeLocale('fr', { persist: 'server' });
+    await changeLocale('de', { persist: 'none' });
+    await slow;
+    expect(currentLocale()).toBe('de');
+    expect(document.documentElement.lang).toBe('de');
+    expect(calls).toEqual([]);
+  });
 });

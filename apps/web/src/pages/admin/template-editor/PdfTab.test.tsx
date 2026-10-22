@@ -443,6 +443,24 @@ describe('PdfTab на en', () => {
     expect(screen.getByDisplayValue('Page {page} of {pages}')).toBeInTheDocument();
   });
 
+  it('нумерация без формата (шаблон после 0017) — русский формат, изменений нет', async () => {
+    await changeLocale('en', { persist: 'none' });
+    mockApi([]);
+    renderWithProviders(
+      <PdfTab
+        template={{
+          ...t,
+          pdfOptions: { pdfa: false, pageNumbers: { position: 'bottom-center', skipFirst: false } },
+        }}
+      />,
+    );
+    expect(await screen.findByRole('textbox', { name: 'Page number format' })).toHaveValue(
+      'Стр. {page} из {pages}',
+    );
+    expect(screen.getByRole('button', { name: 'Save PDF settings' })).toBeDisabled();
+    expect(screen.queryByText('You have unsaved changes')).not.toBeInTheDocument();
+  });
+
   it('все блоки включены — подписи и приложения без кириллицы', async () => {
     await changeLocale('en', { persist: 'none' });
     mockApi([]);

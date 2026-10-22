@@ -74,9 +74,10 @@ function toDraft(o: PdfOptions, pageFormat: string): Draft {
     wmOn: Boolean(o.watermark),
     wm: o.watermark ?? { text: '', opacity: 20, color: 'gray', angle: 'diagonal' },
     pnOn: Boolean(o.pageNumbers),
-    // Формат не задан — подставляется умолчание (до Task 4 §45.4: поле формата пустое с подсказкой).
+    // Формат не задан (шаблоны после 0017) — русский, как его строит buildPdfJob до Task 4 (§45.4);
+    // формат языка интерфейса — только у блока, включённого сейчас.
     pn: o.pageNumbers
-      ? { ...o.pageNumbers, format: o.pageNumbers.format ?? pageFormat }
+      ? { ...o.pageNumbers, format: o.pageNumbers.format ?? PAGE_FORMATS.ru }
       : {
           format: pageFormat,
           position: 'bottom-center',

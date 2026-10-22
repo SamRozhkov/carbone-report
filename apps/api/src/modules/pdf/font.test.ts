@@ -2,6 +2,7 @@ import fontkit from '@pdf-lib/fontkit';
 import { decodePDFRawStream, PDFDict, PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import {
+  cleanPdfMeta,
   cleanPdfText,
   hasGlyph,
   pdfCjkFontBytes,
@@ -45,6 +46,12 @@ describe('выбор шрифта на строку (§45.5)', () => {
   });
   it('cleanPdfText: только управляющие символы → пробел', () => {
     expect(cleanPdfText('李伟\n😀\u2028x')).toBe('李伟 😀 x');
+  });
+  it('cleanPdfMeta: одиночные суррогаты и U+FFFE/U+FFFF → ?, пары, эмодзи и иероглифы остаются', () => {
+    expect(cleanPdfMeta('a\ud800b\udc00c')).toBe('a?b?c');
+    expect(cleanPdfMeta('x\ufffe\uffffy')).toBe('x??y');
+    expect(cleanPdfMeta('\udc00\ud83d\ude00\ud800')).toBe('?😀?');
+    expect(cleanPdfMeta('报告 😀\nОтчёт')).toBe('报告 😀 Отчёт');
   });
 });
 

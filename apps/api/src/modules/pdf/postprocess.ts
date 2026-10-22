@@ -17,6 +17,7 @@ import {
   type PDFPage,
 } from 'pdf-lib';
 import {
+  cleanPdfMeta,
   cleanPdfText,
   pdfBoldFontBytes,
   pdfCjkFontBytes,
@@ -164,11 +165,12 @@ export function infoDict(doc: PDFDocument): PDFDict | undefined {
 function writeInfo(doc: PDFDocument, job: PdfPostJob): void {
   const m = job.metadata;
   if (m) {
-    // Строки Info, а не текст страницы: глифы не нужны, только без управляющих символов.
-    if (m.title) doc.setTitle(cleanPdfText(m.title));
-    if (m.author) doc.setAuthor(cleanPdfText(m.author));
-    if (m.subject) doc.setSubject(cleanPdfText(m.subject));
-    if (m.keywords) doc.setKeywords([cleanPdfText(m.keywords)]);
+    // Строки Info, а не текст страницы: глифы не нужны, только без управляющих символов
+    // и символов, недопустимых в XML (XMP).
+    if (m.title) doc.setTitle(cleanPdfMeta(m.title));
+    if (m.author) doc.setAuthor(cleanPdfMeta(m.author));
+    if (m.subject) doc.setSubject(cleanPdfMeta(m.subject));
+    if (m.keywords) doc.setKeywords([cleanPdfMeta(m.keywords)]);
   }
   // Пустое значение в Info без пары в XMP нарушает эквивалентность Info/XMP (PDF/A-2, 6.6.2.3.1).
   const info = infoDict(doc);

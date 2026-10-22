@@ -126,6 +126,15 @@ export function cleanPdfText(s: string): string {
   return s.replace(CONTROL, ' ');
 }
 
+/** Одиночные суррогаты и U+FFFE/U+FFFF — недопустимы в XML (XMP при PDF/A) и в UTF-16 Info. */
+const NOT_XML =
+  /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]|[\ufffe\uffff]/g;
+
+/** Строка метаданных (Info, XMP): как cleanPdfText, плюс символы, недопустимые в XML, → «?». */
+export function cleanPdfMeta(s: string): string {
+  return cleanPdfText(s).replace(NOT_XML, '?');
+}
+
 /**
  * Шрифт строки (§45.5): все символы есть в Noto Sans — base; иначе cjk, если Noto Sans SC
  * рисует хотя бы один из недостающих символов. Символы, которых нет ни в одном шрифте, шрифт

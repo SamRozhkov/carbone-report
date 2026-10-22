@@ -235,7 +235,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         template: '{d.n:formatN(2)}',
         data: j({ n: 1234567.891 }),
         result: '1.234.567,89',
-        note: 'Los separadores de miles y decimal dependen del idioma del informe: en español, punto y coma. `formatN(0)` redondea al entero: 1234567.5 → «1.234.568».',
+        note: 'Los separadores de miles y decimal dependen del idioma del informe: en español, el punto separa los miles y la coma, los decimales. `formatN(0)` redondea al entero: 1234567.5 → «1.234.568».',
       },
       {
         id: 'fmt-money',
@@ -673,7 +673,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: 'media',
     title: 'Imágenes, códigos de barras, colores, enlaces',
     intro: [
-      'Una imagen o un código de barras de los datos sustituye a una imagen de marcador de posición. Inserte en la plantilla cualquier imagen del tamaño adecuado y escriba la etiqueta en su texto alternativo: en Word, «Formato de imagen» → «Texto alternativo» (o clic derecho → «Editar texto alternativo»); en LibreOffice, «Propiedades» → pestaña «Opciones» → el campo de texto alternativo o «Descripción»; en el editor de plantillas, «Configuración avanzada de la imagen» → «Texto alternativo» → «Descripción». La etiqueta debe ocupar todo el texto alternativo: un texto mixto («Foto {d.name}») se muestra tal cual, y la imagen se mantiene. La misma etiqueta en un párrafo normal simplemente muestra el valor.',
+      'Una imagen o un código de barras de los datos sustituye a una imagen de marcador de posición. Inserte en la plantilla cualquier imagen del tamaño adecuado y escriba la etiqueta en su texto alternativo: en Word, «Formato de imagen» → «Texto alternativo» (o clic derecho → «Ver texto alternativo»); en LibreOffice, «Propiedades» → pestaña «Opciones» → el campo de texto alternativo o «Descripción»; en el editor de plantillas, «Ajustes avanzados» → «Texto alternativo» → «Descripción». La etiqueta debe ocupar todo el texto alternativo: un texto mixto («Foto {d.name}») se muestra tal cual, y la imagen se mantiene. La misma etiqueta en un párrafo normal simplemente muestra el valor.',
       'Una imagen en los datos es un data URI (`data:image/png;base64,…`; PNG, JPEG o GIF) o una dirección `https://…`. Las direcciones solo se cargan desde los hosts del parámetro `IMAGE_URL_ALLOWLIST`; por defecto está vacío, y una dirección da un error de la plantilla. SVG no es compatible. Un valor vacío elimina la imagen de marcador de posición. Límites: 10 MB por imagen y 50 MB por informe. Funciona en DOCX, XLSX, PPTX, ODT, ODS, ODP; varias imágenes en un bucle funcionan en DOCX (imagen «En línea con el texto») y en ODT (anclada «Como carácter»).',
       'Un valor de texto simple (ni `data:` ni `http(s)://`) se escribe en el texto alternativo, y la imagen se mantiene; un valor vacío elimina la imagen. Una imagen no válida (data URI dañado, host que no está en la lista, etiqueta incorrecta) es un error de la plantilla con la etiqueta en su texto, y el informe no se genera. Si no se pudo cargar una imagen desde una dirección (tiempo de espera agotado, respuesta distinta de 2xx), se elimina y el informe se genera.',
     ],

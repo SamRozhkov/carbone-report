@@ -254,7 +254,6 @@
     "save": "Save parameters"
   },
   "pdf": {
-    "pageFormatDefault": "Page {page} of {pages}",
     "color_gray": "Gray",
     "color_red": "Red",
     "color_blue": "Blue",
@@ -364,6 +363,9 @@
     "nameAria": "Template name",
     "datasource": "Data source",
     "defaultOutput": "Default format",
+    "reportLocale": "Report language",
+    "reportLocaleUser": "Same as the user",
+    "reportLocaleHint": "The language sets date and number formats, the default formatC currency, the signature stamp and page numbering. The template text is not translated.",
     "datasourcesLoadFailed": "Could not load the data sources",
     "save": "Save settings",
     "discardAria": "Discard changes to settings",

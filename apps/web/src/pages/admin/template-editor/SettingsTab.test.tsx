@@ -1,10 +1,11 @@
 import type { TemplateAdminDetails } from '@carbone-reports/shared';
+import { LOCALE_NAMES } from '@carbone-reports/shared/i18n';
 import { useState } from 'react';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { MockRoute } from '../../../test/utils';
-import { mockApi, renderWithProviders } from '../../../test/utils';
+import { mockApi, pickOption, renderWithProviders } from '../../../test/utils';
 import { SettingsTab } from './SettingsTab';
 import { adminTemplate } from '../../../test/fixtures';
 
@@ -47,6 +48,35 @@ describe('SettingsTab', () => {
       datasourceId: 'd1',
       defaultOutput: 'pdf',
     });
+  });
+
+  it('язык отчёта: значение шаблона, 7 языков и «Как у пользователя», сохранение, подсказка', async () => {
+    const { calls } = mockApi([
+      { path: '/api/datasources/options', body: [] },
+      {
+        method: 'PATCH',
+        path: '/api/templates/t1',
+        handler: ({ body }) => ({ body: { ...t, ...(body as object) } }),
+      },
+    ]);
+    renderWithProviders(<SettingsTab template={t} />);
+    const combo = await screen.findByRole('combobox', { name: 'Язык отчёта' });
+    expect(combo).toHaveTextContent(LOCALE_NAMES.ru);
+    expect(
+      screen.getByText(
+        'Язык задаёт формат дат и чисел, валюту formatC по умолчанию, штамп подписи и нумерацию страниц. Текст шаблона не переводится.',
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(combo);
+    const popup = document.getElementById(combo.getAttribute('aria-controls') ?? '')!;
+    const names = within(popup)
+      .getAllByRole('option', { hidden: true })
+      .map((o) => o.textContent);
+    expect(names).toEqual([...Object.values(LOCALE_NAMES), 'Как у пользователя']);
+    await pickOption(combo, 'Deutsch');
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить настройки' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'PATCH')).toBe(true));
+    expect(calls.find((c) => c.method === 'PATCH')?.body).toMatchObject({ reportLocale: 'de' });
   });
 
   it('замена файла → PUT multipart', async () => {

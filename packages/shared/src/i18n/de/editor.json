@@ -254,7 +254,6 @@
     "save": "Parameter speichern"
   },
   "pdf": {
-    "pageFormatDefault": "Seite {page} von {pages}",
     "color_gray": "Grau",
     "color_red": "Rot",
     "color_blue": "Blau",
@@ -364,6 +363,9 @@
     "nameAria": "Name der Vorlage",
     "datasource": "Datenquelle",
     "defaultOutput": "Standardformat",
+    "reportLocale": "Berichtssprache",
+    "reportLocaleUser": "Wie beim Benutzer",
+    "reportLocaleHint": "Die Sprache bestimmt das Datums- und Zahlenformat, die Standardwährung von formatC, den Signaturstempel und die Seitennummerierung. Der Vorlagentext wird nicht übersetzt.",
     "datasourcesLoadFailed": "Die Datenquellen konnten nicht geladen werden",
     "save": "Einstellungen speichern",
     "discardAria": "Änderungen an den Einstellungen verwerfen",

@@ -255,7 +255,6 @@
     "save": "Salvar parâmetros"
   },
   "pdf": {
-    "pageFormatDefault": "Pág. {page} de {pages}",
     "color_gray": "Cinza",
     "color_red": "Vermelho",
     "color_blue": "Azul",
@@ -366,6 +365,9 @@
     "nameAria": "Nome do modelo",
     "datasource": "Fonte de dados",
     "defaultOutput": "Formato padrão",
+    "reportLocale": "Idioma do relatório",
+    "reportLocaleUser": "O do usuário",
+    "reportLocaleHint": "O idioma define o formato de datas e números, a moeda padrão de formatC, o carimbo de assinatura e a numeração de páginas. O texto do modelo não é traduzido.",
     "datasourcesLoadFailed": "Não foi possível carregar as fontes de dados",
     "save": "Salvar configurações",
     "discardAria": "Descartar alterações das configurações",

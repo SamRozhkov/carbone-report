@@ -2,6 +2,7 @@ import type { TemplateAdminDetails } from '@carbone-reports/shared';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import { PAGE_FORMATS } from '@carbone-reports/shared/i18n';
 import { adminTemplate } from '../../../test/fixtures';
 import { changeLocale } from '../../../i18n';
 import { mockApi, renderWithProviders } from '../../../test/utils';
@@ -59,7 +60,7 @@ describe('PdfTab', () => {
     expect(calls.at(-1)!.body).toEqual({
       pdfa: false,
       watermark: { text: 'КОПИЯ', opacity: 20, color: 'gray', angle: 'diagonal' },
-      pageNumbers: { format: 'Стр. {page} из {pages}', position: 'bottom-center', skipFirst: true },
+      pageNumbers: { position: 'bottom-center', skipFirst: true },
     });
   });
 
@@ -435,15 +436,32 @@ describe('PdfTab — электронная подпись (§39.2)', () => {
 
 // §44.6: моки на латинице — кириллица на вкладке могла бы прийти только из кода.
 describe('PdfTab на en', () => {
-  it('включение нумерации подставляет английский формат из каталога', async () => {
+  it('включение нумерации не подставляет значение: поле пустое, placeholder — формат языка интерфейса', async () => {
     await changeLocale('en', { persist: 'none' });
     mockApi([]);
-    renderWithProviders(<PdfTab template={{ ...t, pdfOptions: { pdfa: false } }} />);
+    renderWithProviders(
+      <PdfTab template={{ ...t, reportLocale: 'user', pdfOptions: { pdfa: false } }} />,
+    );
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Page numbers' }));
-    expect(screen.getByDisplayValue('Page {page} of {pages}')).toBeInTheDocument();
+    const input = screen.getByRole('textbox', { name: 'Page number format' });
+    expect(input).toHaveValue('');
+    expect(input).toHaveAttribute('placeholder', 'Page {page} of {pages}');
   });
 
-  it('нумерация без формата (шаблон после 0017) — русский формат, изменений нет', async () => {
+  it('placeholder следует языку отчёта шаблона', async () => {
+    await changeLocale('en', { persist: 'none' });
+    mockApi([]);
+    renderWithProviders(
+      <PdfTab template={{ ...t, reportLocale: 'de', pdfOptions: { pdfa: false } }} />,
+    );
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Page numbers' }));
+    expect(screen.getByRole('textbox', { name: 'Page number format' })).toHaveAttribute(
+      'placeholder',
+      PAGE_FORMATS.de,
+    );
+  });
+
+  it('нумерация без формата (шаблон после 0017) — поле пустое, изменений нет', async () => {
     await changeLocale('en', { persist: 'none' });
     mockApi([]);
     renderWithProviders(
@@ -454,11 +472,39 @@ describe('PdfTab на en', () => {
         }}
       />,
     );
-    expect(await screen.findByRole('textbox', { name: 'Page number format' })).toHaveValue(
-      'Стр. {page} из {pages}',
-    );
+    expect(await screen.findByRole('textbox', { name: 'Page number format' })).toHaveValue('');
     expect(screen.getByRole('button', { name: 'Save PDF settings' })).toBeDisabled();
     expect(screen.queryByText('You have unsaved changes')).not.toBeInTheDocument();
+  });
+
+  it('пустое поле при сохранении — format отсутствует в теле', async () => {
+    await changeLocale('en', { persist: 'none' });
+    const { calls } = mockApi([{ method: 'PUT', path: '/api/templates/t1/pdf-options', body: t }]);
+    renderWithProviders(<PdfTab template={{ ...t, pdfOptions: { pdfa: false } }} />);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Page numbers' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save PDF settings' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
+    const sent = calls.find((c) => c.method === 'PUT')!.body as {
+      pageNumbers: Record<string, unknown>;
+    };
+    expect(sent.pageNumbers).not.toHaveProperty('format');
+  });
+
+  it('введённый формат сохраняется как есть', async () => {
+    await changeLocale('en', { persist: 'none' });
+    const { calls } = mockApi([{ method: 'PUT', path: '/api/templates/t1/pdf-options', body: t }]);
+    renderWithProviders(<PdfTab template={{ ...t, pdfOptions: { pdfa: false } }} />);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Page numbers' }));
+    await userEvent.type(
+      screen.getByRole('textbox', { name: 'Page number format' }),
+      '{{page} / {{pages}',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Save PDF settings' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
+    expect(
+      (calls.find((c) => c.method === 'PUT')!.body as { pageNumbers: { format: string } })
+        .pageNumbers.format,
+    ).toBe('{page} / {pages}');
   });
 
   it('все блоки включены — подписи и приложения без кириллицы', async () => {

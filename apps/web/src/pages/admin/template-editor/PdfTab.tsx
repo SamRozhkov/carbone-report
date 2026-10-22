@@ -14,6 +14,7 @@ import {
   type TemplateAttachment,
 } from '@carbone-reports/shared';
 import { PAGE_FORMATS } from '@carbone-reports/shared/i18n';
+import { useLocale } from '../../../i18n';
 import { ArrowDown, ArrowUp, TrashBin } from '@gravity-ui/icons';
 import {
   Button,
@@ -61,28 +62,26 @@ interface Draft {
   wmOn: boolean;
   wm: PdfWatermark;
   pnOn: boolean;
-  pn: PdfPageNumbers;
+  /** Формат пуст — подставляется формат языка отчёта на сервере (§45.4). */
+  pn: PdfPageNumbers & { format: string };
   meta: PdfMetadata;
   prot: PdfProtection;
   sigOn: boolean;
   sig: PdfSignature;
 }
 
-function toDraft(o: PdfOptions, pageFormat: string): Draft {
+function toDraft(o: PdfOptions): Draft {
   return {
     pdfa: o.pdfa,
     wmOn: Boolean(o.watermark),
     wm: o.watermark ?? { text: '', opacity: 20, color: 'gray', angle: 'diagonal' },
     pnOn: Boolean(o.pageNumbers),
-    // Формат не задан (шаблоны после 0017) — русский, как его строит buildPdfJob до Task 4 (§45.4);
-    // формат языка интерфейса — только у блока, включённого сейчас.
-    pn: o.pageNumbers
-      ? { ...o.pageNumbers, format: o.pageNumbers.format ?? PAGE_FORMATS.ru }
-      : {
-          format: pageFormat,
-          position: 'bottom-center',
-          skipFirst: false,
-        },
+    // Формат не задан — поле остаётся пустым, подсказка показывает формат языка отчёта (§45.4).
+    pn: {
+      format: o.pageNumbers?.format ?? '',
+      position: o.pageNumbers?.position ?? 'bottom-center',
+      skipFirst: o.pageNumbers?.skipFirst ?? false,
+    },
     meta: o.metadata ?? { title: '', author: '', subject: '', keywords: '' },
     prot: o.protection ?? NO_PROTECTION,
     sigOn: Boolean(o.signature),
@@ -98,19 +97,24 @@ function fromDraft(d: Draft): PdfOptions {
   return normalizePdfOptions({
     pdfa: d.pdfa,
     ...(d.wmOn ? { watermark: d.wm } : {}),
-    ...(d.pnOn ? { pageNumbers: d.pn } : {}),
+    // Пустое поле — формата нет в теле (формат по языку отчёта подставит сервер).
+    ...(d.pnOn
+      ? { pageNumbers: { ...d.pn, format: d.pn.format.trim() === '' ? undefined : d.pn.format } }
+      : {}),
     metadata: d.meta,
     protection: d.prot,
     ...(d.sigOn ? { signature: d.sig } : {}),
   });
 }
 
-const canon = (o: PdfOptions) => JSON.stringify(fromDraft(toDraft(o, PAGE_FORMATS.ru)));
+const canon = (o: PdfOptions) => JSON.stringify(fromDraft(toDraft(o)));
 
 export function PdfTab({ template }: Pick<TabProps, 'template'>) {
   const { t } = useTranslation();
-  // Единые скобки {page}/{pages} подставляет рендер PDF, не i18next.
-  const pageFormat = t('editor:pdf.pageFormatDefault');
+  const uiLocale = useLocale();
+  // Единые скобки {page}/{pages} подставляет рендер PDF, не i18next; язык — сохранённый в шаблоне.
+  const formatPlaceholder =
+    PAGE_FORMATS[template.reportLocale === 'user' ? uiLocale : template.reportLocale];
   const options = <V extends string>(field: string, values: readonly V[]) =>
     values.map((value) => ({ value, content: t(`editor:pdf.${field}_${value}`) }));
   const kb = (n: number) => t('common:size.kb', { value: Math.max(1, Math.round(n / 1024)) });
@@ -118,7 +122,7 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
   const { add } = useToaster();
   const fileRef = useRef<HTMLInputElement>(null);
   const [baseline, setBaseline] = useState(template.pdfOptions);
-  const [draft, setDraft] = useState<Draft>(() => toDraft(template.pdfOptions, pageFormat));
+  const [draft, setDraft] = useState<Draft>(() => toDraft(template.pdfOptions));
   const [placement, setPlacement] = useState<'start' | 'end'>('end');
   const [removing, setRemoving] = useState<TemplateAttachment | null>(null);
   const [pw, setPw] = useState<PwState>(() => ({
@@ -146,7 +150,7 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
   const stale = canon(template.pdfOptions) !== canon(baseline);
   const reseed = (tpl: TemplateAdminDetails) => {
     setBaseline(tpl.pdfOptions);
-    setDraft(toDraft(tpl.pdfOptions, pageFormat));
+    setDraft(toDraft(tpl.pdfOptions));
   };
   if (stale && !dirty) reseed(template);
 
@@ -268,6 +272,7 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
             >
               <TextInput
                 value={draft.pn.format}
+                placeholder={formatPlaceholder}
                 onUpdate={(format) => set({ pn: { ...draft.pn, format } })}
                 controlProps={{ 'aria-label': t('editor:pdf.formatAria'), maxLength: 100 }}
               />

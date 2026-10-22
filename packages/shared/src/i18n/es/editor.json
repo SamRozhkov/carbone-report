@@ -255,7 +255,6 @@
     "save": "Guardar parámetros"
   },
   "pdf": {
-    "pageFormatDefault": "Pág. {page} de {pages}",
     "color_gray": "Gris",
     "color_red": "Rojo",
     "color_blue": "Azul",
@@ -366,6 +365,9 @@
     "nameAria": "Nombre de la plantilla",
     "datasource": "Origen de datos",
     "defaultOutput": "Formato predeterminado",
+    "reportLocale": "Idioma del informe",
+    "reportLocaleUser": "El del usuario",
+    "reportLocaleHint": "El idioma define el formato de fechas y números, la moneda predeterminada de formatC, el sello de firma y la numeración de páginas. El texto de la plantilla no se traduce.",
     "datasourcesLoadFailed": "No se pudieron cargar los orígenes de datos",
     "save": "Guardar configuración",
     "discardAria": "Descartar los cambios de la configuración",

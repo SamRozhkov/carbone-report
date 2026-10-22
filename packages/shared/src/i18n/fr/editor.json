@@ -255,7 +255,6 @@
     "save": "Enregistrer les paramètres"
   },
   "pdf": {
-    "pageFormatDefault": "Page {page} sur {pages}",
     "color_gray": "Gris",
     "color_red": "Rouge",
     "color_blue": "Bleu",
@@ -366,6 +365,9 @@
     "nameAria": "Nom du modèle",
     "datasource": "Source de données",
     "defaultOutput": "Format par défaut",
+    "reportLocale": "Langue du rapport",
+    "reportLocaleUser": "Celle de l’utilisateur",
+    "reportLocaleHint": "La langue détermine le format des dates et des nombres, la devise par défaut de formatC, le cachet de signature et la numérotation des pages. Le texte du modèle n’est pas traduit.",
     "datasourcesLoadFailed": "Impossible de charger les sources de données",
     "save": "Enregistrer les réglages",
     "discardAria": "Annuler les modifications des réglages",

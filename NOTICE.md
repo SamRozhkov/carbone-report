@@ -22,6 +22,10 @@ Carbone Reports распространяется по лицензии PolyForm 
 подробности — в [`packages/carbone/NOTICE.md`](packages/carbone/NOTICE.md). Вкладка «Графики» в браузере использует
 Apache ECharts (Apache-2.0).
 
+Китайский текст в штампе подписи, нумерации и водяном знаке PDF (с 2.14.0) рисуется шрифтом Noto Sans SC
+(SIL Open Font License 1.1, текст —
+[`packages/carbone/assets/fonts/NotoSansSC-OFL.txt`](packages/carbone/assets/fonts/NotoSansSC-OFL.txt)).
+
 Обработка PDF (с 2.7.0) использует `pdf-lib` 1.17.1 — MIT, https://github.com/Hopding/pdf-lib;
 `@pdf-lib/fontkit` 1.1.1 — MIT, https://github.com/Hopding/fontkit.
 

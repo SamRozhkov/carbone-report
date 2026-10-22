@@ -1,5 +1,5 @@
 // Только для тестов: PDF с подписанными страницами и текст страниц (unpdf, pdf.js).
-import { degrees, PDFDocument, StandardFonts } from 'pdf-lib';
+import { degrees, PDFDict, PDFDocument, PDFName, StandardFonts } from 'pdf-lib';
 import { extractText, getDocumentProxy } from 'unpdf';
 
 export interface TestPage {
@@ -28,4 +28,18 @@ export async function pageTexts(pdf: Uint8Array, password?: string): Promise<str
   const proxy = await getDocumentProxy(new Uint8Array(pdf), password ? { password } : undefined);
   const { text } = await extractText(proxy, { mergePages: false });
   return text as string[];
+}
+
+/** Имена встроенных шрифтов (FontName дескрипторов) — какой шрифт встроен в PDF. */
+export async function pdfFontNames(pdf: Uint8Array): Promise<string[]> {
+  const doc = await PDFDocument.load(pdf, { updateMetadata: false });
+  return doc.context
+    .enumerateIndirectObjects()
+    .map(([, o]) => o)
+    .filter(
+      (o): o is PDFDict =>
+        o instanceof PDFDict && o.get(PDFName.of('Type')) === PDFName.of('FontDescriptor'),
+    )
+    .map((d) => d.lookup(PDFName.of('FontName'), PDFName).decodeText())
+    .sort();
 }

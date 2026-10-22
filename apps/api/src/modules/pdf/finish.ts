@@ -9,7 +9,7 @@ import type { AppDeps } from '../../deps';
 import { decryptSecret } from '../../lib/crypto';
 import { AppError, badRequest } from '../../lib/errors';
 import type { TemplateFull } from '../templates/service';
-import { sanitizePdfText } from './font';
+import { cleanPdfText } from './font';
 import type { PdfPostJob } from './postprocess';
 import type { PdfProtectJob } from './protect';
 
@@ -52,7 +52,10 @@ export function needsPostprocess(p: TemplatePdf): boolean {
   return Boolean(o.watermark || o.pageNumbers || o.metadata || p.attachments.length);
 }
 
-/** Тексты — с подставленными тегами и очищенные (R2); пустой водяной знак не ставится. */
+/**
+ * Тексты — с подставленными тегами, управляющие символы → пробел; символы вне шрифта заменяет
+ * постобработка по шрифту строки (§45.5, R2). Пустой водяной знак не ставится.
+ */
 export function buildPdfJob(
   p: TemplatePdf,
   data: unknown,
@@ -60,7 +63,7 @@ export function buildPdfJob(
   files: Uint8Array[],
 ): PdfPostJob {
   const o = p.options;
-  const fill = (s: string) => sanitizePdfText(fillPdfText(s, data)).trim();
+  const fill = (s: string) => cleanPdfText(fillPdfText(s, data)).trim();
   const wmText = o.watermark ? fill(o.watermark.text) : '';
   return {
     pdfa: o.pdfa,

@@ -37,7 +37,7 @@ describe('needsPostprocess', () => {
 describe('buildPdfJob', () => {
   const data = { number: 42, params: { status: 'ЧЕРНОВИК' }, emoji: '😀', nl: 'а\nб' };
 
-  it('теги подставлены и очищены; пустой title — имя шаблона', () => {
+  it('теги подставлены, управляющие символы → пробел; пустой title — имя шаблона', () => {
     const job = buildPdfJob(
       tp({
         pdfa: true,
@@ -51,12 +51,24 @@ describe('buildPdfJob', () => {
     );
     expect(job).toEqual({
       pdfa: true,
-      watermark: { text: 'ЧЕРНОВИК ?', opacity: 20, color: 'gray', angle: 'diagonal' },
+      // Символы вне шрифта заменяет постобработка по шрифту строки (§45.5).
+      watermark: { text: 'ЧЕРНОВИК 😀', opacity: 20, color: 'gray', angle: 'diagonal' },
       pageNumbers: { format: 'Стр. {page} из {pages}', position: 'bottom-center', skipFirst: true },
       metadata: { title: 'Счёт', author: 'Отдел а б', subject: '', keywords: '' },
       attachments: [],
       now: '2026-10-15T09:30:00.000Z',
     });
+  });
+
+  it('иероглифы не заменяются на «?» до выбора шрифта', () => {
+    const job = buildPdfJob(
+      tp({ watermark: { text: '机密 {d.name}' }, metadata: { title: '报告 {d.name}' } }),
+      { name: '李伟' },
+      NOW,
+      [],
+    );
+    expect(job.watermark?.text).toBe('机密 李伟');
+    expect(job.metadata?.title).toBe('报告 李伟');
   });
 
   it('пустой после подстановки водяной знак не ставится', () => {

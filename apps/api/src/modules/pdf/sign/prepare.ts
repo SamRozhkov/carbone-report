@@ -1,4 +1,3 @@
-import fontkit from '@pdf-lib/fontkit';
 import type { PdfSignaturePosition } from '@carbone-reports/shared';
 import {
   beginText,
@@ -26,8 +25,8 @@ import {
   type PDFPage,
   type PDFRef,
 } from 'pdf-lib';
-import { pdfBoldFontBytes, pdfFontBytes, sanitizePdfText } from '../font';
-import { toPage, visualView } from '../postprocess';
+import { pickPdfFont, sanitizePdfText, type PdfFontKind } from '../font';
+import { pdfFonts, toPage, visualView } from '../postprocess';
 
 export type StampLines = [string, string, string, string, string];
 
@@ -62,17 +61,56 @@ const MATRIX: Record<0 | 90 | 180 | 270, number[]> = {
   270: [0, -1, 1, 0, 0, 0],
 };
 
-/** Очищает строку (как §36.2) и обрезает с «…» по ширине штампа. */
-export function stampText(text: string, font: PDFFont, size: number): string {
+/** Очищает строку по её шрифту (как §36.2) и обрезает с «…» по ширине штампа. */
+export function stampText(
+  text: string,
+  font: PDFFont,
+  size: number,
+  kind: PdfFontKind = 'base',
+): string {
   const max = STAMP.width - 2 * PAD;
-  const clean = sanitizePdfText(text);
+  const clean = sanitizePdfText(text, kind);
   if (font.widthOfTextAtSize(clean, size) <= max) return clean;
-  let t = clean;
-  while (t && font.widthOfTextAtSize(`${t}…`, size) > max) t = t.slice(0, -1);
-  return `${t.trimEnd()}…`;
+  // По кодовым точкам: в Noto Sans SC есть иероглифы вне BMP.
+  const chars = [...clean];
+  while (chars.length && font.widthOfTextAtSize(`${chars.join('')}…`, size) > max) chars.pop();
+  return `${chars.join('').trimEnd()}…`;
 }
 
-function stampOperators(lines: StampLines, regular: PDFFont, bold: PDFFont): PDFOperator[] {
+/** Строка штампа: имя шрифта в ресурсах формы, шрифт и готовый текст. */
+interface StampLine {
+  name: string;
+  font: PDFFont;
+  text: string;
+}
+
+/**
+ * Шрифт на строку (§45.5): Noto Sans (заголовок — Bold) или, если в строке есть иероглифы,
+ * Noto Sans SC Regular (заголовок тоже Regular). SC встраивается только при такой строке.
+ */
+async function stampLines(
+  doc: PDFDocument,
+  lines: StampLines,
+): Promise<{ lines: StampLine[]; fonts: Record<string, PDFFont> }> {
+  const fonts = pdfFonts(doc);
+  const kinds = lines.map(pickPdfFont);
+  const names = kinds.map((k, i) => (k === 'cjk' ? 'F3' : i === 0 ? 'F2' : 'F1'));
+  // Встраивание в порядке F1, F2, F3 — штамп без иероглифов побайтно как до 2.14.0.
+  const byName: Record<string, PDFFont> = {};
+  if (names.includes('F1')) byName.F1 = await fonts.regular();
+  if (names.includes('F2')) byName.F2 = await fonts.bold();
+  if (names.includes('F3')) byName.F3 = await fonts.cjk();
+  return {
+    lines: lines.map((raw, i) => {
+      const font = byName[names[i]!]!;
+      const text = stampText(raw, font, i === 0 ? TITLE_SIZE : LINE_SIZE, kinds[i]);
+      return { name: names[i]!, font, text };
+    }),
+    fonts: byName,
+  };
+}
+
+function stampOperators(lines: StampLine[]): PDFOperator[] {
   const { width: w, height: h } = STAMP;
   const ops: PDFOperator[] = [
     pushGraphicsState(),
@@ -86,18 +124,19 @@ function stampOperators(lines: StampLines, regular: PDFFont, bold: PDFFont): PDF
     setFillingRgbColor(...BLUE),
     beginText(),
   ];
-  ops.push(
-    setFontAndSize('F2', TITLE_SIZE),
-    moveText(PAD, h - PAD - TITLE_SIZE),
-    showText(bold.encodeText(stampText(lines[0], bold, TITLE_SIZE))),
-    setFontAndSize('F1', LINE_SIZE),
-  );
-  for (const line of lines.slice(1)) {
+  let current = '';
+  lines.forEach((line, i) => {
+    const size = i === 0 ? TITLE_SIZE : LINE_SIZE;
+    // Tf — только при смене шрифта или кегля (строки 2–5 обычно одним шрифтом).
+    if (`${line.name} ${size}` !== current) {
+      ops.push(setFontAndSize(line.name, size));
+      current = `${line.name} ${size}`;
+    }
     ops.push(
-      moveText(0, -LINE_STEP),
-      showText(regular.encodeText(stampText(line, regular, LINE_SIZE))),
+      i === 0 ? moveText(PAD, h - PAD - TITLE_SIZE) : moveText(0, -LINE_STEP),
+      showText(line.font.encodeText(line.text)),
     );
-  }
+  });
   ops.push(endText(), popGraphicsState());
   return ops;
 }
@@ -116,9 +155,7 @@ interface Stamp {
 
 /** Штамп на последней странице: шрифты, внешний вид и его место — общее для поля подписи и §42. */
 async function buildStamp(doc: PDFDocument, job: StampJob): Promise<Stamp> {
-  doc.registerFontkit(fontkit);
-  const regular = await doc.embedFont(pdfFontBytes(), { subset: true });
-  const bold = await doc.embedFont(pdfBoldFontBytes(), { subset: true });
+  const { lines, fonts } = await stampLines(doc, job.lines);
   const page = doc.getPages().at(-1)!;
   const v = visualView(page);
   const { width: w, height: h, margin } = STAMP;
@@ -138,10 +175,12 @@ async function buildStamp(doc: PDFDocument, job: StampJob): Promise<Stamp> {
   ];
   const m = MATRIX[v.rot];
   const xobject = doc.context.register(
-    doc.context.formXObject(stampOperators(job.lines, regular, bold), {
+    doc.context.formXObject(stampOperators(lines), {
       BBox: [0, 0, w, h],
       Matrix: m,
-      Resources: { Font: { F1: regular.ref, F2: bold.ref } },
+      Resources: {
+        Font: Object.fromEntries(Object.entries(fonts).map(([name, f]) => [name, f.ref])),
+      },
     }),
   );
   // Угол BBox, повёрнутого Matrix формы, — в левый нижний угол rect.

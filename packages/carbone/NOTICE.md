@@ -109,6 +109,11 @@
 - Шрифт Noto Sans Regular и Bold v2.015 — SIL Open Font License 1.1, текст — `assets/fonts/OFL.txt`
   (https://github.com/notofonts/latin-greek-cyrillic); файлы из https://github.com/notofonts/notofonts.github.io
   (`fonts/NotoSans/hinted/ttf`, коммит `5c39130`), не изменялись.
+- Шрифт Noto Sans SC Regular v2.004 (с 2.14.0, китайский текст в постобработке PDF) — SIL Open Font License 1.1,
+  текст — `assets/fonts/NotoSansSC-OFL.txt` (https://github.com/notofonts/noto-cjk); файл `NotoSansSC-Regular.ttf` —
+  статический TTF Google Fonts (https://fonts.google.com/noto/specimen/Noto+Sans+SC, `fonts.gstatic.com/s/notosanssc/v41`),
+  не изменялся (SHA-256 `450625c8…0f89af`). Глифы в нём не выровнены; API выравнивает glyf в памяти перед
+  встраиванием подмножества (`apps/api/src/modules/pdf/font.ts`).
 
 ## Правило чистой реализации
 

@@ -1,5 +1,6 @@
 import {
   decodePDFRawStream,
+  drawObject,
   PDFArray,
   PDFDict,
   PDFDocument,
@@ -11,7 +12,7 @@ import {
 } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { postprocessPdf } from '../postprocess';
-import { makePdf, pageTexts } from '../test-pdf';
+import { makePdf, pageTexts, pdfFontNames } from '../test-pdf';
 import { fillByteRange } from './embed';
 import {
   prepareSignaturePdf,
@@ -28,6 +29,15 @@ const lines: SignPrepareJob['lines'] = [
   'Действителен: с 01.01.2026 по 01.01.2126',
   'Подписан: 19.10.2026 14:32',
 ];
+/** Строки штампа с иероглифами (заголовок и владелец) — Noto Sans SC (§45.5). */
+const cjkLines: SignPrepareJob['lines'] = [
+  '文件已通过电子签名签署',
+  'Сертификат: 1001',
+  'Владелец: Ли Вэй 李伟 😀',
+  'Действителен: с 01.01.2026 по 01.01.2126',
+  'Подписан: 19.10.2026 14:32',
+];
+const plain = (names: string[]) => names.map((n) => n.replace(/-\d+$/, ''));
 const job = (over: Partial<SignPrepareJob> = {}): SignPrepareJob => ({
   position: 'bottom-right',
   lines,
@@ -47,6 +57,15 @@ async function widgetOf(pdf: Uint8Array) {
     .asArray()
     .map((n) => (n as PDFNumber).asNumber());
   return { doc, page, dicts, widget, rect };
+}
+
+/** Текст внешнего вида подписи: pdf.js не извлекает текст виджета — выводим его XObject на страницу. */
+async function stampTextOf(pdf: Uint8Array): Promise<string> {
+  const { doc, page, widget } = await widgetOf(pdf);
+  const ap = widget.lookup(PDFName.of('AP'), PDFDict).get(PDFName.of('N')) as PDFRef;
+  page.node.setXObject(PDFName.of('ApTest'), ap);
+  page.pushOperators(drawObject('ApTest'));
+  return (await pageTexts(await doc.save())).at(-1)!;
 }
 
 describe('prepareSignaturePdf (§39.4, §39.5)', () => {
@@ -137,12 +156,40 @@ describe('prepareSignaturePdf (§39.4, §39.5)', () => {
     expect(xmp(after)).toBe(xmp(before));
   });
 
+  it('штамп на русском — Noto Sans Regular и Bold, без Noto Sans SC', async () => {
+    const out = await prepareSignaturePdf(await makePdf([{ label: 'a' }]), job());
+    expect(plain(await pdfFontNames(out))).toEqual(['NotoSans-Bold', 'NotoSans-Regular']);
+    expect(await stampTextOf(out)).toContain('Владелец: Иванов Иван Иванович');
+  });
+
+  it('владелец с иероглифами: текст извлекается, эмодзи → ?, заголовок — SC Regular', async () => {
+    const out = await prepareSignaturePdf(
+      await makePdf([{ label: 'a' }]),
+      job({ lines: cjkLines }),
+    );
+    const text = await stampTextOf(out);
+    expect(text).toContain('文件已通过电子签名签署');
+    expect(text).toContain('Владелец: Ли Вэй 李伟 ?');
+    expect(text).toContain('Сертификат: 1001');
+    expect(plain(await pdfFontNames(out))).toEqual(['NotoSans-Regular', 'NotoSansSC-Regular']);
+  });
+
   it('stampText: управляющие символы и символы вне шрифта, обрезка длинной строки', async () => {
     const doc = await PDFDocument.create();
     doc.registerFontkit((await import('@pdf-lib/fontkit')).default);
     const font = await doc.embedFont((await import('../font')).pdfFontBytes(), { subset: true });
     expect(stampText('Владелец:\u0001Иванов 😀', font, 7)).toBe('Владелец: Иванов ?');
     const long = stampText(`Владелец: ${'Константинопольский '.repeat(10)}`, font, 7);
+    expect(long.endsWith('…')).toBe(true);
+    expect(font.widthOfTextAtSize(long, 7)).toBeLessThanOrEqual(STAMP.width - 12);
+  });
+
+  it('stampText по шрифту SC: иероглифы остаются, обрезка по ширине SC', async () => {
+    const doc = await PDFDocument.create();
+    doc.registerFontkit((await import('@pdf-lib/fontkit')).default);
+    const font = await doc.embedFont((await import('../font')).pdfCjkFontBytes(), { subset: true });
+    expect(stampText('所有者: 李伟 😀', font, 7, 'cjk')).toBe('所有者: 李伟 ?');
+    const long = stampText(`所有者: ${'李伟'.repeat(40)}`, font, 7, 'cjk');
     expect(long.endsWith('…')).toBe(true);
     expect(font.widthOfTextAtSize(long, 7)).toBeLessThanOrEqual(STAMP.width - 12);
   });
@@ -245,6 +292,20 @@ describe('prepareStampPdf: штамп без поля подписи (§42)', ()
     expect(texts[0]).not.toContain('Владелец');
     expect(texts[1]).toContain('R2');
     expect(texts[1]).toContain('Владелец: Иванов Иван Иванович');
+  });
+
+  it('строки с иероглифами (ГОСТ, §42): текст читается, SC встроен только для них', async () => {
+    const out = await prepareStampPdf(await makePdf([{ label: 'a' }]), {
+      position: 'bottom-right',
+      lines: cjkLines,
+    });
+    const text = (await pageTexts(out))[0]!;
+    expect(text).toContain('文件已通过电子签名签署');
+    expect(text).toContain('李伟 ?');
+    expect(plain(await pdfFontNames(out))).toEqual(['NotoSans-Regular', 'NotoSansSC-Regular']);
+    expect(
+      plain(await pdfFontNames(await prepareStampPdf(await makePdf([{ label: 'a' }]), sjob()))),
+    ).toEqual(['NotoSans-Bold', 'NotoSans-Regular']);
   });
 
   it('нет /AcroForm, /Sig и аннотаций', async () => {

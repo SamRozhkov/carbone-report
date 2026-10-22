@@ -212,7 +212,7 @@
     "suffixAria": "Zahlensuffix",
     "previewHint": "Führen Sie die Abfrage aus, um das Diagramm mit den Testdaten zu sehen.",
     "copyTagAria": "Tag kopieren",
-    "insertHint": "Fügen Sie ein Platzhalterbild in das Dokument ein und den Tag in dessen Alternativtext. Die Bildgröße ist die Diagrammgröße.",
+    "insertHint": "Fügen Sie ein Platzhalterbild in das Dokument ein und das Tag in dessen Alternativtext. Die Bildgröße ist die Diagrammgröße.",
     "empty": "Keine Diagramme — fügen Sie das erste hinzu.",
     "save": "Diagramme speichern"
   },

@@ -315,7 +315,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         id: 'cond-and',
         title: 'Zwei Bedingungen',
         template:
-          "{d.qty:ifGT(0):and(.paid):ifEQ(true):show('versandbereit'):elseShow('zurückgestellt')}",
+          "{d.qty:ifGT(0):and(.paid):ifEQ(true):show('versandbereit'):elseShow('ausstehend')}",
         data: j({ qty: 2, paid: true }),
         result: 'versandbereit',
         note: 'Statt `and` können Sie `or` verwenden: `…:or(.paid):ifEQ(true)…`.',
@@ -460,13 +460,13 @@ export const HELP_SECTIONS: HelpSection[] = [
         id: 'agg-cum',
         title: 'Laufende Summe',
         template: L(
-          '| Marke | Menge | Bisher |',
+          '| Marke | Menge | Kumuliert |',
           '| {d.cars[i].brand} | {d.cars[i].qty} | {d.cars[i].qty:cumSum} |',
           '| {d.cars[i+1].brand} | | |',
         ),
         data: j({ cars: CARS }),
         result: L(
-          '| Marke | Menge | Bisher |',
+          '| Marke | Menge | Kumuliert |',
           '| Opel | 3 | 3 |',
           '| Tesla | 1 | 4 |',
           '| Opel | 2 | 6 |',
@@ -677,7 +677,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: 'media',
     title: 'Bilder, Barcodes, Farben, Links',
     intro: [
-      'Ein Bild oder ein Barcode aus den Daten ersetzt ein Platzhalterbild. Fügen Sie ein beliebiges Bild in passender Größe in die Vorlage ein und schreiben Sie das Tag in seinen Alternativtext: in Word — „Grafik formatieren“ → „Alternativtext“ (oder Rechtsklick → „Alternativtext bearbeiten“), in LibreOffice — „Eigenschaften“ → Tab „Optionen“ → „Alternativtext“ oder „Beschreibung“, im Vorlageneditor — „Erweiterte Einstellungen des Bildes“ → „Alternativer Text“ → „Beschreibung“. Das Tag muss den gesamten Alternativtext einnehmen: gemischter Text („Foto {d.name}“) wird unverändert ausgegeben, und das Bild bleibt. Dasselbe Tag in einem gewöhnlichen Absatz gibt einfach den Wert aus.',
+      'Ein Bild oder ein Barcode aus den Daten ersetzt ein Platzhalterbild. Fügen Sie ein beliebiges Bild in passender Größe in die Vorlage ein und schreiben Sie das Tag in seinen Alternativtext: in Word — „Grafik formatieren“ → „Alternativtext“ (oder Rechtsklick → „Alternativtext bearbeiten“), in LibreOffice — „Eigenschaften“ → Tab „Optionen“ → „Textalternative“ oder „Beschreibung“, im Vorlageneditor — „Erweiterte Einstellungen des Bildes“ → „Alternativer Text“ → „Beschreibung“. Das Tag muss den gesamten Alternativtext einnehmen: gemischter Text („Foto {d.name}“) wird unverändert ausgegeben, und das Bild bleibt. Dasselbe Tag in einem gewöhnlichen Absatz gibt einfach den Wert aus.',
       'Ein Bild in den Daten ist ein Data-URI (`data:image/png;base64,…`; PNG, JPEG oder GIF) oder eine `https://…`-Adresse. Adressen werden nur von Hosts aus der Einstellung `IMAGE_URL_ALLOWLIST` geladen; sie ist standardmäßig leer, und eine Adresse ergibt einen Vorlagenfehler. SVG wird nicht unterstützt. Ein leerer Wert entfernt das Platzhalterbild. Grenzen: 10 MB pro Bild und 50 MB pro Bericht. Funktioniert in DOCX, XLSX, PPTX, ODT, ODS, ODP; mehrere Bilder in einer Schleife funktionieren in DOCX (Bild „Mit Text in Zeile“) und ODT (verankert „Als Zeichen“).',
       'Ein reiner Textwert (nicht `data:` und nicht `http(s)://`) wird im Alternativtext ausgegeben, und das Bild bleibt; ein leerer Wert entfernt das Bild. Ein ungültiges Bild (ein beschädigter Data-URI, ein Host nicht auf der Liste, ein falsches Tag) ist ein Vorlagenfehler mit dem Tag im Text, und der Bericht wird nicht erstellt. Konnte ein Bild unter einer Adresse nicht geladen werden (Zeitüberschreitung, Antwort nicht 2xx), wird es entfernt, und der Bericht wird erstellt.',
     ],
@@ -734,7 +734,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         template: "{d.site:defaultURL('https://example.com')}",
         data: j({ site: 'not a url' }),
         result: 'https://example.com',
-        note: "Meist wird das Tag als Adresse eines Hyperlinks verwendet: in Word — „Einfügen“ → „Link“, im Feld „Adresse“ — `{d.site:defaultURL('https://example.com')}`. Eine Linkadresse aus den Daten wird geprüft: Ohne Schema wird `https://` ergänzt; erlaubt sind `http`, `https`, `mailto`, `tel`. Eine ungültige Adresse — `javascript:`, `localhost`, eine IP-Adresse oder ein Name ohne Top-Level-Domain (`http://server:8080`) — wird durch den Wert von `:defaultURL` ersetzt (das kann ein Feld sein: `:defaultURL(.fallback)`), ohne ihn durch `#`. Relative Adressen und Anker (`#abschnitt`, `../datei.pdf`) werden ebenfalls zu `#`. In einer Adresse mit statischem Teil (`https://site.de/?id={d.id}`) wird der Tag-Wert kodiert und die ganze Adresse geprüft; ein Tag ganz am Anfang der Adresse (`{d.base}/items/{d.id}`) wird unverändert eingefügt.",
+        note: "Meist wird das Tag als Adresse eines Hyperlinks verwendet: in Word — „Einfügen“ → „Link“, im Feld „Adresse“ — `{d.site:defaultURL('https://example.com')}`. Eine Linkadresse aus den Daten wird geprüft: Ohne Schema wird `https://` ergänzt; erlaubt sind `http`, `https`, `mailto`, `tel`. Eine ungültige Adresse — `javascript:`, `localhost`, eine IP-Adresse oder ein Name ohne Top-Level-Domain (`http://server:8080`) — wird durch den Wert von `:defaultURL` ersetzt (das kann ein Feld sein: `:defaultURL(.fallback)`), ohne `:defaultURL` durch `#`. Relative Adressen und Anker (`#abschnitt`, `../datei.pdf`) werden ebenfalls zu `#`. In einer Adresse mit statischem Teil (`https://site.de/?id={d.id}`) wird der Tag-Wert kodiert und die ganze Adresse geprüft; ein Tag ganz am Anfang der Adresse (`{d.base}/items/{d.id}`) wird unverändert eingefügt.",
       },
     ],
   },
@@ -795,7 +795,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: 'echarts',
     title: 'ECharts-Diagramme',
     intro: [
-      'Ein ECharts-Diagramm wird anstelle eines Platzhalterbildes gezeichnet — in DOCX, XLSX, PPTX, ODT, ODS, ODP. Fügen Sie ein beliebiges Bild in passender Größe in das Dokument ein und schreiben Sie das Tag `{d.charts.sales:chart}` in seinen Alternativtext, genau wie bei Bildern: in Word — „Grafik formatieren“ → „Alternativtext“, in Excel — „Grafik formatieren“ → „Alternativtext“, in LibreOffice — „Eigenschaften“ → „Optionen“ → „Alternativtext“ (in Calc und Impress — „Titel“). Ohne `width`/`height` in der Definition übernimmt das Diagramm die Größe des Bildes; mit ihnen behält das Bild die Breite des Platzhalters, und die Höhe folgt den Proportionen des Diagramms. `:imageFit(contain)` und `:imageFit(fill)` funktionieren wie bei Bildern.',
+      'Ein ECharts-Diagramm wird anstelle eines Platzhalterbildes gezeichnet — in DOCX, XLSX, PPTX, ODT, ODS, ODP. Fügen Sie ein beliebiges Bild in passender Größe in das Dokument ein und schreiben Sie das Tag `{d.charts.sales:chart}` in seinen Alternativtext, genau wie bei Bildern: in Word — „Grafik formatieren“ → „Alternativtext“, in Excel — „Grafik formatieren“ → „Alternativtext“, in LibreOffice — „Eigenschaften“ → „Optionen“ → „Textalternative“ (in Calc und Impress — „Titel“). Ohne `width`/`height` in der Definition übernimmt das Diagramm die Größe des Bildes; mit ihnen behält das Bild die Breite des Platzhalters, und die Höhe folgt den Proportionen des Diagramms. `:imageFit(contain)` und `:imageFit(fill)` funktionieren wie bei Bildern.',
       'Am einfachsten geht es mit dem Diagramm-Editor: dem Tab „Diagramme“ des Vorlageneditors. Wählen Sie eine Abfrage im Modus „Liste von Zeilen“, die Beschriftungsspalte und die Spalten der Reihen (oder „Reihen aus Daten“ — die Spalte, nach der die Zeilen auf Reihen aufgeteilt werden), den Typ, den Titel, die Legende, die Farbpalette und das Zahlenformat; die Vorschau wird mit Testdaten erstellt. Die Diagrammdefinition gelangt unter dem Schlüssel `d.charts.<schlüssel>` in die Berichtsdaten; das Tag wird mit der Schaltfläche „Kopieren“ kopiert und ist auf dem Tab „Dokument“ sichtbar.',
       'Sie können eine fertige ECharts-5-Definition aus SQL übergeben: Der Tag-Wert ist `{ "type": "echarts@v5", "option": { … } }` oder die Definition selbst mit `series`; eine Zeichenkette mit JSON funktioniert ebenfalls. `width` und `height` (100–4000) legen die logische Größe der Zeichenfläche fest: ECharts-Schriftgrößen werden in diesen Pixeln gemessen, eine größere Fläche bedeutet also kleineren Text; ohne sie wird die Größe des Bildes verwendet. `theme` ist `"dark"` oder ein Theme-Objekt. Der Hintergrund ist standardmäßig weiß.',
       'Grenzen: Die Definition ist bis zu 1 MB groß, hat bis zu 20 Reihen und 10.000 Punkte und wird in höchstens 5 s gezeichnet; Funktionen in der Definition funktionieren nicht (nur JSON); die Schriftart ist immer Noto Sans, andere Schriftarten in der Definition werden durch sie ersetzt. Bilder in der Definition (`graphic`, `symbol: "image://…"`, Muster, `image`-Schlüssel) dürfen nur `data:image/png|jpeg|gif;base64,…` sein; eine Adresse, ein Dateipfad oder SVG ist ein Vorlagenfehler. In Diagrammen aus dem Diagramm-Editor werden Datumsbeschriftungen als TT.MM.JJJJ aus dem Datum in den Daten angezeigt, ohne Umrechnung der Zeitzone — um nach Tagen zu gruppieren, wandeln Sie die Zeit in SQL in ein Datum um (`created::date`). Ein leerer Wert entfernt das Platzhalterbild. Eine ungültige Definition ist ein Vorlagenfehler mit dem Tag; ein `:chart`-Tag in gewöhnlichem Text ist ein Vorlagenfehler, der besagt, dass ein Diagramm in den Alternativtext eines Bildes gehört.',
@@ -953,7 +953,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           'Der Vertrag steht auf der Website, die Anleitung hier.',
           '„auf der Website“ führt zu https://site.de/doc, „hier“ zu https://example.com.',
         ),
-        note: 'Adressen werden genauso geprüft wie Links der Vorlage: Ohne Schema wird `https://` ergänzt; erlaubt sind `http`, `https`, `mailto`, `tel`. Eine ungültige Adresse (`javascript:`, `localhost`, ein Anker `#abschnitt`) wird durch den Wert von `:defaultURL` ersetzt, ohne ihn durch `#`.',
+        note: 'Adressen werden genauso geprüft wie Links der Vorlage: Ohne Schema wird `https://` ergänzt; erlaubt sind `http`, `https`, `mailto`, `tel`. Eine ungültige Adresse (`javascript:`, `localhost`, ein Anker `#abschnitt`) wird durch den Wert von `:defaultURL` ersetzt, ohne `:defaultURL` durch `#`.',
       },
       {
         id: 'html-inline',
@@ -988,7 +988,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     intro: [
       'PDF-Einstellungen werden auf dem Tab „PDF“ des Vorlageneditors festgelegt und gelten für das PDF des Berichts: in der Vorschau, beim Erstellen und beim Herunterladen. „Speichern als“ DOCX/XLSX… liefert eine Datei ohne sie.',
       'PDF/A-2b ist ein Format für die Archivierung und den elektronischen Dokumentenaustausch. Ist PDF/A eingeschaltet, müssen angehängte Dateien ebenfalls PDF/A sein (das wird aus den Metadaten der Datei gelesen).',
-      'Das Wasserzeichen und die Metadaten (Titel, Autor, Thema, Stichwörter) können Tags `{d.feld}` und `{d.liste[0].feld}` enthalten — ohne Formatierer und Schleifen. Ein leerer Tag-Wert im Wasserzeichen entfernt das Wasserzeichen: So erscheint „ENTWURF“ nur auf noch nicht freigegebenen Dokumenten. Zeichen, die in der PDF-Schriftart fehlen (Emoji, CJK-Zeichen), werden in den Daten durch „?“ ersetzt.',
+      'Das Wasserzeichen und die Metadaten (Titel, Autor, Thema, Stichwörter) können Tags `{d.feld}` und `{d.liste[0].feld}` enthalten — ohne Formatierer und Schleifen. Ein leerer Tag-Wert im Wasserzeichen entfernt das Wasserzeichen: So erscheint „ENTWURF“ nur auf noch nicht freigegebenen Dokumenten. Zeichen, die in der PDF-Schriftart fehlen (zum Beispiel Emoji), werden in den Daten durch „?“ ersetzt.',
       'Die Seitennummerierung läuft durch das ganze Dokument einschließlich der angehängten Dateien: `{page}` ist die Seitenzahl, `{pages}` die Gesamtzahl der Seiten; die erste Seite kann ohne Nummer bleiben. Angehängte PDFs (bis zu 10 Dateien zu je 20 MB, insgesamt bis zu 500 Seiten) werden am Anfang oder am Ende des Berichts eingefügt; passwortgeschützte Dateien werden nicht angenommen.',
       'Schutz: ein Passwort zum Öffnen (eines pro Vorlage, 4–64 Zeichen, beginnt nicht mit „-“) und Einschränkungen für Drucken, Kopieren von Text und Bearbeiten. Einschränkungen ohne Passwort sperren das Dokument nicht — sie werden von PDF-Betrachtern umgesetzt. Der Schutz gilt für erstellte Berichte; die Vorschau wird ohne ihn angezeigt. PDF/A und Schutz sind nicht miteinander vereinbar. Das Passwort wird verschlüsselt gespeichert, im Dialog nicht angezeigt und beim Übertragen der Vorlage in eine andere Umgebung nicht übernommen — legen Sie es dort erneut fest.',
     ],

@@ -674,7 +674,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     title: 'Imagens, códigos de barras, cores, links',
     intro: [
       'Uma imagem ou um código de barras dos dados substitui uma imagem de espaço reservado. Insira no modelo qualquer imagem do tamanho adequado e escreva a tag no texto alternativo dela: no Word, pelo texto alternativo da imagem (clique com o botão direito na imagem → “Exibir Texto Alt”); no LibreOffice, “Propriedades” → aba “Opções” → o campo de texto alternativo ou “Descrição”; no editor de modelos, as configurações avançadas da imagem → “Texto alternativo” → “Descrição”. A tag deve ocupar todo o texto alternativo: um texto misto (“Foto {d.name}”) é exibido como está, e a imagem permanece. A mesma tag em um parágrafo normal simplesmente mostra o valor.',
-      'Uma imagem nos dados é um data URI (`data:image/png;base64,…`; PNG, JPEG ou GIF) ou um endereço `https://…`. Os endereços só são carregados dos hosts do parâmetro `IMAGE_URL_ALLOWLIST`; por padrão ele está vazio, e um endereço dá um erro no modelo. SVG não é compatível. Um valor vazio remove a imagem de espaço reservado. Limites: 10 MB por imagem e 50 MB por relatório. Funciona em DOCX, XLSX, PPTX, ODT, ODS, ODP; várias imagens em um loop funcionam no DOCX (imagem “Alinhado com o Texto”) e no ODT (ancorada “Como caractere”).',
+      'Uma imagem nos dados é um data URI (`data:image/png;base64,…`; PNG, JPEG ou GIF) ou um endereço `https://…`. Os endereços só são carregados dos hosts do parâmetro `IMAGE_URL_ALLOWLIST`; por padrão ele está vazio, e um endereço dá um erro no modelo. SVG não é suportado. Um valor vazio remove a imagem de espaço reservado. Limites: 10 MB por imagem e 50 MB por relatório. Funciona em DOCX, XLSX, PPTX, ODT, ODS, ODP; várias imagens em um loop funcionam no DOCX (imagem “Alinhado com o Texto”) e no ODT (ancorada “Como caractere”).',
       'Um valor de texto simples (nem `data:` nem `http(s)://`) é escrito no texto alternativo, e a imagem permanece; um valor vazio remove a imagem. Uma imagem inválida (data URI corrompido, host que não está na lista, tag incorreta) é um erro no modelo com a tag no texto, e o relatório não é gerado. Se não foi possível carregar uma imagem de um endereço (tempo esgotado, resposta diferente de 2xx), ela é removida e o relatório é gerado.',
     ],
     examples: [
@@ -723,7 +723,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           ],
         }),
         result: L('| Tarefa | Status |', '| Relatório | concluída |', '| Conciliação | atrasada |'),
-        note: 'A tag não mostra nada; ela colore o elemento em que está: `color(p)`, o parágrafo (padrão); `cell`, a célula; `row`, a linha da tabela; `shape`, a forma (PPTX, ODP, ODT); `part`, um trecho de texto (só ODT). O segundo argumento indica o que colorir: `text` (padrão), `background`, `highlight` (não no DOCX), `border`: o contorno da forma (PPTX). No DOCX, só `text` e `background`, e `shape` não é compatível; no PPTX, `p` com `background` não é compatível. A cor é escrita com 6 dígitos hexadecimais, com ou sem `#`; qualquer outro valor dá cinza `#888888`. No XLSX e no ODS é um erro no modelo.',
+        note: 'A tag não mostra nada; ela colore o elemento em que está: `color(p)`, o parágrafo (padrão); `cell`, a célula; `row`, a linha da tabela; `shape`, a forma (PPTX, ODP, ODT); `part`, um trecho de texto (só ODT). O segundo argumento indica o que colorir: `text` (padrão), `background`, `highlight` (não no DOCX), `border`: o contorno da forma (PPTX). No DOCX, só `text` e `background`, e `shape` não é suportado; no PPTX, `p` com `background` não é suportado. A cor é escrita com 6 dígitos hexadecimais, com ou sem `#`; qualquer outro valor dá cinza `#888888`. No XLSX e no ODS é um erro no modelo.',
       },
       {
         id: 'media-default-url',
@@ -986,7 +986,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     intro: [
       'As configurações do PDF são definidas na aba “PDF” do editor de modelos e se aplicam ao PDF do relatório: na pré-visualização, na geração e no download. “Salvar como” DOCX/XLSX… dá um arquivo sem elas.',
       'PDF/A-2b é um formato para arquivamento e troca eletrônica de documentos. Quando o PDF/A está ativado, os anexos também precisam estar no formato PDF/A (isso é lido nos metadados do arquivo).',
-      'A marca-d’água e os metadados (título, autor, assunto, palavras-chave) podem conter tags `{d.field}` e `{d.list[0].field}`, sem formatadores nem loops. Um valor de tag vazio na marca-d’água remove a marca-d’água: assim, “RASCUNHO” só aparece nos documentos que ainda não foram aprovados. Os caracteres dos dados que não estão na fonte do PDF (emoji, caracteres CJK) são substituídos por “?”.',
+      'A marca-d’água e os metadados (título, autor, assunto, palavras-chave) podem conter tags `{d.field}` e `{d.list[0].field}`, sem formatadores nem loops. Um valor de tag vazio na marca-d’água remove a marca-d’água: assim, “RASCUNHO” só aparece nos documentos que ainda não foram aprovados. Os caracteres dos dados que não estão na fonte do PDF (por exemplo, emoji) são substituídos por “?”.',
       'A numeração de páginas abrange todo o documento com os anexos: `{page}` é o número da página e `{pages}`, o número total de páginas; a primeira página pode ficar sem número. Os PDFs anexos (até 10 arquivos de 20 MB cada, 500 páginas no total) são adicionados no início ou no fim do relatório; arquivos protegidos por senha não são aceitos.',
       'Proteção: uma senha de abertura (uma por modelo, de 4 a 64 caracteres, que não comece com “-”) e restrições de impressão, de cópia do texto e de alteração. As restrições sem senha não bloqueiam o documento: quem as aplica são os leitores de PDF. A proteção se aplica aos relatórios gerados; a pré-visualização é exibida sem ela. PDF/A e a proteção são incompatíveis. A senha é guardada criptografada, não é exibida na caixa de diálogo e não é transferida ao mover o modelo para outro ambiente: defina-a lá novamente.',
     ],
@@ -1049,7 +1049,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         id: 'na-svg',
         title: 'SVG e fontes de códigos de barras',
         instead:
-          'Uma imagem SVG dos dados é um erro no modelo que indica que SVG não é compatível: passe PNG, JPEG ou GIF. As fontes de códigos de barras não são compatíveis: use `:barcode` em uma imagem de espaço reservado.',
+          'Uma imagem SVG dos dados é um erro no modelo que indica que SVG não é suportado: passe PNG, JPEG ou GIF. As fontes de códigos de barras não são suportadas: use `:barcode` em uma imagem de espaço reservado.',
       },
       {
         id: 'na-sort-desc',

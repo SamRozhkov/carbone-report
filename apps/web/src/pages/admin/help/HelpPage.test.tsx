@@ -159,6 +159,30 @@ describe('HelpPage: язык справки (§46)', () => {
     ).toBeInTheDocument();
   });
 
+  it('en: заголовки и результаты из en.ts, «Copy» копирует английский шаблон', async () => {
+    const en = await import('./content/en');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    await changeLocale('en', { persist: 'none' });
+    renderWithProviders(<HelpPage />);
+    const first = en.HELP_SECTIONS[0]!;
+    expect(await screen.findByRole('region', { name: first.title })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(first.title).toBe('Basics');
+    const all = en.HELP_SECTIONS.flatMap((s) => s.examples);
+    const date = all.find((e) => e.id === 'fmt-date-long')!;
+    expect(date.result).toBe('March 8, 2026');
+    const dateCard = screen.getByRole('article', { name: date.title });
+    expect(within(dateCard).getByText(date.result)).toBeInTheDocument();
+    // Пример с постоянным текстом в шаблоне: копируется английский шаблон, а не русский.
+    const e = all.find((x) => x.id === 'basics-params')!;
+    expect(e.template).toBe("Period from {d.params.from:formatD('MM/DD/YYYY')}");
+    const card = screen.getByRole('article', { name: e.title });
+    await userEvent.click(within(card).getByRole('button', { name: `Copy tag: ${e.title}` }));
+    expect(writeText).toHaveBeenCalledWith(e.template);
+  });
+
   it('смена языка на открытой справке — содержимое переключается, якоря на месте', async () => {
     HELP_MODULES.en = () => Promise.resolve(fake);
     renderWithProviders(<HelpPage />);

@@ -12,7 +12,9 @@ export const HELP_RU: HelpContent = ru;
  * Модули языков, кроме ru: по строке на язык (`en: () => import('./en')`). Языка нет в таблице —
  * справка на ru. Записи изменяемы: тест подменяет загрузку чанка.
  */
-export const HELP_MODULES: Partial<Record<Exclude<Locale, 'ru'>, () => Promise<HelpContent>>> = {};
+export const HELP_MODULES: Partial<Record<Exclude<Locale, 'ru'>, () => Promise<HelpContent>>> = {
+  en: () => import('./en'),
+};
 
 /** Справка на языке `locale`; модуль не загрузился — ru и `failed: true` (страница покажет сообщение). */
 export async function loadHelpContent(

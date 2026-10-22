@@ -100,7 +100,9 @@ describe('Layout: язык интерфейса (§44.1)', () => {
     ]);
     renderRoute('/reports');
     await pickOption(await screen.findByRole('button', { name: 'Язык' }), 'Deutsch');
-    expect(await screen.findByText('Berichte')).toBeInTheDocument();
+    // Пункт меню и заголовок страницы (Task 5: страницы тоже переведены).
+    expect(await screen.findByRole('heading', { level: 1, name: 'Berichte' })).toBeInTheDocument();
+    expect(screen.getAllByText('Berichte')).toHaveLength(2);
     expect(screen.getByText('Datenquellen')).toBeInTheDocument();
     expect(screen.queryByText('Моя подпись')).not.toBeInTheDocument();
     expect(document.documentElement.lang).toBe('de');
@@ -110,7 +112,9 @@ describe('Layout: язык интерфейса (§44.1)', () => {
 
     vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['fr-CA']);
     await pickOption(screen.getByRole('button', { name: 'Sprache' }), 'Wie im Browser');
-    expect(await screen.findByText('Rapports')).toBeInTheDocument();
+    // Пункт меню и заголовок страницы (Task 5: страницы тоже переведены).
+    expect(await screen.findByRole('heading', { level: 1, name: 'Rapports' })).toBeInTheDocument();
+    expect(screen.getAllByText('Rapports')).toHaveLength(2);
     expect(calls.filter((c) => c.method === 'PUT').at(-1)).toEqual({
       method: 'PUT',
       path: '/api/me/locale',
@@ -142,7 +146,9 @@ describe('Layout: язык интерфейса (§44.1)', () => {
       'true',
     );
     await pickOption(item, 'Según el navegador');
-    expect(await screen.findByText('Berichte')).toBeInTheDocument();
+    // Пункт меню и заголовок страницы (Task 5: страницы тоже переведены).
+    expect(await screen.findByRole('heading', { level: 1, name: 'Berichte' })).toBeInTheDocument();
+    expect(screen.getAllByText('Berichte')).toHaveLength(2);
     expect(localStorage.getItem('cr.locale')).toBeNull();
     expect(calls.filter((c) => c.method === 'PUT')).toEqual([
       { method: 'PUT', path: '/api/me/locale', body: { locale: null } },
@@ -162,7 +168,9 @@ describe('Layout: язык интерфейса (§44.1)', () => {
     await waitFor(() => expect(item).toHaveAttribute('aria-expanded', 'true'));
     // Активен выбранный пункт «Как в браузере»; вниз: Русский, English.
     await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
-    expect(await screen.findByText('Reports')).toBeInTheDocument();
+    // Пункт меню и заголовок страницы (Task 5: страницы тоже переведены).
+    expect(await screen.findByRole('heading', { level: 1, name: 'Reports' })).toBeInTheDocument();
+    expect(screen.getAllByText('Reports')).toHaveLength(2);
     expect(calls.filter((c) => c.method === 'PUT')).toEqual([
       { method: 'PUT', path: '/api/me/locale', body: { locale: 'en' } },
     ]);

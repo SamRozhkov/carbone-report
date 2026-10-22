@@ -1,4 +1,5 @@
 import { Loader } from '@gravity-ui/uikit';
+import { useTranslation } from 'react-i18next';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { useMe } from '../api/session';
 import { ErrorAlert } from '../components/ErrorAlert';
@@ -16,11 +17,12 @@ export function FullPageLoader() {
 export function RequireUser() {
   const me = useMe();
   const location = useLocation();
+  const { t } = useTranslation();
   if (me.isPending) return <FullPageLoader />;
   if (me.isError) {
     return (
       <div className="cr-centered">
-        <ErrorAlert error={me.error} title="Не удалось проверить вход" />
+        <ErrorAlert error={me.error} title={t('common:shell.authCheckFailed')} />
       </div>
     );
   }

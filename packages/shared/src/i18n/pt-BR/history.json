@@ -1,0 +1,42 @@
+{
+  "title": "Histórico",
+  "column": {
+    "date": "Data",
+    "report": "Relatório",
+    "user": "Usuário",
+    "params": "Parâmetros",
+    "format": "Formato",
+    "result": "Resultado",
+    "duration": "Tempo"
+  },
+  "filter": {
+    "allReports": "Todos os relatórios",
+    "anyResult": "Qualquer resultado",
+    "ok": "Concluído",
+    "error": "Erro",
+    "allUsers": "Todos os usuários"
+  },
+  "status": {
+    "ok": "concluído",
+    "error": "erro"
+  },
+  "params": {
+    "item": "{{name}}: {{value}}",
+    "yes": "sim",
+    "no": "não",
+    "list": "“{{values}}”"
+  },
+  "file": {
+    "deleted": "arquivo excluído",
+    "download": "Baixar",
+    "stampedPdf": "PDF com carimbo",
+    "sig": "Assinatura (.sig)",
+    "signedPdf": "PDF assinado",
+    "sign": "Assinar…",
+    "downloadFailed": "Não foi possível baixar o arquivo"
+  },
+  "signed": "Assinado ({{method}}): {{signer}}, {{date}}",
+  "methodGost": "GOST",
+  "notFound": "Nada encontrado",
+  "empty": "Ainda não há execuções"
+}

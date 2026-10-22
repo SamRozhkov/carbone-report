@@ -2,6 +2,7 @@ import type { RunSignature } from '@carbone-reports/shared';
 import { Dialog, Text, TextInput } from '@gravity-ui/uikit';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../api/client';
 import { api } from '../api/endpoints';
 import { fieldErrors } from '../api/errors';
@@ -16,6 +17,7 @@ export function SignRunDialog(props: {
   onClose: () => void;
   onSigned: (s: RunSignature) => void;
 }) {
+  const { t } = useTranslation();
   const [password, setPassword] = useState('');
   const cert = useQuery({
     queryKey: myCertificateKey,
@@ -46,15 +48,15 @@ export function SignRunDialog(props: {
     props.onClose();
   };
   return (
-    <Dialog open={props.open} onClose={close} size="s" aria-label="Подписать PDF">
-      <Dialog.Header caption="Подписать PDF" />
+    <Dialog open={props.open} onClose={close} size="s" aria-label={t('signature:dialog.title')}>
+      <Dialog.Header caption={t('signature:dialog.title')} />
       <Dialog.Body>
         {c && (
           <Text as="p" color="secondary">
-            {c.subjectCn}, действителен до {formatDate(c.notAfter)}
+            {t('signature:dialog.validUntil', { name: c.subjectCn, date: formatDate(c.notAfter) })}
           </Text>
         )}
-        <Field label="Пароль к ключу подписи" error={errors.password}>
+        <Field label={t('signature:dialog.password')} error={errors.password}>
           <TextInput
             type="password"
             value={password}
@@ -67,14 +69,14 @@ export function SignRunDialog(props: {
             }}
             autoFocus
             autoComplete="new-password"
-            controlProps={{ 'aria-label': 'Пароль к ключу подписи' }}
+            controlProps={{ 'aria-label': t('signature:dialog.password') }}
           />
         </Field>
         <ErrorAlert error={sign.error && !errors.password ? sign.error : null} />
       </Dialog.Body>
       <Dialog.Footer
-        textButtonApply="Подписать"
-        textButtonCancel="Отмена"
+        textButtonApply={t('signature:dialog.submit')}
+        textButtonCancel={t('common:action.cancel')}
         onClickButtonApply={submit}
         onClickButtonCancel={close}
         loading={sign.isPending}

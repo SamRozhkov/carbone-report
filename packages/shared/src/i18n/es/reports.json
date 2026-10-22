@@ -1,0 +1,31 @@
+{
+  "list": {
+    "title": "Informes",
+    "search": "Buscar",
+    "searchLabel": "Buscar informes",
+    "noCategory": "Sin categoría",
+    "notFound": "No se encontró nada.",
+    "emptyAuthor": "Todavía no hay plantillas: cree la primera en la sección «Plantillas».",
+    "empty": "Todavía no hay informes.",
+    "updated": "actualizado {{date}}"
+  },
+  "run": {
+    "openFailed": "No se pudo abrir el informe",
+    "back": "Volver a la lista",
+    "noParams": "El informe no tiene parámetros.",
+    "paramsChanged": "Los parámetros del informe han cambiado: el formulario se ha actualizado",
+    "generate": "Generar",
+    "optionsLoading": "Cargando las opciones de los parámetros…",
+    "ready": "El informe está listo",
+    "preview": "Vista previa del informe",
+    "saveAs": "Guardar como",
+    "signed": "Firmado: {{signer}}, {{date}}",
+    "signedTimestamped": "Firmado: {{signer}}, {{date}}, con sello de tiempo",
+    "downloadStamped": "Descargar PDF con sello",
+    "downloadSig": "Descargar firma (.sig)",
+    "downloadSigned": "Descargar PDF firmado",
+    "sign": "Firmar PDF",
+    "uploadCertificate": "Cargue un certificado en la página «<page>Mi firma</page>»",
+    "saveFailed": "No se pudo guardar el archivo"
+  }
+}

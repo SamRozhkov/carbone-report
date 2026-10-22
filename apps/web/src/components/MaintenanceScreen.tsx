@@ -2,8 +2,8 @@ import type { RecoveryTargets } from '@carbone-reports/shared';
 import { Alert, Button, Loader, Text, TextInput } from '@gravity-ui/uikit';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../api/endpoints';
-import { PHASE_LABEL } from '../lib/backups';
 import { ErrorAlert } from './ErrorAlert';
 import { Field } from './Field';
 
@@ -13,6 +13,7 @@ export const MAINTENANCE_POLL_MS = 3000;
 const reloadPage = () => window.location.reload();
 
 function RecoveryForm({ recovery }: { recovery: RecoveryTargets }) {
+  const { t } = useTranslation();
   const [code, setCode] = useState('');
   const retry = useMutation({
     mutationFn: (target: 'same' | 'pre-restore') => api.maintenance.retry({ code, target }),
@@ -22,27 +23,27 @@ function RecoveryForm({ recovery }: { recovery: RecoveryTargets }) {
     <div className="cr-form">
       <Alert
         theme="danger"
-        title="Восстановление не завершено: база частично заменена"
-        message="Введите код восстановления из журнала сервиса backup (docker compose logs backup) и выберите действие."
+        title={t('common:maintenance.failedTitle')}
+        message={t('common:maintenance.failedText')}
       />
-      <Field label="Код восстановления">
+      <Field label={t('common:maintenance.code')}>
         <TextInput
           value={code}
           onUpdate={setCode}
           placeholder="XXXX-XXXX-XXXX"
           autoComplete="off"
-          controlProps={{ 'aria-label': 'Код восстановления' }}
+          controlProps={{ 'aria-label': t('common:maintenance.code') }}
         />
       </Field>
       <ErrorAlert error={retry.error} />
-      {retry.isSuccess && <Text color="secondary">Повтор запущен, ждём завершения…</Text>}
+      {retry.isSuccess && <Text color="secondary">{t('common:maintenance.retryStarted')}</Text>}
       <Button
         view="action"
         disabled={disabled}
         loading={retry.isPending && retry.variables === 'same'}
         onClick={() => retry.mutate('same')}
       >
-        Повторить восстановление из {recovery.backup}
+        {t('common:maintenance.retrySame', { backup: recovery.backup })}
       </Button>
       {recovery.preRestore && (
         <Button
@@ -51,7 +52,7 @@ function RecoveryForm({ recovery }: { recovery: RecoveryTargets }) {
           loading={retry.isPending && retry.variables === 'pre-restore'}
           onClick={() => retry.mutate('pre-restore')}
         >
-          Вернуть состояние до восстановления ({recovery.preRestore})
+          {t('common:maintenance.retryPreRestore', { backup: recovery.preRestore })}
         </Button>
       )}
     </div>
@@ -60,6 +61,7 @@ function RecoveryForm({ recovery }: { recovery: RecoveryTargets }) {
 
 /** Экран на всю страницу, пока идёт восстановление из бэкапа (§26.5). */
 export function MaintenanceScreen({ reload = reloadPage }: { reload?: () => void }) {
+  const { t } = useTranslation();
   const status = useQuery({
     queryKey: ['maintenance'],
     queryFn: api.maintenance.status,
@@ -75,11 +77,14 @@ export function MaintenanceScreen({ reload = reloadPage }: { reload?: () => void
       <div className="cr-maintenance">
         {!recovery && <Loader size="m" />}
         <Text variant="header-1" as="h1">
-          Идёт восстановление из бэкапа…
+          {t('common:maintenance.restoring')}
         </Text>
         {data?.active && (
           <Text as="div" color="secondary">
-            Этап: {PHASE_LABEL[data.phase] ?? data.phase} · бэкап {data.backup}
+            {t('common:maintenance.phase', {
+              phase: t(`common:backupPhase.${data.phase}`, { defaultValue: data.phase }),
+              backup: data.backup,
+            })}
           </Text>
         )}
         {recovery && <RecoveryForm recovery={recovery} />}

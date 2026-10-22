@@ -1,0 +1,42 @@
+{
+  "title": "История",
+  "column": {
+    "date": "Дата",
+    "report": "Отчёт",
+    "user": "Пользователь",
+    "params": "Параметры",
+    "format": "Формат",
+    "result": "Результат",
+    "duration": "Время"
+  },
+  "filter": {
+    "allReports": "Все отчёты",
+    "anyResult": "Любой результат",
+    "ok": "Готово",
+    "error": "Ошибка",
+    "allUsers": "Все пользователи"
+  },
+  "status": {
+    "ok": "готово",
+    "error": "ошибка"
+  },
+  "params": {
+    "item": "{{name}}: {{value}}",
+    "yes": "да",
+    "no": "нет",
+    "list": "«{{values}}»"
+  },
+  "file": {
+    "deleted": "файл удалён",
+    "download": "Скачать",
+    "stampedPdf": "PDF со штампом",
+    "sig": "Подпись (.sig)",
+    "signedPdf": "PDF с подписью",
+    "sign": "Подписать…",
+    "downloadFailed": "Не удалось скачать файл"
+  },
+  "signed": "Подписан ({{method}}): {{signer}}, {{date}}",
+  "methodGost": "ГОСТ",
+  "notFound": "Ничего не найдено",
+  "empty": "Запусков пока нет"
+}

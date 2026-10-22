@@ -1,0 +1,48 @@
+{
+  "page": {
+    "title": "我的签名",
+    "intro": "需要带私钥的 .p12 或 .pfx 文件——由证书颁发机构或 IT 部门签发",
+    "expiring": "证书将于 {{date}} 到期",
+    "expired": "证书已过期——请上传新证书",
+    "owner": "所有者",
+    "issuer": "颁发者",
+    "serial": "序列号",
+    "validity": "有效期",
+    "validRange": "{{from}} 至 {{to}}",
+    "algorithm": "算法",
+    "fingerprint": "SHA-256 指纹",
+    "replace": "替换",
+    "deleteTitle": "删除签名证书？",
+    "deleteText": "在上传新证书之前，将无法签名 PDF。"
+  },
+  "upload": {
+    "file": "证书文件",
+    "password": "文件密码",
+    "submit": "上传证书"
+  },
+  "dialog": {
+    "title": "签名 PDF",
+    "validUntil": "{{name}}，有效期至 {{date}}",
+    "password": "签名密钥密码",
+    "submit": "签名",
+    "connecting": "正在连接 CryptoPro…",
+    "noCertificates": "没有有效的 GOST 证书——请在 CryptoPro 中安装证书",
+    "certificate": "证书",
+    "confirmInPlugin": "如果出现 CryptoPro 窗口，请在其中确认签名",
+    "authenticityNote": "证书的真实性由签名验证服务（例如 Gosuslugi）检查",
+    "unavailableText": "请安装 <plugin>CryptoPro CAdES Browser plug-in</plugin>（含浏览器扩展）和 <csp>CryptoPro CSP</csp>。浏览器询问时，请允许网站访问插件，然后刷新页面。"
+  },
+  "cades": {
+    "title": "CryptoPro",
+    "intro": "使用 GOST 签名需要在此计算机上安装 CryptoPro CSP、CryptoPro CAdES Browser plug-in 和 GOST 证书。",
+    "check": "检查插件",
+    "versions": "CryptoPro CAdES Browser plug-in {{plugin}}，CryptoPro CSP {{csp}}",
+    "certificates": "有效的 GOST 证书：{{n}}",
+    "unavailable": "未找到 CryptoPro CAdES Browser plug-in 或 CryptoPro CSP",
+    "certificateNotFound": "在“个人”存储中未找到证书",
+    "cancelled": "用户已取消签名",
+    "wrongPin": "PIN 码错误",
+    "tsaUnavailable": "时间戳服务不可用——请稍后重试",
+    "unknown": "未知的插件错误"
+  }
+}

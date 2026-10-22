@@ -1,0 +1,42 @@
+{
+  "title": "历史记录",
+  "column": {
+    "date": "日期",
+    "report": "报表",
+    "user": "用户",
+    "params": "参数",
+    "format": "格式",
+    "result": "结果",
+    "duration": "耗时"
+  },
+  "filter": {
+    "allReports": "全部报表",
+    "anyResult": "任意结果",
+    "ok": "完成",
+    "error": "错误",
+    "allUsers": "全部用户"
+  },
+  "status": {
+    "ok": "完成",
+    "error": "错误"
+  },
+  "params": {
+    "item": "{{name}}：{{value}}",
+    "yes": "是",
+    "no": "否",
+    "list": "“{{values}}”"
+  },
+  "file": {
+    "deleted": "文件已删除",
+    "download": "下载",
+    "stampedPdf": "带签章的 PDF",
+    "sig": "签名（.sig）",
+    "signedPdf": "已签名的 PDF",
+    "sign": "签名…",
+    "downloadFailed": "无法下载文件"
+  },
+  "signed": "已签名（{{method}}）：{{signer}}，{{date}}",
+  "methodGost": "GOST",
+  "notFound": "未找到任何内容",
+  "empty": "还没有运行记录"
+}

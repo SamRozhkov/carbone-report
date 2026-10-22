@@ -1,3 +1,4 @@
+import { i18n } from '../i18n/instance';
 import { filenameFromDisposition } from '../lib/download';
 import { reportMaintenance } from './maintenance';
 
@@ -49,7 +50,7 @@ async function toError(res: Response): Promise<ApiRequestError> {
   return new ApiRequestError(
     res.status,
     `HTTP_${res.status}`,
-    `ошибка сервера (HTTP ${res.status})`,
+    i18n.t('common:error.server', { status: res.status }),
   );
 }
 
@@ -71,7 +72,7 @@ async function send(path: string, opts: RequestOptions = {}): Promise<Response> 
     });
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e;
-    throw new ApiRequestError(0, 'NETWORK', 'нет связи с сервером');
+    throw new ApiRequestError(0, 'NETWORK', i18n.t('common:error.network'));
   }
   if (!res.ok) {
     const err = await toError(res);

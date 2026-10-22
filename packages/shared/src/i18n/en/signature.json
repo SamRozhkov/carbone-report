@@ -1,0 +1,48 @@
+{
+  "page": {
+    "title": "My signature",
+    "intro": "You need a .p12 or .pfx file with a private key — it is issued by a certification authority or your IT department",
+    "expiring": "The certificate expires on {{date}}",
+    "expired": "The certificate has expired — upload a new one",
+    "owner": "Owner",
+    "issuer": "Issuer",
+    "serial": "Serial number",
+    "validity": "Valid",
+    "validRange": "from {{from}} to {{to}}",
+    "algorithm": "Algorithm",
+    "fingerprint": "SHA-256 fingerprint",
+    "replace": "Replace",
+    "deleteTitle": "Delete the signing certificate?",
+    "deleteText": "You will not be able to sign PDFs until you upload a new certificate."
+  },
+  "upload": {
+    "file": "Certificate file",
+    "password": "File password",
+    "submit": "Upload certificate"
+  },
+  "dialog": {
+    "title": "Sign PDF",
+    "validUntil": "{{name}}, valid until {{date}}",
+    "password": "Signing key password",
+    "submit": "Sign",
+    "connecting": "Connecting to CryptoPro…",
+    "noCertificates": "No valid GOST certificates — install a certificate in CryptoPro",
+    "certificate": "Certificate",
+    "confirmInPlugin": "Confirm the signature in the CryptoPro window if it appears",
+    "authenticityNote": "Certificate authenticity is checked by a signature verification service (for example, Gosuslugi)",
+    "unavailableText": "Install <plugin>CryptoPro CAdES Browser plug-in</plugin> (with the browser extension) and <csp>CryptoPro CSP</csp>. When the browser asks, allow the site to access the plug-in, then reload the page."
+  },
+  "cades": {
+    "title": "CryptoPro",
+    "intro": "GOST signing requires CryptoPro CSP, CryptoPro CAdES Browser plug-in and a GOST certificate on this computer.",
+    "check": "Check plug-in",
+    "versions": "CryptoPro CAdES Browser plug-in {{plugin}}, CryptoPro CSP {{csp}}",
+    "certificates": "Valid GOST certificates: {{n}}",
+    "unavailable": "CryptoPro CAdES Browser plug-in or CryptoPro CSP not found",
+    "certificateNotFound": "Certificate not found in the “Personal” store",
+    "cancelled": "Signing was cancelled by the user",
+    "wrongPin": "Wrong PIN",
+    "tsaUnavailable": "Timestamp service unavailable — try again later",
+    "unknown": "unknown plug-in error"
+  }
+}

@@ -30,4 +30,14 @@ describe('format', () => {
     expect(formatDuration(59_950)).toBe('1 мин 00 с');
     expect(formatDuration(119_600)).toBe('2 мин 00 с');
   });
+  it('formatDuration на en, de и zh-CN — единицы и десятичный разделитель языка', async () => {
+    await changeLocale('en', { persist: 'none' });
+    expect(formatDuration(850)).toBe('850 ms');
+    expect(formatDuration(12_340)).toBe('12.3 s');
+    expect(formatDuration(125_000)).toBe('2 min 05 s');
+    await changeLocale('de', { persist: 'none' });
+    expect(formatDuration(12_340)).toBe('12,3 s');
+    await changeLocale('zh-CN', { persist: 'none' });
+    expect(formatDuration(125_000)).toBe('2 分 05 秒');
+  });
 });

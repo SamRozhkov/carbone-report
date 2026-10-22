@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -11,6 +11,10 @@ const script = join(root, 'scripts/i18n-check.ts');
 const tsx = join(root, 'node_modules/.bin/tsx');
 const LOCALES = ['ru', 'en', 'es', 'pt-BR', 'fr', 'de', 'zh-CN'];
 const base = mkdtempSync(join(tmpdir(), 'i18n-check-'));
+// Пространства имён — как в репозитории (NAMESPACES): каждое должно быть в наборе, иначе «нет файла».
+const NAMESPACES = readdirSync(join(root, 'packages/shared/src/i18n/ru')).map((f) =>
+  f.replace(/\.json$/, ''),
+);
 test.after(() => rmSync(base, { recursive: true, force: true }));
 
 /** Корректный набор каталогов: формы множественного числа — по CLDR каждого языка. */
@@ -20,7 +24,12 @@ function validCatalogs() {
     const common = { title: 'Отчёт {{name}}', menu: { open: 'Открыть' } };
     for (const c of new Intl.PluralRules(l).resolvedOptions().pluralCategories)
       common[`items_${c}`] = `{{count}} ${c}`;
-    out[l] = { common, errors: { notFound: { template: 'нет шаблона {{id}}' } }, validation: {} };
+    out[l] = Object.fromEntries(NAMESPACES.map((ns) => [ns, {}]));
+    Object.assign(out[l], {
+      common,
+      errors: { notFound: { template: 'нет шаблона {{id}}' } },
+      validation: {},
+    });
   }
   return out;
 }

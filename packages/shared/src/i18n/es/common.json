@@ -45,5 +45,79 @@
   },
   "items_one": "{{count}} elemento",
   "items_many": "{{count}} de elementos",
-  "items_other": "{{count}} elementos"
+  "items_other": "{{count}} elementos",
+  "labelValue": "{{label}}:",
+  "shell": {
+    "version": "Versión {{version}}",
+    "themeLight": "Tema claro",
+    "themeDark": "Tema oscuro",
+    "logout": "Cerrar sesión",
+    "logoutFailedTitle": "No se pudo cerrar la sesión en el servidor",
+    "logoutFailedText": "Cierre el navegador si el equipo es compartido.",
+    "logoutAll": "Cerrar sesión en todas partes",
+    "logoutAllFailedTitle": "No se pudieron cerrar las sesiones en otros dispositivos",
+    "logoutAllFailedText": "Vuelva a intentarlo después de iniciar sesión o pida a un administrador que cierre las sesiones.",
+    "authCheckFailed": "No se pudo comprobar el inicio de sesión"
+  },
+  "about": {
+    "title": "Acerca de",
+    "web": "Interfaz",
+    "server": "Servidor",
+    "version": "Versión",
+    "commit": "Commit",
+    "builtAt": "Fecha de compilación",
+    "serverUnavailable": "La versión del servidor no está disponible",
+    "mismatch": "Las versiones de la interfaz y del servidor no coinciden: recargue la página o revise el despliegue",
+    "license": "Licencia: {{license}}"
+  },
+  "login": {
+    "login": "Nombre de usuario",
+    "password": "Contraseña",
+    "submit": "Iniciar sesión"
+  },
+  "notFound": {
+    "title": "Página no encontrada",
+    "toReports": "Ir a informes"
+  },
+  "maintenance": {
+    "restoring": "Restaurando desde una copia de seguridad…",
+    "phase": "Etapa: {{phase}} · copia de seguridad {{backup}}",
+    "failedTitle": "La restauración no ha finalizado: la base de datos se reemplazó parcialmente",
+    "failedText": "Introduzca el código de recuperación del registro del servicio backup (docker compose logs backup) y elija una acción.",
+    "code": "Código de recuperación",
+    "retryStarted": "Reintento iniciado, esperando a que finalice…",
+    "retrySame": "Reintentar la restauración desde {{backup}}",
+    "retryPreRestore": "Volver al estado anterior a la restauración ({{backup}})"
+  },
+  "backupPhase": {
+    "backup": "Creación de la copia de seguridad",
+    "verify": "Verificación de la copia de seguridad",
+    "pre-backup": "Copia de seguridad previa a la restauración",
+    "maintenance": "Activación del modo de mantenimiento",
+    "db": "Reemplazo de la base de datos",
+    "migrate": "Aplicación de migraciones",
+    "storage": "Restauración de archivos",
+    "redis": "Limpieza de la caché",
+    "done": "Listo"
+  },
+  "copy": {
+    "done": "Copiado: {{label}}",
+    "failed": "No se pudo copiar: seleccione la etiqueta manualmente"
+  },
+  "error": {
+    "unknown": "error desconocido",
+    "server": "error del servidor (HTTP {{status}})",
+    "network": "sin conexión con el servidor"
+  },
+  "duration": {
+    "ms": "{{value}} ms",
+    "s": "{{value}} s",
+    "min": "{{min}} min {{sec}} s"
+  },
+  "param": {
+    "multipleHint": "varios valores, separados por comas",
+    "waitingFor": "seleccione primero: {{names}}",
+    "selectAll": "Seleccionar todo",
+    "deselectAll": "Quitar todo"
+  }
 }

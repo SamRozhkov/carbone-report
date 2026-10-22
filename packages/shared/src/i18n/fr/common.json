@@ -45,5 +45,79 @@
   },
   "items_one": "{{count}} élément",
   "items_many": "{{count}} d’éléments",
-  "items_other": "{{count}} éléments"
+  "items_other": "{{count}} éléments",
+  "labelValue": "{{label}} :",
+  "shell": {
+    "version": "Version {{version}}",
+    "themeLight": "Thème clair",
+    "themeDark": "Thème sombre",
+    "logout": "Se déconnecter",
+    "logoutFailedTitle": "Impossible de fermer la session sur le serveur",
+    "logoutFailedText": "Fermez le navigateur si l’ordinateur est partagé.",
+    "logoutAll": "Se déconnecter partout",
+    "logoutAllFailedTitle": "Impossible de fermer les sessions sur les autres appareils",
+    "logoutAllFailedText": "Réessayez après vous être connecté ou demandez à un administrateur de fermer les sessions.",
+    "authCheckFailed": "Impossible de vérifier la connexion"
+  },
+  "about": {
+    "title": "À propos",
+    "web": "Interface",
+    "server": "Serveur",
+    "version": "Version",
+    "commit": "Commit",
+    "builtAt": "Date de build",
+    "serverUnavailable": "Version du serveur indisponible",
+    "mismatch": "Les versions de l’interface et du serveur diffèrent — rechargez la page ou vérifiez le déploiement",
+    "license": "Licence : {{license}}"
+  },
+  "login": {
+    "login": "Identifiant",
+    "password": "Mot de passe",
+    "submit": "Se connecter"
+  },
+  "notFound": {
+    "title": "Page introuvable",
+    "toReports": "Aller aux rapports"
+  },
+  "maintenance": {
+    "restoring": "Restauration depuis une sauvegarde en cours…",
+    "phase": "Étape : {{phase}} · sauvegarde {{backup}}",
+    "failedTitle": "Restauration inachevée : la base de données a été partiellement remplacée",
+    "failedText": "Saisissez le code de récupération figurant dans le journal du service backup (docker compose logs backup) et choisissez une action.",
+    "code": "Code de récupération",
+    "retryStarted": "Nouvelle tentative lancée, en attente de la fin…",
+    "retrySame": "Relancer la restauration depuis {{backup}}",
+    "retryPreRestore": "Revenir à l’état antérieur à la restauration ({{backup}})"
+  },
+  "backupPhase": {
+    "backup": "Création de la sauvegarde",
+    "verify": "Vérification de la sauvegarde",
+    "pre-backup": "Sauvegarde avant restauration",
+    "maintenance": "Activation du mode maintenance",
+    "db": "Remplacement de la base de données",
+    "migrate": "Application des migrations",
+    "storage": "Restauration des fichiers",
+    "redis": "Vidage du cache",
+    "done": "Terminé"
+  },
+  "copy": {
+    "done": "Copié : {{label}}",
+    "failed": "Impossible de copier — sélectionnez la balise manuellement"
+  },
+  "error": {
+    "unknown": "erreur inconnue",
+    "server": "erreur du serveur (HTTP {{status}})",
+    "network": "pas de connexion au serveur"
+  },
+  "duration": {
+    "ms": "{{value}} ms",
+    "s": "{{value}} s",
+    "min": "{{min}} min {{sec}} s"
+  },
+  "param": {
+    "multipleHint": "plusieurs valeurs — séparées par des virgules",
+    "waitingFor": "sélectionnez d’abord : {{names}}",
+    "selectAll": "Tout sélectionner",
+    "deselectAll": "Tout désélectionner"
+  }
 }

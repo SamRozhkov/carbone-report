@@ -14,6 +14,7 @@ import {
   Text,
 } from '@gravity-ui/uikit';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
 import { api, runFileUrl } from '../api/endpoints';
@@ -23,25 +24,31 @@ import { ErrorAlert } from '../components/ErrorAlert';
 import { SignGostDialog } from '../components/SignGostDialog';
 import { SignRunDialog } from '../components/SignRunDialog';
 import { PageHeader } from '../components/PageHeader';
+import { i18n } from '../i18n';
 import { formatDateTime, formatDuration } from '../lib/format';
 
-const METHOD_LABEL: Record<SignMethod, string> = { gost: 'ГОСТ', p12: '.p12' };
+const methodLabel = (m: SignMethod) => (m === 'gost' ? i18n.t('history:methodGost') : '.p12');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function runParamValue(v: Exclude<ParamsInput[string], null | undefined>): string {
+  if (v === true) return i18n.t('history:params.yes');
+  if (v === false) return i18n.t('history:params.no');
+  if (Array.isArray(v)) return i18n.t('history:params.list', { values: v.join(', ') });
+  return String(v);
+}
 
 export function formatRunParams(params: ParamsInput): string {
   const parts = Object.entries(params)
     .filter(([, v]) => v !== null && v !== undefined)
-    .map(
-      ([k, v]) =>
-        `${k}: ${v === true ? 'да' : v === false ? 'нет' : Array.isArray(v) ? `«${v.join(', ')}»` : String(v)}`,
-    );
+    .map(([k, v]) => i18n.t('history:params.item', { name: k, value: runParamValue(v!) }));
   return parts.length ? parts.join(', ') : '—';
 }
 
 export function HistoryPage() {
   const me = useMe().data;
   const isAdmin = me?.role === 'admin';
+  const { t } = useTranslation();
   const [sp, setSp] = useSearchParams();
   const page = Math.min(10000, Math.max(1, Math.floor(Number(sp.get('page'))) || 1));
   const rawStatus = sp.get('status');
@@ -91,14 +98,19 @@ export function HistoryPage() {
   };
 
   const columns: TableColumnConfig<RunDto>[] = [
-    { id: 'createdAt', name: 'Дата', template: (r) => formatDateTime(r.createdAt), width: 150 },
-    { id: 'template', name: 'Отчёт', template: (r) => r.templateName ?? '—' },
+    {
+      id: 'createdAt',
+      name: t('history:column.date'),
+      template: (r) => formatDateTime(r.createdAt),
+      width: 150,
+    },
+    { id: 'template', name: t('history:column.report'), template: (r) => r.templateName ?? '—' },
     ...(isAdmin
-      ? [{ id: 'user', name: 'Пользователь', template: (r: RunDto) => r.userLogin }]
+      ? [{ id: 'user', name: t('history:column.user'), template: (r: RunDto) => r.userLogin }]
       : []),
     {
       id: 'params',
-      name: 'Параметры',
+      name: t('history:column.params'),
       template: (r) => {
         const text = formatRunParams(r.params);
         return (
@@ -110,7 +122,7 @@ export function HistoryPage() {
     },
     {
       id: 'format',
-      name: 'Формат',
+      name: t('history:column.format'),
       // Старый запуск — его формат; запуск со снимком — уже собранные форматы.
       template: (r) =>
         (r.outputFormat ? [r.outputFormat] : r.readyFormats)
@@ -120,14 +132,18 @@ export function HistoryPage() {
     },
     {
       id: 'status',
-      name: 'Результат',
+      name: t('history:column.result'),
       template: (r) =>
         r.status === 'ok' ? (
           <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-            <Label theme="success">готово</Label>
+            <Label theme="success">{t('history:status.ok')}</Label>
             {r.signature && (
               <span
-                title={`Подписан (${METHOD_LABEL[r.signature.method]}): ${r.signature.signerCn}, ${formatDateTime(r.signature.signedAt)}`}
+                title={t('history:signed', {
+                  method: methodLabel(r.signature.method),
+                  signer: r.signature.signerCn,
+                  date: formatDateTime(r.signature.signedAt),
+                })}
               >
                 <Icon data={PencilToLine} size={16} />
               </span>
@@ -135,7 +151,7 @@ export function HistoryPage() {
           </span>
         ) : (
           <div>
-            <Label theme="danger">ошибка</Label>
+            <Label theme="danger">{t('history:status.error')}</Label>
             <Text as="div" variant="caption-2" color="danger">
               {r.error}
             </Text>
@@ -144,7 +160,7 @@ export function HistoryPage() {
     },
     {
       id: 'duration',
-      name: 'Время',
+      name: t('history:column.duration'),
       template: (r) => formatDuration(r.durationMs),
       align: 'end',
       width: 100,
@@ -157,7 +173,7 @@ export function HistoryPage() {
         if (!r.fileAvailable) {
           return r.status === 'ok' ? (
             <Text variant="caption-2" color="secondary">
-              файл удалён
+              {t('history:file.deleted')}
             </Text>
           ) : null;
         }
@@ -168,8 +184,8 @@ export function HistoryPage() {
               view="flat"
               size="s"
               href={runFileUrl(r.id)}
-              aria-label="Скачать"
-              title="Скачать"
+              aria-label={t('history:file.download')}
+              title={t('history:file.download')}
             >
               <Icon data={ArrowDownToLine} />
             </Button>
@@ -186,18 +202,18 @@ export function HistoryPage() {
               ...(r.signature?.method === 'gost'
                 ? [
                     {
-                      text: 'PDF со штампом',
+                      text: t('history:file.stampedPdf'),
                       action: () => download.save({ runId: r.id, format: 'pdf', signed: true }),
                     },
                     {
-                      text: 'Подпись (.sig)',
+                      text: t('history:file.sig'),
                       action: () => download.save({ runId: r.id, format: 'sig' }),
                     },
                   ]
                 : r.signature
                   ? [
                       {
-                        text: 'PDF с подписью',
+                        text: t('history:file.signedPdf'),
                         action: () => download.save({ runId: r.id, format: 'pdf', signed: true }),
                       },
                     ]
@@ -205,7 +221,7 @@ export function HistoryPage() {
               ...(r.signable
                 ? [
                     {
-                      text: 'Подписать…',
+                      text: t('history:file.sign'),
                       action: () => setSigning({ id: r.id, method: r.signMethod }),
                     },
                   ]
@@ -215,8 +231,8 @@ export function HistoryPage() {
               <Button
                 view="flat"
                 size="s"
-                aria-label="Скачать"
-                title="Скачать"
+                aria-label={t('history:file.download')}
+                title={t('history:file.download')}
                 loading={download.pending?.runId === r.id}
                 onClick={onClick}
                 extraProps={{ onKeyDown }}
@@ -235,11 +251,11 @@ export function HistoryPage() {
 
   return (
     <>
-      <PageHeader title="История" />
+      <PageHeader title={t('history:title')} />
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
         <Select
-          placeholder="Все отчёты"
-          aria-label="Отчёт"
+          placeholder={t('history:filter.allReports')}
+          aria-label={t('history:column.report')}
           value={templateId ? [templateId] : []}
           onUpdate={([v]) => setFilter('templateId', v)}
           options={(templates.data ?? []).map((t) => ({ value: t.id, content: t.name }))}
@@ -248,21 +264,21 @@ export function HistoryPage() {
           width={240}
         />
         <Select
-          placeholder="Любой результат"
-          aria-label="Результат"
+          placeholder={t('history:filter.anyResult')}
+          aria-label={t('history:column.result')}
           value={status ? [status] : []}
           onUpdate={([v]) => setFilter('status', v)}
           options={[
-            { value: 'ok', content: 'Готово' },
-            { value: 'error', content: 'Ошибка' },
+            { value: 'ok', content: t('history:filter.ok') },
+            { value: 'error', content: t('history:filter.error') },
           ]}
           hasClear
           width={180}
         />
         {isAdmin && (
           <Select
-            placeholder="Все пользователи"
-            aria-label="Пользователь"
+            placeholder={t('history:filter.allUsers')}
+            aria-label={t('history:column.user')}
             value={userId ? [userId] : []}
             onUpdate={([v]) => setFilter('userId', v)}
             options={(users.data ?? []).map((u) => ({ value: u.id, content: u.login }))}
@@ -273,7 +289,7 @@ export function HistoryPage() {
         )}
       </div>
       <ErrorAlert error={runs.error} />
-      <ErrorAlert error={download.error} title="Не удалось скачать файл" />
+      <ErrorAlert error={download.error} title={t('history:file.downloadFailed')} />
       {signing && (
         <SignDialog
           runId={signing.id}
@@ -293,7 +309,7 @@ export function HistoryPage() {
             data={runs.data?.items ?? []}
             columns={columns}
             getRowDescriptor={(r) => ({ id: r.id })}
-            emptyMessage={filtersActive ? 'Ничего не найдено' : 'Запусков пока нет'}
+            emptyMessage={filtersActive ? t('history:notFound') : t('history:empty')}
             width="max"
           />
           {total > RUNS_PAGE_SIZE && (

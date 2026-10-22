@@ -1,4 +1,5 @@
 import { useToaster } from '@gravity-ui/uikit';
+import { i18n } from '../i18n';
 
 let toastSeq = 0;
 
@@ -10,9 +11,14 @@ export function useCopy() {
     const name = `copy-${++toastSeq}`;
     try {
       await navigator.clipboard.writeText(text);
-      add({ name, title: `Скопировано: ${label}`, theme: 'success', autoHiding: 2000 });
+      add({
+        name,
+        title: i18n.t('common:copy.done', { label }),
+        theme: 'success',
+        autoHiding: 2000,
+      });
     } catch {
-      add({ name, title: 'Не удалось скопировать — выделите тег вручную', theme: 'warning' });
+      add({ name, title: i18n.t('common:copy.failed'), theme: 'warning' });
     }
   };
 }

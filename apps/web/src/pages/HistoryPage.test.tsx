@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import type { RunDto } from '@carbone-reports/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { loadCades } from '../lib/cades';
+import { changeLocale } from '../i18n';
 import * as download from '../lib/download';
 import { adminMe, mockApi, renderRoute, userMe } from '../test/utils';
 import { formatRunParams } from './HistoryPage';
@@ -375,5 +376,63 @@ describe('formatRunParams', () => {
     expect(formatRunParams({ ids: [1, 2], from: '2026-01-01' })).toBe(
       'ids: «1, 2», from: 2026-01-01',
     );
+  });
+});
+
+describe('HistoryPage: язык интерфейса', () => {
+  // §44.6: моки на латинице — кириллица на странице могла бы прийти только из кода.
+  it('на en страница без кириллицы: колонки, фильтры, статусы, параметры, время', async () => {
+    await changeLocale('en', { persist: 'none' });
+    mockApi([
+      adminMe,
+      { path: '/api/templates', body: [] },
+      { path: '/api/users', body: [] },
+      {
+        path: '/api/runs',
+        body: page([
+          run({
+            templateName: 'Invoice',
+            params: { company: 'ACME', vat: true, ids: [1, 2] },
+            signature: {
+              method: 'gost',
+              signerCn: 'John Smith',
+              fingerprint: 'ab',
+              signedAt: '2026-01-31T10:00:00',
+              timestamped: false,
+            },
+          }),
+          run({
+            id: 'r2',
+            templateName: 'Invoice',
+            params: {},
+            status: 'error',
+            error: 'query failed',
+            fileAvailable: false,
+            formats: [],
+            readyFormats: [],
+          }),
+          run({
+            id: 'r3',
+            templateName: 'Invoice',
+            params: {},
+            fileAvailable: false,
+            formats: [],
+            readyFormats: [],
+          }),
+        ]),
+      },
+    ]);
+    renderRoute('/history');
+    expect(await screen.findByText('query failed')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'History' })).toBeInTheDocument();
+    for (const name of ['Date', 'Report', 'User', 'Parameters', 'Format', 'Result', 'Time'])
+      expect(screen.getByRole('columnheader', { name })).toBeInTheDocument();
+    expect(screen.getByText('company: ACME, vat: yes, ids: “1, 2”')).toBeInTheDocument();
+    expect(screen.getByText('file deleted')).toBeInTheDocument();
+    expect(screen.getAllByText('1.2 s')).toHaveLength(3);
+    expect(
+      screen.getByTitle('Signed (GOST): John Smith, 01/31/2026, 10:00 AM'),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/[Ѐ-ӿ]/);
   });
 });

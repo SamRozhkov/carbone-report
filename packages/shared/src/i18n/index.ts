@@ -18,7 +18,14 @@ export const LOCALE_NAMES: Record<Locale, string> = {
 };
 
 /** Пространства имён каталогов; разделы интерфейса добавляются по мере перевода. */
-export const NAMESPACES = ['common', 'errors', 'validation'] as const;
+export const NAMESPACES = [
+  'common',
+  'reports',
+  'history',
+  'signature',
+  'errors',
+  'validation',
+] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
 export function isLocale(v: unknown): v is Locale {

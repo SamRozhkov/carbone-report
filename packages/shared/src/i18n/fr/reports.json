@@ -1,0 +1,31 @@
+{
+  "list": {
+    "title": "Rapports",
+    "search": "Rechercher",
+    "searchLabel": "Rechercher des rapports",
+    "noCategory": "Sans catégorie",
+    "notFound": "Aucun résultat.",
+    "emptyAuthor": "Aucun modèle pour l’instant — créez le premier dans la section « Modèles ».",
+    "empty": "Aucun rapport pour l’instant.",
+    "updated": "mis à jour le {{date}}"
+  },
+  "run": {
+    "openFailed": "Impossible d’ouvrir le rapport",
+    "back": "Retour à la liste",
+    "noParams": "Ce rapport n’a pas de paramètres.",
+    "paramsChanged": "Les paramètres du rapport ont changé — le formulaire a été mis à jour",
+    "generate": "Générer",
+    "optionsLoading": "Chargement des options des paramètres…",
+    "ready": "Le rapport est prêt",
+    "preview": "Aperçu du rapport",
+    "saveAs": "Enregistrer sous",
+    "signed": "Signé : {{signer}}, {{date}}",
+    "signedTimestamped": "Signé : {{signer}}, {{date}}, avec horodatage",
+    "downloadStamped": "Télécharger le PDF avec cachet",
+    "downloadSig": "Télécharger la signature (.sig)",
+    "downloadSigned": "Télécharger le PDF signé",
+    "sign": "Signer le PDF",
+    "uploadCertificate": "Téléversez un certificat sur la page « <page>Ma signature</page> »",
+    "saveFailed": "Impossible d’enregistrer le fichier"
+  }
+}

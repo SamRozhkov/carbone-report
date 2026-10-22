@@ -2,13 +2,14 @@ import type { ParamsInput, RunSignature } from '@carbone-reports/shared';
 import { Alert, Button, Link, Loader, Text } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router';
 import { api, runFileUrl } from '../api/endpoints';
 import { ApiRequestError } from '../api/client';
 import { fieldErrors } from '../api/errors';
 import { useRunDownload } from '../api/useRunDownload';
 import { ErrorAlert } from '../components/ErrorAlert';
-import { GOST_AUTHENTICITY_NOTE, SignGostDialog } from '../components/SignGostDialog';
+import { SignGostDialog } from '../components/SignGostDialog';
 import { SignRunDialog } from '../components/SignRunDialog';
 import { PageHeader } from '../components/PageHeader';
 import { ParamForm } from '../components/ParamForm';
@@ -25,6 +26,8 @@ export function ReportRunPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // t — описание шаблона, поэтому функция перевода — tr.
+  const { t: tr } = useTranslation();
   const template = useQuery({ queryKey: ['template', id], queryFn: () => api.templates.get(id) });
   const t = template.data;
 
@@ -65,7 +68,7 @@ export function ReportRunPage() {
   });
 
   if (template.isPending) return <Loader />;
-  if (!t) return <ErrorAlert error={template.error} title="Не удалось открыть отчёт" />;
+  if (!t) return <ErrorAlert error={template.error} title={tr('reports:run.openFailed')} />;
 
   const certificate = cert.data?.certificate ?? null;
   const canSign = gost || (certificate !== null && certificateState(certificate) !== 'expired');
@@ -87,7 +90,7 @@ export function ReportRunPage() {
         title={t.name}
         actions={
           <Button view="flat" onClick={() => navigate('/reports')}>
-            К списку
+            {tr('reports:run.back')}
           </Button>
         }
       />
@@ -107,7 +110,7 @@ export function ReportRunPage() {
             render.mutate();
           }}
         >
-          {t.params.length === 0 && <Text color="secondary">У отчёта нет параметров.</Text>}
+          {t.params.length === 0 && <Text color="secondary">{tr('reports:run.noParams')}</Text>}
           <ParamForm
             templateId={t.id}
             params={t.params}
@@ -121,7 +124,7 @@ export function ReportRunPage() {
           {unmatched.length > 0 && (
             <Alert
               theme="danger"
-              title={paramLike ? 'Параметры отчёта изменились — форма обновлена' : undefined}
+              title={paramLike ? tr('reports:run.paramsChanged') : undefined}
               message={unmatched.map(([k, m]) => (k === '_' ? m : `${k}: ${m}`)).join('; ')}
             />
           )}
@@ -133,25 +136,25 @@ export function ReportRunPage() {
               loading={render.isPending}
               disabled={optionsLoading}
             >
-              Сформировать
+              {tr('reports:run.generate')}
             </Button>
-            {optionsLoading && <Text color="secondary">Загружаются варианты параметров…</Text>}
+            {optionsLoading && <Text color="secondary">{tr('reports:run.optionsLoading')}</Text>}
           </div>
         </form>
         <div>
           {runId && (
             <>
               <div className="cr-page-header">
-                <Text variant="subheader-2">Отчёт готов</Text>
+                <Text variant="subheader-2">{tr('reports:run.ready')}</Text>
               </div>
               {/* Просмотр всегда в PDF, для Excel тоже (§24.1). */}
               <iframe
-                title="Предпросмотр отчёта"
+                title={tr('reports:run.preview')}
                 src={runFileUrl(runId, { format: 'pdf', inline: true })}
                 className="cr-pdf cr-pdf_run"
               />
-              <div className="cr-save" role="group" aria-label="Сохранить как">
-                <Text variant="subheader-1">Сохранить как</Text>
+              <div className="cr-save" role="group" aria-label={tr('reports:run.saveAs')}>
+                <Text variant="subheader-1">{tr('reports:run.saveAs')}</Text>
                 {t.outputFormats.map((f) => {
                   const busy =
                     download.pending?.runId === runId &&
@@ -176,8 +179,15 @@ export function ReportRunPage() {
                   {signature ? (
                     <>
                       <Text>
-                        Подписан: {signature.signerCn}, {formatDateTime(signature.signedAt)}
-                        {signature.timestamped && ', метка времени'}
+                        {tr(
+                          signature.timestamped
+                            ? 'reports:run.signedTimestamped'
+                            : 'reports:run.signed',
+                          {
+                            signer: signature.signerCn,
+                            date: formatDateTime(signature.signedAt),
+                          },
+                        )}
                       </Text>
                       {signature.method === 'gost' ? (
                         <>
@@ -188,7 +198,7 @@ export function ReportRunPage() {
                             disabled={!!download.pending && !pendingSigned?.signed}
                             onClick={() => download.save({ runId, format: 'pdf', signed: true })}
                           >
-                            Скачать PDF со штампом
+                            {tr('reports:run.downloadStamped')}
                           </Button>
                           <Button
                             view="outlined"
@@ -197,9 +207,9 @@ export function ReportRunPage() {
                             disabled={!!download.pending && pendingSigned?.format !== 'sig'}
                             onClick={() => download.save({ runId, format: 'sig' })}
                           >
-                            Скачать подпись (.sig)
+                            {tr('reports:run.downloadSig')}
                           </Button>
-                          <Text color="secondary">{GOST_AUTHENTICITY_NOTE}</Text>
+                          <Text color="secondary">{tr('signature:dialog.authenticityNote')}</Text>
                         </>
                       ) : (
                         <Button
@@ -208,7 +218,7 @@ export function ReportRunPage() {
                           loading={!!pendingSigned?.signed}
                           onClick={() => download.save({ runId, format: 'pdf', signed: true })}
                         >
-                          Скачать подписанный PDF
+                          {tr('reports:run.downloadSigned')}
                         </Button>
                       )}
                     </>
@@ -220,28 +230,32 @@ export function ReportRunPage() {
                         disabled={!canSign}
                         onClick={() => setSignOpen(true)}
                       >
-                        Подписать PDF
+                        {tr('reports:run.sign')}
                       </Button>
                       {!gost && cert.isSuccess && !certificate && (
                         <Text color="secondary">
-                          Загрузите сертификат на странице «
-                          <Link
-                            href="/signature"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              navigate('/signature');
+                          <Trans
+                            t={tr}
+                            i18nKey="reports:run.uploadCertificate"
+                            components={{
+                              page: (
+                                <Link
+                                  href="/signature"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    navigate('/signature');
+                                  }}
+                                />
+                              ),
                             }}
-                          >
-                            Моя подпись
-                          </Link>
-                          »
+                          />
                         </Text>
                       )}
                     </>
                   )}
                 </div>
               )}
-              <ErrorAlert error={download.error} title="Не удалось сохранить файл" />
+              <ErrorAlert error={download.error} title={tr('reports:run.saveFailed')} />
               {signOpen && gost && (
                 <SignGostDialog
                   runId={runId}

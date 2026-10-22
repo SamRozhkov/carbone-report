@@ -1,0 +1,48 @@
+{
+  "page": {
+    "title": "Meine Signatur",
+    "intro": "Sie benötigen eine .p12- oder .pfx-Datei mit privatem Schlüssel — sie wird von einer Zertifizierungsstelle oder Ihrer IT-Abteilung ausgestellt",
+    "expiring": "Das Zertifikat läuft am {{date}} ab",
+    "expired": "Das Zertifikat ist abgelaufen — laden Sie ein neues hoch",
+    "owner": "Eigentümer",
+    "issuer": "Aussteller",
+    "serial": "Seriennummer",
+    "validity": "Gültig",
+    "validRange": "vom {{from}} bis {{to}}",
+    "algorithm": "Algorithmus",
+    "fingerprint": "SHA-256-Fingerabdruck",
+    "replace": "Ersetzen",
+    "deleteTitle": "Signaturzertifikat löschen?",
+    "deleteText": "PDFs können erst wieder signiert werden, wenn Sie ein neues Zertifikat hochladen."
+  },
+  "upload": {
+    "file": "Zertifikatsdatei",
+    "password": "Passwort der Datei",
+    "submit": "Zertifikat hochladen"
+  },
+  "dialog": {
+    "title": "PDF signieren",
+    "validUntil": "{{name}}, gültig bis {{date}}",
+    "password": "Passwort des Signaturschlüssels",
+    "submit": "Signieren",
+    "connecting": "Verbindung zu CryptoPro wird hergestellt…",
+    "noCertificates": "Keine gültigen GOST-Zertifikate — installieren Sie ein Zertifikat in CryptoPro",
+    "certificate": "Zertifikat",
+    "confirmInPlugin": "Bestätigen Sie die Signatur im CryptoPro-Fenster, falls es erscheint",
+    "authenticityNote": "Die Echtheit des Zertifikats wird von einem Signaturprüfdienst geprüft (zum Beispiel Gosuslugi)",
+    "unavailableText": "Installieren Sie <plugin>CryptoPro CAdES Browser plug-in</plugin> (mit der Browsererweiterung) und <csp>CryptoPro CSP</csp>. Wenn der Browser fragt, erlauben Sie der Website den Zugriff auf das Plug-in und laden Sie die Seite anschließend neu."
+  },
+  "cades": {
+    "title": "CryptoPro",
+    "intro": "Für die GOST-Signatur werden CryptoPro CSP, CryptoPro CAdES Browser plug-in und ein GOST-Zertifikat auf diesem Computer benötigt.",
+    "check": "Plug-in prüfen",
+    "versions": "CryptoPro CAdES Browser plug-in {{plugin}}, CryptoPro CSP {{csp}}",
+    "certificates": "Gültige GOST-Zertifikate: {{n}}",
+    "unavailable": "CryptoPro CAdES Browser plug-in oder CryptoPro CSP nicht gefunden",
+    "certificateNotFound": "Zertifikat im Speicher „Persönlich“ nicht gefunden",
+    "cancelled": "Signieren vom Benutzer abgebrochen",
+    "wrongPin": "Falsche PIN",
+    "tsaUnavailable": "Zeitstempeldienst nicht verfügbar — versuchen Sie es später erneut",
+    "unknown": "unbekannter Plug-in-Fehler"
+  }
+}

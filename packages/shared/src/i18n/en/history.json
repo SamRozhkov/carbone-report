@@ -1,0 +1,42 @@
+{
+  "title": "History",
+  "column": {
+    "date": "Date",
+    "report": "Report",
+    "user": "User",
+    "params": "Parameters",
+    "format": "Format",
+    "result": "Result",
+    "duration": "Time"
+  },
+  "filter": {
+    "allReports": "All reports",
+    "anyResult": "Any result",
+    "ok": "Done",
+    "error": "Error",
+    "allUsers": "All users"
+  },
+  "status": {
+    "ok": "done",
+    "error": "error"
+  },
+  "params": {
+    "item": "{{name}}: {{value}}",
+    "yes": "yes",
+    "no": "no",
+    "list": "“{{values}}”"
+  },
+  "file": {
+    "deleted": "file deleted",
+    "download": "Download",
+    "stampedPdf": "PDF with stamp",
+    "sig": "Signature (.sig)",
+    "signedPdf": "Signed PDF",
+    "sign": "Sign…",
+    "downloadFailed": "Could not download the file"
+  },
+  "signed": "Signed ({{method}}): {{signer}}, {{date}}",
+  "methodGost": "GOST",
+  "notFound": "Nothing found",
+  "empty": "No runs yet"
+}

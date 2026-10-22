@@ -1,0 +1,31 @@
+{
+  "list": {
+    "title": "报表",
+    "search": "搜索",
+    "searchLabel": "搜索报表",
+    "noCategory": "未分类",
+    "notFound": "未找到任何内容。",
+    "emptyAuthor": "还没有模板——请在“模板”部分创建第一个。",
+    "empty": "还没有报表。",
+    "updated": "更新于 {{date}}"
+  },
+  "run": {
+    "openFailed": "无法打开报表",
+    "back": "返回列表",
+    "noParams": "该报表没有参数。",
+    "paramsChanged": "报表参数已更改——表单已更新",
+    "generate": "生成",
+    "optionsLoading": "正在加载参数选项…",
+    "ready": "报表已生成",
+    "preview": "报表预览",
+    "saveAs": "另存为",
+    "signed": "已签名：{{signer}}，{{date}}",
+    "signedTimestamped": "已签名：{{signer}}，{{date}}，含时间戳",
+    "downloadStamped": "下载带签章的 PDF",
+    "downloadSig": "下载签名（.sig）",
+    "downloadSigned": "下载已签名的 PDF",
+    "sign": "签名 PDF",
+    "uploadCertificate": "请在“<page>我的签名</page>”页面上传证书",
+    "saveFailed": "无法保存文件"
+  }
+}

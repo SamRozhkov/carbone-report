@@ -145,14 +145,14 @@ export function Layout() {
           <>
             <FooterItem
               id="about"
-              title={`Версия ${webBuild.version}`}
+              title={t('common:shell.version', { version: webBuild.version })}
               icon={CircleInfo}
               compact={isCompact}
               onItemClick={() => setAboutOpen(true)}
             />
             <FooterItem
               id="theme"
-              title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+              title={t(theme === 'dark' ? 'common:shell.themeLight' : 'common:shell.themeDark')}
               icon={theme === 'dark' ? Sun : Moon}
               compact={isCompact}
               onItemClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -180,26 +180,25 @@ export function Layout() {
             <FooterItem id="me" title={me?.login ?? ''} icon={Person} compact={isCompact} />
             <FooterItem
               id="logout"
-              title="Выйти"
+              title={t('common:shell.logout')}
               icon={ArrowRightFromSquare}
               compact={isCompact}
               onItemClick={() =>
                 void signOut(api.logout, {
-                  title: 'Не удалось завершить сессию на сервере',
-                  content: 'Закройте браузер, если компьютер общий.',
+                  title: t('common:shell.logoutFailedTitle'),
+                  content: t('common:shell.logoutFailedText'),
                 })
               }
             />
             <FooterItem
               id="logout-all"
-              title="Выйти везде"
+              title={t('common:shell.logoutAll')}
               icon={ArrowRightToSquare}
               compact={isCompact}
               onItemClick={() =>
                 void signOut(api.logoutAll, {
-                  title: 'Не удалось завершить сессии на других устройствах',
-                  content:
-                    'Попробуйте ещё раз после входа или попросите администратора завершить сессии.',
+                  title: t('common:shell.logoutAllFailedTitle'),
+                  content: t('common:shell.logoutAllFailedText'),
                 })
               }
             />

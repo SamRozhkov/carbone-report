@@ -50,6 +50,18 @@
 | Ошибка | Error | Error | Erro | Erreur | Fehler | 错误 |
 | Как в браузере | Browser default | Según el navegador | Igual ao navegador | Langue du navigateur | Wie im Browser | 跟随浏览器 |
 
+Подписи интерфейса, на которые ссылаются ошибки API (`errors`, `validation`): веб переводит эти разделы, кнопки и режимы так же.
+
+| Русский | English | Español | Português (Brasil) | Français | Deutsch | 简体中文 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Выйти везде | Sign out everywhere | Cerrar sesión en todas partes | Sair de todos os lugares | Se déconnecter partout | Überall abmelden | 在所有设备上退出 |
+| Моя подпись | My signature | Mi firma | Minha assinatura | Ma signature | Meine Signatur | 我的签名 |
+| Справка по шаблонам | Template help | Ayuda sobre plantillas | Ajuda sobre modelos | Aide sur les modèles | Hilfe zu Vorlagen | 模板帮助 |
+| Список строк (режим запроса) | List of rows | Lista de filas | Lista de linhas | Liste de lignes | Liste von Zeilen | 行列表 |
+| SQL-список (тип параметра) | SQL list | Lista SQL | Lista SQL | Liste SQL | SQL-Liste | SQL 列表 |
+| SSL с проверкой | SSL with verification | SSL con verificación | SSL com verificação | SSL avec vérification | SSL mit Prüfung | SSL（验证证书） |
+| обновить / копия / пропустить (загрузка из архива) | update / copy / skip | actualizar / copia / omitir | atualizar / cópia / ignorar | mettre à jour / copie / ignorer | aktualisieren / Kopie / überspringen | 更新 / 副本 / 跳过 |
+
 ## Правила перевода
 
 - Источник текстов — `ru`. Русские тексты при переносе в каталог не меняются.

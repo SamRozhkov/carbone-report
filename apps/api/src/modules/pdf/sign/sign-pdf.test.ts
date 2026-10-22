@@ -1,5 +1,6 @@
 import * as pkijs from 'pkijs';
 import { afterEach, describe, expect, it } from 'vitest';
+import { LOCALES } from '@carbone-reports/shared/i18n';
 import type { SignPrepareJob } from './prepare';
 import { makePdf } from '../test-pdf';
 import { OID } from './cms';
@@ -151,6 +152,50 @@ describe('stampLines: язык отчёта (§45.4)', () => {
       '有效期：2026/01/01 至 2027/01/01',
       '签署时间：2026/10/19 14:32',
     ]);
+  });
+
+  it('es: строки каталога, дата DD/MM/YYYY', () => {
+    expect(stampLines(CERT(), NOW, 'Europe/Moscow', 'es')).toEqual([
+      'DOCUMENTO FIRMADO CON FIRMA ELECTRÓNICA',
+      'Certificado: 1001',
+      'Propietario: Иванов Иван Иванович (rsa)',
+      'Válido: del 01/01/2026 al 01/01/2027',
+      'Firmado: 19/10/2026 14:32',
+    ]);
+  });
+
+  it('pt-BR: строки каталога, дата DD/MM/YYYY', () => {
+    expect(stampLines(CERT(), NOW, 'Europe/Moscow', 'pt-BR')).toEqual([
+      'DOCUMENTO ASSINADO COM ASSINATURA ELETRÔNICA',
+      'Certificado: 1001',
+      'Proprietário: Иванов Иван Иванович (rsa)',
+      'Válido: de 01/01/2026 a 01/01/2027',
+      'Assinado: 19/10/2026 14:32',
+    ]);
+  });
+
+  it('fr: строки каталога (неразрывный пробел перед двоеточием), дата DD/MM/YYYY', () => {
+    expect(stampLines(CERT(), NOW, 'Europe/Moscow', 'fr')).toEqual([
+      'DOCUMENT SIGNÉ PAR SIGNATURE ÉLECTRONIQUE',
+      'Certificat\u00a0: 1001',
+      'Propriétaire\u00a0: Иванов Иван Иванович (rsa)',
+      'Validité\u00a0: du 01/01/2026 au 01/01/2027',
+      'Signé\u00a0: 19/10/2026 14:32',
+    ]);
+  });
+
+  it.each(LOCALES)('%s: пять строк каталога, параметры подставлены (§45.6)', (locale) => {
+    const lines = stampLines(CERT(), NOW, 'Europe/Moscow', locale);
+    expect(lines).toHaveLength(5);
+    for (const line of lines) {
+      expect(line).not.toMatch(/report:|stamp\.|\{\{/);
+      expect(line.trim()).not.toBe('');
+    }
+    expect(lines[1]).toContain('1001');
+    expect(lines[2]).toContain('Иванов Иван Иванович (rsa)');
+    expect(lines[3]).toContain('2026');
+    expect(lines[3]).toContain('2027');
+    expect(lines[4]).toContain('14:32');
   });
 
   it('значения сертификата не интерпретируются i18next', () => {

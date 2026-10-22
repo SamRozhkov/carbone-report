@@ -21,6 +21,9 @@ import {
   stampText,
   type SignPrepareJob,
 } from './prepare';
+import { fixture, FIXTURE_PASSWORD } from './fixtures';
+import { readP12 } from './p12';
+import { stampLines } from './sign-pdf';
 
 const lines: SignPrepareJob['lines'] = [
   'ДОКУМЕНТ ПОДПИСАН ЭЛЕКТРОННОЙ ПОДПИСЬЮ',
@@ -172,6 +175,25 @@ describe('prepareSignaturePdf (§39.4, §39.5)', () => {
     expect(text).toContain('Владелец: Ли Вэй 李伟 ?');
     expect(text).toContain('Сертификат: 1001');
     expect(plain(await pdfFontNames(out))).toEqual(['NotoSans-Regular', 'NotoSansSC-Regular']);
+  });
+
+  it('штамп zh-CN из каталога (stampLines): все строки извлекаются без «?» (§45.6)', async () => {
+    const zh = stampLines(
+      {
+        ...readP12(fixture('rsa.p12'), FIXTURE_PASSWORD).info,
+        notBefore: '2026-01-01T00:00:00.000Z',
+        notAfter: '2027-01-01T00:00:00.000Z',
+      },
+      new Date('2026-10-19T11:32:00.000Z'),
+      'Europe/Moscow',
+      'zh-CN',
+    );
+    const out = await prepareSignaturePdf(await makePdf([{ label: 'a' }]), job({ lines: zh }));
+    const text = await stampTextOf(out);
+    for (const line of zh) expect(text).toContain(line);
+    expect(text).not.toContain('?');
+    // Иероглифы в каждой строке — весь штамп набран Noto Sans SC (§45.5).
+    expect(plain(await pdfFontNames(out))).toEqual(['NotoSansSC-Regular']);
   });
 
   it('stampText: управляющие символы и символы вне шрифта, обрезка длинной строки', async () => {

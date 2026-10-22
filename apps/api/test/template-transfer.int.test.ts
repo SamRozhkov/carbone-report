@@ -1037,4 +1037,38 @@ describe('перенос шаблонов между средами', () => {
     expect(r.statusCode).toBe(400);
     expect(r.json().error.code).toBe('IMPORT_INVALID');
   });
+
+  it('нумерация: прежний формат из выгрузки до 2.14.0 удаляется, как миграцией 0017 (§45.4)', async () => {
+    const srcId = await createTemplate(a, adminA, dsA);
+    const z = await exportZip(a, adminA, [srcId]);
+    const withPages = async (pageNumbers: Record<string, unknown>, legacy: boolean) => {
+      const zip = await JSZip.loadAsync(z);
+      const m = JSON.parse(await zip.file('manifest.json')!.async('string'));
+      m.templates[0].pdfOptions = { pdfa: false, pageNumbers };
+      if (legacy) delete m.templates[0].reportLocale;
+      zip.file('manifest.json', JSON.stringify(m));
+      const r = await apply(b, adminB, await zip.generateAsync({ type: 'nodebuffer' }), [
+        { index: 0, action: 'copy', datasourceId: dsB },
+      ]);
+      expect(r.statusCode).toBe(200);
+      const id = (r.json() as ImportResult).templates[0]!.id!;
+      return (await b.deps.db.select().from(templates).where(eq(templates.id, id)))[0]!.pdfOptions
+        .pageNumbers;
+    };
+    const ru = 'Стр. {page} из {pages}';
+
+    // Выгрузка 2.13: формат по умолчанию записан явно — удаляется, остальное сохраняется.
+    expect(await withPages({ format: ru, position: 'top-right', skipFirst: true }, true)).toEqual({
+      position: 'top-right',
+      skipFirst: true,
+    });
+    // Иной формат в старой выгрузке не трогается.
+    expect(
+      await withPages({ format: 'Лист {page}', position: 'bottom-center', skipFirst: false }, true),
+    ).toEqual({ format: 'Лист {page}', position: 'bottom-center', skipFirst: false });
+    // Выгрузка 2.14.0 (язык задан): формат — как есть, даже совпадающий с ru.
+    expect(
+      await withPages({ format: ru, position: 'bottom-center', skipFirst: false }, false),
+    ).toEqual({ format: ru, position: 'bottom-center', skipFirst: false });
+  });
 });

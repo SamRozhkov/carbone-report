@@ -2030,7 +2030,7 @@ scripts/smoke.ts            сквозная проверка работающе
 - В shared: `LOCALES = ['ru','en','es','pt-BR','fr','de','zh-CN'] as const`, тип `Locale` и `LOCALE_NAMES` с самоназваниями: «Русский», «English», «Español», «Português (Brasil)», «Français», «Deutsch», «简体中文».
 - `users.locale text NULL` (миграция 0016). `NULL` — пользователь язык не выбирал. Значение вне `LOCALES` при чтении считается `NULL`.
 - `PUT /api/me/locale` `{ locale: Locale | null }` → `204`, любая роль; неизвестный язык — `400 VALIDATION`. `GET /api/auth/me` отдаёт `locale` (выбранный или `null`).
-- `DEFAULT_LOCALE` (env, значение из `LOCALES`, по умолчанию `ru`; Helm — `config.defaultLocale`). `GET /api/version` (публичный) отдаёт `defaultLocale`.
+- `DEFAULT_LOCALE` (env, значение из `LOCALES`, по умолчанию `ru`; Helm — `config.defaultLocale`). Публичный `GET /api/i18n` (без входа) отдаёт `{ defaultLocale }`; `/api/version` не меняется (он требует входа).
 - Язык интерфейса определяется в таком порядке:
   1. `me.locale`, если пользователь его выбрал;
   2. первый язык из `navigator.languages`, у которого есть каталог. Сравнение идёт по точному тегу, затем по основному подтегу: `pt-PT` → `pt-BR`, `zh-TW`/`zh-HK` → `zh-CN`, `en-GB` → `en`;
@@ -2115,5 +2115,5 @@ scripts/smoke.ts            сквозная проверка работающе
   - ошибка zod на `en` и `de`;
   - `PUT /api/me/locale` с неизвестным языком — 400;
   - `GET /api/auth/me` возвращает `locale`;
-  - `GET /api/version` возвращает `defaultLocale`.
+  - `GET /api/i18n` без входа возвращает `defaultLocale`.
 - Выпуск: CHANGELOG 2.13.0, README (переключатель языка, `DEFAULT_LOCALE`). Ветка `feat/2.13.0` от `main` (`2e34dbd`); PR, слияние и тег — с разрешения владельца.

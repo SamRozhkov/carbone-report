@@ -16,6 +16,8 @@ const EXEMPT = new Set([
   'GET /api/health',
   'GET /api/ready',
   'GET /api/maintenance',
+  // Язык по умолчанию: страница обслуживания и вход показываются на нём (§44.1).
+  'GET /api/i18n',
   'POST /api/maintenance/retry',
   // Выгрузка шаблонов только читает (§33.2).
   'POST /api/templates/export',
@@ -59,9 +61,12 @@ export function registerMaintenance(app: App, deps: AppDeps): void {
     if (req.method === 'GET' && path.startsWith(EXEMPT_GET_PREFIX)) return;
     const flag = await watch.get();
     if (flag)
-      throw new AppError('maintenance', 503, 'идёт восстановление из бэкапа, повторите позже', {
-        phase: flag.phase,
-      });
+      throw new AppError(
+        'maintenance',
+        503,
+        { key: 'maintenance.restoring' },
+        { phase: flag.phase },
+      );
   });
 
   app.get('/api/maintenance', async (): Promise<MaintenanceStatus> => {
@@ -88,11 +93,10 @@ export function registerMaintenance(app: App, deps: AppDeps): void {
 
   app.post('/api/maintenance/retry', { schema: { body: RecoveryBody } }, async (req, reply) => {
     if (!(await retryAllowed(deps.redis, req.ip)))
-      throw new AppError(
-        'TOO_MANY_ATTEMPTS',
-        429,
-        'слишком много попыток ввода кода, повторите через 15 минут',
-      );
+      throw new AppError('TOO_MANY_ATTEMPTS', 429, {
+        key: 'maintenance.tooManyAttempts',
+        params: { count: RETRY_WINDOW_MS / 60_000 },
+      });
     if (!deps.backupAgent) throw backupsDisabled();
     const r = await deps.backupAgent.request('POST', '/recovery', req.body);
     // Код в журнал не пишется.

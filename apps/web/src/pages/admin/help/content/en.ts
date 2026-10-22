@@ -22,7 +22,7 @@ const GROUPS = [
 ];
 
 export const HELP_INTRO: string[] = [
-  'This page covers only what has been checked on our Carbone — the free edition (Community Edition). Everything it lacks is collected in the last section, together with alternatives.',
+  'This page covers only what has been checked on our Carbone — the free edition (Community Edition). Everything it lacks is collected in the last section, together with alternatives. Error messages from the Carbone engine itself (images, barcodes, colors, charts, HTML) are shown in Russian after “template error:”; this help describes what they mean.',
   'The report data is the `d` object. The result of each template SQL query is stored under its key: in “List of rows” mode it is an array, in “Single row” mode an object (or empty). Report parameters are in `d.params`.',
   'Tags and “Constructs” from the panel on the right of the “Document” tab can be dragged with the mouse straight into the document — the tag lands where you release the button. In “Constructs”, replace `field` and `array` with your own names.',
   'In the examples, a line that starts with “|” is a Word table row, with cells separated by “|”. Other lines are separate paragraphs.',

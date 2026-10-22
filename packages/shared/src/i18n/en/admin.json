@@ -23,10 +23,10 @@
     "users": "Could not load users"
   },
   "roleInTable": {
-    "admin": "Administrator",
-    "editor": "Editor",
-    "access_manager": "Security manager",
-    "user": "User"
+    "admin": "$t(common:role.admin)",
+    "editor": "$t(common:role.editor)",
+    "access_manager": "$t(common:role.access_manager)",
+    "user": "$t(common:role.user)"
   },
   "users": {
     "add": "Add user",

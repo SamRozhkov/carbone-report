@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { LOCALES, NAMESPACES } from '@carbone-reports/shared/i18n';
 
-/** Кириллица в строках кода веба (непереведённый текст); включается в Task 7. */
-const CHECK_WEB_CYRILLIC = false;
+/** Кириллица в строках кода веба (непереведённый текст, §44.6). */
+const CHECK_WEB_CYRILLIC = true;
 /** Кириллица в аргументах AppError и помощников ошибок API; включается в Task 3. */
 const CHECK_API_ERRORS = true;
 
@@ -170,7 +170,7 @@ function checkCatalogs(dir: string): string[] {
   return errors;
 }
 
-// ---- кириллица в коде (выключено до Task 3 и Task 7) ----
+// ---- кириллица в коде ----
 
 function sourceFiles(dir: string, skip: (rel: string) => boolean): string[] {
   const out: string[] = [];
@@ -215,10 +215,21 @@ function cyrillicIn(sf: ts.SourceFile, root: ts.Node, found: string[]) {
   visit(root);
 }
 
-/** Непереведённые строки веба: всё в apps/web/src, кроме тестов и справки (этап 3). */
+/**
+ * Пути apps/web/src (префиксы), где кириллица в строках допустима (§44.6). Файлы *.test.* исключены всегда.
+ */
+const WEB_CYRILLIC_EXCEPTIONS = [
+  // Справка по шаблонам — по-русски до этапа 3 локализации.
+  'pages/admin/help/',
+  // Помощники и фикстуры тестов: данные на русском, как в самих тестах.
+  'test/',
+];
+
+/** Непереведённые строки веба: всё в apps/web/src, кроме тестов и исключений выше. */
 function findCyrillicInWeb(dir = join(ROOT, 'apps/web/src')): string[] {
   const found: string[] = [];
-  for (const f of sourceFiles(dir, (rel) => rel.startsWith('pages/admin/help/'))) {
+  const skip = (rel: string) => WEB_CYRILLIC_EXCEPTIONS.some((p) => rel.startsWith(p));
+  for (const f of sourceFiles(dir, skip)) {
     const sf = parse(f);
     cyrillicIn(sf, sf, found);
   }

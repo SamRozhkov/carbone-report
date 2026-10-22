@@ -1,6 +1,7 @@
 import { ArrowsRotateRight, ChevronDown, ChevronRight, Copy } from '@gravity-ui/icons';
 import { Button, Icon, Link, Text, TextInput } from '@gravity-ui/uikit';
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useCopy } from '../../../components/useCopy';
 import type { TagNode } from '../../../lib/tagTree';
 import { buildTagTree } from '../../../lib/tagTree';
@@ -30,13 +31,14 @@ export function TagTile({
   hint?: string;
   editing: boolean;
 }) {
+  const { t } = useTranslation();
   const copy = useCopy();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <span
         className="cr-tag-tile"
         draggable={editing}
-        title={editing ? 'Перетащите в документ или скопируйте' : undefined}
+        title={editing ? t('editor:tags.dragHint') : undefined}
         style={{ cursor: editing ? 'grab' : undefined }}
         onDragStart={(e) => {
           e.dataTransfer.setData('text/plain', text);
@@ -53,8 +55,8 @@ export function TagTile({
       <Button
         view="flat"
         size="xs"
-        aria-label={`Скопировать ${text}`}
-        title="Скопировать"
+        aria-label={t('editor:tags.copyAria', { text })}
+        title={t('editor:tags.copy')}
         onClick={() => void copy(text)}
       >
         <Icon data={Copy} size={12} />
@@ -78,6 +80,7 @@ function NodeView({
   forceOpen: boolean;
   editing: boolean;
 }) {
+  const { t } = useTranslation();
   const hasChildren = node.children.length > 0;
   const open = forceOpen || expanded.has(node.id);
   return (
@@ -88,7 +91,9 @@ function NodeView({
           <Button
             view="flat"
             size="xs"
-            aria-label={`${open ? 'Свернуть' : 'Развернуть'} ${node.label}`}
+            aria-label={t(open ? 'editor:tags.collapseAria' : 'editor:tags.expandAria', {
+              label: node.label,
+            })}
             onClick={() => toggle(node.id)}
           >
             <Icon data={open ? ChevronDown : ChevronRight} size={12} />
@@ -104,15 +109,15 @@ function NodeView({
           )}
         </Text>
       </div>
-      {node.hint && (
+      {node.badKey && (
         <Text variant="caption-2" color="danger" as="div">
-          {node.hint}
+          {t('editor:tags.badKey')}
         </Text>
       )}
       {node.tag && (
         <TagTile
           text={node.tag}
-          hint={node.nextRowTag ? 'строка цикла' : undefined}
+          hint={node.nextRowTag ? t('editor:tags.loopRow') : undefined}
           editing={editing}
         />
       )}
@@ -129,7 +134,7 @@ function NodeView({
           />
         ))}
       {(open || !hasChildren) && node.nextRowTag && (
-        <TagTile text={node.nextRowTag} hint="следующая строка — конец цикла" editing={editing} />
+        <TagTile text={node.nextRowTag} hint={t('editor:tags.loopEnd')} editing={editing} />
       )}
     </div>
   );
@@ -150,6 +155,7 @@ export function TagsPanel({
   /** Документ редактируется здесь — плитки тегов можно перетаскивать в документ. */
   editing: boolean;
 }) {
+  const { t } = useTranslation();
   // При графиках d.charts — их описания ECharts: деревом не показываем, теги — отдельным блоком.
   const tree = useMemo(
     () =>
@@ -180,20 +186,20 @@ export function TagsPanel({
   return (
     <div className="cr-stack cr-tags-panel">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text variant="subheader-2">Теги</Text>
+        <Text variant="subheader-2">{t('editor:tags.title')}</Text>
         <Button size="s" onClick={onRefresh} loading={refreshing}>
           <Icon data={ArrowsRotateRight} />
-          Обновить данные
+          {t('editor:tags.refresh')}
         </Button>
       </div>
       {charts.length > 0 && (
         <div className="cr-stack">
-          <Text variant="subheader-1">Графики</Text>
+          <Text variant="subheader-1">{t('editor:tab.charts')}</Text>
           {charts.map((key) => (
             <TagTile
               key={key}
               text={chartTag(key)}
-              hint="в замещающий текст картинки"
+              hint={t('editor:tags.chartHint')}
               editing={editing}
             />
           ))}
@@ -201,18 +207,18 @@ export function TagsPanel({
       )}
       <details className="cr-snippets">
         <summary>
-          <Text variant="subheader-1">Конструкции</Text>
+          <Text variant="subheader-1">{t('editor:snippet.title')}</Text>
         </summary>
         {SNIPPET_GROUPS.map((g) => (
           <div key={g} className="cr-stack" style={{ gap: 4 }}>
             <Text variant="caption-2" color="secondary">
-              {g}
+              {t(`editor:snippet.group_${g}`)}
             </Text>
             {SNIPPETS.filter((s) => s.group === g).map((s) => (
-              <div key={s.title}>
-                <Text variant="caption-2">{s.title} </Text>
+              <div key={s.id}>
+                <Text variant="caption-2">{t(`editor:snippet.${s.id}`)} </Text>
                 <Link href={`/admin/help#${s.helpId}`} target="_blank" rel="noopener">
-                  Подробнее
+                  {t('editor:snippet.more')}
                 </Link>
                 <TagTile text={snippetText(s)} editing={editing} />
               </div>
@@ -223,15 +229,15 @@ export function TagsPanel({
       {tree && (
         <TextInput
           type="search"
-          placeholder="Поиск"
+          placeholder={t('editor:tags.search')}
           value={query}
           onUpdate={setQuery}
-          controlProps={{ 'aria-label': 'Поиск по тегам' }}
+          controlProps={{ 'aria-label': t('editor:tags.searchAria') }}
         />
       )}
       {shown ? (
         shown.length === 0 && searching ? (
-          <Text color="secondary">Ничего не найдено</Text>
+          <Text color="secondary">{t('editor:tags.nothingFound')}</Text>
         ) : (
           shown.map((n) => (
             <NodeView
@@ -246,10 +252,7 @@ export function TagsPanel({
           ))
         )
       ) : (
-        <Text color="secondary">
-          Нет данных предпросмотра. Нажмите «Обновить данные» — запросы шаблона выполнятся с
-          тестовыми параметрами.
-        </Text>
+        <Text color="secondary">{t('editor:tags.noData')}</Text>
       )}
     </div>
   );

@@ -1,106 +1,89 @@
-/**
- * «Конструкции» панели тегов (§38.5): один тег из проверенного примера справки (`source`) с заменой имён
- * данных примера на обозначения `поле`, `массив`, `значение`. snippets.test.ts сверяет со справкой.
- */
-export const SNIPPET_GROUPS = ['Условия', 'Формат', 'Таблицы'] as const;
+import { i18n } from '../../../i18n';
 
+/**
+ * «Конструкции» панели тегов (§38.5): один тег из проверенного примера справки, где имена данных примера
+ * заменены обозначениями {field}, {array}, {value}, {yes}, {no}. Обозначения — слова каталога на языке
+ * интерфейса (`editor:snippet.word_*`; в ru — «поле», «массив», «значение», «да», «нет»), сами теги Carbone
+ * не переводятся. snippets.test.ts сверяет со справкой.
+ */
+export const SNIPPET_GROUPS = ['conditions', 'format', 'tables'] as const;
+
+/** Подпись конструкции — ключ `editor:snippet.<id>`, группы — `editor:snippet.group_<группа>`. */
 export interface Snippet {
+  id: string;
   helpId: string;
   group: (typeof SNIPPET_GROUPS)[number];
-  title: string;
-  source: string;
-  replace: [from: string, to: string][];
+  template: string;
 }
+
+export const SNIPPET_WORDS = ['field', 'array', 'value', 'yes', 'no'] as const;
 
 export const SNIPPETS: Snippet[] = [
   {
+    id: 'condText',
     helpId: 'cond-if',
-    group: 'Условия',
-    title: 'Текст по условию',
-    source: "{d.status:ifEQ('paid'):show('Оплачен'):elseShow('Не оплачен')}",
-    replace: [
-      ['d.status', 'd.поле'],
-      ["'paid'", "'значение'"],
-      ["'Не оплачен'", "'нет'"],
-      ["'Оплачен'", "'да'"],
-    ],
+    group: 'conditions',
+    template: "{d.{field}:ifEQ('{value}'):show('{yes}'):elseShow('{no}')}",
   },
   {
+    id: 'hideBegin',
     helpId: 'cond-paragraphs',
-    group: 'Условия',
-    title: 'Скрыть блок: начало',
-    source: '{d.paid:ifEQ(true):hideBegin}',
-    replace: [['d.paid', 'd.поле']],
+    group: 'conditions',
+    template: '{d.{field}:ifEQ(true):hideBegin}',
   },
   {
+    id: 'hideEnd',
     helpId: 'cond-paragraphs',
-    group: 'Условия',
-    title: 'Скрыть блок: конец',
-    source: '{d.paid:hideEnd}',
-    replace: [['d.paid', 'd.поле']],
+    group: 'conditions',
+    template: '{d.{field}:hideEnd}',
   },
   {
+    id: 'dateDigits',
     helpId: 'fmt-date-short',
-    group: 'Формат',
-    title: 'Дата цифрами',
-    source: "{d.date:formatD('DD.MM.YYYY')}",
-    replace: [['d.date', 'd.поле']],
+    group: 'format',
+    template: "{d.{field}:formatD('DD.MM.YYYY')}",
   },
   {
+    id: 'number',
     helpId: 'fmt-number',
-    group: 'Формат',
-    title: 'Число',
-    source: '{d.n:formatN(2)}',
-    replace: [['d.n:', 'd.поле:']],
+    group: 'format',
+    template: '{d.{field}:formatN(2)}',
   },
   {
+    id: 'money',
     helpId: 'fmt-money',
-    group: 'Формат',
-    title: 'Сумма в рублях',
-    source: '{d.sum:formatC()}',
-    replace: [['d.sum', 'd.поле']],
+    group: 'format',
+    template: '{d.{field}:formatC()}',
   },
   {
+    id: 'loopRow',
     helpId: 'tables-rows',
-    group: 'Таблицы',
-    title: 'Строка цикла',
-    source: '{d.cars[i].brand}',
-    replace: [
-      ['d.cars', 'd.массив'],
-      ['brand', 'поле'],
-    ],
+    group: 'tables',
+    template: '{d.{array}[i].{field}}',
   },
   {
+    id: 'loopEnd',
     helpId: 'tables-rows',
-    group: 'Таблицы',
-    title: 'Следующая строка — конец цикла',
-    source: '{d.cars[i+1].brand}',
-    replace: [
-      ['d.cars', 'd.массив'],
-      ['brand', 'поле'],
-    ],
+    group: 'tables',
+    template: '{d.{array}[i+1].{field}}',
   },
   {
+    id: 'rowNumber',
     helpId: 'tables-numbering',
-    group: 'Таблицы',
-    title: 'Номер строки',
-    source: '{d.cars[i].brand:count()}',
-    replace: [
-      ['d.cars', 'd.массив'],
-      ['brand', 'поле'],
-    ],
+    group: 'tables',
+    template: '{d.{array}[i].{field}:count()}',
   },
   {
+    id: 'arraySum',
     helpId: 'agg-sum',
-    group: 'Таблицы',
-    title: 'Сумма по массиву',
-    source: '{d.cars[].qty:aggSum}',
-    replace: [
-      ['d.cars', 'd.массив'],
-      ['qty', 'поле'],
-    ],
+    group: 'tables',
+    template: '{d.{array}[].{field}:aggSum}',
   },
 ];
 
+/** Текст конструкции: обозначения — слова каталога текущего языка. */
 export const snippetText = (s: Snippet): string =>
-  s.replace.reduce((text, [from, to]) => text.split(from).join(to), s.source);
+  SNIPPET_WORDS.reduce(
+    (text, w) => text.split(`{${w}}`).join(i18n.t(`editor:snippet.word_${w}`)),
+    s.template,
+  );

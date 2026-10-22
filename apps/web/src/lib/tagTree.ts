@@ -6,13 +6,12 @@ export interface TagNode {
   /** Для массивов: тег «следующей строки», которым Carbone отмечает конец повторяемого блока. */
   nextRowTag: string | null;
   sample: string | null;
-  /** Предупреждение, если ключ нельзя использовать в теге как есть. */
-  hint: string | null;
+  /** Ключ нельзя использовать в теге как есть (не идентификатор) — панель показывает подсказку. */
+  badKey: boolean;
   children: TagNode[];
 }
 
 const IDENT = /^[\p{L}_][\p{L}\p{N}_]*$/u;
-const BAD_KEY_HINT = 'переименуйте колонку в SQL (латиница, без пробелов)';
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -23,7 +22,7 @@ function sampleOf(v: unknown): string {
 }
 
 function node(label: string, path: string, value: unknown): TagNode {
-  const hint = IDENT.test(label) ? null : BAD_KEY_HINT;
+  const badKey = !IDENT.test(label);
   if (Array.isArray(value)) {
     const item = `${path}[i]`;
     const first = value.find((x) => x !== null && x !== undefined);
@@ -34,7 +33,7 @@ function node(label: string, path: string, value: unknown): TagNode {
         tag: null,
         nextRowTag: `{${path}[i+1]}`,
         sample: null,
-        hint,
+        badKey,
         children: Object.entries(first).map(([k, v]) => node(k, `${item}.${k}`, v)),
       };
     }
@@ -44,7 +43,7 @@ function node(label: string, path: string, value: unknown): TagNode {
       tag: `{${item}}`,
       nextRowTag: `{${path}[i+1]}`,
       sample: null,
-      hint,
+      badKey,
       children: [],
     };
   }
@@ -55,7 +54,7 @@ function node(label: string, path: string, value: unknown): TagNode {
       tag: null,
       nextRowTag: null,
       sample: null,
-      hint,
+      badKey,
       children: Object.entries(value).map(([k, v]) => node(k, `${path}.${k}`, v)),
     };
   }
@@ -65,7 +64,7 @@ function node(label: string, path: string, value: unknown): TagNode {
     tag: `{${path}}`,
     nextRowTag: null,
     sample: sampleOf(value),
-    hint,
+    badKey,
     children: [],
   };
 }

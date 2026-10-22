@@ -24,7 +24,7 @@ export async function initLocale(): Promise<SessionUser | null | undefined> {
     await changeLocale(preferredLocale(me), { persist: 'none' });
   } catch (e) {
     // Чанк языка не загрузился — остаёмся на ru из основного бандла.
-    console.error('Не удалось загрузить язык интерфейса', e);
+    console.error('Failed to load the UI language', e);
   }
   return me;
 }

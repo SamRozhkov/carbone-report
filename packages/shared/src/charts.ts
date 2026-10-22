@@ -487,20 +487,34 @@ function countChartPoints(option: Record<string, unknown>, series: unknown[]): n
   return points;
 }
 
-/**
- * Ошибка, которую даст движок отчёта (packages/carbone/lib/echarts-render.js, parse) для этого описания, или null:
- * описание больше 1 МБ, больше 20 рядов, больше 10 000 точек. Тексты совпадают с движком.
- */
-export function chartLimitError(value: ChartValue): string | null {
-  if (new TextEncoder().encode(JSON.stringify(value)).length > LIMIT_BYTES)
-    return 'описание графика больше 1 МБ';
+/** Какой лимит движка отчёта превышает описание графика (веб переводит по этому значению). */
+export type ChartLimit = 'bytes' | 'series' | 'points';
+
+/** Превышенный лимит движка (1 МБ, 20 рядов, 10 000 точек) или null. */
+export function chartLimit(value: ChartValue): ChartLimit | null {
+  if (new TextEncoder().encode(JSON.stringify(value)).length > LIMIT_BYTES) return 'bytes';
   const { option } = value;
   const series = Array.isArray(option.series)
     ? option.series
     : isRecord(option.series)
       ? [option.series]
       : [];
-  if (series.length > LIMIT_SERIES) return 'в графике больше 20 рядов';
-  if (countChartPoints(option, series) > LIMIT_POINTS) return 'в графике больше 10 000 точек';
+  if (series.length > LIMIT_SERIES) return 'series';
+  if (countChartPoints(option, series) > LIMIT_POINTS) return 'points';
   return null;
+}
+
+const LIMIT_TEXT: Record<ChartLimit, string> = {
+  bytes: 'описание графика больше 1 МБ',
+  series: 'в графике больше 20 рядов',
+  points: 'в графике больше 10 000 точек',
+};
+
+/**
+ * Ошибка, которую даст движок отчёта (packages/carbone/lib/echarts-render.js, parse) для этого описания, или null:
+ * описание больше 1 МБ, больше 20 рядов, больше 10 000 точек. Тексты совпадают с движком.
+ */
+export function chartLimitError(value: ChartValue): string | null {
+  const limit = chartLimit(value);
+  return limit && LIMIT_TEXT[limit];
 }

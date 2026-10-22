@@ -23,10 +23,10 @@
     "users": "Benutzer konnten nicht geladen werden"
   },
   "roleInTable": {
-    "admin": "Administrator",
-    "editor": "Bearbeiter",
-    "access_manager": "Sicherheitsbeauftragter",
-    "user": "Benutzer"
+    "admin": "$t(common:role.admin)",
+    "editor": "$t(common:role.editor)",
+    "access_manager": "$t(common:role.access_manager)",
+    "user": "$t(common:role.user)"
   },
   "users": {
     "add": "Benutzer hinzufügen",

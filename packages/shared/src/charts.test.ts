@@ -3,6 +3,7 @@ import {
   buildChartOption,
   ChartDataError,
   chartLabel,
+  chartLimit,
   chartLimitError,
   chartNumberFormatter,
   chartValue,
@@ -396,6 +397,12 @@ describe('chartLimitError: лимиты движка (§35.2, R9; тексты �
   });
   it('больше 20 рядов', () => {
     expect(chartLimitError(value({ series: series(21, 1) }))).toBe('в графике больше 20 рядов');
+  });
+  it('chartLimit — вид лимита для перевода в вебе', () => {
+    expect(chartLimit(value({ series: series(20, 500) }))).toBeNull();
+    expect(chartLimit(value({ series: series(21, 1) }))).toBe('series');
+    expect(chartLimit(value({ series: series(2, 5001) }))).toBe('points');
+    expect(chartLimit(value({ series: [], pad: 'я'.repeat(600000) }))).toBe('bytes');
   });
   it('больше 10 000 точек: series.data и dataset.source (массив и объект колонок)', () => {
     expect(chartLimitError(value({ series: series(2, 5001) }))).toBe(

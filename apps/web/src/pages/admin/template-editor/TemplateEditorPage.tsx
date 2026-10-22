@@ -12,6 +12,7 @@ import {
 } from '@gravity-ui/uikit';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { ApiRequestError } from '../../../api/client';
 import { api, templateDownloadUrl } from '../../../api/endpoints';
@@ -31,6 +32,7 @@ const TABS = ['document', 'data', 'charts', 'pdf', 'params', 'preview', 'setting
 type TabId = (typeof TABS)[number];
 
 export function TemplateEditorPage() {
+  const { t } = useTranslation();
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const [sp, setSp] = useSearchParams();
@@ -53,20 +55,20 @@ export function TemplateEditorPage() {
   const forbidden =
     (!!template.data && !('queries' in template.data)) ||
     (template.error instanceof ApiRequestError && template.error.status === 403);
-  const t = forbidden ? undefined : template.data;
-  const [testParams, setTestParams] = useTestParams(id, t?.params ?? []);
+  const tpl = forbidden ? undefined : template.data;
+  const [testParams, setTestParams] = useTestParams(id, tpl?.params ?? []);
   const [previewData, setPreviewData] = usePreviewData(id);
 
   // Блокировка живёт на уровне страницы: переключение вкладок её не снимает, уход со страницы снимает.
   // Берём только после первого захода на «Документ» и когда шаблон загружен.
-  const lock = useEditLock(id, documentVisited && !!t);
+  const lock = useEditLock(id, documentVisited && !!tpl);
 
   // Предупреждение перечитывается с новой версией файла (загрузка, замена, сохранение из OnlyOffice).
   // Ошибка запроса не показывается: подсказка необязательна.
   const tagWarnings = useQuery({
-    queryKey: ['template-tag-warnings', id, t?.version],
+    queryKey: ['template-tag-warnings', id, tpl?.version],
     queryFn: () => api.templates.tagWarnings(id),
-    enabled: !!t,
+    enabled: !!tpl,
     retry: false,
   });
   const warned = tagWarnings.data;
@@ -76,17 +78,17 @@ export function TemplateEditorPage() {
     return (
       <Alert
         theme="danger"
-        title="Не удалось открыть шаблон"
-        message="нет права на правку шаблона"
+        title={t('editor:page.openFailed')}
+        message={t('editor:page.noEditRight')}
         actions={
           <Button view="outlined" onClick={() => navigate('/admin/templates')}>
-            К списку шаблонов
+            {t('editor:page.toList')}
           </Button>
         }
       />
     );
   }
-  if (!t) return <ErrorAlert error={template.error} title="Не удалось открыть шаблон" />;
+  if (!tpl) return <ErrorAlert error={template.error} title={t('editor:page.openFailed')} />;
 
   const selectTab = (value: string) => {
     const next = new URLSearchParams(sp);
@@ -101,7 +103,7 @@ export function TemplateEditorPage() {
     setSp(next, { replace: true });
   };
   const tabProps = {
-    template: t,
+    template: tpl,
     testParams,
     onTestParams: setTestParams,
     previewData,
@@ -112,27 +114,27 @@ export function TemplateEditorPage() {
     <>
       <div className="cr-editor-head">
         <Button view="flat" onClick={() => navigate('/admin/templates')}>
-          ← Шаблоны
+          {t('editor:page.back')}
         </Button>
         <Text variant="header-1" as="h1">
-          {t.name}
+          {tpl.name}
         </Text>
-        <Label size="s">{t.fileExt.toUpperCase()}</Label>
-        <Text color="secondary">версия {t.version}</Text>
+        <Label size="s">{tpl.fileExt.toUpperCase()}</Label>
+        <Text color="secondary">{t('editor:page.version', { version: tpl.version })}</Text>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <ExportTemplatesButton ids={[t.id]} />
-          <Button view="outlined" href={templateDownloadUrl(t.id)}>
+          <ExportTemplatesButton ids={[tpl.id]} />
+          <Button view="outlined" href={templateDownloadUrl(tpl.id)}>
             <Icon data={ArrowDownToLine} />
-            Скачать файл
+            {t('editor:page.downloadFile')}
           </Button>
         </div>
       </div>
-      {t.lastSaveError && (
+      {tpl.lastSaveError && (
         <div style={{ marginBottom: 12 }}>
           <Alert
             theme="danger"
-            title="Последнее сохранение из редактора не удалось"
-            message={t.lastSaveError}
+            title={t('editor:page.lastSaveFailed')}
+            message={tpl.lastSaveError}
           />
         </div>
       )}
@@ -140,22 +142,27 @@ export function TemplateEditorPage() {
         <div style={{ marginBottom: 12 }}>
           <Alert
             theme="warning"
-            title="В тегах есть русские буквы вместо латинских"
+            title={t('editor:page.cyrillicTitle')}
             message={
               <div>
-                <div>Такие теги не найдут данные — замените выделенные буквы латинскими.</div>
+                <div>{t('editor:page.cyrillicText')}</div>
                 <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
                   {warned.warnings.map((w) => (
                     <li key={w.tag}>
                       <code>{w.tag}</code> —{' '}
                       {w.word === w.letters[0] && w.letters.length === 1
-                        ? `«${w.word}» в начале тега — русская`
-                        : `«${w.letters.join('», «')}» в «${w.word}» — русская`}
+                        ? t('editor:page.cyrillicStart', { word: w.word })
+                        : t('editor:page.cyrillicLetters', {
+                            word: w.word,
+                            letters: w.letters.join(t('editor:page.cyrillicLettersSeparator')),
+                          })}
                     </li>
                   ))}
                 </ul>
                 {warned.total > warned.warnings.length && (
-                  <div>и ещё {warned.total - warned.warnings.length}</div>
+                  <div>
+                    {t('editor:page.andMore', { n: warned.total - warned.warnings.length })}
+                  </div>
                 )}
               </div>
             }
@@ -164,13 +171,11 @@ export function TemplateEditorPage() {
       )}
       <TabProvider value={tab} onUpdate={selectTab}>
         <TabList>
-          <Tab value="document">Документ</Tab>
-          <Tab value="data">Данные</Tab>
-          <Tab value="charts">Графики</Tab>
-          <Tab value="pdf">PDF</Tab>
-          <Tab value="params">Параметры</Tab>
-          <Tab value="preview">Предпросмотр</Tab>
-          <Tab value="settings">Настройки</Tab>
+          {TABS.map((id) => (
+            <Tab key={id} value={id}>
+              {t(`editor:tab.${id}`)}
+            </Tab>
+          ))}
         </TabList>
       </TabProvider>
       <div style={{ marginTop: 16 }}>
@@ -182,11 +187,11 @@ export function TemplateEditorPage() {
         )}
         {tab === 'data' && <DataTab {...tabProps} />}
         {tab === 'charts' && <ChartsTab {...tabProps} />}
-        {tab === 'pdf' && <PdfTab template={t} />}
-        {tab === 'params' && <ParamsTab template={t} />}
+        {tab === 'pdf' && <PdfTab template={tpl} />}
+        {tab === 'params' && <ParamsTab template={tpl} />}
         {tab === 'preview' && <PreviewTab {...tabProps} />}
         {tab === 'settings' && (
-          <SettingsTab template={t} holder={documentVisited ? lock.holder : undefined} />
+          <SettingsTab template={tpl} holder={documentVisited ? lock.holder : undefined} />
         )}
       </div>
     </>

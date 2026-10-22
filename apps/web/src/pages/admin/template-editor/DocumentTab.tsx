@@ -3,6 +3,7 @@ import { Alert, Button, Icon, Link, Loader, Text, useToaster } from '@gravity-ui
 import { DocumentEditor } from '@onlyoffice/document-editor-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/endpoints';
 import { ApiRequestError } from '../../../api/client';
 import { errorMessage } from '../../../api/errors';
@@ -36,6 +37,7 @@ export function DocumentTab({
   full: boolean;
   onFull: (v: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const [showTags, setShowTags] = useState(true);
@@ -133,14 +135,14 @@ export function DocumentTab({
         if (mounted.current && e instanceof ApiRequestError && e.code === 'NO_CHANGES') {
           add({
             name: toastName('doc-save'),
-            title: 'Нет несохранённых изменений',
+            title: t('editor:document.noChanges'),
             theme: 'info',
             autoHiding: 3000,
           });
         } else if (mounted.current) {
           add({
             name: toastName('doc-save'),
-            title: 'Не удалось сохранить',
+            title: t('editor:document.saveFailed'),
             content: errorMessage(e),
             theme: 'danger',
           });
@@ -150,7 +152,7 @@ export function DocumentTab({
       if (!mounted.current) return;
       add({
         name: toastName('doc-save'),
-        title: 'Сохранение запрошено…',
+        title: t('editor:document.saveRequested'),
         theme: 'info',
         autoHiding: 3000,
       });
@@ -158,23 +160,23 @@ export function DocumentTab({
       while (Date.now() < deadline) {
         await pause(pollMs);
         if (!mounted.current) return;
-        const t = await fresh();
+        const latest = await fresh();
         if (!mounted.current) return;
-        if (t.version > base.version) {
+        if (latest.version > base.version) {
           void queryClient.invalidateQueries({ queryKey: ['templates'] });
           add({
             name: toastName('doc-save'),
-            title: `Сохранено, версия ${t.version}`,
+            title: t('editor:document.saved', { version: latest.version }),
             theme: 'success',
           });
           return;
         }
         // Новая ошибка — новая метка времени; текст не сравниваем: повтор той же ошибки тоже провал (§22.7).
-        if (t.lastSaveErrorAt !== null && t.lastSaveErrorAt !== base.lastSaveErrorAt) {
+        if (latest.lastSaveErrorAt !== null && latest.lastSaveErrorAt !== base.lastSaveErrorAt) {
           add({
             name: toastName('doc-save'),
-            title: 'Сохранение не удалось',
-            content: t.lastSaveError ?? '',
+            title: t('editor:document.saveNotDone'),
+            content: latest.lastSaveError ?? '',
             theme: 'danger',
           });
           return;
@@ -182,15 +184,15 @@ export function DocumentTab({
       }
       add({
         name: toastName('doc-save'),
-        title: 'OnlyOffice не подтвердил сохранение',
-        content: 'Проверьте версию шаблона чуть позже.',
+        title: t('editor:document.saveUnconfirmed'),
+        content: t('editor:document.saveUnconfirmedText'),
         theme: 'warning',
       });
     } catch (e) {
       if (mounted.current) {
         add({
           name: toastName('doc-save'),
-          title: 'Не удалось проверить сохранение',
+          title: t('editor:document.saveCheckFailed'),
           content: errorMessage(e),
           theme: 'danger',
         });
@@ -211,7 +213,7 @@ export function DocumentTab({
       if (!mounted.current) return;
       add({
         name: toastName('tags-refresh'),
-        title: 'Данные не получены',
+        title: t('editor:document.dataFailed'),
         content: errorMessage(e),
         theme: 'danger',
       });
@@ -228,7 +230,7 @@ export function DocumentTab({
         if (!mounted.current) return;
         add({
           name: toastName('doc-takeover'),
-          title: 'Не удалось забрать редактирование',
+          title: t('editor:document.takeoverFailed'),
           content: errorMessage(e),
           theme: 'danger',
         });
@@ -286,7 +288,7 @@ export function DocumentTab({
           {lock.editing && (
             <Button view="action" onClick={onSave} loading={waiting}>
               <Icon data={FloppyDisk} />
-              Сохранить
+              {t('common:action.save')}
             </Button>
           )}
           <Button
@@ -295,11 +297,11 @@ export function DocumentTab({
             onClick={() => setShowTags((v) => !v)}
           >
             <Icon data={Tag} />
-            Теги
+            {t('editor:tags.title')}
           </Button>
           <Button onClick={() => onFull(!full)}>
             <Icon data={full ? ChevronsCollapseUpRight : ChevronsExpandUpRight} />
-            {full ? 'Свернуть' : 'Развернуть'}
+            {full ? t('editor:document.collapse') : t('editor:document.expand')}
           </Button>
         </div>
       </div>
@@ -307,32 +309,27 @@ export function DocumentTab({
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {/* Новая вкладка: документ OnlyOffice в этой вкладке остаётся открытым (§23.1). */}
           <Link href="/admin/help" target="_blank" rel="noopener">
-            Справка по синтаксису
+            {t('editor:document.syntaxHelp')}
           </Link>
           <Text color="secondary" variant="caption-2">
-            Изменения попадают в шаблон по кнопке «Сохранить» или автоматически после закрытия
-            редактора.
+            {t('editor:document.saveNote')}
           </Text>
         </div>
       )}
       {loadError && (
-        <Alert
-          theme="danger"
-          title="Не удалось загрузить редактор OnlyOffice"
-          message={loadError}
-        />
+        <Alert theme="danger" title={t('editor:document.loadFailed')} message={loadError} />
       )}
       <ErrorAlert error={config.error} />
       {config.error && (
         <div>
-          <Button onClick={() => void config.refetch()}>Повторить</Button>
+          <Button onClick={() => void config.refetch()}>{t('editor:document.retry')}</Button>
         </div>
       )}
       {lock.forbidden && (
         <Alert
           theme="danger"
-          title="Редактор закрыт"
-          message="Нет права на правку шаблона. Несохранённые изменения не будут сохранены."
+          title={t('editor:document.closedTitle')}
+          message={t('editor:document.closedText')}
         />
       )}
       <div className="cr-doc-body">
@@ -348,7 +345,7 @@ export function DocumentTab({
               document_title={rebuildTitle}
               events_onAppReady={onAppReady}
               onLoadComponentError={(code, description) =>
-                setLoadError(`${description} (код ${code})`)
+                setLoadError(t('editor:document.loadError', { description, code }))
               }
             />
           ) : (
@@ -367,9 +364,9 @@ export function DocumentTab({
       </div>
       <ConfirmDialog
         open={confirmTakeover}
-        title="Забрать редактирование"
-        text={`Шаблон сейчас редактирует ${holderLogin}. Забрать редактирование? Сделанные правки будут сохранены, а у ${holderLogin} редактор переключится в просмотр`}
-        confirmText="Забрать"
+        title={t('editor:lock.takeoverTitle')}
+        text={t('editor:lock.takeoverText', { login: holderLogin })}
+        confirmText={t('editor:lock.takeoverConfirm')}
         onCancel={() => setConfirmTakeover(false)}
         onConfirm={() => {
           setConfirmTakeover(false);
@@ -397,45 +394,44 @@ function LockBar({
   /** Идёт перехват или захват. */
   busy: boolean;
 }) {
+  const { t } = useTranslation();
   const s = lock.state;
   if (!s || lock.forbidden) return null;
   const time = (iso: string) =>
     new Date(iso).toLocaleTimeString(currentLocale(), { hour: '2-digit', minute: '2-digit' });
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      {s.state === 'mine' && <Text color="positive">Вы редактируете</Text>}
+      {s.state === 'mine' && <Text color="positive">{t('editor:lock.mine')}</Text>}
       {s.state === 'other' && !s.sameUser && (
         <>
           <Text color="warning">
-            Только просмотр — редактирует {s.user.login} с {time(s.since)}
+            {t('editor:lock.other', { login: s.user.login, time: time(s.since) })}
           </Text>
           <Button size="s" onClick={onTakeover} disabled={disabled} loading={busy}>
-            Забрать редактирование
+            {t('editor:lock.takeoverTitle')}
           </Button>
         </>
       )}
       {s.state === 'other' && s.sameUser && (
         <>
-          <Text color="warning">Шаблон открыт у вас в другой вкладке</Text>
+          <Text color="warning">{t('editor:lock.otherTab')}</Text>
           <Button size="s" onClick={onTakeoverHere} disabled={disabled} loading={busy}>
-            Редактировать здесь
+            {t('editor:lock.editHere')}
           </Button>
         </>
       )}
       {s.state === 'free' && (
         <>
-          <Text color="secondary">Документ свободен</Text>
+          <Text color="secondary">{t('editor:lock.free')}</Text>
           <Button size="s" view="action" onClick={onStart} disabled={disabled} loading={busy}>
-            Начать редактирование
+            {t('editor:lock.start')}
           </Button>
         </>
       )}
       {lock.lostTo && s.state !== 'mine' && (
-        <Text color="danger">Редактирование забрал {lock.lostTo}</Text>
+        <Text color="danger">{t('editor:lock.lostTo', { login: lock.lostTo })}</Text>
       )}
-      {lock.offline && (
-        <Text color="danger">Связь с сервером потеряна, изменения могут не сохраниться</Text>
-      )}
+      {lock.offline && <Text color="danger">{t('editor:lock.offline')}</Text>}
     </div>
   );
 }

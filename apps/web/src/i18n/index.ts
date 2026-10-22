@@ -106,7 +106,7 @@ async function loadDateLocale(locale: Locale): Promise<boolean> {
     await settings.loadLocale(DATE_LOCALES[locale]);
     return true;
   } catch (e) {
-    console.error('Не удалось загрузить локаль дат', e);
+    console.error('Failed to load the date locale', e);
     return false;
   }
 }

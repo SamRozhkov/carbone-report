@@ -15,7 +15,7 @@ export function LocaleSync() {
     const target = preferredLocale(data);
     if (target === currentLocale()) return;
     changeLocale(target, { persist: 'none' }).catch((e: unknown) =>
-      console.error('Не удалось загрузить язык интерфейса', e),
+      console.error('Failed to load the UI language', e),
     );
   }, [known, data]);
   return null;

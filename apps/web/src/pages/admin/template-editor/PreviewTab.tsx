@@ -1,6 +1,7 @@
 import { Button, Text } from '@gravity-ui/uikit';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/endpoints';
 import { fieldErrors } from '../../../api/errors';
 import { CodeEditor } from '../../../components/CodeEditor';
@@ -16,6 +17,7 @@ export function PreviewTab({
   previewData,
   onPreviewData,
 }: TabProps) {
+  const { t } = useTranslation();
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const params = () => pickParams(template.params, testParams);
   const paramsKey = JSON.stringify(testParams);
@@ -66,9 +68,9 @@ export function PreviewTab({
   return (
     <div className="cr-run">
       <div className="cr-stack">
-        <Text variant="subheader-2">Тестовые параметры</Text>
+        <Text variant="subheader-2">{t('editor:test.params')}</Text>
         {template.params.length === 0 ? (
-          <Text color="secondary">Параметров нет</Text>
+          <Text color="secondary">{t('editor:test.noParams')}</Text>
         ) : (
           <ParamForm
             templateId={template.id}
@@ -80,27 +82,27 @@ export function PreviewTab({
         )}
         <div style={{ display: 'flex', gap: 8 }}>
           <Button onClick={() => data.mutate()} loading={data.isPending}>
-            Получить данные
+            {t('editor:preview.getData')}
           </Button>
           <Button view="action" onClick={() => pdf.mutate()} loading={pdf.isPending}>
-            Сгенерировать PDF
+            {t('editor:preview.generatePdf')}
           </Button>
         </div>
         <GeneralError error={data.error} errors={dataErrors} shown={shown} />
         <GeneralError error={pdf.error} errors={pdfErrors} shown={shown} />
       </div>
       <div className="cr-stack">
-        {pdfUrl && <iframe title="PDF-предпросмотр" src={pdfUrl} className="cr-pdf" />}
+        {pdfUrl && <iframe title={t('editor:preview.pdfTitle')} src={pdfUrl} className="cr-pdf" />}
         {previewData && (
           <CodeEditor
             language="json"
             readOnly
             value={JSON.stringify(previewData, null, 2)}
-            ariaLabel="Данные отчёта"
+            ariaLabel={t('editor:preview.dataAria')}
             height={400}
           />
         )}
-        {!pdfUrl && !previewData && <Text color="secondary">Здесь появятся данные или PDF.</Text>}
+        {!pdfUrl && !previewData && <Text color="secondary">{t('editor:preview.empty')}</Text>}
       </div>
     </div>
   );

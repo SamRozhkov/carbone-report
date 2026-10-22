@@ -23,10 +23,10 @@
     "users": "Impossible de charger les utilisateurs"
   },
   "roleInTable": {
-    "admin": "Administrateur",
-    "editor": "Éditeur",
-    "access_manager": "Responsable de la sécurité",
-    "user": "Utilisateur"
+    "admin": "$t(common:role.admin)",
+    "editor": "$t(common:role.editor)",
+    "access_manager": "$t(common:role.access_manager)",
+    "user": "$t(common:role.user)"
   },
   "users": {
     "add": "Ajouter un utilisateur",

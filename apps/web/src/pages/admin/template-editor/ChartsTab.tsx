@@ -1,6 +1,7 @@
 import {
   buildChartOption,
-  chartLimitError,
+  ChartDataError,
+  chartLimit,
   type ChartSeries,
   type ChartType,
   type ChartValue,
@@ -25,6 +26,7 @@ import {
 } from '@gravity-ui/uikit';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/endpoints';
 import { fieldErrors } from '../../../api/errors';
 import { ErrorAlert } from '../../../components/ErrorAlert';
@@ -40,31 +42,11 @@ const ChartPreview = lazy(() =>
   import('./ChartPreview').then((m) => ({ default: m.ChartPreview })),
 );
 
-const TYPE_OPTIONS: { value: ChartType; content: string }[] = [
-  { value: 'bar', content: 'Столбцы' },
-  { value: 'barHorizontal', content: 'Горизонтальные столбцы' },
-  { value: 'line', content: 'Линии' },
-  { value: 'area', content: 'Области' },
-  { value: 'pie', content: 'Круговая' },
-  { value: 'doughnut', content: 'Кольцевая' },
-  { value: 'combo', content: 'Комбинированная' },
-];
-const LEGEND_OPTIONS = [
-  { value: 'bottom', content: 'Снизу' },
-  { value: 'top', content: 'Сверху' },
-  { value: 'right', content: 'Справа' },
-  { value: 'none', content: 'Нет' },
-];
-const PALETTE_OPTIONS = [
-  { value: 'default', content: 'Стандартная' },
-  { value: 'contrast', content: 'Контрастная' },
-  { value: 'pastel', content: 'Пастельная' },
-  { value: 'mono', content: 'Оттенки синего' },
-];
-const DECIMALS_OPTIONS = [
-  { value: '', content: 'как есть' },
-  ...[0, 1, 2, 3, 4, 5, 6].map((n) => ({ value: String(n), content: String(n) })),
-];
+// Подписи вариантов — ключи editor:charts.<поле>_<значение>.
+const TYPES: ChartType[] = ['bar', 'barHorizontal', 'line', 'area', 'pie', 'doughnut', 'combo'];
+const LEGENDS: TemplateChart['legend'][] = ['bottom', 'top', 'right', 'none'];
+const PALETTES: TemplateChart['palette'][] = ['default', 'contrast', 'pastel', 'mono'];
+const DECIMALS = [0, 1, 2, 3, 4, 5, 6].map((n) => ({ value: String(n), content: String(n) }));
 const STACKABLE: ChartType[] = ['bar', 'barHorizontal', 'line', 'area'];
 const SMOOTHABLE: ChartType[] = ['line', 'area', 'combo'];
 const isPie = (t: ChartType) => t === 'pie' || t === 'doughnut';
@@ -148,12 +130,13 @@ function ColumnSelect({
   empty?: string;
   onChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   const missing = known && value !== '' && !columns.includes(value);
   const options = [
     ...(empty !== undefined ? [{ value: '', content: empty }] : []),
     ...columns.map((c) => ({ value: c, content: c })),
     ...(value !== '' && !columns.includes(value)
-      ? [{ value, content: missing ? `${value} (нет в результате)` : value }]
+      ? [{ value, content: missing ? t('editor:charts.columnMissing', { column: value }) : value }]
       : []),
   ];
   return (
@@ -163,21 +146,24 @@ function ColumnSelect({
         value={value === '' && empty === undefined ? [] : [value]}
         options={options}
         onUpdate={([v]) => onChange(v ?? '')}
-        placeholder="колонка"
+        placeholder={t('editor:charts.columnPlaceholder')}
         width="max"
       />
-      {missing && <Text color="danger">Колонки «{value}» нет в результате запроса</Text>}
+      {missing && (
+        <Text color="danger">{t('editor:charts.columnNotInResult', { column: value })}</Text>
+      )}
     </div>
   );
 }
 
 export function ChartsTab({ template, testParams }: TabProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const copy = useCopy();
   const nextId = useRef(0);
-  const makeDrafts = (t: TemplateAdminDetails): Draft[] =>
-    t.charts.map((chart) => ({ id: nextId.current++, chart }));
+  const makeDrafts = (tpl: TemplateAdminDetails): Draft[] =>
+    tpl.charts.map((chart) => ({ id: nextId.current++, chart }));
   const [baseline, setBaseline] = useState(template);
   const [drafts, setDrafts] = useState<Draft[]>(() => makeDrafts(template));
   const [selectedId, setSelectedId] = useState<number | undefined>(drafts[0]?.id);
@@ -190,9 +176,9 @@ export function ChartsTab({ template, testParams }: TabProps) {
   const current = drafts[selectedIdx];
   const listQueries = template.queries.filter((q) => q.mode === 'list');
 
-  const reseed = (t: TemplateAdminDetails) => {
-    const next = makeDrafts(t);
-    setBaseline(t);
+  const reseed = (tpl: TemplateAdminDetails) => {
+    const next = makeDrafts(tpl);
+    setBaseline(tpl);
     setDrafts(next);
     setSelectedId(next[Math.min(selectedIdx, next.length - 1)]?.id);
   };
@@ -204,7 +190,7 @@ export function ChartsTab({ template, testParams }: TabProps) {
   const run = useMutation({
     mutationFn: (key: string) => {
       const q = template.queries.find((x) => x.key === key);
-      if (!q) throw new Error(`нет запроса «${key}»`);
+      if (!q) throw new Error(t('editor:charts.noQuery', { key }));
       return api.templates.runQuery(template.id, {
         sql: q.sql,
         params: pickParams(template.params, testParams),
@@ -218,10 +204,10 @@ export function ChartsTab({ template, testParams }: TabProps) {
         template.id,
         drafts.map((d) => d.chart),
       ),
-    onSuccess: (t) => {
-      applyTemplate(queryClient, t);
-      reseed(t);
-      add({ name: `tpl-charts-${Date.now()}`, title: 'Графики сохранены', theme: 'success' });
+    onSuccess: (tpl) => {
+      applyTemplate(queryClient, tpl);
+      reseed(tpl);
+      add({ name: `tpl-charts-${Date.now()}`, title: t('editor:charts.saved'), theme: 'success' });
     },
   });
 
@@ -271,23 +257,32 @@ export function ChartsTab({ template, testParams }: TabProps) {
     if (!current || !result) return { value: null, error: null };
     const c = current.chart;
     if (!c.category || c.series.some((s) => !s.column))
-      return { value: null, error: 'Выберите колонку подписей и колонки рядов' };
+      return { value: null, error: t('editor:charts.chooseColumns') };
     try {
       const value = buildChartOption(c, result.rows);
       // график, который движок отклонит (1 МБ, 20 рядов, 10 000 точек), не показываем
-      const limit = chartLimitError(value);
-      if (limit) return { value: null, error: `Отчёт с этим графиком не соберётся: ${limit}` };
+      const limit = chartLimit(value);
+      if (limit) return { value: null, error: t(`editor:charts.limit_${limit}`) };
       return { value, error: null };
     } catch (e) {
+      // Ошибка данных несёт ключ каталога errors (chart.*): тот же текст есть в editor:charts.*.
+      if (e instanceof ChartDataError && e.key?.startsWith('chart.'))
+        return {
+          value: null,
+          error: t(`editor:charts.${e.key.slice('chart.'.length)}`, {
+            ...e.params,
+            defaultValue: e.message,
+          }),
+        };
       return { value: null, error: e instanceof Error ? e.message : String(e) };
     }
-  }, [current, result]);
+  }, [current, result, t]);
 
   const dirtyNote = dirty && (
     <>
-      <Text color="warning">Есть несохранённые изменения</Text>
+      <Text color="warning">{t('editor:draft.unsaved')}</Text>
       <Button view="flat" onClick={discard}>
-        Отменить
+        {t('editor:draft.discard')}
       </Button>
     </>
   );
@@ -305,12 +300,11 @@ export function ChartsTab({ template, testParams }: TabProps) {
             width="max"
             onClick={() => setSelectedId(d.id)}
           >
-            {d.chart.key}{' '}
-            <Label size="xs">{TYPE_OPTIONS.find((o) => o.value === d.chart.type)?.content}</Label>
+            {d.chart.key} <Label size="xs">{t(`editor:charts.type_${d.chart.type}`)}</Label>
             {withErrors.has(String(i)) && (
-              <Label size="xs" theme="danger" title="В графике есть ошибки">
+              <Label size="xs" theme="danger" title={t('editor:charts.hasErrors')}>
                 <Icon data={CircleExclamation} size={12} />
-                ошибка
+                {t('editor:draft.errorBadge')}
               </Label>
             )}
           </Button>
@@ -321,40 +315,40 @@ export function ChartsTab({ template, testParams }: TabProps) {
           disabled={listQueries.length === 0 || drafts.length >= MAX_TEMPLATE_CHARTS}
         >
           <Icon data={Plus} />
-          Добавить график
+          {t('editor:charts.add')}
         </Button>
         {listQueries.length === 0 && (
-          <Text color="secondary">
-            Сначала добавьте запрос «Список строк» на вкладке «Данные» — график строится по его
-            строкам.
-          </Text>
+          <Text color="secondary">{t('editor:charts.needListQuery')}</Text>
         )}
       </div>
       <div className="cr-stack">
         {c ? (
           <>
             <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
-              <Field label="Ключ (в шаблоне — d.charts.ключ)" error={errorOf('key')}>
+              <Field label={t('editor:charts.key')} error={errorOf('key')}>
                 <TextInput
                   value={c.key}
                   onUpdate={(v) => update({ key: v })}
-                  controlProps={{ 'aria-label': 'Ключ графика' }}
+                  controlProps={{ 'aria-label': t('editor:charts.keyAria') }}
                 />
               </Field>
-              <Field label="Запрос" error={errorOf('query')}>
+              <Field label={t('editor:charts.query')} error={errorOf('query')}>
                 <Select
-                  aria-label="Запрос"
+                  aria-label={t('editor:charts.query')}
                   value={c.query ? [c.query] : []}
                   options={listQueries.map((q) => ({ value: q.key, content: q.key }))}
                   onUpdate={([v]) => v && update({ query: v })}
                   width={200}
                 />
               </Field>
-              <Field label="Тип" error={errorOf('type')}>
+              <Field label={t('editor:charts.type')} error={errorOf('type')}>
                 <Select
-                  aria-label="Тип графика"
+                  aria-label={t('editor:charts.typeAria')}
                   value={[c.type]}
-                  options={TYPE_OPTIONS}
+                  options={TYPES.map((value) => ({
+                    value,
+                    content: t(`editor:charts.type_${value}`),
+                  }))}
                   onUpdate={([v]) =>
                     v && current && update(withType(current.chart, v as ChartType))
                   }
@@ -363,12 +357,12 @@ export function ChartsTab({ template, testParams }: TabProps) {
               </Field>
               <Button view="flat-danger" onClick={removeChart}>
                 <Icon data={TrashBin} />
-                Удалить график
+                {t('editor:charts.remove')}
               </Button>
             </div>
             <Card view="outlined" style={{ padding: 12 }} className="cr-stack">
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <Text variant="subheader-1">Данные</Text>
+                <Text variant="subheader-1">{t('editor:tab.data')}</Text>
                 <Button
                   size="s"
                   onClick={() => run.mutate(c.query)}
@@ -376,17 +370,13 @@ export function ChartsTab({ template, testParams }: TabProps) {
                   disabled={!c.query}
                 >
                   <Icon data={Play} />
-                  Выполнить запрос
+                  {t('editor:charts.run')}
                 </Button>
-                {!result && (
-                  <Text color="secondary">
-                    Колонки появятся после выполнения запроса на тестовых параметрах.
-                  </Text>
-                )}
+                {!result && <Text color="secondary">{t('editor:charts.columnsHint')}</Text>}
               </div>
-              <Field label="Подписи (категории)" error={errorOf('category')}>
+              <Field label={t('editor:charts.category')} error={errorOf('category')}>
                 <ColumnSelect
-                  label="Подписи (категории)"
+                  label={t('editor:charts.category')}
                   value={c.category}
                   columns={columns}
                   known={!!result}
@@ -394,16 +384,13 @@ export function ChartsTab({ template, testParams }: TabProps) {
                 />
               </Field>
               {!isPie(c.type) && (
-                <Field
-                  label="Ряды из данных (колонка с названиями рядов)"
-                  error={errorOf('splitBy')}
-                >
+                <Field label={t('editor:charts.splitBy')} error={errorOf('splitBy')}>
                   <ColumnSelect
-                    label="Ряды из данных"
+                    label={t('editor:charts.splitByAria')}
                     value={c.splitBy ?? ''}
                     columns={columns}
                     known={!!result}
-                    empty="— нет —"
+                    empty={t('editor:charts.none')}
                     onChange={(v) =>
                       update({
                         splitBy: v || null,
@@ -419,11 +406,15 @@ export function ChartsTab({ template, testParams }: TabProps) {
                   style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}
                 >
                   <Field
-                    label={c.splitBy ? 'Значения' : `Ряд ${n + 1}`}
+                    label={
+                      c.splitBy
+                        ? t('editor:charts.values')
+                        : t('editor:charts.series', { n: n + 1 })
+                    }
                     error={errorOf(`series.${n}.column`)}
                   >
                     <ColumnSelect
-                      label={`Колонка ряда ${n + 1}`}
+                      label={t('editor:charts.seriesColumnAria', { n: n + 1 })}
                       value={s.column}
                       columns={columns}
                       known={!!result}
@@ -431,43 +422,47 @@ export function ChartsTab({ template, testParams }: TabProps) {
                     />
                   </Field>
                   {!c.splitBy && (
-                    <Field label="Название" error={errorOf(`series.${n}.name`)}>
+                    <Field label={t('admin:field.name')} error={errorOf(`series.${n}.name`)}>
                       <TextInput
                         value={s.name ?? ''}
                         placeholder={s.column}
                         onUpdate={(v) => updateSeries(n, { name: v })}
-                        controlProps={{ 'aria-label': `Название ряда ${n + 1}` }}
+                        controlProps={{
+                          'aria-label': t('editor:charts.seriesNameAria', { n: n + 1 }),
+                        }}
                       />
                     </Field>
                   )}
                   {!c.splitBy && (
-                    <Field label="Цвет" error={errorOf(`series.${n}.color`)}>
+                    <Field label={t('editor:charts.color')} error={errorOf(`series.${n}.color`)}>
                       <TextInput
                         value={s.color ?? ''}
                         placeholder="#RRGGBB"
                         onUpdate={(v) => updateSeries(n, { color: v })}
-                        controlProps={{ 'aria-label': `Цвет ряда ${n + 1}` }}
+                        controlProps={{
+                          'aria-label': t('editor:charts.seriesColorAria', { n: n + 1 }),
+                        }}
                       />
                     </Field>
                   )}
                   {c.type === 'combo' && (
                     <Select
-                      aria-label={`Вид ряда ${n + 1}`}
+                      aria-label={t('editor:charts.seriesKindAria', { n: n + 1 })}
                       value={[s.kind ?? 'bar']}
                       options={[
-                        { value: 'bar', content: 'Столбцы' },
-                        { value: 'line', content: 'Линия' },
+                        { value: 'bar', content: t('editor:charts.kind_bar') },
+                        { value: 'line', content: t('editor:charts.kind_line') },
                       ]}
                       onUpdate={([v]) => updateSeries(n, { kind: v as 'bar' | 'line' })}
                     />
                   )}
                   {c.type === 'combo' && (
                     <Select
-                      aria-label={`Ось ряда ${n + 1}`}
+                      aria-label={t('editor:charts.seriesAxisAria', { n: n + 1 })}
                       value={[s.axis ?? 'left']}
                       options={[
-                        { value: 'left', content: 'Левая ось' },
-                        { value: 'right', content: 'Правая ось' },
+                        { value: 'left', content: t('editor:charts.axis_left') },
+                        { value: 'right', content: t('editor:charts.axis_right') },
                       ]}
                       onUpdate={([v]) => updateSeries(n, { axis: v as 'left' | 'right' })}
                     />
@@ -475,7 +470,7 @@ export function ChartsTab({ template, testParams }: TabProps) {
                   {c.series.length > 1 && (
                     <Button
                       view="flat-danger"
-                      aria-label={`Удалить ряд ${n + 1}`}
+                      aria-label={t('editor:charts.seriesRemoveAria', { n: n + 1 })}
                       onClick={() => update({ series: c.series.filter((_, i) => i !== n) })}
                     >
                       <Icon data={TrashBin} />
@@ -490,59 +485,65 @@ export function ChartsTab({ template, testParams }: TabProps) {
                   onClick={() => update({ series: [...c.series, { column: '' }] })}
                 >
                   <Icon data={Plus} />
-                  Добавить ряд
+                  {t('editor:charts.addSeries')}
                 </Button>
               )}
             </Card>
             <Card view="outlined" style={{ padding: 12 }} className="cr-stack">
-              <Text variant="subheader-1">Оформление</Text>
+              <Text variant="subheader-1">{t('editor:charts.appearance')}</Text>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
-                <Field label="Заголовок" error={errorOf('title')}>
+                <Field label={t('editor:charts.title')} error={errorOf('title')}>
                   <TextInput
                     value={c.title}
                     onUpdate={(v) => update({ title: v })}
-                    controlProps={{ 'aria-label': 'Заголовок графика' }}
+                    controlProps={{ 'aria-label': t('editor:charts.titleAria') }}
                   />
                 </Field>
-                <Field label="Легенда">
+                <Field label={t('editor:charts.legend')}>
                   <Select
-                    aria-label="Легенда"
+                    aria-label={t('editor:charts.legend')}
                     value={[c.legend]}
-                    options={LEGEND_OPTIONS}
+                    options={LEGENDS.map((value) => ({
+                      value,
+                      content: t(`editor:charts.legend_${value}`),
+                    }))}
                     onUpdate={([v]) => v && update({ legend: v as TemplateChart['legend'] })}
                   />
                 </Field>
-                <Field label="Палитра">
+                <Field label={t('editor:charts.palette')}>
                   <Select
-                    aria-label="Палитра"
+                    aria-label={t('editor:charts.palette')}
                     value={[c.palette]}
-                    options={PALETTE_OPTIONS}
+                    options={PALETTES.map((value) => ({
+                      value,
+                      content: t(`editor:charts.palette_${value}`),
+                    }))}
                     onUpdate={([v]) => v && update({ palette: v as TemplateChart['palette'] })}
                   />
                 </Field>
               </div>
               {!isPie(c.type) && (
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
-                  <Field label="Ось X" error={errorOf('axisX')}>
+                  <Field label={t('editor:charts.axisX')} error={errorOf('axisX')}>
                     <TextInput
                       value={c.axisX}
                       onUpdate={(v) => update({ axisX: v })}
-                      controlProps={{ 'aria-label': 'Название оси X' }}
+                      controlProps={{ 'aria-label': t('editor:charts.axisXAria') }}
                     />
                   </Field>
-                  <Field label="Ось Y" error={errorOf('axisY')}>
+                  <Field label={t('editor:charts.axisY')} error={errorOf('axisY')}>
                     <TextInput
                       value={c.axisY}
                       onUpdate={(v) => update({ axisY: v })}
-                      controlProps={{ 'aria-label': 'Название оси Y' }}
+                      controlProps={{ 'aria-label': t('editor:charts.axisYAria') }}
                     />
                   </Field>
                   {c.type === 'combo' && (
-                    <Field label="Правая ось Y" error={errorOf('axisY2')}>
+                    <Field label={t('editor:charts.axisY2')} error={errorOf('axisY2')}>
                       <TextInput
                         value={c.axisY2}
                         onUpdate={(v) => update({ axisY2: v })}
-                        controlProps={{ 'aria-label': 'Название правой оси Y' }}
+                        controlProps={{ 'aria-label': t('editor:charts.axisY2Aria') }}
                       />
                     </Field>
                   )}
@@ -551,24 +552,24 @@ export function ChartsTab({ template, testParams }: TabProps) {
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'end' }}>
                 {STACKABLE.includes(c.type) && (
                   <Checkbox checked={c.stacked} onUpdate={(v) => update({ stacked: v })}>
-                    Накопление
+                    {t('editor:charts.stacked')}
                   </Checkbox>
                 )}
                 {SMOOTHABLE.includes(c.type) && (
                   <Checkbox checked={c.smooth} onUpdate={(v) => update({ smooth: v })}>
-                    Сглаживание линий
+                    {t('editor:charts.smooth')}
                   </Checkbox>
                 )}
                 <Checkbox checked={c.labels} onUpdate={(v) => update({ labels: v })}>
-                  Подписи значений
+                  {t('editor:charts.labels')}
                 </Checkbox>
               </div>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
-                <Field label="Знаков после запятой" error={errorOf('number.decimals')}>
+                <Field label={t('editor:charts.decimals')} error={errorOf('number.decimals')}>
                   <Select
-                    aria-label="Знаков после запятой"
+                    aria-label={t('editor:charts.decimals')}
                     value={[c.number.decimals === null ? '' : String(c.number.decimals)]}
-                    options={DECIMALS_OPTIONS}
+                    options={[{ value: '', content: t('editor:charts.decimalsAsIs') }, ...DECIMALS]}
                     onUpdate={([v]) =>
                       update({ number: { ...c.number, decimals: v ? Number(v) : null } })
                     }
@@ -578,26 +579,26 @@ export function ChartsTab({ template, testParams }: TabProps) {
                   checked={c.number.thousands}
                   onUpdate={(v) => update({ number: { ...c.number, thousands: v } })}
                 >
-                  Разделять тысячи
+                  {t('editor:charts.thousands')}
                 </Checkbox>
-                <Field label="Суффикс (₽, %, шт.)" error={errorOf('number.suffix')}>
+                <Field label={t('editor:charts.suffix')} error={errorOf('number.suffix')}>
                   <TextInput
                     value={c.number.suffix}
                     onUpdate={(v) => update({ number: { ...c.number, suffix: v } })}
-                    controlProps={{ 'aria-label': 'Суффикс чисел' }}
+                    controlProps={{ 'aria-label': t('editor:charts.suffixAria') }}
                   />
                 </Field>
               </div>
             </Card>
             <Card view="outlined" style={{ padding: 12 }} className="cr-stack">
-              <Text variant="subheader-1">Предпросмотр</Text>
+              <Text variant="subheader-1">{t('editor:tab.preview')}</Text>
               {preview.value ? (
                 <Suspense fallback={<Loader />}>
                   <ChartPreview value={preview.value} />
                 </Suspense>
               ) : (
                 <Text color={preview.error ? 'danger' : 'secondary'}>
-                  {preview.error ?? 'Выполните запрос, чтобы увидеть график на тестовых данных.'}
+                  {preview.error ?? t('editor:charts.previewHint')}
                 </Text>
               )}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -605,20 +606,17 @@ export function ChartsTab({ template, testParams }: TabProps) {
                 <Button
                   size="s"
                   onClick={() => void copy(chartTag(c.key))}
-                  aria-label="Скопировать тег"
+                  aria-label={t('editor:charts.copyTagAria')}
                 >
                   <Icon data={Copy} />
-                  Скопировать
+                  {t('editor:tags.copy')}
                 </Button>
               </div>
-              <Text color="secondary">
-                Вставьте в документ картинку-заглушку, а тег — в её замещающий текст. Размер
-                картинки — размер графика.
-              </Text>
+              <Text color="secondary">{t('editor:charts.insertHint')}</Text>
             </Card>
           </>
         ) : (
-          <Text color="secondary">Графиков нет — добавьте первый.</Text>
+          <Text color="secondary">{t('editor:charts.empty')}</Text>
         )}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Button
@@ -627,13 +625,9 @@ export function ChartsTab({ template, testParams }: TabProps) {
             loading={save.isPending}
             disabled={!dirty}
           >
-            Сохранить графики
+            {t('editor:charts.save')}
           </Button>
-          {dirty && stale && (
-            <Text color="warning">
-              Шаблон изменился на сервере — сохранение перезапишет изменения
-            </Text>
-          )}
+          {dirty && stale && <Text color="warning">{t('editor:draft.stale')}</Text>}
           {dirtyNote}
         </div>
         <GeneralError error={save.error} errors={errors} shown={shown} />

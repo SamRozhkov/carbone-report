@@ -3,6 +3,7 @@
 import type { Locale } from '.';
 import deAdmin from './de/admin.json';
 import deCommon from './de/common.json';
+import deEditor from './de/editor.json';
 import deErrors from './de/errors.json';
 import deHistory from './de/history.json';
 import deReports from './de/reports.json';
@@ -11,6 +12,7 @@ import deTemplates from './de/templates.json';
 import deValidation from './de/validation.json';
 import enAdmin from './en/admin.json';
 import enCommon from './en/common.json';
+import enEditor from './en/editor.json';
 import enErrors from './en/errors.json';
 import enHistory from './en/history.json';
 import enReports from './en/reports.json';
@@ -19,6 +21,7 @@ import enTemplates from './en/templates.json';
 import enValidation from './en/validation.json';
 import esAdmin from './es/admin.json';
 import esCommon from './es/common.json';
+import esEditor from './es/editor.json';
 import esErrors from './es/errors.json';
 import esHistory from './es/history.json';
 import esReports from './es/reports.json';
@@ -27,6 +30,7 @@ import esTemplates from './es/templates.json';
 import esValidation from './es/validation.json';
 import frAdmin from './fr/admin.json';
 import frCommon from './fr/common.json';
+import frEditor from './fr/editor.json';
 import frErrors from './fr/errors.json';
 import frHistory from './fr/history.json';
 import frReports from './fr/reports.json';
@@ -35,6 +39,7 @@ import frTemplates from './fr/templates.json';
 import frValidation from './fr/validation.json';
 import ptBRAdmin from './pt-BR/admin.json';
 import ptBRCommon from './pt-BR/common.json';
+import ptBREditor from './pt-BR/editor.json';
 import ptBRErrors from './pt-BR/errors.json';
 import ptBRHistory from './pt-BR/history.json';
 import ptBRReports from './pt-BR/reports.json';
@@ -43,6 +48,7 @@ import ptBRTemplates from './pt-BR/templates.json';
 import ptBRValidation from './pt-BR/validation.json';
 import ruAdmin from './ru/admin.json';
 import ruCommon from './ru/common.json';
+import ruEditor from './ru/editor.json';
 import ruErrors from './ru/errors.json';
 import ruHistory from './ru/history.json';
 import ruReports from './ru/reports.json';
@@ -51,6 +57,7 @@ import ruTemplates from './ru/templates.json';
 import ruValidation from './ru/validation.json';
 import zhCNAdmin from './zh-CN/admin.json';
 import zhCNCommon from './zh-CN/common.json';
+import zhCNEditor from './zh-CN/editor.json';
 import zhCNErrors from './zh-CN/errors.json';
 import zhCNHistory from './zh-CN/history.json';
 import zhCNReports from './zh-CN/reports.json';
@@ -66,6 +73,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     signature: ruSignature,
     admin: ruAdmin,
     templates: ruTemplates,
+    editor: ruEditor,
     errors: ruErrors,
     validation: ruValidation,
   },
@@ -76,6 +84,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     signature: enSignature,
     admin: enAdmin,
     templates: enTemplates,
+    editor: enEditor,
     errors: enErrors,
     validation: enValidation,
   },
@@ -86,6 +95,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     signature: esSignature,
     admin: esAdmin,
     templates: esTemplates,
+    editor: esEditor,
     errors: esErrors,
     validation: esValidation,
   },
@@ -96,6 +106,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     signature: ptBRSignature,
     admin: ptBRAdmin,
     templates: ptBRTemplates,
+    editor: ptBREditor,
     errors: ptBRErrors,
     validation: ptBRValidation,
   },
@@ -106,6 +117,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     signature: frSignature,
     admin: frAdmin,
     templates: frTemplates,
+    editor: frEditor,
     errors: frErrors,
     validation: frValidation,
   },
@@ -116,6 +128,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     signature: deSignature,
     admin: deAdmin,
     templates: deTemplates,
+    editor: deEditor,
     errors: deErrors,
     validation: deValidation,
   },
@@ -126,6 +139,7 @@ export const resources: Record<Locale, Record<string, object>> = {
     signature: zhCNSignature,
     admin: zhCNAdmin,
     templates: zhCNTemplates,
+    editor: zhCNEditor,
     errors: zhCNErrors,
     validation: zhCNValidation,
   },

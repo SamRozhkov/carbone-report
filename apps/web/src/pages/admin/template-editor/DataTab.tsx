@@ -20,6 +20,7 @@ import {
 } from '@gravity-ui/uikit';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/endpoints';
 import { fieldErrors } from '../../../api/errors';
 import { CodeEditor } from '../../../components/CodeEditor';
@@ -47,11 +48,12 @@ const strip = (ds: TemplateQuery[]) =>
   JSON.stringify(ds.map((q) => ({ key: q.key, mode: q.mode, sql: q.sql })));
 
 export function DataTab({ template, testParams, onTestParams }: TabProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const nextId = useRef(0);
-  const makeDrafts = (t: TemplateAdminDetails): Draft[] =>
-    t.queries.map((q) => ({ id: nextId.current++, key: q.key, mode: q.mode, sql: q.sql }));
+  const makeDrafts = (tpl: TemplateAdminDetails): Draft[] =>
+    tpl.queries.map((q) => ({ id: nextId.current++, key: q.key, mode: q.mode, sql: q.sql }));
   const [baseline, setBaseline] = useState(template);
   const [drafts, setDrafts] = useState<Draft[]>(() => makeDrafts(template));
   const [selectedId, setSelectedId] = useState<number | undefined>(drafts[0]?.id);
@@ -62,9 +64,9 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
   );
   const current = drafts[selectedIdx];
 
-  const reseed = (t: TemplateAdminDetails) => {
-    const next = makeDrafts(t);
-    setBaseline(t);
+  const reseed = (tpl: TemplateAdminDetails) => {
+    const next = makeDrafts(tpl);
+    setBaseline(tpl);
     setDrafts(next);
     setSelectedId(next[Math.min(selectedIdx, next.length - 1)]?.id);
   };
@@ -85,10 +87,10 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
         template.id,
         drafts.map(({ key, mode, sql }) => ({ key, mode, sql })),
       ),
-    onSuccess: (t) => {
-      applyTemplate(queryClient, t);
-      reseed(t);
-      add({ name: `tpl-queries-${Date.now()}`, title: 'Запросы сохранены', theme: 'success' });
+    onSuccess: (tpl) => {
+      applyTemplate(queryClient, tpl);
+      reseed(tpl);
+      add({ name: `tpl-queries-${Date.now()}`, title: t('editor:data.saved'), theme: 'success' });
     },
   });
 
@@ -123,9 +125,9 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
   };
   const dirtyNote = dirty && (
     <>
-      <Text color="warning">Есть несохранённые изменения</Text>
+      <Text color="warning">{t('editor:draft.unsaved')}</Text>
       <Button view="flat" onClick={discard}>
-        Отменить
+        {t('editor:draft.discard')}
       </Button>
     </>
   );
@@ -180,25 +182,25 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
             width="max"
             onClick={() => select(q.id)}
           >
-            {q.key} <Label size="xs">{q.mode === 'list' ? 'список' : 'одна строка'}</Label>
+            {q.key} <Label size="xs">{t(`editor:data.modeShort_${q.mode}`)}</Label>
             {queryKeysWithErrors.has(String(i)) && (
-              <Label size="xs" theme="danger" title="В запросе есть ошибки">
+              <Label size="xs" theme="danger" title={t('editor:data.hasErrors')}>
                 <Icon data={CircleExclamation} size={12} />
-                ошибка
+                {t('editor:draft.errorBadge')}
               </Label>
             )}
           </Button>
         ))}
         <Button view="outlined" onClick={addQuery}>
           <Icon data={Plus} />
-          Добавить запрос
+          {t('editor:data.add')}
         </Button>
         <Card view="outlined" style={{ padding: 12 }}>
           <Text variant="subheader-1" as="div" style={{ marginBottom: 8 }}>
-            Тестовые параметры
+            {t('editor:test.params')}
           </Text>
           {template.params.length === 0 ? (
-            <Text color="secondary">Параметров нет</Text>
+            <Text color="secondary">{t('editor:test.noParams')}</Text>
           ) : (
             <ParamForm
               templateId={template.id}
@@ -213,25 +215,25 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
         {current ? (
           <>
             <div style={{ display: 'flex', gap: 12, alignItems: 'end' }}>
-              <Field label="Ключ (в шаблоне — d.ключ)" error={own['key']}>
+              <Field label={t('editor:data.key')} error={own['key']}>
                 <TextInput
                   value={current.key}
                   onUpdate={(v) => update({ key: v })}
                   validationState={own['key'] ? 'invalid' : undefined}
-                  controlProps={{ 'aria-label': 'Ключ запроса' }}
+                  controlProps={{ 'aria-label': t('editor:data.keyAria') }}
                 />
               </Field>
               <SegmentedRadioGroup
                 value={current.mode}
                 onUpdate={(v) => update({ mode: v as QueryMode })}
                 options={[
-                  { value: 'list', content: 'Список строк' },
-                  { value: 'single', content: 'Одна строка' },
+                  { value: 'list', content: t('editor:data.mode_list') },
+                  { value: 'single', content: t('editor:data.mode_single') },
                 ]}
               />
               <Button view="flat-danger" onClick={removeQuery}>
                 <Icon data={TrashBin} />
-                Удалить запрос
+                {t('editor:data.remove')}
               </Button>
             </div>
             {own['mode'] && <Text color="danger">{own['mode']}</Text>}
@@ -250,7 +252,7 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
                 loading={run.isPending}
               >
                 <Icon data={Play} />
-                Выполнить
+                {t('editor:data.run')}
               </Button>
               <Button
                 view="action"
@@ -258,19 +260,15 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
                 loading={save.isPending}
                 disabled={!dirty}
               >
-                Сохранить запросы
+                {t('editor:data.save')}
               </Button>
-              {dirty && stale && (
-                <Text color="warning">
-                  Шаблон изменился на сервере — сохранение перезапишет изменения
-                </Text>
-              )}
+              {dirty && stale && <Text color="warning">{t('editor:draft.stale')}</Text>}
               {dirtyNote}
             </div>
           </>
         ) : (
           <>
-            <Text color="secondary">Запросов нет — добавьте первый.</Text>
+            <Text color="secondary">{t('editor:data.empty')}</Text>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <Button
                 view="action"
@@ -278,28 +276,34 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
                 loading={save.isPending}
                 disabled={!dirty}
               >
-                Сохранить запросы
+                {t('editor:data.save')}
               </Button>
               {dirtyNote}
             </div>
           </>
         )}
         {others.map(({ q, m }, n) => (
-          <Alert key={n} theme="danger" message={`Запрос «${q.key}»: ${m}`} />
+          <Alert
+            key={n}
+            theme="danger"
+            message={t('editor:data.otherError', { key: q.key, message: m })}
+          />
         ))}
         <GeneralError error={save.error} errors={errors} shown={shown} />
         <ErrorAlert error={run.error} />
         {result && (
           <>
-            <Text variant="subheader-1">Результат запроса «{runKey}»</Text>
+            <Text variant="subheader-1">{t('editor:data.result', { key: runKey })}</Text>
             <Table
               data={result.rows.map((r, i) => ({ ...r, __i: i }))}
               columns={columns}
               getRowDescriptor={(r) => ({ id: String(r.__i) })}
-              emptyMessage="Запрос не вернул строк"
+              emptyMessage={t('editor:data.noRows')}
               width="max"
             />
-            {result.truncated && <Text color="secondary">Показаны первые 50 строк.</Text>}
+            {result.truncated && (
+              <Text color="secondary">{t('editor:data.truncated', { n: 50 })}</Text>
+            )}
           </>
         )}
       </div>

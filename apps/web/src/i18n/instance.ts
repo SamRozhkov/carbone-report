@@ -18,6 +18,7 @@ const RU = import.meta.glob<Catalog>(
     '../../../../packages/shared/src/i18n/ru/signature.json',
     '../../../../packages/shared/src/i18n/ru/admin.json',
     '../../../../packages/shared/src/i18n/ru/templates.json',
+    '../../../../packages/shared/src/i18n/ru/editor.json',
   ],
   { eager: true, import: 'default' },
 );
@@ -29,6 +30,7 @@ const LAZY = import.meta.glob<Catalog>(
     '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/signature.json',
     '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/admin.json',
     '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/templates.json',
+    '../../../../packages/shared/src/i18n/{en,es,pt-BR,fr,de,zh-CN}/editor.json',
   ],
   { import: 'default' },
 );
@@ -52,7 +54,7 @@ export const catalogChunks = {
       const [l, n] = parsePath(path);
       return l === locale && n === ns;
     });
-    if (!entry) return Promise.reject(new Error(`нет каталога ${locale}/${ns}`));
+    if (!entry) return Promise.reject(new Error(`no catalog ${locale}/${ns}`));
     return entry[1]();
   },
 };

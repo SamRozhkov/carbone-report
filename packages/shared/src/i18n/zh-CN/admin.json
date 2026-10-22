@@ -23,10 +23,10 @@
     "users": "无法加载用户"
   },
   "roleInTable": {
-    "admin": "管理员",
-    "editor": "编辑者",
-    "access_manager": "安全管理员",
-    "user": "用户"
+    "admin": "$t(common:role.admin)",
+    "editor": "$t(common:role.editor)",
+    "access_manager": "$t(common:role.access_manager)",
+    "user": "$t(common:role.user)"
   },
   "users": {
     "add": "添加用户",

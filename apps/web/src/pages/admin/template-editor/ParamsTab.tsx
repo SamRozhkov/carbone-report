@@ -20,12 +20,14 @@ import {
 } from '@gravity-ui/uikit';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/endpoints';
 import { errorMessage, fieldErrors } from '../../../api/errors';
 import { CodeEditor } from '../../../components/CodeEditor';
 import { Field } from '../../../components/Field';
 import { GeneralError } from '../../../components/GeneralError';
 import { ParamField } from '../../../components/ParamForm';
+import { i18n } from '../../../i18n';
 import { formatOptions, parseOptions, pickParams } from '../../../lib/params';
 import { applyTemplate, useTestParams } from './editorState';
 
@@ -41,14 +43,7 @@ interface Draft {
   multiple: boolean;
 }
 
-const TYPE_OPTIONS: { value: ParamType; content: string }[] = [
-  { value: 'string', content: 'Строка' },
-  { value: 'number', content: 'Число' },
-  { value: 'date', content: 'Дата' },
-  { value: 'boolean', content: 'Да/нет' },
-  { value: 'select', content: 'Список' },
-  { value: 'query', content: 'SQL-список' },
-];
+const TYPES: ParamType[] = ['string', 'number', 'date', 'boolean', 'select', 'query'];
 
 /** Ссылки :имя в SQL (без приведений ::type). Только подсказка — зависимости определяет сервер. */
 export function sqlRefs(sql: string): string[] {
@@ -67,12 +62,12 @@ export function anyHints(sql: string, drafts: Draft[]): string[] {
   for (const n of refs.scalar) {
     const p = draft(n);
     if (p?.multiple)
-      hints.push(`«${p.label || n}» — множественный выбор: сравнивайте через = any(:${n})`);
+      hints.push(i18n.t('editor:params.hintMultiple', { label: p.label || n, name: n }));
   }
   for (const n of refs.any) {
     const p = draft(n);
     if (p && !p.multiple)
-      hints.push(`«${p.label || n}» — одно значение: сравнивайте через = :${n}`);
+      hints.push(i18n.t('editor:params.hintSingle', { label: p.label || n, name: n }));
   }
   return hints;
 }
@@ -135,6 +130,7 @@ function QueryCheck({
   saved: boolean;
   testParams: Record<string, ParamValue>;
 }) {
+  const { t } = useTranslation();
   const check = useMutation<ParamOptionsResult>({
     mutationFn: () => api.templates.paramOptions(templateId, name, testParams),
   });
@@ -144,26 +140,28 @@ function QueryCheck({
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <Button
           size="s"
-          aria-label={`Проверить: параметр ${n}`}
+          aria-label={t('editor:params.checkAria', { n })}
           disabled={!saved}
           loading={check.isPending}
           onClick={() => check.mutate()}
         >
-          Проверить
+          {t('editor:params.check')}
         </Button>
         {!saved && (
           <Text color="secondary" variant="caption-2">
-            сохраните параметры
+            {t('editor:params.saveFirst')}
           </Text>
         )}
       </div>
       {saved && check.error && <Text color="danger">{errorMessage(check.error)}</Text>}
       {r && r.waitingFor && r.waitingFor.length > 0 && (
-        <Text color="secondary">сначала задайте тестовые значения: {r.waitingFor.join(', ')}</Text>
+        <Text color="secondary">
+          {t('editor:params.waitingFor', { names: r.waitingFor.join(t('editor:listSeparator')) })}
+        </Text>
       )}
       {r && !r.waitingFor?.length && (
         <>
-          <Text color="secondary">всего вариантов: {r.options.length}</Text>
+          <Text color="secondary">{t('editor:params.optionsTotal', { n: r.options.length })}</Text>
           {r.options.length > 0 && (
             <ul style={{ margin: 0, paddingLeft: 20 }}>
               {r.options.slice(0, CHECK_SHOWN).map((o) => (
@@ -186,19 +184,21 @@ function toggleMultiple(v: ParamValue, multiple: boolean): ParamValue {
 }
 
 export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const nextId = useRef(0);
-  const makeDrafts = (t: TemplateAdminDetails) => t.params.map((p) => toDraft(p, nextId.current++));
+  const makeDrafts = (tpl: TemplateAdminDetails) =>
+    tpl.params.map((p) => toDraft(p, nextId.current++));
   const [baseline, setBaseline] = useState(template);
   const [drafts, setDrafts] = useState<Draft[]>(() => makeDrafts(template));
   const [testValues] = useTestParams(template.id, template.params);
   const testParams = pickParams(template.params, testValues);
   const strip = (ds: Draft[]) => JSON.stringify(ds.map(({ id: _id, ...rest }) => rest));
   const dirty = strip(drafts) !== strip(baseline.params.map((p) => toDraft(p, 0)));
-  const reseed = (t: TemplateAdminDetails) => {
-    setBaseline(t);
-    setDrafts(makeDrafts(t));
+  const reseed = (tpl: TemplateAdminDetails) => {
+    setBaseline(tpl);
+    setDrafts(makeDrafts(tpl));
   };
   // Шаблон обновился на сервере: без несохранённых правок подхватываем, иначе сохраняем черновик.
   const stale = template.updatedAt !== baseline.updatedAt;
@@ -206,12 +206,12 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
 
   const save = useMutation({
     mutationFn: () => api.templates.saveParams(template.id, drafts.map(toParam)),
-    onSuccess: (t) => {
-      applyTemplate(queryClient, t);
+    onSuccess: (tpl) => {
+      applyTemplate(queryClient, tpl);
       // SQL вариантов мог измениться: старые варианты из кэша не показываем.
       void queryClient.invalidateQueries({ queryKey: ['param-options', template.id] });
-      reseed(t);
-      add({ name: `tpl-params-${Date.now()}`, title: 'Параметры сохранены', theme: 'success' });
+      reseed(tpl);
+      add({ name: `tpl-params-${Date.now()}`, title: t('editor:params.saved'), theme: 'success' });
     },
   });
   const errors = fieldErrors(save.error);
@@ -259,7 +259,7 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
         {
           id: nextId.current++,
           name: `param${n}`,
-          label: 'Новый параметр',
+          label: t('editor:params.newLabel'),
           type: 'string',
           required: false,
           defaultValue: null,
@@ -272,35 +272,36 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
 
   return (
     <div className="cr-stack">
-      {drafts.length === 0 && (
-        <Text color="secondary">Параметров нет — отчёт формируется без ввода данных.</Text>
-      )}
+      {drafts.length === 0 && <Text color="secondary">{t('editor:params.empty')}</Text>}
       {drafts.map((d, i) => {
         const n = i + 1;
         return (
           <Card key={d.id} view="outlined">
             <div className="cr-param-row">
-              <Field label="Имя (в SQL — :имя)" error={errorFor(i, 'name')}>
+              <Field label={t('editor:params.name')} error={errorFor(i, 'name')}>
                 <TextInput
                   value={d.name}
                   onUpdate={(v) => update(i, { name: v })}
                   validationState={errorFor(i, 'name') ? 'invalid' : undefined}
-                  controlProps={{ 'aria-label': `Имя параметра ${n}` }}
+                  controlProps={{ 'aria-label': t('editor:params.nameAria', { n }) }}
                 />
               </Field>
-              <Field label="Подпись" error={errorFor(i, 'label')}>
+              <Field label={t('editor:params.label')} error={errorFor(i, 'label')}>
                 <TextInput
                   value={d.label}
                   onUpdate={(v) => update(i, { label: v })}
                   validationState={errorFor(i, 'label') ? 'invalid' : undefined}
-                  controlProps={{ 'aria-label': `Подпись параметра ${n}` }}
+                  controlProps={{ 'aria-label': t('editor:params.labelAria', { n }) }}
                 />
               </Field>
-              <Field label="Тип">
+              <Field label={t('editor:params.type')}>
                 <Select
-                  aria-label={`Тип параметра ${n}`}
+                  aria-label={t('editor:params.typeAria', { n })}
                   value={[d.type]}
-                  options={TYPE_OPTIONS}
+                  options={TYPES.map((value) => ({
+                    value,
+                    content: t(`editor:params.type_${value}`),
+                  }))}
                   onUpdate={([v]) =>
                     v &&
                     update(i, {
@@ -315,13 +316,13 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
               <Checkbox
                 checked={d.required}
                 onUpdate={(v) => update(i, { required: v })}
-                content="Обязательный"
+                content={t('editor:params.required')}
               />
               <div style={{ display: 'flex', gap: 4 }}>
                 <Button
                   view="flat"
                   size="s"
-                  aria-label={`Выше: параметр ${n}`}
+                  aria-label={t('editor:params.upAria', { n })}
                   disabled={i === 0}
                   onClick={() => move(i, -1)}
                 >
@@ -330,7 +331,7 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
                 <Button
                   view="flat"
                   size="s"
-                  aria-label={`Ниже: параметр ${n}`}
+                  aria-label={t('editor:params.downAria', { n })}
                   disabled={i === drafts.length - 1}
                   onClick={() => move(i, 1)}
                 >
@@ -339,7 +340,7 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
                 <Button
                   view="flat-danger"
                   size="s"
-                  aria-label={`Удалить параметр ${n}`}
+                  aria-label={t('editor:params.removeAria', { n })}
                   onClick={() => edit((ds) => ds.filter((_, j) => j !== i))}
                 >
                   <Icon data={TrashBin} />
@@ -349,7 +350,7 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
             <div className="cr-param-extra">
               <div>
                 <ParamField
-                  label="По умолчанию"
+                  label={t('editor:params.default')}
                   param={{ ...toParam(d), required: false }}
                   value={d.defaultValue}
                   error={errorFor(i, 'defaultValue')}
@@ -357,31 +358,24 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
                 />
               </div>
               {d.type === 'select' && (
-                <Field
-                  label="Варианты: значение=подпись, по одному на строку"
-                  error={errorFor(i, 'options')}
-                >
+                <Field label={t('editor:params.options')} error={errorFor(i, 'options')}>
                   <TextArea
                     value={d.optionsText}
                     onUpdate={(v) => update(i, { optionsText: v })}
                     minRows={3}
                     validationState={errorFor(i, 'options') ? 'invalid' : undefined}
-                    controlProps={{ 'aria-label': `Варианты параметра ${n}` }}
+                    controlProps={{ 'aria-label': t('editor:params.optionsAria', { n }) }}
                   />
                 </Field>
               )}
               {d.type === 'query' && (
                 <div className="cr-stack">
-                  <Field
-                    group
-                    label="SQL вариантов: колонки value и label"
-                    error={errorFor(i, 'sql')}
-                  >
+                  <Field group label={t('editor:params.sql')} error={errorFor(i, 'sql')}>
                     <CodeEditor
                       language="sql"
                       value={d.sql}
                       onChange={(v) => update(i, { sql: v })}
-                      ariaLabel={`SQL параметра ${n}`}
+                      ariaLabel={t('editor:params.sqlAria', { n })}
                       height={120}
                     />
                   </Field>
@@ -393,10 +387,14 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
                         defaultValue: toggleMultiple(d.defaultValue, v),
                       })
                     }
-                    content="множественный выбор"
+                    content={t('editor:params.multiple')}
                   />
                   {errorFor(i, 'multiple') && <Text color="danger">{errorFor(i, 'multiple')}</Text>}
-                  <Text color="secondary">зависит от: {sqlRefs(d.sql).join(', ') || '—'}</Text>
+                  <Text color="secondary">
+                    {t('editor:params.dependsOn', {
+                      names: sqlRefs(d.sql).join(t('editor:listSeparator')) || '—',
+                    })}
+                  </Text>
                   {anyHints(d.sql, drafts).map((h, k) => (
                     <Text key={k} color="warning">
                       {h}
@@ -420,19 +418,15 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <Button onClick={addParam}>
           <Icon data={Plus} />
-          Добавить параметр
+          {t('editor:params.add')}
         </Button>
         <Button view="action" onClick={() => save.mutate()} loading={save.isPending}>
-          Сохранить параметры
+          {t('editor:params.save')}
         </Button>
-        {dirty && stale && (
-          <Text color="warning">
-            Шаблон изменился на сервере — сохранение перезапишет изменения
-          </Text>
-        )}
+        {dirty && stale && <Text color="warning">{t('editor:draft.stale')}</Text>}
         {dirty && (
           <>
-            <Text color="warning">Есть несохранённые изменения</Text>
+            <Text color="warning">{t('editor:draft.unsaved')}</Text>
             <Button
               view="flat"
               onClick={() => {
@@ -440,7 +434,7 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
                 reseed(template);
               }}
             >
-              Отменить
+              {t('editor:draft.discard')}
             </Button>
           </>
         )}

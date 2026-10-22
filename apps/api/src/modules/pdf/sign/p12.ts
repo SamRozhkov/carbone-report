@@ -3,19 +3,23 @@ import type { CertificateInfo } from '@carbone-reports/shared';
 import type * as asn1js from 'asn1js';
 import forge from 'node-forge';
 import * as pkijs from 'pkijs';
+import { ruText } from '../../../lib/errors';
 
 export const MAX_P12_BYTES = 50 * 1024;
 /** Допустимые алгоритмы хеша: единый список для типа и схемы ответа потока. */
 export const DIGEST_ALGS = ['SHA-256', 'SHA-384'] as const;
 export type DigestAlg = (typeof DIGEST_ALGS)[number];
 
-/** Ошибка у поля формы загрузки сертификата (§39.1); сообщение — для пользователя, без пароля. */
+/**
+ * Ошибка у поля формы загрузки сертификата (§39.1); сообщение — для пользователя, без пароля:
+ * key — ключ каталога errors (переводится на язык запроса), message — тот же текст по-русски.
+ */
 export class P12Error extends Error {
   constructor(
     public readonly field: 'file' | 'password',
-    message: string,
+    public readonly key: string,
   ) {
-    super(message);
+    super(ruText(key));
     this.name = 'P12Error';
   }
 }
@@ -30,10 +34,10 @@ export interface P12Contents {
   digestAlg: DigestAlg;
 }
 
-const BAD_FILE = 'неверный пароль или повреждённый файл';
-const ONE_KEY = 'в файле должен быть один ключ и его сертификат';
-const UNSUPPORTED = 'алгоритм ключа не поддерживается';
-const GOST = 'ГОСТ-сертификаты подписываются через КриптоПро — пока не поддерживается';
+const BAD_FILE = 'p12.badFile';
+const ONE_KEY = 'p12.oneKey';
+const UNSUPPORTED = 'p12.unsupportedAlg';
+const GOST = 'p12.gost';
 
 /** Начала содержимого OID алгоритмов ГОСТ: 1.2.643.2.2.* (КриптоПро) и 1.2.643.7.1.* (ГОСТ Р 34.10/34.11-2012). */
 const GOST_ARCS = [
@@ -67,7 +71,7 @@ const toDer = (a: forge.asn1.Asn1) => Buffer.from(forge.asn1.toDer(a).getBytes()
  */
 export const MAX_P12_ITERATIONS = 100_000;
 export const MAX_P12_TOTAL_ITERATIONS = 300_000;
-const TOO_MANY_ITERATIONS = 'файл сертификата не поддерживается: слишком много итераций шифрования';
+const TOO_MANY_ITERATIONS = 'p12.tooManyIterations';
 const tooManyIterations = () => new P12Error('file', TOO_MANY_ITERATIONS);
 
 type Asn1 = forge.asn1.Asn1;
@@ -262,7 +266,7 @@ export function certInfo(der: Uint8Array, keyAlgName: string): CertificateInfo {
 
 /** Открывает `.p12` паролем и проверяет пригодность для подписи (§39.1). */
 export function readP12(file: Uint8Array, password: string, now = new Date()): P12Contents {
-  if (file.length > MAX_P12_BYTES) throw new P12Error('file', 'файл больше 50 КБ');
+  if (file.length > MAX_P12_BYTES) throw new P12Error('file', 'p12.fileTooLarge');
   if (hasGostOid(file)) throw new P12Error('file', GOST);
   const p12 = openPfx(file, password);
   const oids = forge.pki.oids;
@@ -309,8 +313,8 @@ export function readP12(file: Uint8Array, password: string, now = new Date()): P
   if (!alg) throw new P12Error('file', UNSUPPORTED);
   const cert = certs[idx]!;
   const x = new X509Certificate(cert);
-  if (now < new Date(x.validFrom)) throw new P12Error('file', 'сертификат ещё не действует');
-  if (now > new Date(x.validTo)) throw new P12Error('file', 'срок действия сертификата истёк');
+  if (now < new Date(x.validFrom)) throw new P12Error('file', 'sign.certNotYetValid');
+  if (now > new Date(x.validTo)) throw new P12Error('file', 'sign.certExpired');
   let signing: boolean;
   let info: CertificateInfo;
   try {
@@ -319,7 +323,7 @@ export function readP12(file: Uint8Array, password: string, now = new Date()): P
   } catch {
     throw new P12Error('file', ONE_KEY);
   }
-  if (!signing) throw new P12Error('file', 'сертификат не предназначен для подписи');
+  if (!signing) throw new P12Error('file', 'sign.certNotForSigning');
   return {
     key,
     cert,

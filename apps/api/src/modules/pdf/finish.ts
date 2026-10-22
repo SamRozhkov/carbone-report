@@ -100,7 +100,7 @@ export async function finishPdf(
           throw new AppError(
             'STORAGE_ERROR',
             502,
-            `приложенный файл «${a.name}» недоступен`,
+            { key: 'pdf.attachmentUnavailable', params: { name: a.name } },
             undefined,
             e,
           );
@@ -110,6 +110,6 @@ export async function finishPdf(
     out = await deps.pdf(out, buildPdfJob(p, data, new Date(), files), timeoutMs());
   }
   if (p.protection) out = await deps.pdfProtect(out, p.protection, timeoutMs());
-  if (out.length > MAX_PDF_RESULT_BYTES) throw badRequest('итоговый PDF больше 100 МБ');
+  if (out.length > MAX_PDF_RESULT_BYTES) throw badRequest('pdf.resultTooLarge', { size: 100 });
   return out;
 }

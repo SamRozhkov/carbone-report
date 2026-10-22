@@ -12,6 +12,8 @@
  * Настоящего плагина в тестах нет — обёртка нарочно тонкая, типы описывают только используемое.
  */
 
+import { i18n } from '../i18n';
+
 /** Значение асинхронного API: свойство плагина может быть промисом или уже значением. */
 type Async<T> = T | Promise<T>;
 
@@ -103,7 +105,7 @@ export interface CadesCert {
 
 export class CadesUnavailableError extends Error {
   constructor() {
-    super('Не найден КриптоПро ЭЦП Browser plug-in или КриптоПро CSP');
+    super(i18n.t('signature:cades.unavailable'));
     this.name = 'CadesUnavailableError';
   }
 }
@@ -200,7 +202,7 @@ function createCades(plugin: CadesPlugin, about: CadesAbout): Cades {
         return true;
       });
       const cert = found.cert;
-      if (!cert) throw new Error('Сертификат не найден в хранилище «Личное»');
+      if (!cert) throw new Error(i18n.t('signature:cades.certificateNotFound'));
       const signer = await plugin.CreateObjectAsync('CAdESCOM.CPSigner');
       await signer.propset_Certificate(cert);
       // Только сертификат подписанта: по умолчанию (INCLUDE_CHAIN_EXCEPT_ROOT) SignHash строит цепочку и
@@ -293,8 +295,8 @@ const TSA_RE = /TSP|time-?stamp|штамп\S* времени|метк\S* вре�
 export function cadesErrorText(e: unknown): string {
   const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : '';
   const code = /0x([0-9a-f]{8})/i.exec(msg)?.[1]?.toUpperCase();
-  if (code === '8010006E') return 'Подписание отменено пользователем';
-  if (code === '8010006B') return 'Неверный ПИН-код';
-  if (TSA_RE.test(msg)) return 'Служба меток времени недоступна — повторите позже';
-  return msg || 'неизвестная ошибка плагина';
+  if (code === '8010006E') return i18n.t('signature:cades.cancelled');
+  if (code === '8010006B') return i18n.t('signature:cades.wrongPin');
+  if (TSA_RE.test(msg)) return i18n.t('signature:cades.tsaUnavailable');
+  return msg || i18n.t('signature:cades.unknown');
 }

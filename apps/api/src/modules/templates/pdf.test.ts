@@ -1,5 +1,6 @@
 import { PdfOptions } from '@carbone-reports/shared';
 import { describe, expect, it } from 'vitest';
+import { ruDetails } from '../../lib/errors';
 import { pdfaMessage, pdfOptionIssues } from './pdf';
 
 describe('pdfOptionIssues', () => {
@@ -9,7 +10,7 @@ describe('pdfOptionIssues', () => {
       pageNumbers: {},
       metadata: { title: 'Счёт № {d.number}' },
     });
-    expect(pdfOptionIssues(o)).toEqual([]);
+    expect(ruDetails(pdfOptionIssues(o))).toEqual([]);
   });
 
   it('символы вне шрифта, форматтеры, теги в нумерации — у полей', () => {
@@ -18,7 +19,7 @@ describe('pdfOptionIssues', () => {
       pageNumbers: { format: '{page} {d.x}' },
       metadata: { title: '{d.sum:formatC}', author: '中', subject: '', keywords: '' },
     });
-    expect(pdfOptionIssues(o)).toEqual([
+    expect(ruDetails(pdfOptionIssues(o))).toEqual([
       { path: '/watermark/text', message: 'символ «😀» не поддерживается шрифтом PDF' },
       { path: '/pageNumbers/format', message: 'в нумерации теги {d.…} не поддерживаются' },
       { path: '/metadata/title', message: 'в полях PDF теги без форматтеров: {d.sum:formatC}' },
@@ -27,6 +28,8 @@ describe('pdfOptionIssues', () => {
   });
 
   it('pdfaMessage', () => {
-    expect(pdfaMessage('скан.pdf')).toBe('PDF/A включён: файл «скан.pdf» не в формате PDF/A');
+    expect(ruDetails(pdfaMessage('скан.pdf'))).toBe(
+      'PDF/A включён: файл «скан.pdf» не в формате PDF/A',
+    );
   });
 });

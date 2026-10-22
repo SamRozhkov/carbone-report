@@ -18,7 +18,7 @@ import { ACCESS_ROLES, deleteRight, NO_EDIT_RIGHT } from './permissions';
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
-const USER_NOT_FOUND = 'пользователь не найден';
+const USER_NOT_FOUND = 'notFound.user';
 
 const DirectoryQuery = z.object({ role: Role.optional() });
 
@@ -27,7 +27,7 @@ async function editorsOf(db: Db | Tx, templateId: string): Promise<TemplateEdito
     .select({ ownerId: templates.ownerId })
     .from(templates)
     .where(eq(templates.id, templateId));
-  if (!t) throw notFound('шаблон');
+  if (!t) throw notFound('template');
   const rows = await db
     .select({ id: templateEditors.userId })
     .from(templateEditors)
@@ -42,7 +42,7 @@ async function lockTemplate(tx: Tx, id: string): Promise<{ ownerId: string | nul
     .from(templates)
     .where(eq(templates.id, id))
     .for('update');
-  if (!t) throw notFound('шаблон');
+  if (!t) throw notFound('template');
   return t;
 }
 
@@ -86,9 +86,8 @@ export function registerTemplateEditorRoutes(app: App, deps: AppDeps, guards: Gu
         if (found.length !== userIds.length) throw badRequest(USER_NOT_FOUND);
         // Роль проверяется только у добавляемых: записи понижённых остаются, но не действуют (§43.1).
         if (found.some((u) => !current.has(u.id) && u.role !== 'editor'))
-          throw badRequest('можно выдать только пользователю с ролью «Редактор»');
-        if (t.ownerId && userIds.includes(t.ownerId))
-          throw badRequest('владелец уже может править шаблон');
+          throw badRequest('access.grantEditorOnly');
+        if (t.ownerId && userIds.includes(t.ownerId)) throw badRequest('access.ownerAlreadyEditor');
         await tx.delete(templateEditors).where(eq(templateEditors.templateId, id));
         if (userIds.length > 0) {
           await tx
@@ -114,8 +113,7 @@ export function registerTemplateEditorRoutes(app: App, deps: AppDeps, guards: Gu
         await lockTemplate(tx, id);
         const [u] = await loadUsers(tx, [userId]);
         if (!u) throw badRequest(USER_NOT_FOUND);
-        if (u.role !== 'editor')
-          throw badRequest('владельцем может быть только пользователь с ролью «Редактор»');
+        if (u.role !== 'editor') throw badRequest('access.ownerEditorOnly');
         await tx.update(templates).set({ ownerId: userId }).where(eq(templates.id, id));
         await tx
           .delete(templateEditors)

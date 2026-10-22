@@ -3,6 +3,7 @@ import {
   buildChartOption,
   ChartDataError,
   chartLabel,
+  chartLimit,
   chartLimitError,
   chartNumberFormatter,
   chartValue,
@@ -12,6 +13,13 @@ import {
   TemplateChartList,
   type TemplateChart as Chart,
 } from './charts';
+import { createTranslator } from './i18n/server';
+
+/** Сообщение zod по-русски: ключ `v:…` — из каталога validation. */
+const ruMessage = (i: { message: string; params?: Record<string, unknown> }) =>
+  i.message.startsWith('v:')
+    ? createTranslator('ru')(`validation:${i.message.slice(2)}`, i.params)
+    : i.message;
 
 const NB = ' ';
 const FMT = `cr:number:${JSON.stringify({ decimals: null, thousands: false, suffix: '' })}`;
@@ -30,7 +38,10 @@ const ROWS = [
   { month: 'Мар', total: null, cnt: '1e3' },
 ];
 const issues = (v: unknown) =>
-  (TemplateChart.safeParse(v).error?.issues ?? []).map((i) => [i.path.join('.'), i.message]);
+  (TemplateChart.safeParse(v).error?.issues ?? []).map((i) => [
+    i.path.join('.'),
+    ruMessage(i as never),
+  ]);
 
 describe('TemplateChart: схема (§35.3)', () => {
   it('минимальный график — значения по умолчанию', () => {
@@ -108,7 +119,7 @@ describe('TemplateChart: схема (§35.3)', () => {
       ).success,
     ).toBe(false);
     const dup = TemplateChartList.safeParse([c, { ...c }]);
-    expect(dup.error?.issues.map((i) => [i.path.join('.'), i.message])).toEqual([
+    expect(dup.error?.issues.map((i) => [i.path.join('.'), ruMessage(i as never)])).toEqual([
       ['1.key', 'ключ графика «a» повторяется'],
     ]);
   });
@@ -386,6 +397,12 @@ describe('chartLimitError: лимиты движка (§35.2, R9; тексты �
   });
   it('больше 20 рядов', () => {
     expect(chartLimitError(value({ series: series(21, 1) }))).toBe('в графике больше 20 рядов');
+  });
+  it('chartLimit — вид лимита для перевода в вебе', () => {
+    expect(chartLimit(value({ series: series(20, 500) }))).toBeNull();
+    expect(chartLimit(value({ series: series(21, 1) }))).toBe('series');
+    expect(chartLimit(value({ series: series(2, 5001) }))).toBe('points');
+    expect(chartLimit(value({ series: [], pad: 'я'.repeat(600000) }))).toBe('bytes');
   });
   it('больше 10 000 точек: series.data и dataset.source (массив и объект колонок)', () => {
     expect(chartLimitError(value({ series: series(2, 5001) }))).toBe(

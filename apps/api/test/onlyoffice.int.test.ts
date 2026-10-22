@@ -162,6 +162,24 @@ describe('editor-config', () => {
     expect(forbidden.statusCode).toBe(403);
   });
 
+  it('язык и регион редактора — по языку запроса (§44.3)', async () => {
+    const config = async (headers: Record<string, string>) =>
+      (
+        await t.app.inject({
+          method: 'GET',
+          url: `/api/templates/${tplId}/editor-config?holder=${holder}`,
+          headers: { cookie: admin, ...headers },
+        })
+      ).json().editorConfig;
+    expect(await config({})).toMatchObject({ lang: 'ru', region: 'ru-RU' });
+    expect(await config({ 'x-locale': 'fr' })).toMatchObject({ lang: 'fr', region: 'fr-FR' });
+    expect(await config({ 'x-locale': 'pt-BR' })).toMatchObject({ lang: 'pt-BR', region: 'pt-BR' });
+    expect(await config({ 'accept-language': 'zh-TW' })).toMatchObject({
+      lang: 'zh-CN',
+      region: 'zh-CN',
+    });
+  });
+
   it('файл отдаётся по токену из конфига и не отдаётся без него или с токеном другого шаблона', async () => {
     const cfg = (
       await t.app.inject({

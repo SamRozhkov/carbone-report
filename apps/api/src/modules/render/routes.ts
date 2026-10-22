@@ -16,8 +16,8 @@ export function registerRenderRoutes(app: App, files: RenderHandoff): void {
     },
     async (req, reply) => {
       const got = await files.take(req.params.id, req.query.t ?? '');
-      if (got === 'forbidden') throw new AppError('FORBIDDEN', 403, 'неверный токен файла');
-      if (got === 'gone') throw new AppError('NOT_FOUND', 404, 'файл уже выдан или устарел');
+      if (got === 'forbidden') throw new AppError('FORBIDDEN', 403, { key: 'file.invalidToken' });
+      if (got === 'gone') throw new AppError('NOT_FOUND', 404, { key: 'file.gone' });
       return reply.header('content-type', MIME[got.ext]).send(got.file);
     },
   );

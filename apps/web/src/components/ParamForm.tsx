@@ -17,6 +17,7 @@ import {
 } from '@gravity-ui/uikit';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/errors';
 import { isEmptyParam } from '../lib/params';
@@ -33,6 +34,7 @@ export interface ParamFieldProps {
 }
 
 export function ParamField({ param, value, onChange, error, disabled, label }: ParamFieldProps) {
+  const { t } = useTranslation();
   const caption = (label ?? param.label) + (param.required && !label ? ' *' : '');
   const invalid = error ? ('invalid' as const) : undefined;
 
@@ -106,7 +108,7 @@ export function ParamField({ param, value, onChange, error, disabled, label }: P
         <Field
           label={caption}
           error={error}
-          hint={param.multiple ? 'несколько значений — через запятую' : undefined}
+          hint={param.multiple ? t('common:param.multipleHint') : undefined}
         >
           <TextInput
             value={
@@ -195,6 +197,7 @@ function QueryParamField({
   error,
   disabled,
 }: QueryParamFieldProps) {
+  const { t } = useTranslation();
   const caption = param.label + (param.required ? ' *' : '');
   const value = values[param.name] ?? null;
   const parentParams = Object.fromEntries(param.dependsOn.map((n) => [n, values[n] ?? null]));
@@ -256,7 +259,9 @@ function QueryParamField({
     : (Array.isArray(value) ? value : [value]).map((v) => String(v));
   const label = (n: string) => params.find((p) => p.name === n)?.label ?? n;
   const hint =
-    waiting.length > 0 ? `сначала выберите: ${waiting.map(label).join(', ')}` : undefined;
+    waiting.length > 0
+      ? t('common:param.waitingFor', { names: waiting.map(label).join(', ') })
+      : undefined;
   const shownError = error ?? (options.error ? errorMessage(options.error) : undefined);
   const allValues = (data?.options ?? []).map((o) => String(o.value));
   const allSelected = allValues.length > 0 && allValues.every((v) => selected.includes(v));
@@ -271,7 +276,7 @@ function QueryParamField({
           disabled={allValues.length === 0 || loading}
           onUpdate={() => onChange(allSelected ? null : allValues.map(toValue))}
         >
-          {allSelected ? 'Снять все' : 'Выбрать все'}
+          {allSelected ? t('common:param.deselectAll') : t('common:param.selectAll')}
         </Checkbox>
       </div>
       {renderFilter()}

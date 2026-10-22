@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mockApi } from '../test/utils';
 import { apiJson, ApiRequestError } from './client';
 import { isMaintenanceReported, resetMaintenance } from './maintenance';
@@ -73,5 +73,21 @@ describe('режим обслуживания', () => {
     } finally {
       resetMaintenance();
     }
+  });
+});
+
+describe('X-Locale', () => {
+  it('каждый запрос несёт текущий язык интерфейса', async () => {
+    const { changeLocale } = await import('../i18n');
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response(null, { status: 204 }));
+    const header = () =>
+      (fetchSpy.mock.lastCall?.[1]?.headers as Record<string, string>)['x-locale'];
+    await apiJson('/api/x');
+    expect(header()).toBe('ru');
+    await changeLocale('de', { persist: 'none' });
+    await apiJson('/api/x', { method: 'POST', json: {} });
+    expect(header()).toBe('de');
   });
 });

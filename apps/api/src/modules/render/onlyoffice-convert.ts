@@ -18,10 +18,10 @@ export type Converter = (req: ConvertRequest) => Promise<Buffer>;
 const DEFAULT_MAX_BYTES = 100 * 1024 * 1024;
 
 const unavailable = (cause?: unknown) =>
-  new AppError('CONVERT_ERROR', 502, 'сервис конвертации недоступен', undefined, cause);
+  new AppError('CONVERT_ERROR', 502, { key: 'convert.unavailable' }, undefined, cause);
 const failed = (code: number) =>
-  new AppError('CONVERT_ERROR', 502, `ошибка конвертации (код ${code})`);
-const timeout = () => new AppError('TIMEOUT', 504, 'превышено время ожидания');
+  new AppError('CONVERT_ERROR', 502, { key: 'convert.failed', params: { code } });
+const timeout = () => new AppError('TIMEOUT', 504, { key: 'timeout' });
 
 /** Перевод отчёта в другой формат через Conversion API Document Server (POST /converter). */
 export function createOnlyOfficeConverter(opts: {

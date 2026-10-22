@@ -1,0 +1,92 @@
+{
+  "list": {
+    "selectAll": "Select all templates",
+    "select": "Select “{{name}}”",
+    "editingBy": "Being edited by {{login}}",
+    "type": "Type",
+    "updatedAt": "Modified",
+    "open": "Open",
+    "duplicate": "Duplicate",
+    "download": "Download",
+    "exportSelected": "Export ({{n}})",
+    "import": "Import from archive",
+    "create": "Create template",
+    "empty": "No templates yet",
+    "duplicated": "Copy “{{name}}” created",
+    "deleteTitle": "Delete template?",
+    "deleteText": "Template “{{name}}” will be deleted together with its queries and parameters. The run history will be kept."
+  },
+  "export": {
+    "button": "Export",
+    "failed": "Could not export",
+    "tooMany": "Too many templates",
+    "tooManyText": "You can export at most {{max}} templates at a time; {{selected}} selected."
+  },
+  "create": {
+    "title": "New template",
+    "noDatasourcesAdmin": "First add a data source in the <page>“Data sources”</page> section.",
+    "noDatasources": "There are no data sources yet — ask an administrator to add one.",
+    "datasource": "Data source",
+    "file": "File",
+    "blankDocx": "Blank DOCX",
+    "blankXlsx": "Blank XLSX",
+    "upload": "Upload file",
+    "fileAria": "Template file"
+  },
+  "importAction": {
+    "create": "create",
+    "update": "update",
+    "copy": "copy",
+    "skip": "skip"
+  },
+  "importResult": {
+    "create": "created",
+    "update": "updated",
+    "copy": "copy created",
+    "skip": "skipped"
+  },
+  "import": {
+    "title": "Import templates from archive",
+    "tooBig": "The archive is larger than 50 MB and cannot be uploaded.",
+    "tooBigFile": "The archive is larger than 50 MB and cannot be uploaded. Size of “{{name}}”: {{size}} MB.",
+    "noteUnavailable": "“{{was}}” is no longer available — “{{now}}” is selected, please check",
+    "noteTargetGone": "The template selected for update was deleted or renamed — check your choice",
+    "noteTargetChanged": "The template was changed after the previous preview — check that it can be replaced",
+    "noteDatasourceGone": "The selected data source was deleted",
+    "notesTwo": "{{first}}. {{second}}",
+    "template": "Template",
+    "action": "Action",
+    "datasource": "Data source",
+    "result": "Result",
+    "missingGroups": "Missing groups: {{groups}} — access will not be granted",
+    "pdfPassword": "The PDF password is not transferred: a new template will have no password; on update, the current template keeps its password",
+    "lockedBy": "{{login}} is editing the template: the update will be rejected while the editor is open",
+    "categorySkipped": "Category “{{category}}” does not exist here — it will not be created, and the template will be imported without it",
+    "categoryCreated": "Category “{{category}}” will be created",
+    "actionAria": "Action: {{name}}",
+    "targetAria": "Template to update: {{name}}",
+    "targetUpdatedAt": "modified {{date}}",
+    "updateNote": "The file, queries, parameters, access groups, category, availability to everyone and data source will be replaced with the data from the archive",
+    "datasourceAria": "Data source: {{name}}",
+    "chooseDatasource": "Select a data source",
+    "inArchive": "In the archive: “{{name}}” — {{problem}}",
+    "inArchiveHost": "In the archive: “{{name}}” ({{host}}) — {{problem}}",
+    "datasourceAmbiguous": "several data sources with this name were found — choose one",
+    "datasourceNotFound": "not found here",
+    "fileAria": "Archive file",
+    "datasourcesFailed": "Could not get the list of data sources",
+    "rejected": "Archive rejected",
+    "archiveInfo": "App version in the archive: {{version}}, exported {{date}}",
+    "applyFailed": "Could not import",
+    "retry": "Repeat preview",
+    "apply": "Import"
+  },
+  "access": {
+    "noCategory": "No category",
+    "groupsHint": "groups that can see the template in addition to access through the category",
+    "adminOnlyAfterSave": "After saving, the template will be available only to administrators",
+    "adminOnlyNow": "The template is currently available only to administrators",
+    "saved": "Access saved",
+    "dialogTitle": "Access to template “{{name}}”"
+  }
+}

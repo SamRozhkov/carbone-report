@@ -8,8 +8,8 @@ import { OID } from './cms';
 export type TsaClient = (imprint: Uint8Array, deadline: number) => Promise<Uint8Array>;
 
 export const tsaUnavailable = (cause?: unknown) =>
-  new AppError('TSA_UNAVAILABLE', 502, 'служба меток времени недоступна', undefined, cause);
-const timeout = () => new AppError('TIMEOUT', 504, 'превышено время ожидания');
+  new AppError('TSA_UNAVAILABLE', 502, { key: 'sign.tsaUnavailable' }, undefined, cause);
+const timeout = () => new AppError('TIMEOUT', 504, { key: 'timeout' });
 
 const ab = (b: Uint8Array) => new Uint8Array(b).slice().buffer;
 const same = (a: ArrayBuffer | Uint8Array, b: Uint8Array) =>

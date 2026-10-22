@@ -1,0 +1,76 @@
+{
+  "invalidId": "identifiant non valide",
+  "invalidDatasourceId": "identifiant de source de données non valide",
+  "invalidTemplateId": "identifiant de modèle non valide",
+  "identName": "nom : lettres latines, chiffres et _",
+  "identKey": "clé : lettres latines, chiffres et _",
+  "reservedName": "nom réservé",
+  "nameRequired": "indiquez le nom",
+  "backupName": "nom de sauvegarde non valide",
+  "recoveryCodeRequired": "saisissez le code de récupération",
+  "query": {
+    "paramsReserved": "la clé « params » est réservée"
+  },
+  "param": {
+    "selectNeedsOption": "select nécessite au moins une option",
+    "sqlRequired": "indiquez la requête SQL des options",
+    "sqlNoOptions": "les options d’une liste SQL sont définies par la requête",
+    "multipleDefaults": "plusieurs valeurs ne sont autorisées qu’avec le choix multiple",
+    "sqlOnlyQuery": "SQL n’est autorisé que pour le type « Liste SQL »",
+    "multipleOnlyQuery": "le choix multiple n’est autorisé que pour le type « Liste SQL »",
+    "invalidValue": "valeur non autorisée"
+  },
+  "datasource": {
+    "caOnlyVerify": "un certificat d’AC n’est indiqué que pour le mode « SSL avec vérification »",
+    "pemExpected": "un certificat au format PEM est attendu"
+  },
+  "chart": {
+    "columnRequired": "choisissez une colonne",
+    "keyTooLong": "clé — jusqu’à 64 caractères",
+    "colorHex": "couleur — #RRGGBB",
+    "queryRequired": "choisissez une requête",
+    "seriesRequired": "ajoutez une série",
+    "tooManySeries": "séries — au plus {{maximum}}",
+    "stackedOnly": "empilement — uniquement pour les colonnes, lignes et aires",
+    "smoothOnly": "lissage — uniquement pour les lignes, aires et graphiques combinés",
+    "kindOnlyCombo": "type et axe de la série — uniquement pour les graphiques combinés",
+    "pieOneSeries": "graphiques en secteurs et en anneau — exactement une série",
+    "pieNoSplit": "les séries issues des données ne sont pas disponibles pour les graphiques en secteurs et en anneau",
+    "splitOneSeries": "avec des séries issues des données — exactement une série (colonne de valeurs)",
+    "splitColors": "les couleurs des séries issues des données proviennent de la palette",
+    "axisY2Only": "axe secondaire — uniquement pour un graphique combiné avec une série sur l’axe de droite",
+    "tooManyCharts": "graphiques par modèle — au plus {{maximum}}",
+    "keyDuplicate": "la clé de graphique « {{key}} » est en double",
+    "chartsKeyTaken": "la clé charts est occupée par les graphiques"
+  },
+  "pdf": {
+    "textRequired": "saisissez le texte",
+    "pageTagRequired": "{page} est requis — le numéro de page",
+    "pdfaProtection": "PDF/A est incompatible avec un mot de passe et des restrictions",
+    "passwordLength": "mot de passe — de {{min}} à {{max}} caractères",
+    "passwordControl": "le mot de passe contient des caractères non autorisés",
+    "passwordDash": "le mot de passe ne peut pas commencer par « - »",
+    "signatureProtection": "La signature est incompatible avec un mot de passe et des restrictions",
+    "tagFormatter": "dans les champs PDF, seules les balises sans formateurs sont autorisées : {{tag}}",
+    "attachmentNotPdfa": "PDF/A est activé : le fichier « {{name}} » n’est pas au format PDF/A"
+  },
+  "transfer": {
+    "sha256": "un sha256 en hexadécimal est attendu",
+    "formatUnavailable": "le format {{format}} n’est pas disponible pour .{{ext}}",
+    "fileExt": "le fichier du modèle doit avoir l’extension .{{ext}}",
+    "groupDuplicate": "le groupe « {{name}} » est en double",
+    "queryDuplicate": "la clé de requête « {{key}} » est en double",
+    "paramDuplicate": "le paramètre « {{name}} » est en double",
+    "chartDuplicate": "la clé de graphique « {{key}} » est en double",
+    "chartNoQuery": "pas de requête « {{query}} » dans le modèle de l’archive",
+    "chartQueryList": "la requête « {{query}} » doit renvoyer une liste de lignes",
+    "nameDuplicate": "le nom « {{name}} » apparaît plusieurs fois dans l’archive",
+    "pathExpected": "le chemin {{path}} est attendu"
+  },
+  "import": {
+    "targetRequired": "indiquez le modèle à mettre à jour",
+    "targetUpdatedAtRequired": "indiquez l’heure de modification issue de l’aperçu",
+    "targetOnlyUpdate": "le modèle à mettre à jour n’est indiqué que pour « mettre à jour »",
+    "targetUpdatedAtOnlyUpdate": "l’heure de modification n’est indiquée que pour « mettre à jour »"
+  }
+}

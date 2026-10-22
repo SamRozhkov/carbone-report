@@ -2,6 +2,7 @@ import type { RunSignature } from '@carbone-reports/shared';
 import { Alert, Dialog, Link, Loader, RadioGroup, Text } from '@gravity-ui/uikit';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../api/client';
 import { api } from '../api/endpoints';
 import { formatDate } from '../lib/format';
@@ -9,30 +10,26 @@ import { CadesUnavailableError, cadesErrorText, loadCades } from '../lib/cades';
 
 const PLUGIN_URL = 'https://www.cryptopro.ru/products/cades/plugin';
 const CSP_URL = 'https://www.cryptopro.ru/products/csp';
-export const GOST_AUTHENTICITY_NOTE =
-  'Подлинность сертификата проверяется сервисом проверки подписи (например, Госуслуги)';
 
 /** Ошибка сервера — его текстом (§39.3), ошибка плагина — понятным текстом (§42.7). */
 const signErrorText = (e: unknown) =>
   e instanceof ApiRequestError ? e.message : cadesErrorText(e);
 
 function Unavailable() {
+  const { t } = useTranslation();
   return (
     <Alert
       theme="danger"
-      title="Не найден КриптоПро ЭЦП Browser plug-in или КриптоПро CSP"
+      title={t('signature:cades.unavailable')}
       message={
-        <>
-          Установите{' '}
-          <Link href={PLUGIN_URL} target="_blank" rel="noopener noreferrer">
-            КриптоПро ЭЦП Browser plug-in
-          </Link>{' '}
-          (с расширением для браузера) и{' '}
-          <Link href={CSP_URL} target="_blank" rel="noopener noreferrer">
-            КриптоПро CSP
-          </Link>
-          . Когда браузер спросит, разрешите сайту доступ к плагину, затем обновите страницу.
-        </>
+        <Trans
+          t={t}
+          i18nKey="signature:dialog.unavailableText"
+          components={{
+            plugin: <Link href={PLUGIN_URL} target="_blank" rel="noopener noreferrer" />,
+            csp: <Link href={CSP_URL} target="_blank" rel="noopener noreferrer" />,
+          }}
+        />
       }
     />
   );
@@ -45,6 +42,7 @@ export function SignGostDialog(props: {
   onClose: () => void;
   onSigned: (s: RunSignature) => void;
 }) {
+  const { t } = useTranslation();
   const [picked, setPicked] = useState<string | null>(null);
   const plugin = useQuery({
     queryKey: ['cades-certificates'],
@@ -83,7 +81,7 @@ export function SignGostDialog(props: {
     body = (
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <Loader size="s" />
-        <Text color="secondary">Подключение к КриптоПро…</Text>
+        <Text color="secondary">{t('signature:dialog.connecting')}</Text>
       </div>
     );
   } else if (plugin.error) {
@@ -94,17 +92,12 @@ export function SignGostDialog(props: {
         <Alert theme="danger" message={cadesErrorText(plugin.error)} />
       );
   } else if (certs.length === 0) {
-    body = (
-      <Alert
-        theme="warning"
-        message="Нет действующих сертификатов ГОСТ — установите сертификат в КриптоПро"
-      />
-    );
+    body = <Alert theme="warning" message={t('signature:dialog.noCertificates')} />;
   } else {
     body = (
       <RadioGroup
         direction="vertical"
-        aria-label="Сертификат"
+        aria-label={t('signature:dialog.certificate')}
         value={thumbprint ?? undefined}
         onUpdate={setPicked}
         disabled={sign.isPending}
@@ -114,7 +107,10 @@ export function SignGostDialog(props: {
             <span>
               {c.subjectCn}
               <Text as="div" color="secondary" variant="caption-2">
-                {c.issuerCn}, действителен до {formatDate(c.validTo.toISOString())}
+                {t('signature:dialog.validUntil', {
+                  name: c.issuerCn,
+                  date: formatDate(c.validTo.toISOString()),
+                })}
               </Text>
             </span>
           ),
@@ -124,23 +120,23 @@ export function SignGostDialog(props: {
   }
 
   return (
-    <Dialog open={props.open} onClose={close} size="m" aria-label="Подписать PDF">
-      <Dialog.Header caption="Подписать PDF" />
+    <Dialog open={props.open} onClose={close} size="m" aria-label={t('signature:dialog.title')}>
+      <Dialog.Header caption={t('signature:dialog.title')} />
       <Dialog.Body className="cr-stack">
         {body}
         {sign.isPending && (
           <Text as="p" color="secondary">
-            Подтвердите подпись в окне КриптоПро, если оно появится
+            {t('signature:dialog.confirmInPlugin')}
           </Text>
         )}
         {sign.error && <Alert theme="danger" message={signErrorText(sign.error)} />}
         <Text as="p" color="secondary">
-          {GOST_AUTHENTICITY_NOTE}
+          {t('signature:dialog.authenticityNote')}
         </Text>
       </Dialog.Body>
       <Dialog.Footer
-        textButtonApply="Подписать"
-        textButtonCancel="Отмена"
+        textButtonApply={t('signature:dialog.submit')}
+        textButtonCancel={t('common:action.cancel')}
         onClickButtonApply={() => {
           if (canSubmit) sign.mutate();
         }}

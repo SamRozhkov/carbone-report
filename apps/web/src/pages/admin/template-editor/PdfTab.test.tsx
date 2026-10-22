@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { adminTemplate } from '../../../test/fixtures';
+import { changeLocale } from '../../../i18n';
 import { mockApi, renderWithProviders } from '../../../test/utils';
 import { PdfTab } from './PdfTab';
 
@@ -429,5 +430,62 @@ describe('PdfTab — электронная подпись (§39.2)', () => {
     expect(screen.getByRole('combobox', { name: 'Положение штампа' })).toHaveTextContent(
       'Внизу по центру',
     );
+  });
+});
+
+// §44.6: моки на латинице — кириллица на вкладке могла бы прийти только из кода.
+describe('PdfTab на en', () => {
+  it('включение нумерации подставляет английский формат из каталога', async () => {
+    await changeLocale('en', { persist: 'none' });
+    mockApi([]);
+    renderWithProviders(<PdfTab template={{ ...t, pdfOptions: { pdfa: false } }} />);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Page numbers' }));
+    expect(screen.getByDisplayValue('Page {page} of {pages}')).toBeInTheDocument();
+  });
+
+  it('все блоки включены — подписи и приложения без кириллицы', async () => {
+    await changeLocale('en', { persist: 'none' });
+    mockApi([]);
+    const latin = {
+      ...adminTemplate,
+      name: 'Invoice',
+      description: 'Invoice for payment',
+      pdfPasswordSet: true,
+      pdfOptions: {
+        pdfa: false,
+        watermark: { text: 'COPY', opacity: 20, color: 'red', angle: 'diagonal' },
+        pageNumbers: { format: 'Page {page} of {pages}', position: 'top-right', skipFirst: true },
+        metadata: { title: 'Invoice', author: '', subject: '', keywords: '' },
+        signature: { position: 'bottom-left', method: 'gost' },
+      },
+      attachments: [att('a1', 'Title.pdf', 'start', 0), att('a2', 'Terms.pdf', 'end', 0, true)],
+    } as TemplateAdminDetails;
+    renderWithProviders(<PdfTab template={latin} />);
+    expect(await screen.findByRole('checkbox', { name: 'Watermark' })).toBeChecked();
+    expect(screen.getByRole('textbox', { name: 'Watermark text' })).toHaveValue('COPY');
+    expect(screen.getByRole('checkbox', { name: 'Page numbers' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Do not number the first page' })).toBeChecked();
+    expect(screen.getByText('Top right')).toBeInTheDocument();
+    expect(screen.getByText('Red')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Metadata: Title' })).toHaveValue('Invoice');
+    expect(screen.getByText('A password is set')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Allow signing the PDF' })).toBeChecked();
+    expect(screen.getByRole('combobox', { name: 'Signing method' })).toHaveTextContent(
+      'GOST, CryptoPro (.sig file)',
+    );
+    expect(screen.getByRole('combobox', { name: 'Stamp position' })).toHaveTextContent(
+      'Bottom left',
+    );
+    const rows = screen.getAllByTestId('pdf-attachment');
+    expect(rows[0]!.textContent).toContain('at the start');
+    expect(rows[0]!.textContent).toContain('2 pages, 1 KB');
+    expect(screen.getByRole('button', { name: 'Title.pdf: to the end' })).toHaveTextContent(
+      'To the end',
+    );
+    expect(screen.getByRole('button', { name: 'Upload PDF' })).toBeInTheDocument();
+    expect(
+      screen.getByText('See the result on the “Preview” tab, “Generate PDF” button.'),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/[Ѐ-ӿ]/);
   });
 });

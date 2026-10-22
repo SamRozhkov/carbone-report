@@ -41,5 +41,5 @@ export async function assertTemplateAccess(
     .select({ id: templates.id })
     .from(templates)
     .where(and(eq(templates.id, templateId), accessibleTemplates(user)));
-  if (!row) throw notFound('шаблон');
+  if (!row) throw notFound('template');
 }

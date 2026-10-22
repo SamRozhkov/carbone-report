@@ -3,6 +3,7 @@ import { TrashBin } from '@gravity-ui/icons';
 import { Button, Icon, Loader, Select, Text, useToaster } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/endpoints';
 import { usePermissions } from '../../../app/permissions';
 import { ErrorAlert } from '../../../components/ErrorAlert';
@@ -15,6 +16,7 @@ import { templateKey } from './editorState';
  * (`canManageEditors`); смена владельца — только `admin`.
  */
 export function EditorsBlock({ template }: { template: TemplateAdminDetails }) {
+  const { t } = useTranslation();
   const id = template.id;
   const queryClient = useQueryClient();
   const { add } = useToaster();
@@ -51,7 +53,11 @@ export function EditorsBlock({ template }: { template: TemplateAdminDetails }) {
     mutationFn: () => api.templates.setEditors(id, userIds),
     onSuccess: (e) => {
       applyEditors(e);
-      add({ name: `tpl-editors-${Date.now()}`, title: 'Редакторы сохранены', theme: 'success' });
+      add({
+        name: `tpl-editors-${Date.now()}`,
+        title: t('editor:editors.saved'),
+        theme: 'success',
+      });
     },
   });
   const changeOwner = useMutation({
@@ -59,7 +65,11 @@ export function EditorsBlock({ template }: { template: TemplateAdminDetails }) {
     onSuccess: async (e) => {
       applyEditors(e);
       setNewOwner(undefined);
-      add({ name: `tpl-owner-${Date.now()}`, title: 'Владелец изменён', theme: 'success' });
+      add({
+        name: `tpl-owner-${Date.now()}`,
+        title: t('editor:editors.ownerChanged'),
+        theme: 'success',
+      });
       // Права в шаблоне (canDelete, canManageEditors) зависят от владельца — перечитываем.
       await queryClient.invalidateQueries({ queryKey: templateKey(id) });
     },
@@ -67,7 +77,8 @@ export function EditorsBlock({ template }: { template: TemplateAdminDetails }) {
 
   const logins = new Map((people.data ?? []).map((u) => [u.id, u.login]));
   // Заблокированных нет в справочнике.
-  const loginOf = (uid: string) => logins.get(uid) ?? (people.data ? '(заблокирован)' : '…');
+  const loginOf = (uid: string) =>
+    logins.get(uid) ?? (people.data ? t('editor:editors.blocked') : '…');
   const ownerId = baseline?.ownerId ?? null;
   const addOptions = (candidates.data ?? [])
     .filter((u) => u.id !== ownerId && !userIds.includes(u.id))
@@ -79,28 +90,28 @@ export function EditorsBlock({ template }: { template: TemplateAdminDetails }) {
   return (
     <section aria-labelledby={headingId} className="cr-form" style={{ marginTop: 16 }}>
       <Text variant="subheader-2" id={headingId}>
-        Редакторы
+        {t('editor:editors.title')}
       </Text>
-      <ErrorAlert error={editors.error} title="Не удалось загрузить редакторов" />
+      <ErrorAlert error={editors.error} title={t('editor:editors.loadFailed')} />
       {people.error && (
-        <ErrorAlert error={people.error} title="Не удалось загрузить пользователей" />
+        <ErrorAlert error={people.error} title={t('editor:editors.usersLoadFailed')} />
       )}
       {candidates.error && (
-        <ErrorAlert error={candidates.error} title="Не удалось загрузить пользователей" />
+        <ErrorAlert error={candidates.error} title={t('editor:editors.usersLoadFailed')} />
       )}
       {editors.isPending && <Loader size="s" />}
       {baseline && (
         <>
-          <Field label="Владелец" group>
+          <Field label={t('editor:editors.owner')} group>
             <Text color={ownerId ? undefined : 'secondary'}>
-              {ownerId ? loginOf(ownerId) : 'не назначен'}
+              {ownerId ? loginOf(ownerId) : t('editor:editors.noOwner')}
             </Text>
           </Field>
           {isAdmin && (
-            <Field label="Смена владельца" group>
+            <Field label={t('editor:editors.changeOwner')} group>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <Select
-                  aria-label="Новый владелец"
+                  aria-label={t('editor:editors.newOwner')}
                   value={newOwner ? [newOwner] : []}
                   onUpdate={([v]) => {
                     changeOwner.reset();
@@ -109,7 +120,7 @@ export function EditorsBlock({ template }: { template: TemplateAdminDetails }) {
                   options={ownerOptions}
                   loading={candidates.isPending}
                   filterable
-                  placeholder="выберите редактора"
+                  placeholder={t('editor:editors.chooseEditor')}
                   width="max"
                 />
                 <Button
@@ -117,15 +128,15 @@ export function EditorsBlock({ template }: { template: TemplateAdminDetails }) {
                   loading={changeOwner.isPending}
                   disabled={!newOwner}
                 >
-                  Сменить владельца
+                  {t('editor:editors.changeOwnerButton')}
                 </Button>
               </div>
             </Field>
           )}
           <ErrorAlert error={changeOwner.error} />
-          <Field label="Выданные редакторы" group>
+          <Field label={t('editor:editors.granted')} group>
             {userIds.length === 0 ? (
-              <Text color="secondary">редакторов нет</Text>
+              <Text color="secondary">{t('editor:editors.none')}</Text>
             ) : (
               <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                 {userIds.map((uid) => (
@@ -134,8 +145,8 @@ export function EditorsBlock({ template }: { template: TemplateAdminDetails }) {
                     <Button
                       view="flat"
                       size="s"
-                      aria-label={`Убрать ${loginOf(uid)}`}
-                      title="Убрать"
+                      aria-label={t('editor:editors.removeAria', { login: loginOf(uid) })}
+                      title={t('editor:editors.remove')}
                       onClick={() => {
                         save.reset();
                         setUserIds((ids) => ids.filter((x) => x !== uid));
@@ -148,9 +159,9 @@ export function EditorsBlock({ template }: { template: TemplateAdminDetails }) {
               </ul>
             )}
           </Field>
-          <Field label="Добавить редактора">
+          <Field label={t('editor:editors.add')}>
             <Select
-              aria-label="Добавить редактора"
+              aria-label={t('editor:editors.add')}
               value={[]}
               onUpdate={([v]) => {
                 if (!v) return;
@@ -160,7 +171,7 @@ export function EditorsBlock({ template }: { template: TemplateAdminDetails }) {
               options={addOptions}
               loading={candidates.isPending}
               filterable
-              placeholder="выберите пользователя с ролью «Редактор»"
+              placeholder={t('editor:editors.chooseUser')}
               width="max"
             />
           </Field>
@@ -172,20 +183,20 @@ export function EditorsBlock({ template }: { template: TemplateAdminDetails }) {
               loading={save.isPending}
               disabled={!dirty}
             >
-              Сохранить редакторов
+              {t('editor:editors.save')}
             </Button>
             {dirty && (
               <>
-                <Text color="warning">Есть несохранённые изменения</Text>
+                <Text color="warning">{t('editor:draft.unsaved')}</Text>
                 <Button
                   view="flat"
-                  aria-label="Отменить изменения редакторов"
+                  aria-label={t('editor:editors.discardAria')}
                   onClick={() => {
                     save.reset();
                     reseed(editors.data ?? baseline);
                   }}
                 >
-                  Отменить
+                  {t('editor:draft.discard')}
                 </Button>
               </>
             )}

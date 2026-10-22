@@ -1,4 +1,5 @@
 import type { SslMode } from '@carbone-reports/shared';
+import type { Locale } from '@carbone-reports/shared/i18n';
 import { eq } from 'drizzle-orm';
 import pg from 'pg';
 import type { Config } from '../../config';
@@ -6,7 +7,7 @@ import type { Db } from '../../db/client';
 import { datasources, type DatasourceRow } from '../../db/schema';
 import type { SourcePools } from '../../deps';
 import { decryptSecret } from '../../lib/crypto';
-import { notFound } from '../../lib/errors';
+import { notFound, translateMsg } from '../../lib/errors';
 
 const OID = { INT8: 20, NUMERIC: 1700, DATE: 1082 } as const;
 
@@ -51,9 +52,15 @@ const CERT_ERRORS = new Set([
   'CERT_HAS_EXPIRED',
 ]);
 
-export function certErrorMessage(e: Error): string {
+/** Текст ошибки подключения на языке locale; текст драйвера — как есть. */
+export function certErrorMessage(e: Error, locale: Locale = 'ru'): string {
   const code = (e as NodeJS.ErrnoException).code;
-  return code && CERT_ERRORS.has(code) ? `сертификат не прошёл проверку: ${e.message}` : e.message;
+  return code && CERT_ERRORS.has(code)
+    ? translateMsg(locale, {
+        key: 'datasource.certFailed',
+        params: { message: e.message },
+      })
+    : e.message;
 }
 
 export function poolConfig(c: ConnParams): pg.PoolConfig {
@@ -85,6 +92,7 @@ export function connParamsFromRow(row: DatasourceRow, key: Buffer): ConnParams {
 
 export async function testConnection(
   c: ConnParams,
+  locale: Locale = 'ru',
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const { max: _max, idleTimeoutMillis: _idle, ...cfg } = poolConfig(c);
   const client = new pg.Client(cfg);
@@ -93,7 +101,7 @@ export async function testConnection(
     await client.query('select 1');
     return { ok: true };
   } catch (e) {
-    return { ok: false, message: certErrorMessage(e as Error) };
+    return { ok: false, message: certErrorMessage(e as Error, locale) };
   } finally {
     await client.end().catch(() => {});
   }
@@ -104,7 +112,7 @@ export function createSourcePools(deps: { db: Db; config: Config }): SourcePools
 
   async function open(id: string) {
     const [row] = await deps.db.select().from(datasources).where(eq(datasources.id, id));
-    if (!row) throw notFound('источник данных');
+    if (!row) throw notFound('datasource');
     const pool = new pg.Pool(poolConfig(connParamsFromRow(row, deps.config.encryptionKey)));
     // Ошибки простаивающих соединений не должны ронять процесс.
     pool.on('error', () => {});

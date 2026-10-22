@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import { changeLocale } from '../../i18n';
 import { adminMe, mockApi, renderRoute } from '../../test/utils';
 
 const ds = [
@@ -237,5 +238,104 @@ describe('TemplatesPage', () => {
     expect(within(row('Акт')).getByRole('button', { name: 'Дублировать' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Создать шаблон' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Загрузить из архива' })).toBeInTheDocument();
+  });
+});
+
+describe('TemplatesPage: язык интерфейса', () => {
+  const latinDs = [{ ...ds[0], name: 'Warehouse' }];
+
+  // §44.6: моки на латинице — кириллица на странице могла бы прийти только из кода.
+  it('на de список шаблонов без кириллицы', async () => {
+    await changeLocale('de', { persist: 'none' });
+    mockApi([
+      adminMe,
+      {
+        path: '/api/templates',
+        body: [
+          {
+            ...tpl,
+            name: 'Invoice',
+            description: 'Payment invoice',
+            editingBy: { id: 'u2', login: 'petrov' },
+          },
+        ],
+      },
+    ]);
+    renderRoute('/admin/templates');
+    await screen.findByText('Invoice');
+    expect(screen.getByRole('heading', { level: 1, name: 'Vorlagen' })).toBeInTheDocument();
+    for (const name of ['Exportieren', 'Aus Archiv importieren', 'Vorlage erstellen'])
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    for (const name of ['Name', 'Typ', 'Geändert'])
+      expect(screen.getByRole('columnheader', { name })).toBeInTheDocument();
+    expect(within(row('Invoice')).getByText('Wird von petrov bearbeitet')).toBeInTheDocument();
+    expect(within(row('Invoice')).getByRole('button', { name: 'Duplizieren' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('checkbox', { name: '„Invoice“ auswählen' }));
+    expect(screen.getByRole('button', { name: 'Exportieren (1)' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/[Ѐ-ӿ]/);
+  });
+
+  it('на de диалог загрузки из архива с предпросмотром без кириллицы', async () => {
+    await changeLocale('de', { persist: 'none' });
+    mockApi([
+      adminMe,
+      { path: '/api/templates', body: [] },
+      { path: '/api/datasources/options', body: latinDs },
+      {
+        method: 'POST',
+        path: '/api/templates/import/preview',
+        body: {
+          appVersion: '2.13.0',
+          exportedAt: '2026-10-10T10:00:00Z',
+          templates: [
+            {
+              index: 0,
+              name: 'Invoice',
+              description: '',
+              fileExt: 'docx',
+              existing: [],
+              datasource: {
+                name: 'Sales',
+                host: 'db',
+                port: 5432,
+                database: 'wh',
+                username: 'ro',
+                sslMode: 'disable',
+              },
+              datasourceMatch: null,
+              category: 'Finance',
+              categoryExists: false,
+              categorySkipped: false,
+              groups: ['Accounting'],
+              missingGroups: ['Accounting'],
+              pdfPasswordSet: true,
+              errors: [],
+            },
+          ],
+        },
+      },
+    ]);
+    renderRoute('/admin/templates');
+    await userEvent.click(await screen.findByRole('button', { name: 'Aus Archiv importieren' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Vorlagen aus Archiv importieren')).toBeInTheDocument();
+    await userEvent.upload(
+      within(dialog).getByLabelText('Archivdatei'),
+      new File(['PK'], 'a.crt.zip'),
+    );
+    expect(await within(dialog).findByText('Invoice')).toBeInTheDocument();
+    for (const name of ['Vorlage', 'Aktion', 'Datenquelle'])
+      expect(within(dialog).getByRole('columnheader', { name })).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('Fehlende Gruppen: Accounting — der Zugriff wird nicht gewährt'),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText('Die Kategorie „Finance“ wird angelegt')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('Im Archiv: „Sales“ (db) — in dieser Umgebung nicht gefunden'),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText(/^Das PDF-Passwort wird nicht übernommen/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/^App-Version im Archiv: 2\.13\.0/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Importieren' })).toBeDisabled();
+    expect(document.body.textContent).not.toMatch(/[Ѐ-ӿ]/);
   });
 });

@@ -48,9 +48,10 @@ import type {
   UserDto,
   RecoveryBody,
 } from '@carbone-reports/shared';
+import type { Locale } from '@carbone-reports/shared/i18n';
 import type { ImportPreview, ImportResult } from '@carbone-reports/shared/template-transfer';
 import type { Config } from '@onlyoffice/doceditor-types';
-import { apiBlob, apiFile, apiJson } from './client';
+import { apiBlob, apiFile, apiJson, requestLocale } from './client';
 import type { SessionUser } from './session';
 
 export type TestResult = { ok: true } | { ok: false; message: string };
@@ -68,7 +69,15 @@ export interface VersionDto {
 
 export const api = {
   version: () => apiJson<VersionDto>('/api/version'),
-  me: () => apiJson<SessionUser>('/api/auth/me'),
+  me: {
+    get: (signal?: AbortSignal) => apiJson<SessionUser>('/api/auth/me', { signal }),
+    /** Язык интерфейса пользователя (§44.1); null — «Как в браузере». */
+    setLocale: (locale: Locale | null) => apiJson<void>('/api/me/locale', put({ locale })),
+  },
+  /** Публичные настройки языка (без входа). */
+  i18n: {
+    get: (signal?: AbortSignal) => apiJson<{ defaultLocale: Locale }>('/api/i18n', { signal }),
+  },
   login: (body: LoginBody) => apiJson<SessionUser>('/api/auth/login', post(body)),
   logout: () => apiJson<void>('/api/auth/logout', post()),
   logoutAll: () => apiJson<void>('/api/auth/logout-all', post()),
@@ -262,6 +271,7 @@ export const runFileUrl = (
 export function releaseEditLock(id: string, holder: string): void {
   void fetch(`/api/templates/${id}/edit-lock?holder=${encodeURIComponent(holder)}`, {
     method: 'DELETE',
+    headers: { 'x-locale': requestLocale() },
     keepalive: true,
     credentials: 'same-origin',
   }).catch(() => undefined);

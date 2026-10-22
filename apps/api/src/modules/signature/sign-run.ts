@@ -10,7 +10,7 @@ import { reportRunSignatures, reportRuns } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { decryptSecret } from '../../lib/crypto';
 import { Deadline } from '../../lib/deadline';
-import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
+import { AppError, badRequest, conflict, notFound, text } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
 import { P12Error, type P12Contents } from '../pdf/sign/p12';
 import { signPdf } from '../pdf/sign/sign-pdf';
@@ -26,26 +26,20 @@ import {
   toRunSignature,
 } from '../reports/snapshot';
 import { loadUserCertificate } from './certificates';
-import { recordSignFailure, signBlocked } from './password-failures';
+import { recordSignFailure, SIGN_FAILURE_WINDOW_MS, signBlocked } from './password-failures';
 
-export const unavailable = () => badRequest('подпись для этого отчёта недоступна');
+export const unavailable = () => badRequest('sign.unavailable');
 // Пароль не попадает ни в сообщение, ни в details (Review Focus 1).
 const wrongPassword = () =>
-  new AppError('VALIDATION', 400, 'неверные данные запроса', [
-    { path: '/password', message: 'неверный пароль к ключу' },
+  new AppError('VALIDATION', 400, { key: 'validation' }, [
+    { path: '/password', message: text('sign.wrongKeyPassword') },
   ]);
 const tooMany = () =>
-  new AppError(
-    'TOO_MANY_ATTEMPTS',
-    429,
-    'слишком много неверных паролей — попробуйте через 15 минут',
-  );
-export const busy = () =>
-  new AppError(
-    'SIGN_BUSY',
-    409,
-    'другая подпись уже выполняется — повторите через несколько секунд',
-  );
+  new AppError('TOO_MANY_ATTEMPTS', 429, {
+    key: 'sign.tooManyPasswords',
+    params: { count: SIGN_FAILURE_WINDOW_MS / 60_000 },
+  });
+export const busy = () => new AppError('SIGN_BUSY', 409, { key: 'sign.busy' });
 
 /**
  * POST /api/runs/:id/sign — подпись PDF запуска сертификатом пользователя (§39.3).
@@ -63,7 +57,7 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
       const me = currentUser(req);
       const [run] = await db.select().from(reportRuns).where(eq(reportRuns.id, req.params.id));
       // Подписывает только владелец (§39.3): чужой запуск неотличим от несуществующего, и для администратора.
-      if (!run || run.userId !== me.id) throw notFound('запуск');
+      if (!run || run.userId !== me.id) throw notFound('run');
       const position = run.signaturePosition;
       const filePath = run.filePath;
       if (!run.snapshot || run.status !== 'ok' || run.fileDeleted || !filePath || !position)
@@ -71,10 +65,10 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
       // Подписать можно только способом из снимка (§42.1): ГОСТ-запуск подписывает плагин КриптоПро.
       if (run.signMethod === 'gost') throw unavailable();
       const cert = await loadUserCertificate(db, me.id);
-      if (!cert) throw badRequest('загрузите сертификат на странице «Моя подпись»');
+      if (!cert) throw badRequest('sign.uploadCertificate');
       const checkedAt = new Date();
-      if (checkedAt < cert.notBefore) throw badRequest('сертификат ещё не действует');
-      if (checkedAt > cert.notAfter) throw badRequest('срок действия сертификата истёк');
+      if (checkedAt < cert.notBefore) throw badRequest('sign.certNotYetValid');
+      if (checkedAt > cert.notAfter) throw badRequest('sign.certExpired');
       // Ранний 429 без блокировки; решающая проверка — внутри неё, перед паролем (§39.8).
       // Окно считается по часам базы (now()), как и запись счётчика.
       if (await signBlocked(db, me.id)) throw tooMany();
@@ -101,7 +95,7 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
             .select({ runId: reportRunSignatures.runId })
             .from(reportRunSignatures)
             .where(eq(reportRunSignatures.runId, run.id));
-          if (done) throw conflict('отчёт уже подписан');
+          if (done) throw conflict('sign.alreadySigned');
 
           // Время подписи — после взятия блокировки: им проверяется срок сертификата (p12Read),
           // оно же в штампе, /M и строке подписи.
@@ -120,7 +114,7 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
               await recordSignFailure(tx, me.id);
               return { wrongPassword: true };
             }
-            if (e instanceof P12Error) throw badRequest(e.message);
+            if (e instanceof P12Error) throw badRequest(e.key);
             throw e;
           }
           const signer = new P12Signer(
@@ -138,7 +132,8 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
             deadline: Date.now() + deadline.remaining(),
             prepare: deps.pdfSignPrepare,
           });
-          if (signed.length > MAX_PDF_RESULT_BYTES) throw badRequest('итоговый PDF больше 100 МБ');
+          if (signed.length > MAX_PDF_RESULT_BYTES)
+            throw badRequest('pdf.resultTooLarge', { size: 100 });
           const path = signedPath(run.id);
           await storage.write(path, signed);
           try {

@@ -1,0 +1,31 @@
+{
+  "list": {
+    "title": "Relatórios",
+    "search": "Pesquisar",
+    "searchLabel": "Pesquisar relatórios",
+    "noCategory": "Sem categoria",
+    "notFound": "Nada encontrado.",
+    "emptyAuthor": "Ainda não há modelos — crie o primeiro na seção “Modelos”.",
+    "empty": "Ainda não há relatórios.",
+    "updated": "atualizado em {{date}}"
+  },
+  "run": {
+    "openFailed": "Não foi possível abrir o relatório",
+    "back": "Voltar à lista",
+    "noParams": "O relatório não tem parâmetros.",
+    "paramsChanged": "Os parâmetros do relatório mudaram — o formulário foi atualizado",
+    "generate": "Gerar",
+    "optionsLoading": "Carregando as opções dos parâmetros…",
+    "ready": "Relatório pronto",
+    "preview": "Pré-visualização do relatório",
+    "saveAs": "Salvar como",
+    "signed": "Assinado: {{signer}}, {{date}}",
+    "signedTimestamped": "Assinado: {{signer}}, {{date}}, com carimbo de tempo",
+    "downloadStamped": "Baixar PDF com carimbo",
+    "downloadSig": "Baixar assinatura (.sig)",
+    "downloadSigned": "Baixar PDF assinado",
+    "sign": "Assinar PDF",
+    "uploadCertificate": "Envie um certificado na página “<page>Minha assinatura</page>”",
+    "saveFailed": "Não foi possível salvar o arquivo"
+  }
+}

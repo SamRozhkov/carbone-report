@@ -1,0 +1,76 @@
+{
+  "invalidId": "ungültige Kennung",
+  "invalidDatasourceId": "ungültige Kennung der Datenquelle",
+  "invalidTemplateId": "ungültige Kennung der Vorlage",
+  "identName": "Name: lateinische Buchstaben, Ziffern und _",
+  "identKey": "Schlüssel: lateinische Buchstaben, Ziffern und _",
+  "reservedName": "reservierter Name",
+  "nameRequired": "geben Sie einen Namen ein",
+  "backupName": "ungültiger Name der Sicherung",
+  "recoveryCodeRequired": "geben Sie den Wiederherstellungscode ein",
+  "query": {
+    "paramsReserved": "der Schlüssel „params“ ist reserviert"
+  },
+  "param": {
+    "selectNeedsOption": "select benötigt mindestens eine Option",
+    "sqlRequired": "geben Sie die SQL-Abfrage für die Optionen an",
+    "sqlNoOptions": "die Optionen einer SQL-Liste werden durch die Abfrage festgelegt",
+    "multipleDefaults": "mehrere Werte sind nur bei Mehrfachauswahl zulässig",
+    "sqlOnlyQuery": "SQL ist nur beim Typ „SQL-Liste“ zulässig",
+    "multipleOnlyQuery": "Mehrfachauswahl ist nur beim Typ „SQL-Liste“ zulässig",
+    "invalidValue": "unzulässiger Wert"
+  },
+  "datasource": {
+    "caOnlyVerify": "ein CA-Zertifikat wird nur im Modus „SSL mit Prüfung“ angegeben",
+    "pemExpected": "ein Zertifikat im PEM-Format wird erwartet"
+  },
+  "chart": {
+    "columnRequired": "wählen Sie eine Spalte",
+    "keyTooLong": "Schlüssel — bis zu 64 Zeichen",
+    "colorHex": "Farbe — #RRGGBB",
+    "queryRequired": "wählen Sie eine Abfrage",
+    "seriesRequired": "fügen Sie eine Datenreihe hinzu",
+    "tooManySeries": "Datenreihen — höchstens {{maximum}}",
+    "stackedOnly": "Stapeln — nur bei Säulen, Linien und Flächen",
+    "smoothOnly": "Glätten — nur bei Linien, Flächen und kombinierten Diagrammen",
+    "kindOnlyCombo": "Art und Achse einer Datenreihe — nur bei kombinierten Diagrammen",
+    "pieOneSeries": "Kreis- und Ringdiagramm — genau eine Datenreihe",
+    "pieNoSplit": "Datenreihen aus Daten sind bei Kreis- und Ringdiagrammen nicht verfügbar",
+    "splitOneSeries": "bei Datenreihen aus Daten — genau eine Datenreihe (Wertespalte)",
+    "splitColors": "die Farben der Datenreihen aus Daten stammen aus der Palette",
+    "axisY2Only": "zweite Achse — nur bei einem kombinierten Diagramm mit einer Datenreihe auf der rechten Achse",
+    "tooManyCharts": "Diagramme pro Vorlage — höchstens {{maximum}}",
+    "keyDuplicate": "der Diagrammschlüssel „{{key}}“ ist doppelt",
+    "chartsKeyTaken": "der Schlüssel charts ist von Diagrammen belegt"
+  },
+  "pdf": {
+    "textRequired": "geben Sie den Text ein",
+    "pageTagRequired": "{page} ist erforderlich — die Seitenzahl",
+    "pdfaProtection": "PDF/A ist mit Passwort und Einschränkungen nicht kompatibel",
+    "passwordLength": "Passwort — {{min}} bis {{max}} Zeichen",
+    "passwordControl": "das Passwort enthält unzulässige Zeichen",
+    "passwordDash": "das Passwort darf nicht mit „-“ beginnen",
+    "signatureProtection": "Die Signatur ist mit Passwort und Einschränkungen nicht kompatibel",
+    "tagFormatter": "in PDF-Feldern sind nur Tags ohne Formatierer zulässig: {{tag}}",
+    "attachmentNotPdfa": "PDF/A ist aktiviert: die Datei „{{name}}“ ist nicht im PDF/A-Format"
+  },
+  "transfer": {
+    "sha256": "ein sha256 in Hex wird erwartet",
+    "formatUnavailable": "das Format {{format}} ist für .{{ext}} nicht verfügbar",
+    "fileExt": "die Vorlagendatei muss die Erweiterung .{{ext}} haben",
+    "groupDuplicate": "die Gruppe „{{name}}“ ist doppelt",
+    "queryDuplicate": "der Abfrageschlüssel „{{key}}“ ist doppelt",
+    "paramDuplicate": "der Parameter „{{name}}“ ist doppelt",
+    "chartDuplicate": "der Diagrammschlüssel „{{key}}“ ist doppelt",
+    "chartNoQuery": "keine Abfrage „{{query}}“ in der Vorlage des Archivs",
+    "chartQueryList": "die Abfrage „{{query}}“ muss eine Liste von Zeilen zurückgeben",
+    "nameDuplicate": "der Name „{{name}}“ kommt im Archiv mehrfach vor",
+    "pathExpected": "der Pfad {{path}} wird erwartet"
+  },
+  "import": {
+    "targetRequired": "geben Sie die zu aktualisierende Vorlage an",
+    "targetUpdatedAtRequired": "geben Sie den Änderungszeitpunkt aus der Vorschau an",
+    "targetOnlyUpdate": "die zu aktualisierende Vorlage wird nur bei „aktualisieren“ angegeben",
+    "targetUpdatedAtOnlyUpdate": "der Änderungszeitpunkt wird nur bei „aktualisieren“ angegeben"
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "role": {
+    "admin": "管理员",
+    "editor": "编辑者",
+    "access_manager": "安全管理员",
+    "user": "用户"
+  },
+  "nav": {
+    "reports": "报表",
+    "history": "历史记录",
+    "signature": "我的签名",
+    "templates": "模板",
+    "datasources": "数据源",
+    "users": "用户",
+    "groups": "用户组",
+    "categories": "类别",
+    "access": "报表访问权限",
+    "backups": "备份",
+    "help": "模板帮助"
+  },
+  "locale": {
+    "title": "语言",
+    "ru": "Русский",
+    "en": "English",
+    "es": "Español",
+    "pt-BR": "Português (Brasil)",
+    "fr": "Français",
+    "de": "Deutsch",
+    "zh-CN": "简体中文",
+    "browser": "跟随浏览器",
+    "loadFailed": "无法加载语言",
+    "saveFailed": "无法保存语言选择"
+  },
+  "action": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "close": "关闭",
+    "edit": "编辑",
+    "add": "添加"
+  },
+  "status": {
+    "loading": "正在加载…",
+    "error": "错误"
+  },
+  "items_other": "{{count}} 项",
+  "labelValue": "{{label}}：",
+  "shell": {
+    "version": "版本 {{version}}",
+    "themeLight": "浅色主题",
+    "themeDark": "深色主题",
+    "logout": "退出",
+    "logoutFailedTitle": "无法在服务器上结束会话",
+    "logoutFailedText": "如果这是公用计算机，请关闭浏览器。",
+    "logoutAll": "在所有设备上退出",
+    "logoutAllFailedTitle": "无法结束其他设备上的会话",
+    "logoutAllFailedText": "请登录后重试，或请管理员结束这些会话。",
+    "authCheckFailed": "无法验证登录状态"
+  },
+  "about": {
+    "title": "关于",
+    "web": "界面",
+    "server": "服务器",
+    "version": "版本",
+    "commit": "提交",
+    "builtAt": "构建日期",
+    "serverUnavailable": "无法获取服务器版本",
+    "mismatch": "界面和服务器版本不一致——请刷新页面或检查部署",
+    "license": "许可证：{{license}}"
+  },
+  "login": {
+    "login": "用户名",
+    "password": "密码",
+    "submit": "登录"
+  },
+  "notFound": {
+    "title": "页面不存在",
+    "toReports": "返回报表"
+  },
+  "maintenance": {
+    "restoring": "正在从备份恢复…",
+    "phase": "阶段：{{phase}} · 备份 {{backup}}",
+    "failedTitle": "恢复未完成：数据库已被部分替换",
+    "failedText": "请输入 backup 服务日志（docker compose logs backup）中的恢复代码，然后选择操作。",
+    "code": "恢复代码",
+    "retryStarted": "已开始重试，正在等待完成…",
+    "retrySame": "重新从 {{backup}} 恢复",
+    "retryPreRestore": "回到恢复前的状态（{{backup}}）"
+  },
+  "backupPhase": {
+    "backup": "正在创建备份",
+    "verify": "正在校验备份",
+    "pre-backup": "恢复前备份",
+    "maintenance": "正在启用维护模式",
+    "db": "正在替换数据库",
+    "migrate": "正在应用迁移",
+    "storage": "正在恢复文件",
+    "redis": "正在清除缓存",
+    "done": "完成"
+  },
+  "copy": {
+    "done": "已复制：{{label}}",
+    "failed": "无法复制——请手动选择标签"
+  },
+  "error": {
+    "unknown": "未知错误",
+    "server": "服务器错误（HTTP {{status}}）",
+    "network": "无法连接服务器"
+  },
+  "duration": {
+    "ms": "{{value}} 毫秒",
+    "s": "{{value}} 秒",
+    "min": "{{min}} 分 {{sec}} 秒"
+  },
+  "size": {
+    "b": "{{value}} B",
+    "kb": "{{value}} KB",
+    "mb": "{{value}} MB",
+    "gb": "{{value}} GB",
+    "tb": "{{value}} TB"
+  },
+  "param": {
+    "multipleHint": "多个值以逗号分隔",
+    "waitingFor": "请先选择：{{names}}",
+    "selectAll": "全选",
+    "deselectAll": "全部取消"
+  }
+}

@@ -10,6 +10,13 @@ import {
   BACKUP_NAME_RE,
   RecoveryBody,
 } from './index';
+import { createTranslator } from './i18n/server';
+
+/** Сообщение zod по-русски: ключ `v:…` — из каталога validation. */
+const ruMessage = (i: { message: string; params?: Record<string, unknown> }) =>
+  i.message.startsWith('v:')
+    ? createTranslator('ru')(`validation:${i.message.slice(2)}`, i.params)
+    : i.message;
 
 describe('TemplateQuery', () => {
   it('принимает корректный ключ', () => {
@@ -25,7 +32,7 @@ describe('TemplateQuery', () => {
   it('отклоняет ключ __proto__', () => {
     const r = TemplateQuery.safeParse({ key: '__proto__', sql: 'select 1', mode: 'list' });
     expect(r.success).toBe(false);
-    expect(r.error?.issues[0]?.message).toBe('зарезервированное имя');
+    expect(ruMessage(r.error!.issues[0] as never)).toBe('зарезервированное имя');
   });
   it('отклоняет ключ с пробелом и ключ, начинающийся с цифры', () => {
     expect(TemplateQuery.safeParse({ key: 'my key', sql: 'x', mode: 'list' }).success).toBe(false);

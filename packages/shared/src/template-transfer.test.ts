@@ -8,6 +8,13 @@ import {
   transferFilePath,
   type TransferTemplate,
 } from './template-transfer';
+import { createTranslator } from './i18n/server';
+
+/** Сообщение zod по-русски: ключ `v:…` — из каталога validation. */
+const ruMessage = (i: { message: string; params?: Record<string, unknown> }) =>
+  i.message.startsWith('v:')
+    ? createTranslator('ru')(`validation:${i.message.slice(2)}`, i.params)
+    : i.message;
 
 const SHA = 'a'.repeat(64);
 
@@ -192,7 +199,7 @@ describe('TransferTemplate: графики (§35.6)', () => {
   });
   const messages = (t: Record<string, unknown>) =>
     (TransferManifest.safeParse(manifest(t as Partial<TransferTemplate>)).error?.issues ?? []).map(
-      (i) => i.message,
+      (i) => ruMessage(i as never),
     );
   it('без charts — шаблон без графиков; с графиком — config с умолчаниями', () => {
     expect(TransferManifest.parse(manifest({})).templates[0]!.charts).toBeUndefined();
@@ -273,7 +280,7 @@ describe('настройки PDF и приложения в архиве (§36.6
       manifest([tpl({ attachments: [att(0, { file: 'x.pdf' })] } as never)]),
     );
     expect(wrongPath.success).toBe(false);
-    expect(wrongPath.error!.issues[0]!.message).toBe(
+    expect(ruMessage(wrongPath.error!.issues[0] as never)).toBe(
       `ожидается путь ${transferAttachmentPath(0, 0)}`,
     );
     const many = TransferManifest.safeParse(
@@ -289,7 +296,7 @@ describe('настройки PDF и приложения в архиве (§36.6
       ]),
     );
     expect(rule.success).toBe(false);
-    expect(rule.error!.issues.map((i) => i.message)).toContain(
+    expect(rule.error!.issues.map((i) => ruMessage(i as never))).toContain(
       'PDF/A включён: файл «скан.pdf» не в формате PDF/A',
     );
   });
@@ -309,7 +316,7 @@ describe('пароль PDF в архиве (§37.4)', () => {
     ]) {
       const r = TransferManifest.safeParse(manifest([tpl(extra as never)]));
       expect(r.success).toBe(false);
-      expect(r.error!.issues).toContainEqual(
+      expect(r.error!.issues.map((i) => ({ ...i, message: ruMessage(i as never) }))).toContainEqual(
         expect.objectContaining({
           path: ['templates', 0, 'pdfOptions', 'pdfa'],
           message: 'PDF/A несовместим с паролем и ограничениями',

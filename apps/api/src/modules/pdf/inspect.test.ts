@@ -27,7 +27,7 @@ describe('inspectPdf', () => {
 
   it('не PDF, битый и с паролем — PdfInputError с текстом', async () => {
     await expect(inspectPdf(Buffer.from('PK\x03\x04 zip'))).rejects.toThrow(
-      new PdfInputError('файл не PDF'),
+      new PdfInputError('pdf.notPdf'),
     );
     await expect(inspectPdf(Buffer.from('%PDF-1.7\nмусор'))).rejects.toThrow('PDF повреждён');
     const doc = await PDFDocument.load(await makePdf([{ label: 'a' }]));

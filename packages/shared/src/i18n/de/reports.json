@@ -1,0 +1,31 @@
+{
+  "list": {
+    "title": "Berichte",
+    "search": "Suche",
+    "searchLabel": "Berichte durchsuchen",
+    "noCategory": "Ohne Kategorie",
+    "notFound": "Nichts gefunden.",
+    "emptyAuthor": "Noch keine Vorlagen — erstellen Sie die erste im Bereich „Vorlagen“.",
+    "empty": "Noch keine Berichte.",
+    "updated": "aktualisiert am {{date}}"
+  },
+  "run": {
+    "openFailed": "Der Bericht konnte nicht geöffnet werden",
+    "back": "Zur Liste",
+    "noParams": "Der Bericht hat keine Parameter.",
+    "paramsChanged": "Die Parameter des Berichts haben sich geändert — das Formular wurde aktualisiert",
+    "generate": "Erstellen",
+    "optionsLoading": "Parameteroptionen werden geladen…",
+    "ready": "Bericht ist fertig",
+    "preview": "Berichtsvorschau",
+    "saveAs": "Speichern als",
+    "signed": "Signiert: {{signer}}, {{date}}",
+    "signedTimestamped": "Signiert: {{signer}}, {{date}}, mit Zeitstempel",
+    "downloadStamped": "PDF mit Stempel herunterladen",
+    "downloadSig": "Signatur herunterladen (.sig)",
+    "downloadSigned": "Signiertes PDF herunterladen",
+    "sign": "PDF signieren",
+    "uploadCertificate": "Laden Sie ein Zertifikat auf der Seite „<page>Meine Signatur</page>“ hoch",
+    "saveFailed": "Die Datei konnte nicht gespeichert werden"
+  }
+}

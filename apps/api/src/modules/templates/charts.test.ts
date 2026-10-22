@@ -1,13 +1,7 @@
 import { TemplateChart } from '@carbone-reports/shared';
 import { describe, expect, it } from 'vitest';
-import { AppError } from '../../lib/errors';
-import {
-  assertNoIssues,
-  chartIssues,
-  CHARTS_KEY_TAKEN,
-  injectCharts,
-  queryIssuesForCharts,
-} from './charts';
+import { AppError, ruDetails } from '../../lib/errors';
+import { assertNoIssues, chartIssues, injectCharts, queryIssuesForCharts } from './charts';
 
 const chart = (over: Record<string, unknown> = {}) =>
   TemplateChart.parse({
@@ -18,6 +12,8 @@ const chart = (over: Record<string, unknown> = {}) =>
     series: [{ column: 'v' }],
     ...over,
   });
+/** Текст ключа CHARTS_KEY_TAKEN по-русски. */
+const CHARTS_KEY_TAKEN_RU = 'ключ charts занят графиками';
 const Q = [
   { key: 'orders', mode: 'list' as const, sql: 'select 1' },
   { key: 'head', mode: 'single' as const, sql: 'select 1' },
@@ -25,8 +21,10 @@ const Q = [
 
 describe('проверки графиков (§35.3)', () => {
   it('chartIssues: нет запроса, запрос «одна строка», ключ charts', () => {
-    expect(chartIssues([chart()], Q)).toEqual([]);
-    expect(chartIssues([chart({ query: 'nope' }), chart({ key: 'b', query: 'head' })], Q)).toEqual([
+    expect(ruDetails(chartIssues([chart()], Q))).toEqual([]);
+    expect(
+      ruDetails(chartIssues([chart({ query: 'nope' }), chart({ key: 'b', query: 'head' })], Q)),
+    ).toEqual([
       { path: '/0/query', message: 'нет запроса «nope»' },
       {
         path: '/1/query',
@@ -34,22 +32,26 @@ describe('проверки графиков (§35.3)', () => {
       },
     ]);
     expect(
-      chartIssues([chart()], [...Q, { key: 'charts', mode: 'list', sql: 'select 1' }]),
-    ).toEqual([{ path: '', message: CHARTS_KEY_TAKEN }]);
-    expect(chartIssues([], [{ key: 'charts', mode: 'list', sql: 'select 1' }])).toEqual([]);
+      ruDetails(chartIssues([chart()], [...Q, { key: 'charts', mode: 'list', sql: 'select 1' }])),
+    ).toEqual([{ path: '', message: CHARTS_KEY_TAKEN_RU }]);
+    expect(ruDetails(chartIssues([], [{ key: 'charts', mode: 'list', sql: 'select 1' }]))).toEqual(
+      [],
+    );
   });
   it('queryIssuesForCharts: ключ charts, удалённый и «одна строка» запрос графика (R8)', () => {
     expect(queryIssuesForCharts([{ key: 'charts', mode: 'list', sql: 'x' }], [])).toEqual([]);
     expect(
-      queryIssuesForCharts(
-        [
-          { key: 'charts', mode: 'list', sql: 'x' },
-          { key: 'orders', mode: 'single', sql: 'x' },
-        ],
-        [chart(), chart({ key: 'b', query: 'gone' })],
+      ruDetails(
+        queryIssuesForCharts(
+          [
+            { key: 'charts', mode: 'list', sql: 'x' },
+            { key: 'orders', mode: 'single', sql: 'x' },
+          ],
+          [chart(), chart({ key: 'b', query: 'gone' })],
+        ),
       ),
     ).toEqual([
-      { path: '/0/key', message: CHARTS_KEY_TAKEN },
+      { path: '/0/key', message: CHARTS_KEY_TAKEN_RU },
       {
         path: '/1/mode',
         message: 'запрос используется графиком «sales» — нужен режим «Список строк»',

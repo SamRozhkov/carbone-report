@@ -1,7 +1,6 @@
 import { AppError } from './errors';
 
-export const reportTimeout = () =>
-  new AppError('TIMEOUT', 504, 'превышено время формирования отчёта');
+export const reportTimeout = () => new AppError('TIMEOUT', 504, { key: 'reportTimeout' });
 
 /** Общий срок операции (формирование отчёта): отсчёт от создания, таймауты шагов — не дольше остатка. */
 export class Deadline {

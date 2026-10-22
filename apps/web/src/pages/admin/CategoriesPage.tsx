@@ -17,6 +17,7 @@ import {
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api/endpoints';
 import { conflictMessage, errorMessage, fieldErrors } from '../../api/errors';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -33,6 +34,7 @@ const invalidateCategories = (queryClient: QueryClient) =>
   );
 
 export function CategoriesPage() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const list = useQuery({ queryKey: ['categories'], queryFn: api.categories.list });
@@ -53,7 +55,7 @@ export function CategoriesPage() {
       setDeleting(null);
       add({
         name: `category-delete-${Date.now()}`,
-        title: 'Не удалось удалить',
+        title: t('admin:deleteFailed'),
         content: errorMessage(e),
         theme: 'danger',
       });
@@ -61,23 +63,33 @@ export function CategoriesPage() {
   });
 
   const columns: TableColumnConfig<CategoryDto>[] = [
-    { id: 'sortOrder', name: 'Порядок', align: 'end', template: (c) => c.sortOrder },
-    { id: 'name', name: 'Название', template: (c) => c.name },
+    {
+      id: 'sortOrder',
+      name: t('admin:categories.order'),
+      align: 'end',
+      template: (c) => c.sortOrder,
+    },
+    { id: 'name', name: t('admin:field.name'), template: (c) => c.name },
     {
       id: 'public',
-      name: 'Доступно всем',
-      template: (c) => (c.public ? <Label theme="success">да</Label> : '—'),
+      name: t('admin:field.public'),
+      template: (c) => (c.public ? <Label theme="success">{t('admin:yes')}</Label> : '—'),
     },
     {
       id: 'groups',
-      name: 'Группы',
+      name: t('admin:field.groups'),
       template: (c) =>
         c.groupIds
           .map((id) => groupName.get(id))
           .filter(Boolean)
           .join(', ') || '—',
     },
-    { id: 'templates', name: 'Шаблонов', align: 'end', template: (c) => c.templateCount },
+    {
+      id: 'templates',
+      name: t('admin:categories.templates'),
+      align: 'end',
+      template: (c) => c.templateCount,
+    },
     {
       id: 'actions',
       name: '',
@@ -87,8 +99,8 @@ export function CategoriesPage() {
           <Button
             view="flat"
             size="s"
-            aria-label="Изменить"
-            title="Изменить"
+            aria-label={t('common:action.edit')}
+            title={t('common:action.edit')}
             onClick={() => setDialog({ category: c })}
           >
             <Icon data={Pencil} />
@@ -96,8 +108,8 @@ export function CategoriesPage() {
           <Button
             view="flat-danger"
             size="s"
-            aria-label="Удалить"
-            title="Удалить"
+            aria-label={t('common:action.delete')}
+            title={t('common:action.delete')}
             onClick={() => {
               setLastDeleted(c);
               setDeleting(c);
@@ -113,16 +125,16 @@ export function CategoriesPage() {
   return (
     <>
       <PageHeader
-        title="Категории"
+        title={t('common:nav.categories')}
         actions={
           <Button view="action" onClick={() => setDialog({ category: null })}>
             <Icon data={Plus} />
-            Добавить категорию
+            {t('admin:categories.add')}
           </Button>
         }
       />
       <ErrorAlert error={list.error} />
-      {groups.error && <ErrorAlert error={groups.error} title="Не удалось загрузить группы" />}
+      {groups.error && <ErrorAlert error={groups.error} title={t('admin:loadFailed.groups')} />}
       {list.isPending ? (
         <Loader />
       ) : (
@@ -130,7 +142,7 @@ export function CategoriesPage() {
           data={list.data ?? []}
           columns={columns}
           getRowDescriptor={(c) => ({ id: c.id })}
-          emptyMessage="Категорий пока нет"
+          emptyMessage={t('admin:categories.empty')}
           width="max"
         />
       )}
@@ -143,9 +155,9 @@ export function CategoriesPage() {
       )}
       <ConfirmDialog
         open={!!deleting}
-        title="Удалить категорию?"
-        text={`Категория «${(deleting ?? lastDeleted)?.name ?? ''}» будет удалена. Шаблоны категории останутся без категории, доступ, выданный через неё, пропадёт.`}
-        confirmText="Удалить"
+        title={t('admin:categories.deleteTitle')}
+        text={t('admin:categories.deleteText', { name: (deleting ?? lastDeleted)?.name ?? '' })}
+        confirmText={t('common:action.delete')}
         danger
         loading={remove.isPending}
         onConfirm={() => deleting && remove.mutate(deleting)}
@@ -162,6 +174,7 @@ function CategoryDialog({
   category: CategoryDto | null;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const groups = useQuery({ queryKey: ['groups'], queryFn: api.groups.list });
   // Сохранённое состояние: после POST и неудачного PUT groups повтор не создаёт дубль.
@@ -204,10 +217,13 @@ function CategoryDialog({
 
   return (
     <Dialog open onClose={onClose} aria-labelledby="cr-category-dialog">
-      <Dialog.Header caption={category ? 'Категория' : 'Новая категория'} id="cr-category-dialog" />
+      <Dialog.Header
+        caption={category ? t('admin:categories.dialogEdit') : t('admin:categories.dialogNew')}
+        id="cr-category-dialog"
+      />
       <Dialog.Body>
         <div className="cr-form">
-          <Field label="Название" error={nameError}>
+          <Field label={t('admin:field.name')} error={nameError}>
             <TextInput
               value={name}
               onUpdate={(v) => {
@@ -215,10 +231,14 @@ function CategoryDialog({
                 setName(v);
               }}
               validationState={nameError ? 'invalid' : undefined}
-              controlProps={{ 'aria-label': 'Название' }}
+              controlProps={{ 'aria-label': t('admin:field.name') }}
             />
           </Field>
-          <Field label="Порядок" error={errors.sortOrder} hint="меньше — выше в каталоге отчётов">
+          <Field
+            label={t('admin:categories.order')}
+            error={errors.sortOrder}
+            hint={t('admin:categories.orderHint')}
+          >
             <NumberInput
               value={sortOrder}
               onUpdate={setSortOrder}
@@ -226,15 +246,15 @@ function CategoryDialog({
               max={1_000_000}
               allowDecimal={false}
               validationState={errors.sortOrder ? 'invalid' : undefined}
-              controlProps={{ 'aria-label': 'Порядок' }}
+              controlProps={{ 'aria-label': t('admin:categories.order') }}
             />
           </Field>
-          <Field label="Видимость" error={errors.public} group>
-            <Checkbox checked={isPublic} onUpdate={setIsPublic} content="Доступно всем" />
+          <Field label={t('admin:field.visibility')} error={errors.public} group>
+            <Checkbox checked={isPublic} onUpdate={setIsPublic} content={t('admin:field.public')} />
           </Field>
-          <Field label="Группы" hint="группы, которым видны все шаблоны категории" group>
+          <Field label={t('admin:field.groups')} hint={t('admin:categories.groupsHint')} group>
             <Select
-              aria-label="Группы"
+              aria-label={t('admin:field.groups')}
               value={groupIds}
               onUpdate={setGroupIds}
               options={(groups.data ?? []).map((g) => ({ value: g.id, content: g.name }))}
@@ -242,11 +262,11 @@ function CategoryDialog({
               filterable
               hasClear
               loading={groups.isPending}
-              placeholder="нет групп"
+              placeholder={t('admin:noGroups')}
               width="max"
             />
           </Field>
-          {groups.error && <ErrorAlert error={groups.error} title="Не удалось загрузить группы" />}
+          {groups.error && <ErrorAlert error={groups.error} title={t('admin:loadFailed.groups')} />}
           <GeneralError
             error={conflict ? null : save.error}
             errors={errors}
@@ -257,8 +277,8 @@ function CategoryDialog({
       <Dialog.Footer
         onClickButtonApply={() => save.mutate()}
         onClickButtonCancel={onClose}
-        textButtonApply={saved ? 'Сохранить' : 'Создать'}
-        textButtonCancel="Отмена"
+        textButtonApply={saved ? t('common:action.save') : t('admin:create')}
+        textButtonCancel={t('common:action.cancel')}
         loading={save.isPending}
         propsButtonApply={{ disabled: !name.trim() }}
       />

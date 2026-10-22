@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import { changeLocale } from '../../i18n';
 import { adminMe, mockApi, renderRoute } from '../../test/utils';
 
 const groups = [
@@ -193,5 +194,40 @@ describe('GroupsPage', () => {
     );
     expect(calls.some((c) => c.path === '/api/users/directory')).toBe(true);
     expect(calls.some((c) => c.path === '/api/users')).toBe(false);
+  });
+});
+
+describe('GroupsPage: язык интерфейса', () => {
+  // §44.6: моки на латинице — кириллица на странице могла бы прийти только из кода.
+  it('на fr диалог группы — подписи и пунктуация из каталога, без кириллицы', async () => {
+    await changeLocale('fr', { persist: 'none' });
+    mockApi([
+      adminMe,
+      {
+        path: '/api/groups',
+        body: [{ ...groups[1], name: 'Warehouse', description: 'Stock reports' }],
+      },
+    ]);
+    renderRoute('/admin/groups');
+    await screen.findByText('Warehouse');
+    expect(screen.getByRole('heading', { level: 1, name: 'Groupes' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Ajouter un groupe' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Nouveau groupe')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Nom')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Description')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Créer' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Annuler' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/[Ѐ-ӿ]/);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Annuler' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    // Подтверждение удаления: неразрывные пробелы перед «?» и внутри « » — из каталога fr
+    // (сравнение по textContent: getByText схлопывает неразрывный пробел в обычный).
+    await userEvent.click(screen.getByRole('button', { name: 'Supprimer' }));
+    const confirm = await screen.findByRole('dialog');
+    await within(confirm).findByText(/Supprimer le groupe/);
+    expect(confirm.textContent).toContain('Supprimer le groupe\u00a0?');
+    expect(confirm.textContent).toContain('Le groupe «\u00a0Warehouse\u00a0» sera supprimé.');
+    expect(document.body.textContent).not.toMatch(/[Ѐ-ӿ]/);
   });
 });

@@ -1,0 +1,48 @@
+{
+  "page": {
+    "title": "Mi firma",
+    "intro": "Se necesita un archivo .p12 o .pfx con clave privada; lo emite una autoridad de certificación o el departamento de TI",
+    "expiring": "El certificado caduca el {{date}}",
+    "expired": "El certificado ha caducado: cargue uno nuevo",
+    "owner": "Propietario",
+    "issuer": "Emisor",
+    "serial": "Número de serie",
+    "validity": "Válido",
+    "validRange": "del {{from}} al {{to}}",
+    "algorithm": "Algoritmo",
+    "fingerprint": "Huella SHA-256",
+    "replace": "Reemplazar",
+    "deleteTitle": "¿Eliminar el certificado de firma?",
+    "deleteText": "No se podrán firmar archivos PDF hasta que cargue un certificado nuevo."
+  },
+  "upload": {
+    "file": "Archivo del certificado",
+    "password": "Contraseña del archivo",
+    "submit": "Cargar certificado"
+  },
+  "dialog": {
+    "title": "Firmar PDF",
+    "validUntil": "{{name}}, válido hasta el {{date}}",
+    "password": "Contraseña de la clave de firma",
+    "submit": "Firmar",
+    "connecting": "Conectando con CryptoPro…",
+    "noCertificates": "No hay certificados GOST válidos: instale un certificado en CryptoPro",
+    "certificate": "Certificado",
+    "confirmInPlugin": "Confirme la firma en la ventana de CryptoPro si aparece",
+    "authenticityNote": "La autenticidad del certificado la comprueba un servicio de verificación de firmas (por ejemplo, Gosuslugi)",
+    "unavailableText": "Instale <plugin>CryptoPro CAdES Browser plug-in</plugin> (con la extensión para el navegador) y <csp>CryptoPro CSP</csp>. Cuando el navegador lo solicite, permita que el sitio acceda al complemento y, después, recargue la página."
+  },
+  "cades": {
+    "title": "CryptoPro",
+    "intro": "Para firmar con GOST se necesitan CryptoPro CSP, CryptoPro CAdES Browser plug-in y un certificado GOST en este equipo.",
+    "check": "Comprobar el complemento",
+    "versions": "CryptoPro CAdES Browser plug-in {{plugin}}, CryptoPro CSP {{csp}}",
+    "certificates": "Certificados GOST válidos: {{n}}",
+    "unavailable": "No se encontró CryptoPro CAdES Browser plug-in ni CryptoPro CSP",
+    "certificateNotFound": "No se encontró el certificado en el almacén «Personal»",
+    "cancelled": "El usuario canceló la firma",
+    "wrongPin": "PIN incorrecto",
+    "tsaUnavailable": "El servicio de sellado de tiempo no está disponible: vuelva a intentarlo más tarde",
+    "unknown": "error desconocido del complemento"
+  }
+}

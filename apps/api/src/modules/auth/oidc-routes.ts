@@ -36,7 +36,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
   const settings = deps.config.oidc;
   const client = settings ? (override ?? createOidcClient(settings)) : null;
   const enabled = () => {
-    if (!settings || !client) throw notFound('OIDC');
+    if (!settings || !client) throw notFound('oidc');
     return client;
   };
   // __Secure- требует атрибут Secure; прежний `oidc_flow` не чистим: он живёт 10 минут и привязан к пути.
@@ -58,7 +58,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
     async (req, reply) => {
       noStore(reply);
       const service = enabled();
-      if (!deps.redis) throw new AppError('OIDC_UNAVAILABLE', 503, 'OIDC требует доступного Redis');
+      if (!deps.redis) throw new AppError('OIDC_UNAVAILABLE', 503, { key: 'oidc.redisRequired' });
       const flow: OidcFlow = {
         state: random(),
         nonce: random(),
@@ -72,11 +72,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
         reply.setCookie(flowCookieName, flow.browser, { ...flowCookie, maxAge: 600 });
         return reply.redirect(url);
       } catch {
-        throw new AppError(
-          'OIDC_UNAVAILABLE',
-          503,
-          'Keycloak недоступен, используйте обычный вход',
-        );
+        throw new AppError('OIDC_UNAVAILABLE', 503, { key: 'oidc.unavailableUseLogin' });
       }
     },
   );
@@ -115,18 +111,10 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
         if (person.expiresAt.getTime() <= Date.now()) throw new Error('сессия уже истекла');
       } catch (error) {
         if (error instanceof OidcUsernameError)
-          throw new AppError(
-            'OIDC_INVALID_USERNAME',
-            403,
-            'логин из Keycloak (preferred_username) не подходит: от 3 до 64 символов, без управляющих и невидимых символов',
-          );
+          throw new AppError('OIDC_INVALID_USERNAME', 403, { key: 'oidc.invalidUsername' });
         // Причина — сообщение ошибки, без кода авторизации и токенов.
         req.log.warn({ reason: (error as Error).message }, 'OIDC: вход не подтверждён');
-        throw new AppError(
-          'OIDC_INVALID_RESPONSE',
-          401,
-          'не удалось подтвердить вход через Keycloak',
-        );
+        throw new AppError('OIDC_INVALID_RESPONSE', 401, { key: 'oidc.invalidResponse' });
       }
       const { user, sessionId } = await resolveOidcUser(deps, person, req.log);
       req.log.info({ userId: user.id }, 'OIDC: вход выполнен');
@@ -193,10 +181,10 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
               { reason },
               'OIDC: back-channel logout не проверен — провайдер недоступен',
             );
-            throw new AppError('OIDC_UNAVAILABLE', 503, 'Keycloak недоступен, повторите позже');
+            throw new AppError('OIDC_UNAVAILABLE', 503, { key: 'oidc.unavailable' });
           }
           req.log.warn({ reason }, 'OIDC: back-channel logout отклонён');
-          throw new AppError('OIDC_INVALID_LOGOUT', 400, 'неверный logout token');
+          throw new AppError('OIDC_INVALID_LOGOUT', 400, { key: 'oidc.invalidLogoutToken' });
         }
         // Повтор того же logout token (jti) пропускаем: иначе перехваченный токен отзывал бы
         // и сессии, заведённые после него. Redis недоступен — проверить нельзя: 503, Keycloak повторит.
@@ -210,7 +198,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
             { reason: (error as Error).message },
             'OIDC: back-channel logout не проверен — Redis недоступен',
           );
-          throw new AppError('OIDC_UNAVAILABLE', 503, 'Keycloak недоступен, повторите позже');
+          throw new AppError('OIDC_UNAVAILABLE', 503, { key: 'oidc.unavailable' });
         }
         if (fresh !== 'OK') {
           req.log.info('OIDC: повтор back-channel logout пропущен');
@@ -251,7 +239,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
       enabled();
       const [user] = await deps.db.select().from(users).where(eq(users.id, req.body.userId));
       if (!user || user.login.toLowerCase() === (deps.config.adminLogin ?? '').toLowerCase())
-        throw new AppError('OIDC_ACCOUNT_RESERVED', 403, 'нельзя привязать эту учётную запись');
+        throw new AppError('OIDC_ACCOUNT_RESERVED', 403, { key: 'oidc.accountReserved' });
       const [existing] = await deps.db
         .select()
         .from(oidcIdentities)
@@ -262,7 +250,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
           ),
         );
       if (existing && existing.userId !== user.id)
-        throw new AppError('CONFLICT', 409, 'внешняя учётная запись уже привязана');
+        throw new AppError('CONFLICT', 409, { key: 'oidc.alreadyLinked' });
       await deps.db
         .insert(oidcIdentities)
         .values({ issuer: settings!.issuer, subject: req.body.subject, userId: user.id })
@@ -278,7 +266,7 @@ export function registerOidcRoutes(app: App, deps: AppDeps, guards: Guards, over
           ),
         );
       if (linked?.userId !== user.id)
-        throw new AppError('CONFLICT', 409, 'внешняя учётная запись уже привязана');
+        throw new AppError('CONFLICT', 409, { key: 'oidc.alreadyLinked' });
       req.log.info({ userId: user.id, by: currentUser(req).id }, 'OIDC: учётная запись привязана');
       return reply.status(201).send({ userId: user.id });
     },

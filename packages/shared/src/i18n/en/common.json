@@ -1,0 +1,129 @@
+{
+  "role": {
+    "admin": "Administrator",
+    "editor": "Editor",
+    "access_manager": "Security manager",
+    "user": "User"
+  },
+  "nav": {
+    "reports": "Reports",
+    "history": "History",
+    "signature": "My signature",
+    "templates": "Templates",
+    "datasources": "Data sources",
+    "users": "Users",
+    "groups": "Groups",
+    "categories": "Categories",
+    "access": "Report access",
+    "backups": "Backups",
+    "help": "Template help"
+  },
+  "locale": {
+    "title": "Language",
+    "ru": "Русский",
+    "en": "English",
+    "es": "Español",
+    "pt-BR": "Português (Brasil)",
+    "fr": "Français",
+    "de": "Deutsch",
+    "zh-CN": "简体中文",
+    "browser": "Browser default",
+    "loadFailed": "Could not load the language",
+    "saveFailed": "Could not save the language choice"
+  },
+  "action": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "close": "Close",
+    "edit": "Edit",
+    "add": "Add"
+  },
+  "status": {
+    "loading": "Loading…",
+    "error": "Error"
+  },
+  "items_one": "{{count}} item",
+  "items_other": "{{count}} items",
+  "labelValue": "{{label}}:",
+  "shell": {
+    "version": "Version {{version}}",
+    "themeLight": "Light theme",
+    "themeDark": "Dark theme",
+    "logout": "Sign out",
+    "logoutFailedTitle": "Could not end the session on the server",
+    "logoutFailedText": "Close the browser if this computer is shared.",
+    "logoutAll": "Sign out everywhere",
+    "logoutAllFailedTitle": "Could not end sessions on other devices",
+    "logoutAllFailedText": "Try again after signing in or ask an administrator to end the sessions.",
+    "authCheckFailed": "Could not verify sign-in"
+  },
+  "about": {
+    "title": "About",
+    "web": "Web interface",
+    "server": "Server",
+    "version": "Version",
+    "commit": "Commit",
+    "builtAt": "Build date",
+    "serverUnavailable": "Server version unavailable",
+    "mismatch": "Web interface and server versions differ — reload the page or check the deployment",
+    "license": "License: {{license}}"
+  },
+  "login": {
+    "login": "Login",
+    "password": "Password",
+    "submit": "Sign in"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "toReports": "Go to reports"
+  },
+  "maintenance": {
+    "restoring": "Restoring from backup…",
+    "phase": "Stage: {{phase}} · backup {{backup}}",
+    "failedTitle": "Restore not completed: the database has been partially replaced",
+    "failedText": "Enter the recovery code from the backup service log (docker compose logs backup) and choose an action.",
+    "code": "Recovery code",
+    "retryStarted": "Retry started, waiting for it to finish…",
+    "retrySame": "Retry restore from {{backup}}",
+    "retryPreRestore": "Return to the state before the restore ({{backup}})"
+  },
+  "backupPhase": {
+    "backup": "Creating backup",
+    "verify": "Verifying backup",
+    "pre-backup": "Backup before restore",
+    "maintenance": "Enabling maintenance mode",
+    "db": "Replacing the database",
+    "migrate": "Applying migrations",
+    "storage": "Restoring files",
+    "redis": "Clearing the cache",
+    "done": "Done"
+  },
+  "copy": {
+    "done": "Copied: {{label}}",
+    "failed": "Could not copy — select the tag manually"
+  },
+  "error": {
+    "unknown": "unknown error",
+    "server": "server error (HTTP {{status}})",
+    "network": "no connection to the server"
+  },
+  "duration": {
+    "ms": "{{value}} ms",
+    "s": "{{value}} s",
+    "min": "{{min}} min {{sec}} s"
+  },
+  "size": {
+    "b": "{{value}} B",
+    "kb": "{{value}} KB",
+    "mb": "{{value}} MB",
+    "gb": "{{value}} GB",
+    "tb": "{{value}} TB"
+  },
+  "param": {
+    "multipleHint": "several values — separated by commas",
+    "waitingFor": "select first: {{names}}",
+    "selectAll": "Select all",
+    "deselectAll": "Clear all"
+  }
+}

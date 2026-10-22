@@ -1,0 +1,76 @@
+{
+  "invalidId": "标识符无效",
+  "invalidDatasourceId": "数据源标识符无效",
+  "invalidTemplateId": "模板标识符无效",
+  "identName": "名称：拉丁字母、数字和 _",
+  "identKey": "键：拉丁字母、数字和 _",
+  "reservedName": "保留名称",
+  "nameRequired": "请填写名称",
+  "backupName": "备份名称无效",
+  "recoveryCodeRequired": "请输入恢复代码",
+  "query": {
+    "paramsReserved": "键“params”为保留键"
+  },
+  "param": {
+    "selectNeedsOption": "select 至少需要一个选项",
+    "sqlRequired": "请填写选项的 SQL 查询",
+    "sqlNoOptions": "SQL 列表的选项由查询定义",
+    "multipleDefaults": "只有多选时才允许多个值",
+    "sqlOnlyQuery": "只有“SQL 列表”类型才允许 SQL",
+    "multipleOnlyQuery": "只有“SQL 列表”类型才允许多选",
+    "invalidValue": "值不允许"
+  },
+  "datasource": {
+    "caOnlyVerify": "只有“SSL（验证证书）”模式才需指定 CA 证书",
+    "pemExpected": "应为 PEM 格式的证书"
+  },
+  "chart": {
+    "columnRequired": "请选择列",
+    "keyTooLong": "键——最多 64 个字符",
+    "colorHex": "颜色——#RRGGBB",
+    "queryRequired": "请选择查询",
+    "seriesRequired": "请添加系列",
+    "tooManySeries": "系列——最多 {{maximum}} 个",
+    "stackedOnly": "堆叠——仅适用于柱形图、折线图和面积图",
+    "smoothOnly": "平滑——仅适用于折线图、面积图和组合图",
+    "kindOnlyCombo": "系列类型和坐标轴——仅适用于组合图",
+    "pieOneSeries": "饼图和环形图——只能有一个系列",
+    "pieNoSplit": "饼图和环形图不支持来自数据的系列",
+    "splitOneSeries": "使用来自数据的系列时——只能有一个系列（数值列）",
+    "splitColors": "来自数据的系列颜色取自调色板",
+    "axisY2Only": "次坐标轴——仅适用于有系列位于右轴的组合图",
+    "tooManyCharts": "每个模板的图表——最多 {{maximum}} 个",
+    "keyDuplicate": "图表键“{{key}}”重复",
+    "chartsKeyTaken": "键 charts 已被图表占用"
+  },
+  "pdf": {
+    "textRequired": "请输入文本",
+    "pageTagRequired": "需要 {page}——页码",
+    "pdfaProtection": "PDF/A 与密码和限制不兼容",
+    "passwordLength": "密码——{{min}} 到 {{max}} 个字符",
+    "passwordControl": "密码包含不允许的字符",
+    "passwordDash": "密码不能以“-”开头",
+    "signatureProtection": "签名与密码和限制不兼容",
+    "tagFormatter": "PDF 字段中只能使用不带格式化器的标签：{{tag}}",
+    "attachmentNotPdfa": "已启用 PDF/A：文件“{{name}}”不是 PDF/A 格式"
+  },
+  "transfer": {
+    "sha256": "应为十六进制的 sha256",
+    "formatUnavailable": "格式 {{format}} 不适用于 .{{ext}}",
+    "fileExt": "模板文件的扩展名必须为 .{{ext}}",
+    "groupDuplicate": "用户组“{{name}}”重复",
+    "queryDuplicate": "查询键“{{key}}”重复",
+    "paramDuplicate": "参数“{{name}}”重复",
+    "chartDuplicate": "图表键“{{key}}”重复",
+    "chartNoQuery": "压缩包的模板中没有查询“{{query}}”",
+    "chartQueryList": "查询“{{query}}”必须返回行列表",
+    "nameDuplicate": "压缩包中名称“{{name}}”重复",
+    "pathExpected": "路径应为 {{path}}"
+  },
+  "import": {
+    "targetRequired": "请指定要更新的模板",
+    "targetUpdatedAtRequired": "请指定预览中的修改时间",
+    "targetOnlyUpdate": "只有“更新”才需指定要更新的模板",
+    "targetUpdatedAtOnlyUpdate": "只有“更新”才需指定修改时间"
+  }
+}

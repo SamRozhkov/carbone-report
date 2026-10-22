@@ -1,0 +1,129 @@
+{
+  "role": {
+    "admin": "Administrator",
+    "editor": "Bearbeiter",
+    "access_manager": "Sicherheitsbeauftragter",
+    "user": "Benutzer"
+  },
+  "nav": {
+    "reports": "Berichte",
+    "history": "Verlauf",
+    "signature": "Meine Signatur",
+    "templates": "Vorlagen",
+    "datasources": "Datenquellen",
+    "users": "Benutzer",
+    "groups": "Gruppen",
+    "categories": "Kategorien",
+    "access": "Zugriff auf Berichte",
+    "backups": "Sicherungen",
+    "help": "Hilfe zu Vorlagen"
+  },
+  "locale": {
+    "title": "Sprache",
+    "ru": "Русский",
+    "en": "English",
+    "es": "Español",
+    "pt-BR": "Português (Brasil)",
+    "fr": "Français",
+    "de": "Deutsch",
+    "zh-CN": "简体中文",
+    "browser": "Wie im Browser",
+    "loadFailed": "Die Sprache konnte nicht geladen werden",
+    "saveFailed": "Die Sprachauswahl konnte nicht gespeichert werden"
+  },
+  "action": {
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "close": "Schließen",
+    "edit": "Bearbeiten",
+    "add": "Hinzufügen"
+  },
+  "status": {
+    "loading": "Wird geladen…",
+    "error": "Fehler"
+  },
+  "items_one": "{{count}} Element",
+  "items_other": "{{count}} Elemente",
+  "labelValue": "{{label}}:",
+  "shell": {
+    "version": "Version {{version}}",
+    "themeLight": "Helles Design",
+    "themeDark": "Dunkles Design",
+    "logout": "Abmelden",
+    "logoutFailedTitle": "Die Sitzung konnte auf dem Server nicht beendet werden",
+    "logoutFailedText": "Schließen Sie den Browser, wenn der Computer gemeinsam genutzt wird.",
+    "logoutAll": "Überall abmelden",
+    "logoutAllFailedTitle": "Die Sitzungen auf anderen Geräten konnten nicht beendet werden",
+    "logoutAllFailedText": "Versuchen Sie es nach der Anmeldung erneut oder bitten Sie einen Administrator, die Sitzungen zu beenden.",
+    "authCheckFailed": "Die Anmeldung konnte nicht geprüft werden"
+  },
+  "about": {
+    "title": "Über das Programm",
+    "web": "Oberfläche",
+    "server": "Server",
+    "version": "Version",
+    "commit": "Commit",
+    "builtAt": "Build-Datum",
+    "serverUnavailable": "Serverversion nicht verfügbar",
+    "mismatch": "Die Versionen von Oberfläche und Server unterscheiden sich — laden Sie die Seite neu oder prüfen Sie die Bereitstellung",
+    "license": "Lizenz: {{license}}"
+  },
+  "login": {
+    "login": "Benutzername",
+    "password": "Passwort",
+    "submit": "Anmelden"
+  },
+  "notFound": {
+    "title": "Seite nicht gefunden",
+    "toReports": "Zu den Berichten"
+  },
+  "maintenance": {
+    "restoring": "Wiederherstellung aus der Sicherung läuft…",
+    "phase": "Schritt: {{phase}} · Sicherung {{backup}}",
+    "failedTitle": "Wiederherstellung nicht abgeschlossen: Die Datenbank wurde teilweise ersetzt",
+    "failedText": "Geben Sie den Wiederherstellungscode aus dem Protokoll des Dienstes backup ein (docker compose logs backup) und wählen Sie eine Aktion.",
+    "code": "Wiederherstellungscode",
+    "retryStarted": "Wiederholung gestartet, warte auf den Abschluss…",
+    "retrySame": "Wiederherstellung aus {{backup}} wiederholen",
+    "retryPreRestore": "Zustand vor der Wiederherstellung zurückholen ({{backup}})"
+  },
+  "backupPhase": {
+    "backup": "Sicherung wird erstellt",
+    "verify": "Sicherung wird geprüft",
+    "pre-backup": "Sicherung vor der Wiederherstellung",
+    "maintenance": "Wartungsmodus wird aktiviert",
+    "db": "Datenbank wird ersetzt",
+    "migrate": "Migrationen werden angewendet",
+    "storage": "Dateien werden wiederhergestellt",
+    "redis": "Cache wird geleert",
+    "done": "Fertig"
+  },
+  "copy": {
+    "done": "Kopiert: {{label}}",
+    "failed": "Kopieren fehlgeschlagen — markieren Sie das Tag manuell"
+  },
+  "error": {
+    "unknown": "unbekannter Fehler",
+    "server": "Serverfehler (HTTP {{status}})",
+    "network": "keine Verbindung zum Server"
+  },
+  "duration": {
+    "ms": "{{value}} ms",
+    "s": "{{value}} s",
+    "min": "{{min}} min {{sec}} s"
+  },
+  "size": {
+    "b": "{{value}} B",
+    "kb": "{{value}} KB",
+    "mb": "{{value}} MB",
+    "gb": "{{value}} GB",
+    "tb": "{{value}} TB"
+  },
+  "param": {
+    "multipleHint": "mehrere Werte — durch Kommas getrennt",
+    "waitingFor": "zuerst auswählen: {{names}}",
+    "selectAll": "Alle auswählen",
+    "deselectAll": "Auswahl aufheben"
+  }
+}

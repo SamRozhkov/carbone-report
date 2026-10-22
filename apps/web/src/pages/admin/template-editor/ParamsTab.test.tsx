@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import { changeLocale } from '../../../i18n';
 import { mockApi, renderWithProviders } from '../../../test/utils';
 import { anyHints, ParamsTab } from './ParamsTab';
 import { adminTemplate } from '../../../test/fixtures';
@@ -445,5 +446,72 @@ describe('ParamsTab', () => {
     await userEvent.type(screen.getByLabelText('SQL параметра 2'), ' and 1=1');
     expect(screen.getByRole('button', { name: 'Проверить: параметр 2' })).toBeDisabled();
     expect(screen.getByText('сохраните параметры')).toBeInTheDocument();
+  });
+});
+
+// §44.6: моки на латинице — кириллица на вкладке могла бы прийти только из кода.
+describe('ParamsTab на en', () => {
+  it('подписи полей, типы, подсказки SQL-списка — без кириллицы', async () => {
+    await changeLocale('en', { persist: 'none' });
+    mockApi([]);
+    const latin = {
+      ...t,
+      name: 'Invoice',
+      description: 'Invoice for payment',
+      params: [
+        { ...t.params[0]!, label: 'From date' },
+        {
+          name: 'status',
+          label: 'Status',
+          type: 'select',
+          required: false,
+          defaultValue: null,
+          options: [{ value: 'new', label: 'New' }],
+        },
+        {
+          name: 'city',
+          label: 'City',
+          type: 'query',
+          required: false,
+          defaultValue: null,
+          options: null,
+          sql: 'select id as value, name as label from city where d > :from and r = :region',
+          multiple: false,
+          dependsOn: ['from'],
+        },
+        {
+          name: 'region',
+          label: 'Region',
+          type: 'query',
+          required: false,
+          defaultValue: null,
+          options: null,
+          sql: 'select 1 as value, 2 as label',
+          multiple: true,
+          dependsOn: [],
+        },
+      ],
+    } as TemplateAdminDetails;
+    renderWithProviders(<ParamsTab template={latin} />);
+    expect(await screen.findByRole('textbox', { name: 'Name of parameter 1' })).toHaveValue('from');
+    expect(screen.getAllByText('Name (in SQL — :name)')).toHaveLength(4);
+    expect(screen.getByRole('combobox', { name: 'Type of parameter 2' })).toHaveTextContent('List');
+    expect(screen.getByRole('combobox', { name: 'Type of parameter 3' })).toHaveTextContent(
+      'SQL list',
+    );
+    expect(screen.getByText('Options: value=label, one per line')).toBeInTheDocument();
+    expect(screen.getAllByText('Options SQL: columns value and label')).toHaveLength(2);
+    expect(screen.getByText('depends on: from, region')).toBeInTheDocument();
+    expect(
+      screen.getByText('“Region” allows multiple values: compare with = any(:region)'),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Check: parameter/ })).toHaveLength(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Add parameter' }));
+    expect(screen.getByRole('textbox', { name: 'Label of parameter 5' })).toHaveValue(
+      'New parameter',
+    );
+    expect(screen.getByText('You have unsaved changes')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save parameters' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/[Ѐ-ӿ]/);
   });
 });

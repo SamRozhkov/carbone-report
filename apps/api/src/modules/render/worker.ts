@@ -127,10 +127,11 @@ port.on('message', (m: Request) => {
         message: err instanceof Error ? err.message : String(err),
         // P12Error: главный поток восстанавливает её с тем же полем (§39.8);
         // CadesError: отказ проверки ГОСТ, текст §42.4 — пользователю (поле gost).
+        // key — ключ каталога errors: текст переводится на язык запроса в главном потоке.
         ...(err instanceof P12Error
-          ? { field: err.field }
+          ? { field: err.field, key: err.key }
           : err instanceof CadesError
-            ? { field: 'gost' }
+            ? { field: 'gost', key: err.key }
             : {}),
       });
     },

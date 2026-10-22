@@ -1,4 +1,5 @@
 import { Worker, type ResourceLimits } from 'node:worker_threads';
+import { ruText, type Msg } from '../../lib/errors';
 
 /** Опции рендера Carbone для потока. */
 export interface RenderOptions {
@@ -56,20 +57,29 @@ export class RenderTimeoutError extends Error {
 /** Поток завершился аварийно или пул остановлен. */
 export class RenderCrashError extends Error {}
 
-/** Ошибка шаблона: message — текст Carbone; field — поле формы (ошибка .p12, §39.8) или gost (§42.4). */
+/**
+ * Ошибка шаблона: message — текст Carbone; field — поле формы (ошибка .p12, §39.8) или gost (§42.4).
+ * text — сообщение каталога errors, если текст наш, а не Carbone (message — тот же текст по-русски).
+ */
 export class TemplateRenderError extends Error {
   constructor(
     message: string,
     readonly field?: string,
+    readonly text?: Msg,
   ) {
     super(message);
   }
 }
 
+const notJson = (params?: { message: string }) => {
+  const text = params ? { key: 'render.dataNotJsonDetail', params } : { key: 'render.dataNotJson' };
+  return new TemplateRenderError(ruText(text.key, text.params), undefined, text);
+};
+
 type Reply =
   | { ready: true }
   | { id: number; ok: true; out: Uint8Array; warnings?: string[]; meta?: string }
-  | { id: number; ok: false; message: string; field?: string };
+  | { id: number; ok: false; message: string; field?: string; key?: string };
 
 interface Task {
   id: number;
@@ -128,14 +138,10 @@ export class RenderPool {
       try {
         data = JSON.stringify(job.data);
       } catch (err) {
-        return reject(
-          new TemplateRenderError(
-            `данные отчёта не сериализуются в JSON: ${err instanceof Error ? err.message : String(err)}`,
-          ),
-        );
+        return reject(notJson({ message: err instanceof Error ? err.message : String(err) }));
       }
       if (typeof data !== 'string') {
-        return reject(new TemplateRenderError('данные отчёта не сериализуются в JSON'));
+        return reject(notJson());
       }
       const task: Task = { id: ++this.seq, job, data, deadlineAt, resolve, reject };
       task.timer = setTimeout(() => this.expireQueued(task), wait);
@@ -244,7 +250,8 @@ export class RenderPool {
         warnings: Array.isArray(m.warnings) ? m.warnings : [],
         ...(typeof m.meta === 'string' ? { meta: JSON.parse(m.meta) as unknown } : {}),
       });
-    else task.reject(new TemplateRenderError(m.message, m.field));
+    else
+      task.reject(new TemplateRenderError(m.message, m.field, m.key ? { key: m.key } : undefined));
     this.dispatch();
   }
 

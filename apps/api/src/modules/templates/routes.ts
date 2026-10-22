@@ -21,6 +21,7 @@ import {
 } from '@carbone-reports/shared';
 import {
   ExportTemplatesBody,
+  type ImportDecision,
   ImportDecisions,
   type ImportPreview,
   type ImportResult,
@@ -45,7 +46,7 @@ import {
   users,
 } from '../../db/schema';
 import type { AppDeps } from '../../deps';
-import { badRequest, forbidden, notFound } from '../../lib/errors';
+import { badRequest, forbidden, issueText, localizedSafeParse, notFound } from '../../lib/errors';
 import { contentDisposition, isZip, MIME } from '../../lib/http';
 import { accessibleTemplates, assertTemplateAccess } from '../access/access';
 import {
@@ -87,10 +88,11 @@ import {
 
 const MAX_FILE = 20 * 1024 * 1024;
 
-function uniqueOrFail(values: string[], what: string): void {
+/** Повтор значения — 400 с сообщением key (параметр value — повторённое значение). */
+function uniqueOrFail(values: string[], key: string): void {
   const seen = new Set<string>();
   for (const v of values) {
-    if (seen.has(v)) throw badRequest(`${what} "${v}" повторяется`);
+    if (seen.has(v)) throw badRequest(key, { value: v });
     seen.add(v);
   }
 }
@@ -107,7 +109,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       .select({ id: datasources.id })
       .from(datasources)
       .where(eq(datasources.id, id));
-    if (!ds) throw badRequest('источник данных не найден');
+    if (!ds) throw badRequest('notFound.datasource');
   }
 
   async function readUpload(req: FastifyRequest) {
@@ -121,10 +123,10 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         fields[part.fieldname] = String(part.value);
       }
     }
-    if (!file) throw badRequest('файл не передан');
+    if (!file) throw badRequest('upload.noFile');
     const ext = TemplateExt.safeParse(extname(file.filename).slice(1).toLowerCase());
-    if (!ext.success) throw badRequest('поддерживаются файлы docx, xlsx, odt, ods, pptx');
-    if (!isZip(file.data)) throw badRequest('файл повреждён или не является документом Office');
+    if (!ext.success) throw badRequest('template.unsupportedFile');
+    if (!isZip(file.data)) throw badRequest('template.notOffice');
     return { fields, ext: ext.data, data: file.data };
   }
 
@@ -135,17 +137,17 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     try {
       for await (const part of req.parts({ limits: { fileSize: MAX_TRANSFER_ARCHIVE_BYTES } })) {
         if (part.type === 'file') {
-          if (part.fieldname !== 'file') throw badRequest('архив передаётся в поле file');
+          if (part.fieldname !== 'file') throw badRequest('upload.archiveField');
           data = await part.toBuffer();
         } else fields[part.fieldname] = String(part.value);
       }
     } catch (err) {
       if ((err as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE') {
-        throw importInvalid(`архив больше ${MAX_TRANSFER_ARCHIVE_BYTES / 1024 / 1024} МБ`);
+        throw importInvalid('archive.tooLarge', { size: MAX_TRANSFER_ARCHIVE_BYTES / 1024 / 1024 });
       }
       throw err;
     }
-    if (!data) throw badRequest('файл не передан');
+    if (!data) throw badRequest('upload.noFile');
     return { fields, data };
   }
 
@@ -354,7 +356,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         datasourceId: z.uuid(),
       })
       .safeParse(fields);
-    if (!meta.success) throw badRequest('укажите название и источник данных');
+    if (!meta.success) throw badRequest('template.nameAndDatasource');
     const row = await insertTemplate({ ...meta.data, ext, data, userId: currentUser(req).id });
     return reply.status(201).send(toSummary(row, null));
   });
@@ -375,7 +377,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     async (req) => {
       const row = await loadTemplate(db, req.params.id);
       const { ext, data } = await readUpload(req);
-      if (ext !== row.fileExt) throw badRequest(`ожидается файл .${row.fileExt}`);
+      if (ext !== row.fileExt) throw badRequest('template.extExpected', { ext: row.fileExt });
       let written: string | undefined;
       let previous: string | undefined;
       let updated: TemplateRow;
@@ -387,7 +389,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
             .from(templates)
             .where(eq(templates.id, row.id))
             .for('update');
-          if (!cur) throw notFound('шаблон');
+          if (!cur) throw notFound('template');
           // Документ редактирует другая вкладка — файл не заменяется; своя (holder) не мешает (§38.2).
           await assertNotLockedByOther(tx, cur.id, req.query.holder ?? null);
           // Новая версия — новый файл: при сбое коммита строка продолжает указывать на прежний.
@@ -440,7 +442,10 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
         req.body.defaultOutput &&
         !outputFormatsFor(row.fileExt).includes(req.body.defaultOutput)
       ) {
-        throw badRequest(`формат ${req.body.defaultOutput} недоступен для .${row.fileExt}`);
+        throw badRequest('template.formatUnavailable', {
+          format: req.body.defaultOutput,
+          ext: row.fileExt,
+        });
       }
       if (req.body.datasourceId) await ensureDatasource(req.body.datasourceId);
       await db
@@ -465,7 +470,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
           .from(templates)
           .where(eq(templates.id, row.id))
           .for('update');
-        if (!cur) throw notFound('шаблон');
+        if (!cur) throw notFound('template');
         // Владельца мог сменить админ, пока запрос ждал блокировку: право проверяется ещё раз под ней.
         if (!deleteRight(currentUser(req), cur)) throw forbidden(NO_EDIT_RIGHT);
         await assertNotLockedByOther(tx, cur.id, null);
@@ -503,7 +508,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
   // Загрузка из архива (§33.2); в режиме обслуживания закрыта вместе с прочими изменениями.
   app.post('/api/templates/import/preview', author, async (req): Promise<ImportPreview> => {
     const { data } = await readArchiveUpload(req);
-    return previewImport(deps, data, currentUser(req));
+    return previewImport(deps, data, currentUser(req), req.locale);
   });
 
   app.post('/api/templates/import', author, async (req): Promise<ImportResult> => {
@@ -512,16 +517,25 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
     try {
       raw = JSON.parse(fields.decisions ?? '');
     } catch {
-      throw badRequest('не переданы решения по шаблонам (decisions)');
+      throw badRequest('import.noDecisions');
     }
-    const decisions = ImportDecisions.safeParse(raw);
+    // Сообщение issue входит в текст ошибки и переводится на язык запроса (§44.4).
+    const decisions = localizedSafeParse(ImportDecisions, raw);
     if (!decisions.success) {
       const issue = decisions.error.issues[0]!;
-      throw badRequest(
-        `неверные решения по шаблонам: ${issue.path.join('.')} ${issue.message}`.trim(),
-      );
+      const message = issueText(issue);
+      throw issue.path.length
+        ? badRequest('import.invalidDecisionsPath', { path: issue.path.join('.'), message })
+        : badRequest('import.invalidDecisions', { message });
     }
-    return applyImport(deps, data, decisions.data, currentUser(req), req.log);
+    return applyImport(
+      deps,
+      data,
+      decisions.data as ImportDecision[],
+      currentUser(req),
+      req.log,
+      req.locale,
+    );
   });
 
   app.post(
@@ -584,7 +598,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       const row = await loadTemplate(db, req.params.id);
       uniqueOrFail(
         req.body.map((q) => q.key),
-        'ключ запроса',
+        'template.queryKeyDuplicate',
       );
       await db.transaction(async (tx) => {
         // Проверка графиков — под блокировкой строки: параллельный PUT …/charts ждёт.
@@ -615,7 +629,7 @@ export function registerTemplateRoutes(app: App, deps: AppDeps, guards: Guards):
       const row = await loadTemplate(db, req.params.id);
       uniqueOrFail(
         req.body.map((p) => p.name),
-        'параметр',
+        'template.paramDuplicate',
       );
       orderParams(req.body); // только проверка графа; порядок хранения не меняется
       checkParamDefaults(req.body);

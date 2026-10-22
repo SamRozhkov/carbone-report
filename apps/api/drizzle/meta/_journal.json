@@ -113,6 +113,13 @@
       "when": 1792570723951,
       "tag": "0015_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792644518575,
+      "tag": "0016_user_locale",
+      "breakpoints": true
     }
   ]
 }

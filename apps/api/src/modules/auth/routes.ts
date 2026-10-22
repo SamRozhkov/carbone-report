@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { LoginBody, type Features } from '@carbone-reports/shared';
+import { LoginBody, type MeDto } from '@carbone-reports/shared';
+import { isLocale } from '@carbone-reports/shared/i18n';
 import { eq, sql } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { App } from '../../app';
@@ -79,10 +80,12 @@ async function provisionLdapUser(deps: AppDeps, login: string): Promise<UserRow 
 }
 
 export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): void {
-  // Признак включённых функций для меню web (§26.3): в ответах входа и /api/auth/me.
-  const withFeatures = (user: SessionUser): SessionUser & { features: Features } => ({
+  // Ответ входа и /api/auth/me: признак включённых функций для меню web (§26.3) и выбранный
+  // язык (§44.1; значение вне LOCALES — как не выбранный).
+  const toMe = (user: SessionUser, locale: string | null): MeDto => ({
     ...user,
     features: { backups: deps.backupAgent !== null },
+    locale: isLocale(locale) ? locale : null,
   });
 
   const loginRateLimit = {
@@ -95,7 +98,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
         .trim()
         .toLowerCase(),
     errorResponseBuilder: () =>
-      new AppError('TOO_MANY_ATTEMPTS', 429, 'слишком много попыток входа, повторите через минуту'),
+      new AppError('TOO_MANY_ATTEMPTS', 429, { key: 'auth.tooManyAttempts' }),
   };
 
   // Лимит по IP поверх лимита по логину: перебор многих логинов с одного адреса.
@@ -125,11 +128,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
             .header('retry-after', r.ttlInSeconds)
             .header('x-ratelimit-limit', r.max)
             .header('x-ratelimit-remaining', 0);
-          throw new AppError(
-            'TOO_MANY_ATTEMPTS',
-            429,
-            'слишком много попыток входа с этого адреса, повторите через минуту',
-          );
+          throw new AppError('TOO_MANY_ATTEMPTS', 429, { key: 'auth.tooManyAttemptsIp' });
         }
       },
     },
@@ -152,7 +151,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
       if (canonicalLogin) {
         const rejectLdap = (reason: string, accountLogin: string): never => {
           req.log.warn({ login: accountLogin }, `вход через LDAP отклонён: ${reason}`);
-          throw new AppError('INVALID_CREDENTIALS', 401, 'неверный логин или пароль');
+          throw new AppError('INVALID_CREDENTIALS', 401, { key: 'auth.invalidCredentials' });
         };
         // Канонический логин из каталога (например, uid записи, найденной по почте) совпал
         // с ADMIN_LOGIN — отказ без отката на локальный пароль с этим вводом.
@@ -173,7 +172,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
         }
         const ldapUser = existing ?? (await provisionLdapUser(deps, canonicalLogin));
         if (!ldapUser || ldapUser.blocked) {
-          throw new AppError('INVALID_CREDENTIALS', 401, 'неверный логин или пароль');
+          throw new AppError('INVALID_CREDENTIALS', 401, { key: 'auth.invalidCredentials' });
         }
         // Найденный (или найденный при гонке заведения) аккаунт — встроенный администратор.
         if (isAdminLogin(ldapUser.login))
@@ -184,16 +183,16 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
           rejectLdap('аккаунт заведён через Keycloak', ldapUser.login);
         const user = { id: ldapUser.id, login: ldapUser.login, role: ldapUser.role };
         await setSessionCookie(reply, deps, user, ldapUser.sessionVersion);
-        return withFeatures(user);
+        return toMe(user, ldapUser.locale);
       }
 
       const ok = await verifyPassword(row?.passwordHash ?? (await DUMMY_HASH_PROMISE), password);
       if (!row || !ok || row.blocked) {
-        throw new AppError('INVALID_CREDENTIALS', 401, 'неверный логин или пароль');
+        throw new AppError('INVALID_CREDENTIALS', 401, { key: 'auth.invalidCredentials' });
       }
       const user = { id: row.id, login: row.login, role: row.role };
       await setSessionCookie(reply, deps, user, row.sessionVersion);
-      return withFeatures(user);
+      return toMe(user, row.locale);
     },
   );
 
@@ -218,7 +217,12 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
     return reply.status(204).send();
   });
 
-  app.get('/api/auth/me', { preHandler: guards.requireUser }, async (req) =>
-    withFeatures(currentUser(req)),
-  );
+  app.get('/api/auth/me', { preHandler: guards.requireUser }, async (req) => {
+    const user = currentUser(req);
+    const [row] = await deps.db
+      .select({ locale: users.locale })
+      .from(users)
+      .where(eq(users.id, user.id));
+    return toMe(user, row?.locale ?? null);
+  });
 }

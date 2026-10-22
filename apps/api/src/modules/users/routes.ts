@@ -62,7 +62,7 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
         .returning();
       return reply.status(201).send(toUserDto(row!));
     } catch (e) {
-      if (isUniqueViolation(e)) throw conflict('пользователь с таким логином уже существует');
+      if (isUniqueViolation(e)) throw conflict('user.loginTaken');
       throw e;
     }
   });
@@ -78,13 +78,13 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
         req.params.id === me.id &&
         (blocked === true || (role !== undefined && role !== 'admin'))
       ) {
-        throw badRequest('нельзя заблокировать или понизить собственную учётную запись');
+        throw badRequest('user.cannotDemoteSelf');
       }
       const patch: Partial<UserRow> = {};
       if (password !== undefined) patch.passwordHash = await hashPassword(password);
       if (role !== undefined) patch.role = role;
       if (blocked !== undefined) patch.blocked = blocked;
-      if (Object.keys(patch).length === 0) throw badRequest('нет изменений');
+      if (Object.keys(patch).length === 0) throw badRequest('noChanges');
       // Смена пароля, роли или блокировка завершает все выданные сессии пользователя.
       const revoke = password !== undefined || role !== undefined || blocked !== undefined;
       const isSelf = req.params.id === me.id;
@@ -98,7 +98,7 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
             : eq(users.id, req.params.id),
         )
         .returning();
-      if (!row) throw isSelf ? unauthorized() : notFound('пользователь');
+      if (!row) throw isSelf ? unauthorized() : notFound('user');
       // Своя запись: текущая вкладка продолжает работать с новой cookie.
       if (revoke && row.id === me.id) {
         await setSessionCookie(
@@ -123,21 +123,20 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
     { ...pre, schema: { params: IdParams } },
     async (req, reply) => {
       if (req.params.id === currentUser(req).id) {
-        throw badRequest('нельзя завершить собственные сессии — используйте «Выйти везде»');
+        throw badRequest('user.cannotEndOwnSessions');
       }
       const [row] = await deps.db
         .update(users)
         .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
         .where(eq(users.id, req.params.id))
         .returning({ id: users.id });
-      if (!row) throw notFound('пользователь');
+      if (!row) throw notFound('user');
       return reply.status(204).send();
     },
   );
 
   app.delete('/api/users/:id', { ...pre, schema: { params: IdParams } }, async (req, reply) => {
-    if (req.params.id === currentUser(req).id)
-      throw badRequest('нельзя удалить собственную учётную запись');
+    if (req.params.id === currentUser(req).id) throw badRequest('user.cannotDeleteSelf');
     // Запуски удаляются каскадом, поэтому пути файлов нужно собрать до удаления пользователя.
     const runs = await deps.db
       .select({ id: reportRuns.id, filePath: reportRuns.filePath, snapshot: reportRuns.snapshot })
@@ -150,7 +149,7 @@ export function registerUserRoutes(app: App, deps: AppDeps, guards: Guards): voi
         ),
       );
     const [row] = await deps.db.delete(users).where(eq(users.id, req.params.id)).returning();
-    if (!row) throw notFound('пользователь');
+    if (!row) throw notFound('user');
     for (const r of runs) {
       // Снимок — каталог reports/<runId>/ целиком (§24.5), старый запуск — его файл.
       const path = runStoragePath(r)!;

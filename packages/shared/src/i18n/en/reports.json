@@ -1,0 +1,31 @@
+{
+  "list": {
+    "title": "Reports",
+    "search": "Search",
+    "searchLabel": "Search reports",
+    "noCategory": "Uncategorized",
+    "notFound": "Nothing found.",
+    "emptyAuthor": "No templates yet — create the first one in the “Templates” section.",
+    "empty": "No reports yet.",
+    "updated": "updated {{date}}"
+  },
+  "run": {
+    "openFailed": "Could not open the report",
+    "back": "Back to list",
+    "noParams": "This report has no parameters.",
+    "paramsChanged": "The report parameters have changed — the form has been updated",
+    "generate": "Generate",
+    "optionsLoading": "Loading parameter options…",
+    "ready": "Report is ready",
+    "preview": "Report preview",
+    "saveAs": "Save as",
+    "signed": "Signed: {{signer}}, {{date}}",
+    "signedTimestamped": "Signed: {{signer}}, {{date}}, with timestamp",
+    "downloadStamped": "Download PDF with stamp",
+    "downloadSig": "Download signature (.sig)",
+    "downloadSigned": "Download signed PDF",
+    "sign": "Sign PDF",
+    "uploadCertificate": "Upload a certificate on the “<page>My signature</page>” page",
+    "saveFailed": "Could not save the file"
+  }
+}

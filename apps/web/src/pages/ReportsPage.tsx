@@ -2,14 +2,14 @@ import type { TemplateSummary } from '@carbone-reports/shared';
 import { Card, Label, Loader, Text, TextInput } from '@gravity-ui/uikit';
 import { useQuery } from '@tanstack/react-query';
 import { useId, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { api } from '../api/endpoints';
 import { usePermissions } from '../app/permissions';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { PageHeader } from '../components/PageHeader';
+import { currentLocale, i18n } from '../i18n';
 import { formatDate } from '../lib/format';
-
-const NO_CATEGORY = 'Без категории';
 
 interface Section {
   key: string;
@@ -20,32 +20,33 @@ interface Section {
 /** Разделы каталога: категории по sortOrder и имени, шаблоны без категории — последним разделом «Без категории»; категория «Прочие» — обычная. */
 function sectionsOf(list: TemplateSummary[]): Section[] {
   const byKey = new Map<string, Section & { sortOrder: number }>();
-  for (const t of list) {
-    const key = t.category?.id ?? '';
+  for (const tpl of list) {
+    const key = tpl.category?.id ?? '';
     let s = byKey.get(key);
     if (!s) {
-      s = t.category
-        ? { key, title: t.category.name, sortOrder: t.category.sortOrder, items: [] }
-        : { key, title: NO_CATEGORY, sortOrder: 0, items: [] };
+      s = tpl.category
+        ? { key, title: tpl.category.name, sortOrder: tpl.category.sortOrder, items: [] }
+        : { key, title: i18n.t('reports:list.noCategory'), sortOrder: 0, items: [] };
       byKey.set(key, s);
     }
-    s.items.push(t);
+    s.items.push(tpl);
   }
   return [...byKey.values()].sort((a, b) => {
     if (!a.key !== !b.key) return a.key ? -1 : 1;
-    return a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, 'ru');
+    return a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, currentLocale());
   });
 }
 
 export function ReportsPage() {
   const { canAuthor } = usePermissions();
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const templates = useQuery({ queryKey: ['templates'], queryFn: api.templates.list });
 
   const q = query.trim().toLowerCase();
   const all = templates.data ?? [];
   const items = all.filter(
-    (t) => !q || t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q),
+    (tpl) => !q || tpl.name.toLowerCase().includes(q) || tpl.description.toLowerCase().includes(q),
   );
   // Заголовки нужны, только если в каталоге больше одного раздела; пустые после поиска скрываем.
   const showTitles = sectionsOf(all).length > 1;
@@ -53,22 +54,22 @@ export function ReportsPage() {
 
   let empty: string | null = null;
   if (templates.data && items.length === 0) {
-    if (all.length > 0) empty = 'Ничего не найдено.';
-    else if (canAuthor) empty = 'Шаблонов пока нет — создайте первый в разделе «Шаблоны».';
-    else empty = 'Отчётов пока нет.';
+    if (all.length > 0) empty = t('reports:list.notFound');
+    else if (canAuthor) empty = t('reports:list.emptyAuthor');
+    else empty = t('reports:list.empty');
   }
 
   return (
     <>
       <PageHeader
-        title="Отчёты"
+        title={t('reports:list.title')}
         actions={
           <TextInput
-            placeholder="Поиск"
+            placeholder={t('reports:list.search')}
             value={query}
             onUpdate={setQuery}
             hasClear
-            controlProps={{ 'aria-label': 'Поиск отчётов' }}
+            controlProps={{ 'aria-label': t('reports:list.searchLabel') }}
           />
         }
       />
@@ -98,28 +99,29 @@ function CatalogSection({ section }: { section: Section }) {
 
 function Cards({ items }: { items: TemplateSummary[] }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   return (
     <div className="cr-cards">
-      {items.map((t) => (
+      {items.map((tpl) => (
         <Card
-          key={t.id}
+          key={tpl.id}
           type="action"
           view="outlined"
           className="cr-card"
-          onClick={() => navigate(`/reports/${t.id}`)}
+          onClick={() => navigate(`/reports/${tpl.id}`)}
         >
           <Text variant="subheader-2" as="div">
-            {t.name}
+            {tpl.name}
           </Text>
-          {t.description && (
+          {tpl.description && (
             <Text color="secondary" as="div">
-              {t.description}
+              {tpl.description}
             </Text>
           )}
           <div className="cr-card-meta">
-            <Label size="xs">{t.fileExt.toUpperCase()}</Label>
+            <Label size="xs">{tpl.fileExt.toUpperCase()}</Label>
             <Text variant="caption-2" color="secondary">
-              обновлён {formatDate(t.updatedAt)}
+              {t('reports:list.updated', { date: formatDate(tpl.updatedAt) })}
             </Text>
           </div>
         </Card>

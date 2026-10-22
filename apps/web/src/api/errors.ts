@@ -1,8 +1,9 @@
+import { i18n } from '../i18n/instance';
 import { ApiRequestError } from './client';
 
 export function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
-  return 'неизвестная ошибка';
+  return i18n.t('common:error.unknown');
 }
 
 /**

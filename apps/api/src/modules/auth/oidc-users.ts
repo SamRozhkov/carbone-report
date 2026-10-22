@@ -16,11 +16,7 @@ export async function resolveOidcUser(
   // ошибки можно выяснить, занят ли логин и является ли он логином встроенного администратора.
   const unavailable: (reason: string) => never = (reason) => {
     log?.warn({ login: person.username, sub: person.subject }, `OIDC: вход отклонён — ${reason}`);
-    throw new AppError(
-      'OIDC_LOGIN_UNAVAILABLE',
-      403,
-      'вход через Keycloak для этой учётной записи недоступен — обратитесь к администратору',
-    );
+    throw new AppError('OIDC_LOGIN_UNAVAILABLE', 403, { key: 'oidc.loginUnavailable' });
   };
   // Never attach a directory identity to the recovery administrator.
   if (person.username.toLowerCase() === (deps.config.adminLogin ?? '').toLowerCase())
@@ -63,7 +59,7 @@ export async function resolveOidcUser(
       user.blocked ||
       user.login.toLowerCase() === (deps.config.adminLogin ?? '').toLowerCase()
     )
-      throw new AppError('INVALID_CREDENTIALS', 401, 'вход недоступен');
+      throw new AppError('INVALID_CREDENTIALS', 401, { key: 'oidc.signInUnavailable' });
     const sessionId = randomUUID();
     await tx.insert(oidcSessions).values({
       id: sessionId,

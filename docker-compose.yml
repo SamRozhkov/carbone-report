@@ -74,6 +74,8 @@ services:
       S3_CREATE_BUCKET: 'true'
       COOKIE_SECURE: 'true'
       TZ: ${TZ:-Europe/Moscow}
+      # Язык по умолчанию: ru, en, es, pt-BR, fr, de или zh-CN (§44.1).
+      DEFAULT_LOCALE: ${DEFAULT_LOCALE:-ru}
       QUERY_TIMEOUT_MS: ${QUERY_TIMEOUT_MS:-30000}
       QUERY_MAX_ROWS: ${QUERY_MAX_ROWS:-100000}
       RENDER_TIMEOUT_MS: ${RENDER_TIMEOUT_MS:-120000}

@@ -26,7 +26,8 @@ import {
   users,
 } from '../../../db/schema';
 import type { AppDeps } from '../../../deps';
-import { AppError, badRequest, conflict, forbidden } from '../../../lib/errors';
+import type { Locale } from '@carbone-reports/shared/i18n';
+import { AppError, badRequest, conflict, forbidden, translateMsg } from '../../../lib/errors';
 import type { SessionUser } from '../../auth/session';
 import { editableTemplates, NO_EDIT_RIGHT } from '../../access/permissions';
 import { activeLock, lockAlive } from '../../edit-lock/service';
@@ -46,8 +47,11 @@ type Log = { warn: (obj: object, msg: string) => void };
 
 const toTemplateParam = ({ sortOrder: _, ...p }: TransferParam): TemplateParam => p;
 
-/** Те же проверки параметров, что у `PUT /api/templates/:id/params`: граф ссылок и значения по умолчанию. */
-export function paramErrors(params: TransferParam[]): string[] {
+/**
+ * Те же проверки параметров, что у `PUT /api/templates/:id/params`: граф ссылок и значения по
+ * умолчанию. Тексты — на языке locale (идут в ответ предпросмотра).
+ */
+export function paramErrors(params: TransferParam[], locale: Locale = 'ru'): string[] {
   const defs = params.map(toTemplateParam);
   const out: string[] = [];
   for (const check of [orderParams, checkParamDefaults]) {
@@ -55,17 +59,19 @@ export function paramErrors(params: TransferParam[]): string[] {
       check(defs);
     } catch (err) {
       if (!(err instanceof AppError)) throw err;
-      const d = err.details as
+      const d = err.detailsIn(locale) as
         { path: string; message: string }[] | { fields: Record<string, string> } | undefined;
+      const paramError = (name: string | number, message: string) =>
+        translateMsg(locale, { key: 'import.paramError', params: { name, message } });
       if (Array.isArray(d)) {
         for (const x of d) {
           const i = Number(x.path.split('/')[1]);
-          out.push(`параметр «${defs[i]?.name ?? i}»: ${x.message}`);
+          out.push(paramError(defs[i]?.name ?? i, x.message));
         }
       } else if (d?.fields) {
-        for (const [name, msg] of Object.entries(d.fields)) out.push(`параметр «${name}»: ${msg}`);
+        for (const [name, msg] of Object.entries(d.fields)) out.push(paramError(name, msg));
       } else {
-        out.push(err.message);
+        out.push(err.textIn(locale));
       }
     }
   }
@@ -89,6 +95,7 @@ export function planImport(
   manifest: TransferManifest,
   lookup: ImportLookup,
   actor: Pick<SessionUser, 'role'>,
+  locale: Locale = 'ru',
 ): ImportPreviewItem[] {
   return manifest.templates.map((t, index) => {
     const sameName = lookup.templatesByName.get(t.name) ?? [];
@@ -110,7 +117,7 @@ export function planImport(
       categorySkipped: actor.role !== 'admin' && !categoryExists,
       groups: t.groups,
       missingGroups: t.groups.filter((g) => !lookup.groupsByLower.has(g.toLowerCase())),
-      errors: paramErrors(t.params),
+      errors: paramErrors(t.params, locale),
       pdfPasswordSet: t.pdfPasswordSet ?? false,
     };
   });
@@ -143,7 +150,7 @@ export interface ResolvedDecision {
 export const updatedAtText = sql<string>`to_char(${templates.updatedAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
 export const changedSincePreview = (name: string) =>
-  conflict(`шаблон «${name}» изменился после предпросмотра — повторите предпросмотр`);
+  conflict('import.changedSincePreview', { name });
 
 /**
  * Проверка решений администратора по плану: ровно одно решение на шаблон архива, источник
@@ -158,16 +165,16 @@ export function resolveDecisions(
 ): ResolvedDecision[] {
   const byIndex = new Map<number, ImportDecision>();
   for (const d of decisions) {
-    if (d.index >= plan.length) throw badRequest(`в архиве нет шаблона с номером ${d.index}`);
-    if (byIndex.has(d.index)) throw badRequest(`решение для шаблона ${d.index} повторяется`);
+    if (d.index >= plan.length) throw badRequest('import.noTemplateIndex', { index: d.index });
+    if (byIndex.has(d.index)) throw badRequest('import.decisionDuplicate', { index: d.index });
     byIndex.set(d.index, d);
   }
   const taken = new Set(ctx.takenNames);
   const updated = new Set<string>();
   return plan.map((item) => {
     const d = byIndex.get(item.index);
-    const who = `шаблон «${item.name}»`;
-    if (!d) throw badRequest(`${who}: не выбрано действие`);
+    const template = item.name;
+    if (!d) throw badRequest('import.noAction', { template });
     if (d.action === 'skip') {
       return {
         index: item.index,
@@ -178,28 +185,27 @@ export function resolveDecisions(
         targetUpdatedAt: null,
       };
     }
-    if (item.errors.length) throw importInvalid(`${who}: ${item.errors[0]}`);
-    if (!d.datasourceId) throw badRequest(`${who}: выберите источник данных`);
+    if (item.errors.length)
+      throw importInvalid('import.templateError', { template, message: item.errors[0]! });
+    if (!d.datasourceId) throw badRequest('import.datasourceRequired', { template });
     if (!ctx.datasourceIds.has(d.datasourceId))
-      throw conflict(`${who}: источник данных не найден — повторите предпросмотр`);
+      throw conflict('import.datasourceGone', { template });
     let name = item.name;
     let targetId: string | null = null;
     if (d.action === 'create') {
       if (taken.has(name)) {
         // Предпросмотр предлагает «создать» только при свободном имени: шаблон появился после него.
-        throw conflict(
-          `${who} уже есть — повторите предпросмотр и выберите «обновить», «копия» или «пропустить»`,
-        );
+        throw conflict('import.nameTaken', { template });
       }
     } else if (d.action === 'copy') {
       name = copyName(item.name, taken);
     } else {
-      if (!d.targetId) throw badRequest(`${who}: укажите обновляемый шаблон`);
-      if (!d.targetUpdatedAt) throw badRequest(`${who}: укажите время изменения из предпросмотра`);
+      if (!d.targetId) throw badRequest('import.targetRequired', { template });
+      if (!d.targetUpdatedAt) throw badRequest('import.targetUpdatedAtRequired', { template });
       const target = item.existing.find((e) => e.id === d.targetId);
       // Удалён, переименован или изменён (файл, запросы, параметры, доступ) после предпросмотра.
       if (target?.updatedAt !== d.targetUpdatedAt) throw changedSincePreview(item.name);
-      if (updated.has(d.targetId)) throw badRequest(`${who} обновляется дважды`);
+      if (updated.has(d.targetId)) throw badRequest('import.updatedTwice', { template });
       updated.add(d.targetId);
       targetId = d.targetId;
     }
@@ -284,12 +290,13 @@ export async function previewImport(
   deps: ImportDeps,
   zip: Buffer,
   actor: SessionUser,
+  locale: Locale = 'ru',
 ): Promise<ImportPreview> {
   const { manifest } = await readTransferArchive(zip);
   return {
     appVersion: manifest.appVersion,
     exportedAt: manifest.exportedAt,
-    templates: planImport(manifest, await loadLookup(deps, manifest, actor), actor),
+    templates: planImport(manifest, await loadLookup(deps, manifest, actor), actor, locale),
   };
 }
 
@@ -337,13 +344,15 @@ export async function applyImport(
   decisions: ImportDecision[],
   actor: SessionUser,
   log?: Log,
+  /** Язык текстов ошибок параметров, которые входят в ошибку загрузки. */
+  locale: Locale = 'ru',
 ): Promise<ImportResult> {
   const { db, storage } = deps;
   const { manifest, files, attachments } = await readTransferArchive(zip);
   // До записи файлов; иначе чужой шаблон не попал бы в `existing` и отказ был бы 409.
   await assertUpdateTargets(deps, decisions, actor);
   const lookup = await loadLookup(deps, manifest, actor);
-  const plan = planImport(manifest, lookup, actor);
+  const plan = planImport(manifest, lookup, actor, locale);
 
   const wantedDs = [...new Set(decisions.flatMap((d) => (d.datasourceId ? [d.datasourceId] : [])))];
   const [dsRows, nameRows] = await Promise.all([
@@ -401,7 +410,7 @@ export async function applyImport(
       for (const r of resolved) {
         if (!r.targetId) continue;
         const lock = await activeLock(tx, r.targetId);
-        if (lock) throw conflict(`шаблон «${r.name}» редактирует ${lock.login} — повторите позже`);
+        if (lock) throw conflict('import.templateLocked', { template: r.name, login: lock.login });
       }
       // Имена — заново: между ранней проверкой и блокировкой могла пройти другая загрузка.
       const names = await tx.select({ name: templates.name }).from(templates);
@@ -585,9 +594,7 @@ export async function applyImport(
       ),
     ]);
     if (isConcurrentChange(err)) {
-      throw conflict(
-        'данные изменились во время загрузки (источник, группа или категория) — повторите предпросмотр',
-      );
+      throw conflict('import.concurrentChange');
     }
     throw err;
   }

@@ -5,20 +5,28 @@ import { cleanup, configure as configureTesting } from '@testing-library/react';
 import type { ChangeEvent } from 'react';
 import { afterEach, vi } from 'vitest';
 import type { CodeEditorProps } from '../components/CodeEditor';
+import { changeLocale, currentLocale, setDefaultLocale } from '../i18n';
 
+// Язык тестов — ru (§44.6): i18n инициализируется с ru синхронно при импорте.
+document.documentElement.lang = 'ru';
 configure({ lang: 'ru' });
 // Медленные раннеры CI: холодный старт страницы дольше стандартной секунды findBy*/waitFor.
 configureTesting({ asyncUtilTimeout: 3000 });
 await settings.loadLocale('ru');
 settings.setLocale('ru');
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   vi.restoreAllMocks();
   try {
     localStorage.clear();
   } catch {
     // ignore
+  }
+  // Тест сменил язык — следующий снова начинает на ru.
+  setDefaultLocale('ru');
+  if (currentLocale() !== 'ru' || document.documentElement.lang !== 'ru') {
+    await changeLocale('ru', { persist: 'none' });
   }
 });
 

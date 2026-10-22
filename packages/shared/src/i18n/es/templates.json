@@ -1,0 +1,92 @@
+{
+  "list": {
+    "selectAll": "Seleccionar todas las plantillas",
+    "select": "Seleccionar «{{name}}»",
+    "editingBy": "En edición por {{login}}",
+    "type": "Tipo",
+    "updatedAt": "Modificada",
+    "open": "Abrir",
+    "duplicate": "Duplicar",
+    "download": "Descargar",
+    "exportSelected": "Exportar ({{n}})",
+    "import": "Importar desde archivo ZIP",
+    "create": "Crear plantilla",
+    "empty": "Todavía no hay plantillas",
+    "duplicated": "Se creó la copia «{{name}}»",
+    "deleteTitle": "¿Eliminar la plantilla?",
+    "deleteText": "La plantilla «{{name}}» se eliminará junto con sus consultas y parámetros. El historial de ejecuciones se conservará."
+  },
+  "export": {
+    "button": "Exportar",
+    "failed": "No se pudo exportar",
+    "tooMany": "Demasiadas plantillas",
+    "tooManyText": "Se pueden exportar como máximo {{max}} plantillas a la vez; seleccionadas: {{selected}}."
+  },
+  "create": {
+    "title": "Nueva plantilla",
+    "noDatasourcesAdmin": "Primero añada un origen de datos en la sección <page>«Orígenes de datos»</page>.",
+    "noDatasources": "Todavía no hay orígenes de datos: pida a un administrador que añada uno.",
+    "datasource": "Origen de datos",
+    "file": "Archivo",
+    "blankDocx": "DOCX en blanco",
+    "blankXlsx": "XLSX en blanco",
+    "upload": "Cargar archivo",
+    "fileAria": "Archivo de plantilla"
+  },
+  "importAction": {
+    "create": "crear",
+    "update": "actualizar",
+    "copy": "copia",
+    "skip": "omitir"
+  },
+  "importResult": {
+    "create": "creada",
+    "update": "actualizada",
+    "copy": "copia creada",
+    "skip": "omitida"
+  },
+  "import": {
+    "title": "Importar plantillas desde archivo ZIP",
+    "tooBig": "El archivo ZIP supera los 50 MB y no se puede cargar.",
+    "tooBigFile": "El archivo ZIP supera los 50 MB y no se puede cargar. Tamaño del archivo «{{name}}»: {{size}} MB.",
+    "noteUnavailable": "«{{was}}» ya no está disponible; se seleccionó «{{now}}», revíselo",
+    "noteTargetGone": "La plantilla elegida para actualizar se eliminó o cambió de nombre; revise la selección",
+    "noteTargetChanged": "La plantilla cambió después de la vista previa anterior; compruebe que se puede reemplazar",
+    "noteDatasourceGone": "Se eliminó el origen de datos seleccionado",
+    "notesTwo": "{{first}}. {{second}}",
+    "template": "Plantilla",
+    "action": "Acción",
+    "datasource": "Origen de datos",
+    "result": "Resultado",
+    "missingGroups": "No existen los grupos: {{groups}}; no se concederá el acceso",
+    "pdfPassword": "La contraseña del PDF no se transfiere: una plantilla nueva quedará sin contraseña y, al actualizar, se mantendrá la contraseña de la plantilla actual",
+    "lockedBy": "{{login}} está editando la plantilla: la actualización se rechazará mientras el editor esté abierto",
+    "categorySkipped": "La categoría «{{category}}» no existe en este entorno: no se creará y la plantilla se importará sin ella",
+    "categoryCreated": "Se creará la categoría «{{category}}»",
+    "actionAria": "Acción: {{name}}",
+    "targetAria": "Plantilla que se actualizará: {{name}}",
+    "targetUpdatedAt": "modificada el {{date}}",
+    "updateNote": "El archivo, las consultas, los parámetros, los grupos de acceso, la categoría, la disponibilidad para todos y el origen se reemplazarán por los datos del archivo ZIP",
+    "datasourceAria": "Origen de datos: {{name}}",
+    "chooseDatasource": "Seleccione un origen",
+    "inArchive": "En el archivo ZIP: «{{name}}» — {{problem}}",
+    "inArchiveHost": "En el archivo ZIP: «{{name}}» ({{host}}) — {{problem}}",
+    "datasourceAmbiguous": "se encontraron varios orígenes con este nombre; elija uno",
+    "datasourceNotFound": "no se encontró en este entorno",
+    "fileAria": "Archivo ZIP",
+    "datasourcesFailed": "No se pudo obtener la lista de orígenes de datos",
+    "rejected": "Archivo ZIP rechazado",
+    "archiveInfo": "Versión de la aplicación en el archivo ZIP: {{version}}, exportado el {{date}}",
+    "applyFailed": "No se pudo importar",
+    "retry": "Repetir la vista previa",
+    "apply": "Importar"
+  },
+  "access": {
+    "noCategory": "Sin categoría",
+    "groupsHint": "grupos que ven la plantilla además del acceso a través de la categoría",
+    "adminOnlyAfterSave": "Después de guardar, la plantilla solo estará disponible para los administradores",
+    "adminOnlyNow": "Ahora la plantilla solo está disponible para los administradores",
+    "saved": "Acceso guardado",
+    "dialogTitle": "Acceso a la plantilla «{{name}}»"
+  }
+}

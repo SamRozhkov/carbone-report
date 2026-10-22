@@ -1,18 +1,20 @@
-import { pdfStaticText, pdfTextIssues, type PdfOptions } from '@carbone-reports/shared';
+import { pdfStaticText, pdfTextBadTag, type PdfOptions } from '@carbone-reports/shared';
+import { text } from '../../lib/errors';
 import { unsupportedChars } from '../pdf/font';
 import type { ChartIssue } from './charts';
 
-export const pdfaMessage = (name: string) => `PDF/A включён: файл «${name}» не в формате PDF/A`;
+/** Приложение не в формате PDF/A при включённом PDF/A. */
+export const pdfaMessage = (name: string) => text('pdf.attachmentNotPdfa', { name });
 
-function textIssue(path: string, text: string, tags: 'allowed' | 'none'): ChartIssue | null {
+function textIssue(path: string, value: string, tags: 'allowed' | 'none'): ChartIssue | null {
   if (tags === 'none') {
-    if (text.includes('{d.')) return { path, message: 'в нумерации теги {d.…} не поддерживаются' };
+    if (value.includes('{d.')) return { path, message: text('pdf.numberingTags') };
   } else {
-    const tagIssue = pdfTextIssues(text);
-    if (tagIssue) return { path, message: tagIssue };
+    const tag = pdfTextBadTag(value);
+    if (tag) return { path, message: text('pdf.tagFormatter', { tag }) };
   }
-  const bad = unsupportedChars(tags === 'none' ? text : pdfStaticText(text));
-  if (bad.length) return { path, message: `символ «${bad[0]}» не поддерживается шрифтом PDF` };
+  const bad = unsupportedChars(tags === 'none' ? value : pdfStaticText(value));
+  if (bad.length) return { path, message: text('pdf.unsupportedChar', { char: bad[0]! }) };
   return null;
 }
 

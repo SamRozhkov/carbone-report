@@ -46,8 +46,8 @@ describe('buildTagTree', () => {
 
   it('ключ не-идентификатор: узел остаётся, добавляется подсказка', () => {
     const tree = buildTagTree({ 'Общая сумма': 1, ok_1: 2, дата: 3 });
-    expect(tree[0]!.hint).toMatch(/переименуйте колонку в SQL/);
-    expect(tree[1]!.hint).toBeNull();
-    expect(tree[2]!.hint).toBeNull();
+    expect(tree[0]!.badKey).toBe(true);
+    expect(tree[1]!.badKey).toBe(false);
+    expect(tree[2]!.badKey).toBe(false);
   });
 });

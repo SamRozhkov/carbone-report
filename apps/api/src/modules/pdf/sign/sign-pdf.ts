@@ -19,7 +19,7 @@ export interface SignPdfOptions {
 
 function left(deadline: number): number {
   const ms = deadline - Date.now();
-  if (ms <= 0) throw new AppError('TIMEOUT', 504, 'превышено время ожидания');
+  if (ms <= 0) throw new AppError('TIMEOUT', 504, { key: 'timeout' });
   return ms;
 }
 

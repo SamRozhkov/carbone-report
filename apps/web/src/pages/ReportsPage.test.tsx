@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import { changeLocale } from '../i18n';
 import { adminMe, mockApi, renderRoute, userMe } from '../test/utils';
 
 const templates = [
@@ -153,5 +154,47 @@ describe('ReportsPage', () => {
     expect(
       within(screen.getByRole('region', { name: 'Без категории' })).getByText('Сводка'),
     ).toBeInTheDocument();
+  });
+
+  // §44.6: моки на латинице — кириллица на странице могла бы прийти только из кода.
+  it('на en страница без кириллицы: шапка, меню, разделы, «Без категории», дата', async () => {
+    await changeLocale('en', { persist: 'none' });
+    mockApi([
+      adminMe,
+      {
+        path: '/api/templates',
+        body: [
+          tpl('t1', 'Invoice', null),
+          tpl('t2', 'Balance', { id: 'c1', name: 'Finance', sortOrder: 0 }),
+        ],
+      },
+    ]);
+    renderRoute('/reports');
+    await screen.findByText('Invoice');
+    expect(screen.getByRole('heading', { level: 1, name: 'Reports' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Uncategorized' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Search reports')).toBeInTheDocument();
+    expect(screen.getAllByText(/^updated /)).toHaveLength(2);
+    expect(document.body.textContent).not.toMatch(/[Ѐ-ӿ]/);
+  });
+
+  it('на en пустой каталог автора — подсказка с разделом “Templates”', async () => {
+    await changeLocale('en', { persist: 'none' });
+    mockApi([adminMe, { path: '/api/templates', body: [] }]);
+    renderRoute('/reports');
+    expect(
+      await screen.findByText(
+        'No templates yet — create the first one in the “Templates” section.',
+      ),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/[Ѐ-ӿ]/);
+  });
+
+  it('на zh-CN заголовок страницы — из каталога', async () => {
+    await changeLocale('zh-CN', { persist: 'none' });
+    mockApi([userMe, { path: '/api/templates', body: [tpl('t1', 'Invoice', null)] }]);
+    renderRoute('/reports');
+    await screen.findByText('Invoice');
+    expect(screen.getByRole('heading', { level: 1, name: '报表' })).toBeInTheDocument();
   });
 });

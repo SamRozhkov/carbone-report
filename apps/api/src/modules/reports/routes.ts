@@ -24,7 +24,7 @@ import {
 } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { Deadline } from '../../lib/deadline';
-import { AppError, notFound } from '../../lib/errors';
+import { AppError, notFound, ruText } from '../../lib/errors';
 import { contentDisposition, MIME, SIG_MIME } from '../../lib/http';
 import { assertTemplateAccess } from '../access/access';
 import { currentUser, type Guards } from '../auth/guards';
@@ -150,7 +150,8 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
               ...base,
               params: paramsForErrorRun(full, req.body.params),
               status: 'error',
-              error: e instanceof AppError ? e.message : 'внутренняя ошибка сервера',
+              // В истории — по-русски (err.message), как журнал.
+              error: e instanceof AppError ? e.message : ruText('internal'),
               durationMs: Date.now() - started,
             });
           } catch (insertErr) {
@@ -255,8 +256,8 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
       const me = currentUser(req);
       const [run] = await db.select().from(reportRuns).where(eq(reportRuns.id, req.params.id));
       // Чужой запуск для пользователя неотличим от несуществующего.
-      if (!run || (me.role !== 'admin' && run.userId !== me.id)) throw notFound('запуск');
-      if (run.status !== 'ok' || !run.filePath) throw notFound('файл');
+      if (!run || (me.role !== 'admin' && run.userId !== me.id)) throw notFound('run');
+      if (run.status !== 'ok' || !run.filePath) throw notFound('file');
       if (req.query.signed === '1') {
         // R10: подписанный файл есть только в PDF.
         if (req.query.format !== undefined && req.query.format !== 'pdf') throw formatUnavailable();
@@ -265,7 +266,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
           .select()
           .from(reportRunSignatures)
           .where(eq(reportRunSignatures.runId, run.id));
-        if (!sig) throw notFound('файл');
+        if (!sig) throw notFound('file');
         const date = run.createdAt.toISOString().slice(0, 10);
         return reply
           .header('content-type', MIME.pdf)
@@ -284,7 +285,7 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
           .select()
           .from(reportRunSignatures)
           .where(eq(reportRunSignatures.runId, run.id));
-        if (!sig || sig.method !== 'gost' || !sig.sigPath) throw notFound('файл');
+        if (!sig || sig.method !== 'gost' || !sig.sigPath) throw notFound('file');
         const date = run.createdAt.toISOString().slice(0, 10);
         return reply
           .header('content-type', SIG_MIME)
@@ -301,12 +302,12 @@ export function registerReportRoutes(app: App, deps: AppDeps, guards: Guards): v
         // Ошибка сборки (в том числе CARBONE_COMMUNITY и CONVERT_ERROR) уходит как есть; статус запуска не меняется.
         content = await ensureRunFile(deps, run, format, deadline);
       } else {
-        if (run.fileDeleted) throw new AppError('GONE', 410, 'файл удалён по сроку хранения');
+        if (run.fileDeleted) throw new AppError('GONE', 410, { key: 'run.fileExpired' });
         try {
           content = await storage.read(run.filePath);
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code === 'ENOENT')
-            throw new AppError('GONE', 410, 'файл удалён по сроку хранения');
+            throw new AppError('GONE', 410, { key: 'run.fileExpired' });
           throw e;
         }
       }

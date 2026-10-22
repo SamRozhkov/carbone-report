@@ -1,0 +1,285 @@
+{
+  "unauthorized": "需要登录",
+  "forbidden": "权限不足",
+  "internal": "服务器内部错误",
+  "validation": "请求数据无效",
+  "badRequest": "请求无效",
+  "fileTooLarge": "文件超过 {{size}} MB",
+  "tooManyParts": "请求中的文件或字段过多",
+  "invalidJson": "请求正文中的 JSON 无效",
+  "bodyTooLarge": "请求正文过大",
+  "unsupportedMediaType": "不支持的内容类型",
+  "timeout": "等待超时",
+  "noChanges": "没有更改",
+  "notFound": {
+    "template": "未找到模板",
+    "user": "未找到用户",
+    "group": "未找到用户组",
+    "category": "未找到类别",
+    "datasource": "未找到数据源",
+    "run": "未找到运行记录",
+    "file": "未找到文件",
+    "param": "未找到参数",
+    "attachment": "未找到附加文件",
+    "oidc": "未找到 OIDC"
+  },
+  "access": {
+    "relatedDeleted": "相关记录已被删除，请重试",
+    "groupNameTaken": "同名用户组已存在",
+    "categoryNameTaken": "同名类别已存在",
+    "unknownUser": "未知用户",
+    "unknownGroup": "未知用户组",
+    "unknownCategory": "未知类别",
+    "noEditRight": "无权编辑模板",
+    "grantEditorOnly": "只能授予具有“编辑者”角色的用户",
+    "ownerAlreadyEditor": "所有者已经可以编辑该模板",
+    "ownerEditorOnly": "只有具有“编辑者”角色的用户才能成为所有者"
+  },
+  "datasource": {
+    "passwordRequired": "必须填写密码",
+    "inUse": "该数据源正被模板使用",
+    "certFailed": "证书未通过验证：{{message}}",
+    "connectFailed": "无法连接到数据源“{{name}}”",
+    "connectionLost": "与数据源“{{name}}”的连接已中断"
+  },
+  "user": {
+    "loginTaken": "使用该登录名的用户已存在",
+    "cannotDemoteSelf": "不能停用或降级自己的账户",
+    "cannotEndOwnSessions": "不能结束自己的会话——请使用“在所有设备上退出”",
+    "cannotDeleteSelf": "不能删除自己的账户"
+  },
+  "auth": {
+    "tooManyAttempts": "登录尝试次数过多，请一分钟后重试",
+    "tooManyAttemptsIp": "来自该地址的登录尝试次数过多，请一分钟后重试",
+    "invalidCredentials": "登录名或密码错误"
+  },
+  "oidc": {
+    "loginUnavailable": "该账户无法通过 Keycloak 登录——请联系管理员",
+    "signInUnavailable": "无法登录",
+    "redisRequired": "OIDC 需要可用的 Redis",
+    "unavailableUseLogin": "Keycloak 不可用，请使用常规登录",
+    "invalidUsername": "Keycloak 登录名（preferred_username）不符合要求：3 到 64 个字符，不得包含控制字符和不可见字符",
+    "invalidResponse": "无法确认通过 Keycloak 的登录",
+    "unavailable": "Keycloak 不可用，请稍后重试",
+    "invalidLogoutToken": "logout token 无效",
+    "accountReserved": "无法关联此账户",
+    "alreadyLinked": "外部账户已关联"
+  },
+  "p12": {
+    "badFile": "密码错误或文件已损坏",
+    "oneKey": "文件中必须只有一个密钥及其证书",
+    "unsupportedAlg": "不支持该密钥算法",
+    "gost": "GOST 证书通过 CryptoPro 签名——暂不支持",
+    "tooManyIterations": "不支持该证书文件：加密迭代次数过多",
+    "fileTooLarge": "文件超过 50 KB",
+    "passwordRequired": "请输入密码",
+    "tooManyUploads": "证书上传次数过多——请一分钟后重试"
+  },
+  "sign": {
+    "certNotYetValid": "证书尚未生效",
+    "certExpired": "证书已过期",
+    "certNotForSigning": "该证书不用于签名",
+    "tsaUnavailable": "时间戳服务不可用",
+    "unavailable": "此报表无法签名",
+    "wrongKeyPassword": "密钥密码错误",
+    "tooManyPasswords_other": "密码错误次数过多——请 {{count}} 分钟后重试",
+    "busy": "另一个签名正在进行——请几秒钟后重试",
+    "uploadCertificate": "请在“我的签名”页面上传证书",
+    "alreadySigned": "报表已签名"
+  },
+  "gost": {
+    "format": "签名格式无效",
+    "otherCert": "签名由其他证书生成",
+    "document": "签名与文档不符",
+    "invalid": "签名无效",
+    "noTimestamp": "没有时间戳",
+    "timestamp": "时间戳无效",
+    "badCertificate": "证书无效",
+    "restart": "请重新开始签名",
+    "unsupportedCertificate": "证书不是 GOST R 34.10-2012 证书或不受支持",
+    "signatureTooLarge": "签名超过 64 KB"
+  },
+  "carbone": {
+    "communityFormatter": "模板使用了 {{name}}——Carbone 免费版不可用，请参阅“模板帮助”",
+    "communityUnknown": "模板使用了 Carbone 免费版不可用的格式化器，请参阅“模板帮助”"
+  },
+  "render": {
+    "dataNotJson": "报表数据无法序列化为 JSON",
+    "dataNotJsonDetail": "报表数据无法序列化为 JSON：{{message}}",
+    "formatUnavailable": "格式 {{format}} 不适用于 {{ext}} 模板",
+    "templateError": "模板错误：{{message}}",
+    "generationError": "生成错误：{{message}}",
+    "unavailable": "生成服务不可用",
+    "workerUnavailable": "渲染线程不可用"
+  },
+  "convert": {
+    "unavailable": "转换服务不可用",
+    "failed": "转换错误（代码 {{code}}）"
+  },
+  "file": {
+    "invalidToken": "文件令牌无效",
+    "gone": "文件已被获取或已过期"
+  },
+  "onlyoffice": {
+    "unavailable": "文档服务器不可用",
+    "noChanges": "没有未保存的更改",
+    "notOpen": "文档未在编辑器中打开",
+    "commandError": "文档服务器返回错误 {{code}}",
+    "saveFailed": "OnlyOffice 无法保存文档",
+    "forceSaveFailed": "OnlyOffice 强制保存出错",
+    "invalidSignature": "OnlyOffice 签名无效",
+    "noRightToSave": "更改未保存：无权编辑模板",
+    "badCallback": "OnlyOffice 回调格式无效",
+    "noFileUrl": "OnlyOffice 未提供文件链接",
+    "badFileUrl": "OnlyOffice 提供的文件链接不允许使用",
+    "downloadFailed": "无法从 OnlyOffice 下载文件",
+    "notDocument": "从 OnlyOffice 收到的文件不是文档"
+  },
+  "pdf": {
+    "processingError": "PDF 处理错误：{{message}}",
+    "signPrepareError": "准备 PDF 签名时出错：{{message}}",
+    "protectUnavailable": "PDF 加密不可用：未安装 qpdf",
+    "protectFailed": "无法加密 PDF",
+    "notPdf": "文件不是 PDF",
+    "encrypted": "PDF 受密码保护",
+    "damaged": "PDF 已损坏",
+    "attachmentUnavailable": "附加文件“{{name}}”不可用",
+    "resultTooLarge": "生成的 PDF 超过 {{size}} MB",
+    "attachmentNotPdfa": "已启用 PDF/A：文件“{{name}}”不是 PDF/A 格式",
+    "numberingTags": "页码中不支持 {d.…} 标签",
+    "tagFormatter": "PDF 字段中只能使用不带格式化器的标签：{{tag}}",
+    "unsupportedChar": "PDF 字体不支持字符“{{char}}”",
+    "tooManyPages_other": "模板的附加文件最多 {{count}} 页",
+    "placement": "placement：start 或 end",
+    "tooManyAttachments_other": "模板最多可有 {{count}} 个附加文件"
+  },
+  "upload": {
+    "fileField": "文件须通过 file 字段提交",
+    "noFile": "未提交文件",
+    "archiveField": "压缩包须通过 file 字段提交"
+  },
+  "run": {
+    "snapshotGone": "文件已删除——请重新生成报表",
+    "formatUnavailable": "此报表不支持该格式",
+    "fileExpired": "文件已因保存期限到期而删除"
+  },
+  "reportTimeout": "报表生成超时",
+  "editLock": {
+    "locked": "{{login}} 正在编辑该模板",
+    "startEditing": "请开始编辑"
+  },
+  "backup": {
+    "disabled": "备份管理已关闭：请设置 BACKUP_AGENT_URL 和 BACKUP_AGENT_TOKEN",
+    "agentUnavailable": "备份代理不可用"
+  },
+  "maintenance": {
+    "restoring": "正在从备份恢复，请稍后重试",
+    "tooManyAttempts_other": "代码输入尝试次数过多，请 {{count}} 分钟后重试"
+  },
+  "sql": {
+    "query": "查询“{{key}}”",
+    "param": "参数“{{label}}”",
+    "readOnly": "{{what}}：禁止写入——查询只能以只读方式执行",
+    "error": "{{what}}：{{message}}",
+    "errorHint": "{{what}}：{{message}}（{{hint}}）",
+    "txForbidden": "{{what}}：禁止控制事务",
+    "unknownParam": "{{what}}：未知参数 :{{name}}",
+    "tooManyRows_other": "查询“{{key}}”返回超过 {{count}} 行",
+    "tooManyOptions_other": "{{what}}：选项超过 {{count}} 个——请细化查询",
+    "positionalParams": "请使用命名参数 :name，而不是 $1",
+    "hintMissingOperator": "any 前需要比较运算符：= any(:名称)",
+    "hintArray": "参数 :{{name}} 为多选：请使用 = any(:{{name}}) 比较",
+    "hintArrays": "参数 {{list}} 为多选：请使用 = any(:名称) 比较",
+    "hintScalar": "参数 :{{name}} 为单个值：请使用 = :{{name}} 比较"
+  },
+  "param": {
+    "invalid": "参数无效",
+    "expectedList": "应为值列表",
+    "expectedOne": "应为单个值",
+    "invalidValue": "值不允许",
+    "expectedString": "应为字符串",
+    "expectedNumber": "应为数字",
+    "expectedDate": "应为 YYYY-MM-DD 格式的日期",
+    "expectedBoolean": "应为是/否",
+    "required": "必填参数",
+    "defaultInvalid": "默认值：{{message}}",
+    "unavailable": "该值不可用",
+    "unknownRef": "未知参数 :{{name}}",
+    "selfRef": "参数不能引用自身",
+    "cycle": "循环依赖：{{names}}"
+  },
+  "chart": {
+    "noColumn": "图表 {{chart}}：没有列 {{column}}",
+    "tooManySeries_other": "图表 {{chart}}：系列超过 {{count}} 个",
+    "noQuery": "没有查询“{{query}}”",
+    "querySingle": "查询“{{query}}”只返回一行——需要“行列表”模式",
+    "queryUsed": "查询“{{query}}”被图表“{{chart}}”使用",
+    "queryUsedList": "该查询被图表“{{chart}}”使用——需要“行列表”模式"
+  },
+  "archive": {
+    "partTooLarge": "部分过大",
+    "notZip": "文件不是 ZIP 压缩包",
+    "zip64": "不支持 ZIP64 压缩包",
+    "multiVolume": "不支持分卷压缩包",
+    "tooManyEntries_other": "压缩包中的条目超过 {{count}} 个",
+    "damaged": "压缩包已损坏",
+    "damagedEntry": "压缩包已损坏：{{name}}",
+    "badPath": "压缩包中的路径不允许：{{path}}",
+    "encrypted": "不支持加密压缩包：{{name}}",
+    "unsupportedMethod": "压缩包中有不支持的压缩方法：{{name}}",
+    "tooLarge": "压缩包超过 {{size}} MB",
+    "duplicateEntry": "压缩包中有重复条目：{{name}}",
+    "unpackedTooLarge": "解压后的压缩包超过 {{size}} MB",
+    "noManifest": "压缩包中没有 {{file}}",
+    "extraFile": "压缩包中有多余文件：{{name}}",
+    "missingFile": "压缩包中没有文件 {{file}}",
+    "checksum": "文件 {{file}} 与清单中的校验和不一致",
+    "notOffice": "文件 {{file}} 不是 Office 文档"
+  },
+  "import": {
+    "manifestJson": "{{file}}：JSON 无效",
+    "notTransferArchive": "这不是 carbone-reports 模板压缩包",
+    "formatVersion": "不支持压缩包格式版本 {{version}}（应为 {{expected}}）",
+    "manifestTemplate": "{{file}}：模板 {{index}}：{{message}}",
+    "manifestTemplatePath": "{{file}}：模板 {{index}}（{{path}}）：{{message}}",
+    "manifestPath": "{{file}}：{{path}}：{{message}}",
+    "manifest": "{{file}}：清单：{{message}}",
+    "manifestTooLarge": "{{file}} 超过 {{size}} MB",
+    "attachmentError": "模板“{{template}}”：文件“{{name}}”：{{message}}",
+    "templateError": "模板“{{template}}”：{{message}}",
+    "paramError": "参数“{{name}}”：{{message}}",
+    "changedSincePreview": "模板“{{name}}”在预览后已更改——请重新预览",
+    "noTemplateIndex": "压缩包中没有编号为 {{index}} 的模板",
+    "decisionDuplicate": "模板 {{index}} 的决定重复",
+    "noAction": "模板“{{template}}”：未选择操作",
+    "datasourceRequired": "模板“{{template}}”：请选择数据源",
+    "datasourceGone": "模板“{{template}}”：未找到数据源——请重新预览",
+    "nameTaken": "模板“{{template}}”已存在——请重新预览并选择“更新”“副本”或“跳过”",
+    "targetRequired": "模板“{{template}}”：请指定要更新的模板",
+    "targetUpdatedAtRequired": "模板“{{template}}”：请指定预览中的修改时间",
+    "updatedTwice": "模板“{{template}}”被更新了两次",
+    "templateLocked": "{{login}} 正在编辑模板“{{template}}”——请稍后重试",
+    "concurrentChange": "导入期间数据已更改（数据源、用户组或类别）——请重新预览",
+    "noDecisions": "未提交模板的决定（decisions）",
+    "invalidDecisions": "模板的决定无效：{{message}}",
+    "invalidDecisionsPath": "模板的决定无效：{{path}} {{message}}"
+  },
+  "export": {
+    "invalid": "压缩包未通过检查：{{message}}",
+    "templateInvalid": "模板“{{name}}”无法导出：{{message}}",
+    "templateInvalidPath": "模板“{{name}}”无法导出（{{path}}）：{{message}}",
+    "manifestTooLarge": "模板描述（{{file}}）超过 {{size}} MB——请分批导出",
+    "nameDuplicate": "所选模板中名称“{{name}}”重复",
+    "filesTooLarge": "所选模板的文件无法放入 {{size}} MB 的压缩包——请分批导出",
+    "archiveTooLarge": "压缩包将超过 {{size}} MB——请分批导出模板"
+  },
+  "template": {
+    "unsupportedFile": "支持的文件：docx、xlsx、odt、ods、pptx",
+    "notOffice": "文件已损坏或不是 Office 文档",
+    "nameAndDatasource": "请填写名称并选择数据源",
+    "extExpected": "应为 .{{ext}} 文件",
+    "formatUnavailable": "格式 {{format}} 不适用于 .{{ext}}",
+    "queryKeyDuplicate": "查询键“{{value}}”重复",
+    "paramDuplicate": "参数“{{value}}”重复"
+  }
+}

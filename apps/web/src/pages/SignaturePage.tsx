@@ -3,6 +3,7 @@ import { CERT_EXPIRY_WARNING_DAYS } from '@carbone-reports/shared';
 import { Alert, Button, Card, Loader, Text, TextInput } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../api/endpoints';
 import { fieldErrors } from '../api/errors';
 import { CadesCheck } from '../components/CadesCheck';
@@ -25,6 +26,7 @@ export function certificateState(
 }
 
 function UploadForm({ onDone, onCancel }: { onDone: () => void; onCancel?: () => void }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [password, setPassword] = useState('');
@@ -54,23 +56,23 @@ function UploadForm({ onDone, onCancel }: { onDone: () => void; onCancel?: () =>
         if (file && password) upload.mutate();
       }}
     >
-      <Field label="Файл сертификата" error={errors.file}>
+      <Field label={t('signature:upload.file')} error={errors.file}>
         <input
           ref={fileInput}
           type="file"
           accept=".p12,.pfx"
-          aria-label="Файл сертификата"
+          aria-label={t('signature:upload.file')}
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
       </Field>
-      <Field label="Пароль к файлу" error={errors.password}>
+      <Field label={t('signature:upload.password')} error={errors.password}>
         <TextInput
           type="password"
           value={password}
           onUpdate={setPassword}
           autoComplete="new-password"
           validationState={errors.password ? 'invalid' : undefined}
-          controlProps={{ 'aria-label': 'Пароль к файлу' }}
+          controlProps={{ 'aria-label': t('signature:upload.password') }}
         />
       </Field>
       <GeneralError error={upload.error} errors={errors} shown={['file', 'password']} />
@@ -81,9 +83,9 @@ function UploadForm({ onDone, onCancel }: { onDone: () => void; onCancel?: () =>
           loading={upload.isPending}
           disabled={!file || !password}
         >
-          Загрузить сертификат
+          {t('signature:upload.submit')}
         </Button>
-        {onCancel && <Button onClick={onCancel}>Отмена</Button>}
+        {onCancel && <Button onClick={onCancel}>{t('common:action.cancel')}</Button>}
       </div>
     </form>
   );
@@ -103,6 +105,7 @@ function Row({ label, children, mono }: { label: string; children: string; mono?
 }
 
 export function SignaturePage() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: myCertificateKey, queryFn: api.signature.get });
   const [replacing, setReplacing] = useState(false);
@@ -120,16 +123,13 @@ export function SignaturePage() {
 
   return (
     <>
-      <PageHeader title="Моя подпись" />
+      <PageHeader title={t('signature:page.title')} />
       <ErrorAlert error={query.error} />
       {query.isPending ? (
         <Loader />
       ) : !cert ? (
         <div className="cr-form">
-          <Text as="p">
-            Нужен файл .p12 или .pfx с закрытым ключом — его выдаёт удостоверяющий центр или
-            ИТ-служба
-          </Text>
+          <Text as="p">{t('signature:page.intro')}</Text>
           <UploadForm onDone={() => undefined} />
         </div>
       ) : (
@@ -137,28 +137,29 @@ export function SignaturePage() {
           {state === 'expiring' && (
             <Alert
               theme="warning"
-              message={`Срок действия сертификата заканчивается ${formatDate(cert.notAfter)}`}
+              message={t('signature:page.expiring', { date: formatDate(cert.notAfter) })}
             />
           )}
-          {state === 'expired' && (
-            <Alert theme="danger" message="Срок действия сертификата истёк — загрузите новый" />
-          )}
+          {state === 'expired' && <Alert theme="danger" message={t('signature:page.expired')} />}
           <Card view="outlined" style={{ padding: 16, display: 'grid', gap: 8 }}>
-            <Row label="Владелец">{cert.subjectCn}</Row>
-            <Row label="Издатель">{cert.issuer}</Row>
-            <Row label="Серийный номер">{cert.serial}</Row>
-            <Row label="Действителен">
-              {`с ${formatDate(cert.notBefore)} по ${formatDate(cert.notAfter)}`}
+            <Row label={t('signature:page.owner')}>{cert.subjectCn}</Row>
+            <Row label={t('signature:page.issuer')}>{cert.issuer}</Row>
+            <Row label={t('signature:page.serial')}>{cert.serial}</Row>
+            <Row label={t('signature:page.validity')}>
+              {t('signature:page.validRange', {
+                from: formatDate(cert.notBefore),
+                to: formatDate(cert.notAfter),
+              })}
             </Row>
-            <Row label="Алгоритм">{cert.keyAlg}</Row>
-            <Row label="Отпечаток SHA-256" mono>
+            <Row label={t('signature:page.algorithm')}>{cert.keyAlg}</Row>
+            <Row label={t('signature:page.fingerprint')} mono>
               {cert.fingerprint}
             </Row>
           </Card>
           <div style={{ display: 'flex', gap: 8 }}>
-            <Button onClick={() => setReplacing((v) => !v)}>Заменить</Button>
+            <Button onClick={() => setReplacing((v) => !v)}>{t('signature:page.replace')}</Button>
             <Button view="outlined-danger" onClick={() => setConfirming(true)}>
-              Удалить
+              {t('common:action.delete')}
             </Button>
           </div>
           {replacing && (
@@ -168,9 +169,9 @@ export function SignaturePage() {
       )}
       <ConfirmDialog
         open={confirming}
-        title="Удалить сертификат подписи?"
-        text="Подписывать PDF будет нельзя, пока не загрузите новый сертификат."
-        confirmText="Удалить"
+        title={t('signature:page.deleteTitle')}
+        text={t('signature:page.deleteText')}
+        confirmText={t('common:action.delete')}
         danger
         loading={remove.isPending}
         onConfirm={() => remove.mutate()}

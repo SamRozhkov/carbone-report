@@ -1,0 +1,76 @@
+{
+  "invalidId": "identificador inválido",
+  "invalidDatasourceId": "identificador de fonte de dados inválido",
+  "invalidTemplateId": "identificador de modelo inválido",
+  "identName": "nome: letras latinas, dígitos e _",
+  "identKey": "chave: letras latinas, dígitos e _",
+  "reservedName": "nome reservado",
+  "nameRequired": "informe o nome",
+  "backupName": "nome de backup inválido",
+  "recoveryCodeRequired": "digite o código de recuperação",
+  "query": {
+    "paramsReserved": "a chave “params” é reservada"
+  },
+  "param": {
+    "selectNeedsOption": "select precisa de pelo menos uma opção",
+    "sqlRequired": "informe a consulta SQL das opções",
+    "sqlNoOptions": "as opções de uma lista SQL são definidas pela consulta",
+    "multipleDefaults": "vários valores só são permitidos com seleção múltipla",
+    "sqlOnlyQuery": "SQL só é permitido no tipo “Lista SQL”",
+    "multipleOnlyQuery": "a seleção múltipla só é permitida no tipo “Lista SQL”",
+    "invalidValue": "valor inválido"
+  },
+  "datasource": {
+    "caOnlyVerify": "o certificado de CA só é informado no modo “SSL com verificação”",
+    "pemExpected": "espera-se um certificado no formato PEM"
+  },
+  "chart": {
+    "columnRequired": "selecione uma coluna",
+    "keyTooLong": "chave — até 64 caracteres",
+    "colorHex": "cor — #RRGGBB",
+    "queryRequired": "selecione uma consulta",
+    "seriesRequired": "adicione uma série",
+    "tooManySeries": "séries — no máximo {{maximum}}",
+    "stackedOnly": "empilhamento — só em colunas, linhas e áreas",
+    "smoothOnly": "suavização — só em linhas, áreas e gráficos combinados",
+    "kindOnlyCombo": "tipo e eixo da série — só em gráficos combinados",
+    "pieOneSeries": "gráficos de pizza e rosca — exatamente uma série",
+    "pieNoSplit": "séries a partir dos dados não estão disponíveis em gráficos de pizza e rosca",
+    "splitOneSeries": "com séries a partir dos dados — exatamente uma série (coluna de valores)",
+    "splitColors": "as cores das séries a partir dos dados vêm da paleta",
+    "axisY2Only": "eixo secundário — só em gráfico combinado com uma série no eixo direito",
+    "tooManyCharts": "gráficos por modelo — no máximo {{maximum}}",
+    "keyDuplicate": "a chave de gráfico “{{key}}” está repetida",
+    "chartsKeyTaken": "a chave charts está ocupada pelos gráficos"
+  },
+  "pdf": {
+    "textRequired": "informe o texto",
+    "pageTagRequired": "é necessário {page} — o número da página",
+    "pdfaProtection": "PDF/A é incompatível com senha e restrições",
+    "passwordLength": "senha — de {{min}} a {{max}} caracteres",
+    "passwordControl": "a senha contém caracteres inválidos",
+    "passwordDash": "a senha não pode começar com “-”",
+    "signatureProtection": "A assinatura é incompatível com senha e restrições",
+    "tagFormatter": "nos campos do PDF só são permitidas tags sem formatadores: {{tag}}",
+    "attachmentNotPdfa": "PDF/A está ativado: o arquivo “{{name}}” não está no formato PDF/A"
+  },
+  "transfer": {
+    "sha256": "espera-se um sha256 em hexadecimal",
+    "formatUnavailable": "o formato {{format}} não está disponível para .{{ext}}",
+    "fileExt": "o arquivo do modelo deve ter a extensão .{{ext}}",
+    "groupDuplicate": "o grupo “{{name}}” está repetido",
+    "queryDuplicate": "a chave de consulta “{{key}}” está repetida",
+    "paramDuplicate": "o parâmetro “{{name}}” está repetido",
+    "chartDuplicate": "a chave de gráfico “{{key}}” está repetida",
+    "chartNoQuery": "não há consulta “{{query}}” no modelo do arquivo ZIP",
+    "chartQueryList": "a consulta “{{query}}” deve retornar uma lista de linhas",
+    "nameDuplicate": "o nome “{{name}}” se repete no arquivo ZIP",
+    "pathExpected": "espera-se o caminho {{path}}"
+  },
+  "import": {
+    "targetRequired": "indique o modelo a ser atualizado",
+    "targetUpdatedAtRequired": "indique a hora de modificação da pré-visualização",
+    "targetOnlyUpdate": "o modelo a ser atualizado só é indicado para “atualizar”",
+    "targetUpdatedAtOnlyUpdate": "a hora de modificação só é indicada para “atualizar”"
+  }
+}

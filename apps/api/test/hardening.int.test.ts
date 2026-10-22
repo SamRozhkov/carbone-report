@@ -16,7 +16,10 @@ let admin: { cookie: string; user: { id: string } };
 let dsId: string;
 const carbone: CarboneRenderer = {
   async render() {
-    throw new AppError('CARBONE_ERROR', 502, 'ошибка генерации: boom');
+    throw new AppError('CARBONE_ERROR', 502, {
+      key: 'render.generationError',
+      params: { message: 'boom' },
+    });
   },
 };
 

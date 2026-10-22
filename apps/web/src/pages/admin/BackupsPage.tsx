@@ -3,40 +3,54 @@ import type { TableColumnConfig } from '@gravity-ui/uikit';
 import { Alert, Button, Label, Loader, Table, Text, useToaster } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/errors';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { PageHeader } from '../../components/PageHeader';
-import {
-  formatSize,
-  KIND_LABEL,
-  PHASE_LABEL,
-  requestedByLabel,
-  STATUS_LABEL,
-} from '../../lib/backups';
+import { formatSize, requestedByLabel } from '../../lib/backups';
 import { formatDateTime } from '../../lib/format';
 import { RestoreDialog } from './RestoreDialog';
 
 const backupsKey = ['backups'] as const;
 const operationKey = ['backups', 'operation'] as const;
 const STATUS_THEME = { running: 'info', succeeded: 'success', failed: 'danger' } as const;
+const STATUS_KEY = {
+  running: 'admin:backups.statusRunning',
+  succeeded: 'admin:backups.statusSucceeded',
+  failed: 'admin:backups.statusFailed',
+} as const;
+const KIND_KEY = {
+  regular: 'admin:backups.kindRegular',
+  'pre-restore': 'admin:backups.kindPreRestore',
+} as const;
 
 function OperationPanel({ op }: { op: BackupOperationDto }) {
+  const { t } = useTranslation();
   return (
     <div className="cr-backup-operation">
       <Text variant="subheader-2" as="div">
-        {op.type === 'backup' ? 'Бэкап' : `Восстановление из ${op.backup ?? '—'}`}
+        {op.type === 'backup'
+          ? t('admin:backups.opBackup')
+          : t('admin:backups.opRestore', { backup: op.backup ?? '—' })}
       </Text>
       <Text as="div" color="secondary">
-        Запустил: {requestedByLabel(op.requestedBy)} · {formatDateTime(op.startedAt)}
+        {t('admin:backups.startedBy', {
+          by: requestedByLabel(op.requestedBy),
+          date: formatDateTime(op.startedAt),
+        })}
       </Text>
-      <Text as="div">Этап: {PHASE_LABEL[op.phase]}</Text>
+      <Text as="div">
+        {t('admin:backups.phase', {
+          phase: t(`common:backupPhase.${op.phase}`, { defaultValue: op.phase }),
+        })}
+      </Text>
       <span data-testid="operation-status">
-        <Label theme={STATUS_THEME[op.status]}>{STATUS_LABEL[op.status]}</Label>
+        <Label theme={STATUS_THEME[op.status]}>{t(STATUS_KEY[op.status])}</Label>
       </span>
       {op.error && <Alert theme="danger" message={op.error} />}
       <details>
-        <summary>Журнал</summary>
+        <summary>{t('admin:backups.log')}</summary>
         <pre className="cr-backup-log">{op.log.join('\n')}</pre>
       </details>
     </div>
@@ -44,6 +58,7 @@ function OperationPanel({ op }: { op: BackupOperationDto }) {
 }
 
 export function BackupsPage() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const backups = useQuery({ queryKey: backupsKey, queryFn: api.backups.list });
@@ -66,7 +81,7 @@ export function BackupsPage() {
   const fail = (e: unknown) =>
     add({
       name: `backups-error-${Date.now()}`,
-      title: 'Ошибка',
+      title: t('common:status.error'),
       content: errorMessage(e),
       theme: 'danger',
     });
@@ -80,7 +95,7 @@ export function BackupsPage() {
   const columns: TableColumnConfig<BackupDto>[] = [
     {
       id: 'date',
-      name: 'Дата',
+      name: t('admin:backups.date'),
       template: (b) => (
         <div>
           <div>{formatDateTime(b.createdAt)}</div>
@@ -92,33 +107,34 @@ export function BackupsPage() {
     },
     {
       id: 'kind',
-      name: 'Тип',
+      name: t('admin:backups.kind'),
       template: (b) =>
         b.kind === 'pre-restore' ? (
-          <Label theme="info">{KIND_LABEL[b.kind]}</Label>
+          <Label theme="info">{t(KIND_KEY[b.kind])}</Label>
         ) : (
-          KIND_LABEL[b.kind]
+          t(KIND_KEY[b.kind])
         ),
     },
     {
       id: 'size',
-      name: 'Размер',
-      template: (b) => `база ${formatSize(b.dbSize)} · файлы ${formatSize(b.storageSize)}`,
+      name: t('admin:backups.size'),
+      template: (b) =>
+        t('admin:backups.sizes', { db: formatSize(b.dbSize), files: formatSize(b.storageSize) }),
     },
     {
       id: 'migration',
-      name: 'Миграция',
+      name: t('admin:backups.migration'),
       template: (b) =>
         b.lastMigration ? <span title={b.lastMigration}>{b.lastMigration.slice(0, 12)}</span> : '—',
     },
     {
       id: 'status',
-      name: 'Статус',
+      name: t('admin:field.status'),
       template: (b) =>
         b.status === 'ok' ? (
-          <Label theme="success">готов</Label>
+          <Label theme="success">{t('admin:backups.ready')}</Label>
         ) : (
-          <Label theme="warning">незавершён</Label>
+          <Label theme="warning">{t('admin:backups.incomplete')}</Label>
         ),
     },
     {
@@ -133,7 +149,7 @@ export function BackupsPage() {
             disabled={running}
             onClick={() => setRestoring(b)}
           >
-            Восстановить
+            {t('admin:backups.restore')}
           </Button>
         ) : null,
     },
@@ -142,7 +158,7 @@ export function BackupsPage() {
   return (
     <>
       <PageHeader
-        title="Бэкапы"
+        title={t('common:nav.backups')}
         actions={
           <Button
             view="action"
@@ -150,13 +166,13 @@ export function BackupsPage() {
             disabled={running}
             onClick={() => create.mutate()}
           >
-            Сделать бэкап
+            {t('admin:backups.create')}
           </Button>
         }
       />
-      <ErrorAlert error={operation.error} title="Не удалось получить состояние операции" />
+      <ErrorAlert error={operation.error} title={t('admin:backups.operationFailed')} />
       {operation.data && <OperationPanel op={operation.data} />}
-      <ErrorAlert error={backups.error} title="Не удалось получить список бэкапов" />
+      <ErrorAlert error={backups.error} title={t('admin:backups.listFailed')} />
       {backups.isPending ? (
         <Loader />
       ) : (
@@ -164,7 +180,7 @@ export function BackupsPage() {
           <Table
             data={backups.data}
             columns={columns}
-            emptyMessage="Бэкапов пока нет"
+            emptyMessage={t('admin:backups.empty')}
             width="max"
           />
         )

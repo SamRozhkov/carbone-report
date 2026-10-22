@@ -2,6 +2,7 @@ import type { OutputFormat, TemplateAccess, TemplateAdminDetails } from '@carbon
 import { Button, Loader, Select, Text, TextArea, TextInput, useToaster } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/endpoints';
 import { errorMessage, fieldErrors } from '../../../api/errors';
 import { ErrorAlert } from '../../../components/ErrorAlert';
@@ -21,17 +22,18 @@ export function SettingsTab({
   /** Номер вкладки «Документ» этой страницы: собственная блокировка замене файла не мешает (§38.2). */
   holder?: string;
 }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { add } = useToaster();
   const datasources = useQuery({
     queryKey: ['datasources', 'options'],
     queryFn: api.datasources.options,
   });
-  const pick = (t: TemplateAdminDetails) => ({
-    name: t.name,
-    description: t.description,
-    datasourceId: t.datasourceId,
-    defaultOutput: t.defaultOutput,
+  const pick = (tpl: TemplateAdminDetails) => ({
+    name: tpl.name,
+    description: tpl.description,
+    datasourceId: tpl.datasourceId,
+    defaultOutput: tpl.defaultOutput,
   });
   const [baseline, setBaseline] = useState(template);
   const [name, setName] = useState(template.name);
@@ -41,12 +43,12 @@ export function SettingsTab({
   const dirty =
     JSON.stringify({ name, description, datasourceId, defaultOutput }) !==
     JSON.stringify(pick(baseline));
-  const reseed = (t: TemplateAdminDetails) => {
-    setBaseline(t);
-    setName(t.name);
-    setDescription(t.description);
-    setDatasourceId(t.datasourceId);
-    setDefaultOutput(t.defaultOutput);
+  const reseed = (tpl: TemplateAdminDetails) => {
+    setBaseline(tpl);
+    setName(tpl.name);
+    setDescription(tpl.description);
+    setDatasourceId(tpl.datasourceId);
+    setDefaultOutput(tpl.defaultOutput);
   };
   // Шаблон обновился на сервере: без несохранённых правок подхватываем, иначе сохраняем черновик.
   const stale = template.updatedAt !== baseline.updatedAt;
@@ -55,10 +57,14 @@ export function SettingsTab({
   const save = useMutation({
     mutationFn: () =>
       api.templates.update(template.id, { name, description, datasourceId, defaultOutput }),
-    onSuccess: (t) => {
-      applyTemplate(queryClient, t);
-      reseed(t);
-      add({ name: `tpl-settings-${Date.now()}`, title: 'Настройки сохранены', theme: 'success' });
+    onSuccess: (tpl) => {
+      applyTemplate(queryClient, tpl);
+      reseed(tpl);
+      add({
+        name: `tpl-settings-${Date.now()}`,
+        title: t('editor:settings.saved'),
+        theme: 'success',
+      });
     },
   });
   const replace = useMutation({
@@ -67,18 +73,18 @@ export function SettingsTab({
       form.append('file', file);
       return api.templates.replaceFile(template.id, form, holder);
     },
-    onSuccess: (t) => {
-      applyTemplate(queryClient, t);
+    onSuccess: (tpl) => {
+      applyTemplate(queryClient, tpl);
       add({
         name: `tpl-file-${Date.now()}`,
-        title: `Файл заменён, версия ${t.version}`,
+        title: t('editor:settings.fileReplaced', { version: tpl.version }),
         theme: 'success',
       });
     },
     onError: (e) =>
       add({
         name: `tpl-file-err-${Date.now()}`,
-        title: 'Файл не заменён',
+        title: t('editor:settings.fileNotReplaced'),
         content: errorMessage(e),
         theme: 'danger',
       }),
@@ -87,18 +93,18 @@ export function SettingsTab({
 
   return (
     <div className="cr-form">
-      <Field label="Название" error={errors.name}>
+      <Field label={t('admin:field.name')} error={errors.name}>
         <TextInput
           value={name}
           onUpdate={setName}
           validationState={errors.name ? 'invalid' : undefined}
-          controlProps={{ 'aria-label': 'Название шаблона' }}
+          controlProps={{ 'aria-label': t('editor:settings.nameAria') }}
         />
       </Field>
-      <Field label="Описание" error={errors.description}>
+      <Field label={t('admin:field.description')} error={errors.description}>
         <TextArea value={description} onUpdate={setDescription} minRows={2} />
       </Field>
-      <Field label="Источник данных" error={errors.datasourceId}>
+      <Field label={t('editor:settings.datasource')} error={errors.datasourceId}>
         <Select
           value={[datasourceId]}
           onUpdate={([v]) => v && setDatasourceId(v)}
@@ -106,7 +112,7 @@ export function SettingsTab({
           width="max"
         />
       </Field>
-      <Field label="Формат по умолчанию" error={errors.defaultOutput}>
+      <Field label={t('editor:settings.defaultOutput')} error={errors.defaultOutput}>
         <Select
           value={[defaultOutput]}
           onUpdate={([v]) => v && setDefaultOutput(v as OutputFormat)}
@@ -115,11 +121,9 @@ export function SettingsTab({
         />
       </Field>
       {datasources.error && (
-        <ErrorAlert error={datasources.error} title="Не удалось загрузить источники данных" />
+        <ErrorAlert error={datasources.error} title={t('editor:settings.datasourcesLoadFailed')} />
       )}
-      {dirty && stale && (
-        <Text color="warning">Шаблон изменился на сервере — сохранение перезапишет изменения</Text>
-      )}
+      {dirty && stale && <Text color="warning">{t('editor:draft.stale')}</Text>}
       <GeneralError error={save.error} errors={errors} shown={SHOWN} />
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <Button
@@ -128,20 +132,20 @@ export function SettingsTab({
           loading={save.isPending}
           disabled={!dirty}
         >
-          Сохранить настройки
+          {t('editor:settings.save')}
         </Button>
         {dirty && (
           <>
-            <Text color="warning">Есть несохранённые изменения</Text>
+            <Text color="warning">{t('editor:draft.unsaved')}</Text>
             <Button
               view="flat"
-              aria-label="Отменить изменения настроек"
+              aria-label={t('editor:settings.discardAria')}
               onClick={() => {
                 save.reset();
                 reseed(template);
               }}
             >
-              Отменить
+              {t('editor:draft.discard')}
             </Button>
           </>
         )}
@@ -149,14 +153,13 @@ export function SettingsTab({
       <AccessSection templateId={template.id} />
       {template.canManageEditors && <EditorsBlock template={template} />}
       <div className="cr-field" style={{ marginTop: 16 }}>
-        <Text variant="subheader-1">Заменить файл шаблона</Text>
+        <Text variant="subheader-1">{t('editor:settings.replaceFile')}</Text>
         <Text color="secondary" variant="caption-2">
-          Загрузите отредактированный .{template.fileExt} — версия шаблона увеличится, открытые
-          сессии редактора начнутся заново.
+          {t('editor:settings.replaceFileHint', { ext: template.fileExt })}
         </Text>
         <input
           type="file"
-          aria-label="Новый файл шаблона"
+          aria-label={t('editor:settings.newFileAria')}
           accept={`.${template.fileExt}`}
           disabled={replace.isPending}
           onChange={(e) => {
@@ -172,6 +175,7 @@ export function SettingsTab({
 
 /** Кто видит шаблон: «доступно всем», категория и группы. */
 function AccessSection({ templateId }: { templateId: string }) {
+  const { t } = useTranslation();
   const headingId = useId();
   const access = useQuery({
     queryKey: ['template-access', templateId],
@@ -206,9 +210,9 @@ function AccessSection({ templateId }: { templateId: string }) {
   return (
     <section aria-labelledby={headingId} className="cr-form" style={{ marginTop: 16 }}>
       <Text variant="subheader-2" id={headingId}>
-        Доступ
+        {t('editor:settings.access')}
       </Text>
-      <ErrorAlert error={access.error} title="Не удалось загрузить настройки доступа" />
+      <ErrorAlert error={access.error} title={t('editor:settings.accessLoadFailed')} />
       {access.isPending && <Loader size="s" />}
       {form && (
         <>
@@ -221,13 +225,17 @@ function AccessSection({ templateId }: { templateId: string }) {
               loading={save.isPending}
               disabled={!dirty}
             >
-              Сохранить доступ
+              {t('editor:settings.saveAccess')}
             </Button>
             {dirty && (
               <>
-                <Text color="warning">Есть несохранённые изменения</Text>
-                <Button view="flat" aria-label="Отменить изменения доступа" onClick={discard}>
-                  Отменить
+                <Text color="warning">{t('editor:draft.unsaved')}</Text>
+                <Button
+                  view="flat"
+                  aria-label={t('editor:settings.discardAccessAria')}
+                  onClick={discard}
+                >
+                  {t('editor:draft.discard')}
                 </Button>
               </>
             )}

@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import { changeLocale } from '../../../i18n';
 import { mockApi, renderWithProviders } from '../../../test/utils';
 import { DataTab } from './DataTab';
 import { adminTemplate } from '../../../test/fixtures';
@@ -209,5 +210,41 @@ describe('DataTab', () => {
       expect(screen.getByLabelText('Ключ запроса')).toHaveValue('other');
       expect(screen.queryByText(/Шаблон изменился на сервере/)).not.toBeInTheDocument();
     });
+  });
+});
+
+// §44.6: моки на латинице — кириллица на вкладке могла бы прийти только из кода.
+describe('DataTab на en', () => {
+  it('подписи, режимы, результат и несохранённые правки — без кириллицы', async () => {
+    await changeLocale('en', { persist: 'none' });
+    mockApi([
+      {
+        method: 'POST',
+        path: '/api/templates/t1/queries/run',
+        body: { columns: ['id'], rows: [], truncated: true },
+      },
+    ]);
+    const latin = {
+      ...t,
+      name: 'Invoice',
+      description: 'Invoice for payment',
+      params: [{ ...t.params[0]!, label: 'Limit' }],
+    } as TemplateAdminDetails;
+    renderWithProviders(<DataTab {...props} template={latin} />);
+    expect(await screen.findByText('Test parameters')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add query' })).toBeInTheDocument();
+    expect(screen.getByText('Key (in the template — d.key)')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'List of rows' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Single row' })).toBeChecked();
+    expect(screen.getAllByText('single row').length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }));
+    expect(await screen.findByText('Result of query “company”')).toBeInTheDocument();
+    expect(screen.getByText('The query returned no rows')).toBeInTheDocument();
+    expect(screen.getByText('Showing the first 50 rows.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'List of rows' }));
+    expect(screen.getByText('You have unsaved changes')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save queries' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/[Ѐ-ӿ]/);
   });
 });

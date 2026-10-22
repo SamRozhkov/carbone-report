@@ -15,8 +15,8 @@ export interface PdfProtectJob {
 }
 
 const unavailable = () =>
-  new AppError('PDF_PROTECT_UNAVAILABLE', 503, 'шифрование PDF недоступно: не установлен qpdf');
-const timeout = () => new AppError('TIMEOUT', 504, 'превышено время ожидания');
+  new AppError('PDF_PROTECT_UNAVAILABLE', 503, { key: 'pdf.protectUnavailable' });
+const timeout = () => new AppError('TIMEOUT', 504, { key: 'timeout' });
 
 /** Аргументы qpdf 11.3 (позиционный `--encrypt`, AES-256); пишутся по одному на строку в файл @args. */
 export function qpdfArgs(
@@ -68,7 +68,7 @@ function redact(text: string, secrets: string[]): string {
 
 function failed(code: string | number | undefined, text: string): AppError {
   const cause = new Error(`qpdf: код ${String(code)}: ${text}`);
-  return new AppError('PDF_ERROR', 502, 'не удалось зашифровать PDF', undefined, cause);
+  return new AppError('PDF_ERROR', 502, { key: 'pdf.protectFailed' }, undefined, cause);
 }
 
 function runQpdf(

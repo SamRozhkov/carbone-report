@@ -1,0 +1,130 @@
+{
+  "role": {
+    "admin": "Administrador",
+    "editor": "Editor",
+    "access_manager": "Gerente de segurança",
+    "user": "Usuário"
+  },
+  "nav": {
+    "reports": "Relatórios",
+    "history": "Histórico",
+    "signature": "Minha assinatura",
+    "templates": "Modelos",
+    "datasources": "Fontes de dados",
+    "users": "Usuários",
+    "groups": "Grupos",
+    "categories": "Categorias",
+    "access": "Acesso aos relatórios",
+    "backups": "Backups",
+    "help": "Ajuda sobre modelos"
+  },
+  "locale": {
+    "title": "Idioma",
+    "ru": "Русский",
+    "en": "English",
+    "es": "Español",
+    "pt-BR": "Português (Brasil)",
+    "fr": "Français",
+    "de": "Deutsch",
+    "zh-CN": "简体中文",
+    "browser": "Igual ao navegador",
+    "loadFailed": "Não foi possível carregar o idioma",
+    "saveFailed": "Não foi possível salvar o idioma selecionado"
+  },
+  "action": {
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "close": "Fechar",
+    "edit": "Editar",
+    "add": "Adicionar"
+  },
+  "status": {
+    "loading": "Carregando…",
+    "error": "Erro"
+  },
+  "items_one": "{{count}} item",
+  "items_many": "{{count}} de itens",
+  "items_other": "{{count}} itens",
+  "labelValue": "{{label}}:",
+  "shell": {
+    "version": "Versão {{version}}",
+    "themeLight": "Tema claro",
+    "themeDark": "Tema escuro",
+    "logout": "Sair",
+    "logoutFailedTitle": "Não foi possível encerrar a sessão no servidor",
+    "logoutFailedText": "Feche o navegador se o computador for compartilhado.",
+    "logoutAll": "Sair de todos os lugares",
+    "logoutAllFailedTitle": "Não foi possível encerrar as sessões em outros dispositivos",
+    "logoutAllFailedText": "Tente novamente depois de entrar ou peça a um administrador que encerre as sessões.",
+    "authCheckFailed": "Não foi possível verificar o login"
+  },
+  "about": {
+    "title": "Sobre",
+    "web": "Interface",
+    "server": "Servidor",
+    "version": "Versão",
+    "commit": "Commit",
+    "builtAt": "Data da build",
+    "serverUnavailable": "Versão do servidor indisponível",
+    "mismatch": "As versões da interface e do servidor são diferentes — recarregue a página ou verifique a implantação",
+    "license": "Licença: {{license}}"
+  },
+  "login": {
+    "login": "Login",
+    "password": "Senha",
+    "submit": "Entrar"
+  },
+  "notFound": {
+    "title": "Página não encontrada",
+    "toReports": "Ir para relatórios"
+  },
+  "maintenance": {
+    "restoring": "Restaurando a partir do backup…",
+    "phase": "Etapa: {{phase}} · backup {{backup}}",
+    "failedTitle": "Restauração não concluída: o banco de dados foi parcialmente substituído",
+    "failedText": "Informe o código de recuperação do log do serviço backup (docker compose logs backup) e escolha uma ação.",
+    "code": "Código de recuperação",
+    "retryStarted": "Nova tentativa iniciada, aguardando a conclusão…",
+    "retrySame": "Repetir a restauração a partir de {{backup}}",
+    "retryPreRestore": "Voltar ao estado anterior à restauração ({{backup}})"
+  },
+  "backupPhase": {
+    "backup": "Criação do backup",
+    "verify": "Verificação do backup",
+    "pre-backup": "Backup antes da restauração",
+    "maintenance": "Ativação do modo de manutenção",
+    "db": "Substituição do banco de dados",
+    "migrate": "Aplicação das migrações",
+    "storage": "Restauração dos arquivos",
+    "redis": "Limpeza do cache",
+    "done": "Concluído"
+  },
+  "copy": {
+    "done": "Copiado: {{label}}",
+    "failed": "Não foi possível copiar — selecione a tag manualmente"
+  },
+  "error": {
+    "unknown": "erro desconhecido",
+    "server": "erro do servidor (HTTP {{status}})",
+    "network": "sem conexão com o servidor"
+  },
+  "duration": {
+    "ms": "{{value}} ms",
+    "s": "{{value}} s",
+    "min": "{{min}} min {{sec}} s"
+  },
+  "size": {
+    "b": "{{value}} B",
+    "kb": "{{value}} KB",
+    "mb": "{{value}} MB",
+    "gb": "{{value}} GB",
+    "tb": "{{value}} TB"
+  },
+  "param": {
+    "multipleHint": "vários valores — separados por vírgula",
+    "waitingFor": "selecione primeiro: {{names}}",
+    "selectAll": "Selecionar tudo",
+    "deselectAll": "Desmarcar tudo"
+  }
+}

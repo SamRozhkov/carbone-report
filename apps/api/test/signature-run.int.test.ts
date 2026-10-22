@@ -9,6 +9,7 @@ import { startTestTsa, type TestTsa } from '../src/modules/pdf/sign/test-tsa';
 import { opensslVerify } from '../src/modules/pdf/sign/test-verify';
 import { makePdf } from '../src/modules/pdf/test-pdf';
 import { createTemplate, createTestApp, loginAs, multipart, type TestApp } from './helpers';
+import { createTranslator } from '@carbone-reports/shared/i18n/server';
 
 let t: TestApp;
 let tsa: TestTsa;
@@ -107,6 +108,69 @@ const runsOf = async (cookie: string) =>
     .items as Array<{ id: string; signable: boolean; signature: unknown; signMethod: unknown }>;
 
 describe('подпись запуска (§39.3)', () => {
+  it('сертификат истёк к моменту подписи — 400 с текстом на языке запроса', async () => {
+    // Загрузка — с настоящим временем; при подписи читатель видит 2200 год: сертификат истёк.
+    let expired = false;
+    const reader: P12Reader = async (file, password, now, deadline) =>
+      inProcessP12Reader(file, password, expired ? new Date('2200-01-01') : now, deadline);
+    const t2 = await createTestApp({ carbone, p12Read: reader }, { signTsaUrl: tsa.url });
+    try {
+      const admin2 = (await loginAs(t2, 'admin')).cookie;
+      const ds = await t2.app.inject({
+        method: 'POST',
+        url: '/api/datasources',
+        headers: { cookie: admin2 },
+        payload: {
+          name: 'src',
+          host: 'localhost',
+          port: 5432,
+          database: 'x',
+          username: 'x',
+          password: 'x',
+          sslMode: 'disable',
+        },
+      });
+      const tpl2 = await createTemplate(t2, admin2, ds.json().id as string, { public: true });
+      const saved = await t2.app.inject({
+        method: 'PUT',
+        url: `/api/templates/${tpl2}/pdf-options`,
+        headers: { cookie: admin2 },
+        payload: { pdfa: false, signature: { position: 'bottom-left' } },
+      });
+      if (saved.statusCode !== 200) throw new Error(saved.body);
+      const user2 = await loginAs(t2, 'user');
+      const body = multipart(
+        { password: FIXTURE_PASSWORD },
+        { name: 'me.p12', data: fixture('rsa.p12') },
+      );
+      const up = await t2.app.inject({
+        method: 'POST',
+        url: '/api/me/certificate',
+        headers: { cookie: user2.cookie, ...body.headers },
+        payload: body.payload,
+      });
+      if (up.statusCode !== 201) throw new Error(up.body);
+      expired = true;
+      const runId = await render(user2.cookie, tpl2, t2);
+      const sign = (locale?: string) =>
+        t2.app.inject({
+          method: 'POST',
+          url: `/api/runs/${runId}/sign`,
+          headers: { cookie: user2.cookie, ...(locale ? { 'x-locale': locale } : {}) },
+          payload: { password: FIXTURE_PASSWORD },
+        });
+      const ru = await sign();
+      expect(ru.statusCode).toBe(400);
+      expect(ru.json().error.message).toBe('срок действия сертификата истёк');
+      const en = await sign('en');
+      expect(en.statusCode).toBe(400);
+      expect(en.json().error.message).toBe(createTranslator('en')('errors:sign.certExpired'));
+      expect(en.json().error.message).not.toMatch(/[а-яё]/i);
+    } finally {
+      await t2.close();
+    }
+  });
+
   it('успех: 201, подписанный PDF скачивается и проверяется, история', async () => {
     const runId = await render(user.cookie);
     expect((await runsOf(user.cookie)).find((r) => r.id === runId)).toMatchObject({

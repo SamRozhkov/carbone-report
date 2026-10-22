@@ -1,0 +1,42 @@
+{
+  "title": "Verlauf",
+  "column": {
+    "date": "Datum",
+    "report": "Bericht",
+    "user": "Benutzer",
+    "params": "Parameter",
+    "format": "Format",
+    "result": "Ergebnis",
+    "duration": "Dauer"
+  },
+  "filter": {
+    "allReports": "Alle Berichte",
+    "anyResult": "Beliebiges Ergebnis",
+    "ok": "Fertig",
+    "error": "Fehler",
+    "allUsers": "Alle Benutzer"
+  },
+  "status": {
+    "ok": "fertig",
+    "error": "Fehler"
+  },
+  "params": {
+    "item": "{{name}}: {{value}}",
+    "yes": "ja",
+    "no": "nein",
+    "list": "„{{values}}“"
+  },
+  "file": {
+    "deleted": "Datei gelöscht",
+    "download": "Herunterladen",
+    "stampedPdf": "PDF mit Stempel",
+    "sig": "Signatur (.sig)",
+    "signedPdf": "Signiertes PDF",
+    "sign": "Signieren…",
+    "downloadFailed": "Die Datei konnte nicht heruntergeladen werden"
+  },
+  "signed": "Signiert ({{method}}): {{signer}}, {{date}}",
+  "methodGost": "GOST",
+  "notFound": "Nichts gefunden",
+  "empty": "Noch keine Ausführungen"
+}

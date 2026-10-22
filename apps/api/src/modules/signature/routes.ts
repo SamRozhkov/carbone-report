@@ -5,7 +5,7 @@ import type { App } from '../../app';
 import { userCertificates, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { encryptSecret } from '../../lib/crypto';
-import { AppError, badRequest, notFound } from '../../lib/errors';
+import { AppError, badRequest, notFound, text } from '../../lib/errors';
 import { currentUser, type Guards } from '../auth/guards';
 import { P12Error } from '../pdf/sign/p12';
 import { loadUserCertificate, p12FieldError, toCertificateInfo } from './certificates';
@@ -21,20 +21,20 @@ async function readCertificateUpload(
   try {
     for await (const part of req.parts({ limits: { fileSize: 1024 * 1024 } })) {
       if (part.type === 'file') {
-        if (part.fieldname !== 'file') throw badRequest('файл передаётся в поле file');
+        if (part.fieldname !== 'file') throw badRequest('upload.fileField');
         file = await part.toBuffer();
       } else if (part.fieldname === 'password') password = String(part.value);
     }
   } catch (err) {
     // Больше 1 МБ — не общее «файл больше 20 МБ» (413), а то же, что даёт readP12 (400 у /file).
     if ((err as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE')
-      throw p12FieldError(new P12Error('file', 'файл больше 50 КБ'));
+      throw p12FieldError(new P12Error('file', 'p12.fileTooLarge'));
     throw err;
   }
-  if (!file) throw badRequest('файл не передан');
+  if (!file) throw badRequest('upload.noFile');
   if (!password)
-    throw new AppError('VALIDATION', 400, 'неверные данные запроса', [
-      { path: '/password', message: 'укажите пароль' },
+    throw new AppError('VALIDATION', 400, { key: 'validation' }, [
+      { path: '/password', message: text('p12.passwordRequired') },
     ]);
   return { file, password };
 }
@@ -70,11 +70,7 @@ export function registerSignatureRoutes(app: App, deps: AppDeps, guards: Guards)
         .header('retry-after', r.ttlInSeconds)
         .header('x-ratelimit-limit', r.max)
         .header('x-ratelimit-remaining', 0);
-      throw new AppError(
-        'TOO_MANY_ATTEMPTS',
-        429,
-        'слишком много загрузок сертификата — попробуйте через минуту',
-      );
+      throw new AppError('TOO_MANY_ATTEMPTS', 429, { key: 'p12.tooManyUploads' });
     }
   };
 
@@ -126,7 +122,7 @@ export function registerSignatureRoutes(app: App, deps: AppDeps, guards: Guards)
         .select({ id: users.id })
         .from(users)
         .where(eq(users.id, req.params.id));
-      if (!user) throw notFound('пользователь');
+      if (!user) throw notFound('user');
       await db.delete(userCertificates).where(eq(userCertificates.userId, user.id));
       return reply.status(204).send();
     },

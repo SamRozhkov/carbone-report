@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { sqlParamHint } from './sql-hints';
+import { ruText } from '../../lib/errors';
+import { sqlParamHint as hintMsg } from './sql-hints';
+
+/** Подсказка по-русски. */
+const sqlParamHint = (...a: Parameters<typeof hintMsg>) => {
+  const m = hintMsg(...a);
+  return m && ruText(m.key, m.params);
+};
 
 const pgErr = (code: string, message = 'ошибка') => Object.assign(new Error(message), { code });
 

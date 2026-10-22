@@ -32,6 +32,7 @@ import {
   type TestApp,
 } from './helpers';
 import { makePdf } from '../src/modules/pdf/test-pdf';
+import { createTranslator } from '@carbone-reports/shared/i18n/server';
 
 /** Две «среды» — два приложения со своими БД и хранилищами. */
 let a: TestApp;
@@ -271,6 +272,26 @@ describe('перенос шаблонов между средами', () => {
   it('create при существующем имени — 409; copy — «(2)», затем «(3)»; skip', async () => {
     const dup = await apply(b, adminB, zip, [{ index: 0, action: 'create', datasourceId: dsB }]);
     expect(dup.statusCode).toBe(409);
+    expect(dup.json().error.message).toBe(
+      `шаблон «${name}» уже есть — повторите предпросмотр и выберите «обновить», «копия» или «пропустить»`,
+    );
+    // §44.4: тот же отказ на языке запроса (X-Locale).
+    for (const locale of ['en', 'zh-CN'] as const) {
+      const body = multipart(
+        { decisions: JSON.stringify([{ index: 0, action: 'create', datasourceId: dsB }]) },
+        { name: 'x.crt.zip', data: zip },
+      );
+      const r = await b.app.inject({
+        method: 'POST',
+        url: '/api/templates/import',
+        headers: { cookie: adminB, 'x-locale': locale, ...body.headers },
+        payload: body.payload,
+      });
+      expect(r.statusCode).toBe(409);
+      const message = r.json().error.message as string;
+      expect(message).toBe(createTranslator(locale)('errors:import.nameTaken', { template: name }));
+      expect(message.replace(name, '')).not.toMatch(/[а-яё]/i);
+    }
     const p = (await preview(b, adminB, zip)).json() as ImportPreview;
     expect(p.templates[0]!.existing).toEqual([
       {

@@ -2,6 +2,7 @@ import { type ChartValue, reviveChartFormatters } from '@carbone-reports/shared'
 import { Text } from '@gravity-ui/uikit';
 import * as echarts from 'echarts';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const WIDTH = 600;
 const HEIGHT = 360;
@@ -11,6 +12,7 @@ const HEIGHT = 360;
  * (белый фон, без анимации, маркеры формата чисел — функции). Модуль грузится отдельным чанком (lazy в ChartsTab).
  */
 export function ChartPreview({ value }: { value: ChartValue }) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -41,7 +43,7 @@ export function ChartPreview({ value }: { value: ChartValue }) {
         data-testid="chart-preview"
         style={{ width: WIDTH, height: HEIGHT, border: '1px solid var(--g-color-line-generic)' }}
       />
-      {error && <Text color="danger">Ошибка ECharts: {error}</Text>}
+      {error && <Text color="danger">{t('editor:charts.echartsError', { error })}</Text>}
     </div>
   );
 }

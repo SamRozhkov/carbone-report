@@ -1,0 +1,131 @@
+{
+  "role": {
+    "admin": "Администратор",
+    "editor": "Редактор",
+    "access_manager": "Менеджер безопасности",
+    "user": "Пользователь"
+  },
+  "nav": {
+    "reports": "Отчёты",
+    "history": "История",
+    "signature": "Моя подпись",
+    "templates": "Шаблоны",
+    "datasources": "Источники данных",
+    "users": "Пользователи",
+    "groups": "Группы",
+    "categories": "Категории",
+    "access": "Доступ к отчётам",
+    "backups": "Бэкапы",
+    "help": "Справка по шаблонам"
+  },
+  "locale": {
+    "title": "Язык",
+    "ru": "Русский",
+    "en": "English",
+    "es": "Español",
+    "pt-BR": "Português (Brasil)",
+    "fr": "Français",
+    "de": "Deutsch",
+    "zh-CN": "简体中文",
+    "browser": "Как в браузере",
+    "loadFailed": "Не удалось загрузить язык",
+    "saveFailed": "Не удалось сохранить выбор языка"
+  },
+  "action": {
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "close": "Закрыть",
+    "edit": "Изменить",
+    "add": "Добавить"
+  },
+  "status": {
+    "loading": "Загрузка…",
+    "error": "Ошибка"
+  },
+  "items_one": "{{count}} элемент",
+  "items_few": "{{count}} элемента",
+  "items_many": "{{count}} элементов",
+  "items_other": "{{count}} элемента",
+  "labelValue": "{{label}}:",
+  "shell": {
+    "version": "Версия {{version}}",
+    "themeLight": "Светлая тема",
+    "themeDark": "Тёмная тема",
+    "logout": "Выйти",
+    "logoutFailedTitle": "Не удалось завершить сессию на сервере",
+    "logoutFailedText": "Закройте браузер, если компьютер общий.",
+    "logoutAll": "Выйти везде",
+    "logoutAllFailedTitle": "Не удалось завершить сессии на других устройствах",
+    "logoutAllFailedText": "Попробуйте ещё раз после входа или попросите администратора завершить сессии.",
+    "authCheckFailed": "Не удалось проверить вход"
+  },
+  "about": {
+    "title": "О программе",
+    "web": "Интерфейс",
+    "server": "Сервер",
+    "version": "Версия",
+    "commit": "Коммит",
+    "builtAt": "Дата сборки",
+    "serverUnavailable": "Версия сервера недоступна",
+    "mismatch": "Версии интерфейса и сервера различаются — обновите страницу или проверьте развёртывание",
+    "license": "Лицензия: {{license}}"
+  },
+  "login": {
+    "login": "Логин",
+    "password": "Пароль",
+    "submit": "Войти"
+  },
+  "notFound": {
+    "title": "Страница не найдена",
+    "toReports": "К отчётам"
+  },
+  "maintenance": {
+    "restoring": "Идёт восстановление из бэкапа…",
+    "phase": "Этап: {{phase}} · бэкап {{backup}}",
+    "failedTitle": "Восстановление не завершено: база частично заменена",
+    "failedText": "Введите код восстановления из журнала сервиса backup (docker compose logs backup) и выберите действие.",
+    "code": "Код восстановления",
+    "retryStarted": "Повтор запущен, ждём завершения…",
+    "retrySame": "Повторить восстановление из {{backup}}",
+    "retryPreRestore": "Вернуть состояние до восстановления ({{backup}})"
+  },
+  "backupPhase": {
+    "backup": "Создание бэкапа",
+    "verify": "Проверка бэкапа",
+    "pre-backup": "Бэкап перед восстановлением",
+    "maintenance": "Включение режима обслуживания",
+    "db": "Замена базы данных",
+    "migrate": "Применение миграций",
+    "storage": "Восстановление файлов",
+    "redis": "Очистка кэша",
+    "done": "Готово"
+  },
+  "copy": {
+    "done": "Скопировано: {{label}}",
+    "failed": "Не удалось скопировать — выделите тег вручную"
+  },
+  "error": {
+    "unknown": "неизвестная ошибка",
+    "server": "ошибка сервера (HTTP {{status}})",
+    "network": "нет связи с сервером"
+  },
+  "duration": {
+    "ms": "{{value}} мс",
+    "s": "{{value}} с",
+    "min": "{{min}} мин {{sec}} с"
+  },
+  "size": {
+    "b": "{{value}} Б",
+    "kb": "{{value}} КБ",
+    "mb": "{{value}} МБ",
+    "gb": "{{value}} ГБ",
+    "tb": "{{value}} ТБ"
+  },
+  "param": {
+    "multipleHint": "несколько значений — через запятую",
+    "waitingFor": "сначала выберите: {{names}}",
+    "selectAll": "Выбрать все",
+    "deselectAll": "Снять все"
+  }
+}

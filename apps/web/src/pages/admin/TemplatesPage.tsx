@@ -4,6 +4,7 @@ import type { TableColumnConfig } from '@gravity-ui/uikit';
 import { Button, Checkbox, Icon, Label, Loader, Table, Text, useToaster } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
 import { api, templateDownloadUrl } from '../../api/endpoints';
 import { errorMessage } from '../../api/errors';
@@ -16,6 +17,7 @@ import { ExportTemplatesButton } from './ExportTemplatesButton';
 import { ImportDialog } from './ImportDialog';
 
 export function TemplatesPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { add } = useToaster();
@@ -31,28 +33,28 @@ export function TemplatesPage() {
   const fail = (e: unknown) =>
     add({
       name: `tpl-error-${Date.now()}`,
-      title: 'Ошибка',
+      title: t('common:status.error'),
       content: errorMessage(e),
       theme: 'danger',
     });
 
   const duplicate = useMutation({
-    mutationFn: (t: TemplateEditSummary) => api.templates.duplicate(t.id),
+    mutationFn: (tpl: TemplateEditSummary) => api.templates.duplicate(tpl.id),
     onSuccess: async (copy) => {
       await refresh();
       add({
         name: `tpl-dup-${Date.now()}`,
-        title: `Создана копия «${copy.name}»`,
+        title: t('templates:list.duplicated', { name: copy.name }),
         theme: 'success',
       });
     },
     onError: fail,
   });
   const remove = useMutation({
-    mutationFn: (t: TemplateEditSummary) => api.templates.remove(t.id),
-    onSuccess: async (_, t) => {
-      queryClient.removeQueries({ queryKey: ['template', t.id] });
-      queryClient.removeQueries({ queryKey: ['template-admin', t.id] });
+    mutationFn: (tpl: TemplateEditSummary) => api.templates.remove(tpl.id),
+    onSuccess: async (_, tpl) => {
+      queryClient.removeQueries({ queryKey: ['template', tpl.id] });
+      queryClient.removeQueries({ queryKey: ['template-admin', tpl.id] });
       await refresh();
       setDeleting(null);
     },
@@ -61,7 +63,7 @@ export function TemplatesPage() {
 
   const all = list.data ?? [];
   // Выбор переживает обновление списка: исчезнувшие (удалённые) шаблоны отбрасываются.
-  const chosen = all.filter((t) => selected.has(t.id)).map((t) => t.id);
+  const chosen = all.filter((tpl) => selected.has(tpl.id)).map((tpl) => tpl.id);
   const toggle = (id: string, on: boolean) =>
     setSelected((s) => {
       const n = new Set(s);
@@ -76,34 +78,34 @@ export function TemplatesPage() {
       width: 40,
       name: () => (
         <Checkbox
-          controlProps={{ 'aria-label': 'Выбрать все шаблоны' }}
+          controlProps={{ 'aria-label': t('templates:list.selectAll') }}
           checked={all.length > 0 && chosen.length === all.length}
           indeterminate={chosen.length > 0 && chosen.length < all.length}
-          onUpdate={(on) => setSelected(on ? new Set(all.map((t) => t.id)) : new Set())}
+          onUpdate={(on) => setSelected(on ? new Set(all.map((tpl) => tpl.id)) : new Set())}
         />
       ),
-      template: (t) => (
+      template: (tpl) => (
         <Checkbox
-          controlProps={{ 'aria-label': `Выбрать «${t.name}»` }}
-          checked={selected.has(t.id)}
-          onUpdate={(on) => toggle(t.id, on)}
+          controlProps={{ 'aria-label': t('templates:list.select', { name: tpl.name }) }}
+          checked={selected.has(tpl.id)}
+          onUpdate={(on) => toggle(tpl.id, on)}
         />
       ),
     },
     {
       id: 'name',
-      name: 'Название',
-      template: (t) => (
+      name: t('admin:field.name'),
+      template: (tpl) => (
         <div>
-          <Link to={`/admin/templates/${t.id}`}>{t.name}</Link>
-          {t.editingBy && (
+          <Link to={`/admin/templates/${tpl.id}`}>{tpl.name}</Link>
+          {tpl.editingBy && (
             <Label theme="warning" size="xs">
-              Редактирует {t.editingBy.login}
+              {t('templates:list.editingBy', { login: tpl.editingBy.login })}
             </Label>
           )}
-          {t.description && (
+          {tpl.description && (
             <Text as="div" variant="caption-2" color="secondary">
-              {t.description}
+              {tpl.description}
             </Text>
           )}
         </div>
@@ -111,54 +113,59 @@ export function TemplatesPage() {
     },
     {
       id: 'ext',
-      name: 'Тип',
-      template: (t) => <Label size="xs">{t.fileExt.toUpperCase()}</Label>,
+      name: t('templates:list.type'),
+      template: (tpl) => <Label size="xs">{tpl.fileExt.toUpperCase()}</Label>,
       width: 80,
     },
-    { id: 'updatedAt', name: 'Изменён', template: (t) => formatDateTime(t.updatedAt), width: 150 },
+    {
+      id: 'updatedAt',
+      name: t('templates:list.updatedAt'),
+      template: (tpl) => formatDateTime(tpl.updatedAt),
+      width: 150,
+    },
     {
       id: 'actions',
       name: '',
       align: 'end',
-      template: (t) => (
+      template: (tpl) => (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
           <Button
             view="flat"
             size="s"
-            aria-label="Открыть"
-            title="Открыть"
-            onClick={() => navigate(`/admin/templates/${t.id}`)}
+            aria-label={t('templates:list.open')}
+            title={t('templates:list.open')}
+            onClick={() => navigate(`/admin/templates/${tpl.id}`)}
           >
             <Icon data={Pencil} />
           </Button>
           <Button
             view="flat"
             size="s"
-            aria-label="Дублировать"
-            title="Дублировать"
-            loading={duplicate.isPending && duplicate.variables?.id === t.id}
-            onClick={() => duplicate.mutate(t)}
+            aria-label={t('templates:list.duplicate')}
+            title={t('templates:list.duplicate')}
+            loading={duplicate.isPending && duplicate.variables?.id === tpl.id}
+            onClick={() => duplicate.mutate(tpl)}
           >
             <Icon data={Copy} />
           </Button>
           <Button
             view="flat"
             size="s"
-            aria-label="Скачать"
-            title="Скачать"
-            href={templateDownloadUrl(t.id)}
+            aria-label={t('templates:list.download')}
+            title={t('templates:list.download')}
+            href={templateDownloadUrl(tpl.id)}
           >
             <Icon data={ArrowDownToLine} />
           </Button>
-          {t.canDelete && (
+          {tpl.canDelete && (
             <Button
               view="flat-danger"
               size="s"
-              aria-label="Удалить"
-              title="Удалить"
+              aria-label={t('common:action.delete')}
+              title={t('common:action.delete')}
               onClick={() => {
-                setLastDeleted(t);
-                setDeleting(t);
+                setLastDeleted(tpl);
+                setDeleting(tpl);
               }}
             >
               <Icon data={TrashBin} />
@@ -172,19 +179,21 @@ export function TemplatesPage() {
   return (
     <>
       <PageHeader
-        title="Шаблоны"
+        title={t('common:nav.templates')}
         actions={
           <div style={{ display: 'flex', gap: 8 }}>
             <ExportTemplatesButton ids={chosen}>
-              {chosen.length > 0 ? `Выгрузить (${chosen.length})` : 'Выгрузить'}
+              {chosen.length > 0
+                ? t('templates:list.exportSelected', { n: chosen.length })
+                : t('templates:export.button')}
             </ExportTemplatesButton>
             <Button view="outlined" onClick={() => setImportOpen(true)}>
               <Icon data={ArrowUpToLine} />
-              Загрузить из архива
+              {t('templates:list.import')}
             </Button>
             <Button view="action" onClick={() => setCreateOpen(true)}>
               <Icon data={Plus} />
-              Создать шаблон
+              {t('templates:list.create')}
             </Button>
           </div>
         }
@@ -196,8 +205,8 @@ export function TemplatesPage() {
         <Table
           data={list.data ?? []}
           columns={columns}
-          getRowDescriptor={(t) => ({ id: t.id })}
-          emptyMessage="Шаблонов пока нет"
+          getRowDescriptor={(tpl) => ({ id: tpl.id })}
+          emptyMessage={t('templates:list.empty')}
           width="max"
         />
       )}
@@ -205,9 +214,9 @@ export function TemplatesPage() {
       {importOpen && <ImportDialog open onClose={() => setImportOpen(false)} />}
       <ConfirmDialog
         open={!!deleting}
-        title="Удалить шаблон?"
-        text={`Шаблон «${lastDeleted?.name ?? ''}» будет удалён вместе с запросами и параметрами. История запусков сохранится.`}
-        confirmText="Удалить"
+        title={t('templates:list.deleteTitle')}
+        text={t('templates:list.deleteText', { name: lastDeleted?.name ?? '' })}
+        confirmText={t('common:action.delete')}
         danger
         loading={remove.isPending}
         onConfirm={() => deleting && remove.mutate(deleting)}

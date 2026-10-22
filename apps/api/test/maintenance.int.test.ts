@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createRedis } from '../src/lib/redis';
 import { createAgentClient } from '../src/modules/backups/agent-client';
 import { MAINTENANCE_KEY } from '../src/modules/maintenance/flag';
+import { createTranslator } from '@carbone-reports/shared/i18n/server';
 import { startFakeAgent, type FakeAgent } from './fake-agent';
 import { createTestApp, loginAs, type TestApp } from './helpers';
 
@@ -83,6 +84,14 @@ describe('режим обслуживания', () => {
       });
     }
     expect((await t.app.inject({ method: 'GET', url: '/api/health' })).statusCode).toBe(200);
+    // Язык по умолчанию нужен странице обслуживания и входу (§44.1).
+    expect((await t.app.inject({ method: 'GET', url: '/api/i18n' })).statusCode).toBe(200);
+    const en = await t.app.inject({
+      method: 'GET',
+      url: '/api/templates',
+      headers: { 'x-locale': 'en' },
+    });
+    expect(en.json().error.message).toBe(createTranslator('en')('errors:maintenance.restoring'));
     const m = await t.app.inject({ method: 'GET', url: '/api/maintenance?t=1' });
     expect(m.statusCode).toBe(200);
     expect(m.json()).toEqual({

@@ -1,10 +1,16 @@
 import type { PdfPostprocessor } from '../../deps';
-import { AppError } from '../../lib/errors';
+import { AppError, text, type Msg } from '../../lib/errors';
 import { RenderTimeoutError, TemplateRenderError, type RenderPool } from '../render/pool';
 import { postprocessPdf } from './postprocess';
 
-const failed = (message: string, cause?: unknown) =>
-  new AppError('PDF_ERROR', 502, `ошибка обработки PDF: ${message}`, undefined, cause);
+const failed = (message: string | Msg, cause?: unknown) =>
+  new AppError(
+    'PDF_ERROR',
+    502,
+    { key: 'pdf.processingError', params: { message } },
+    undefined,
+    cause,
+  );
 
 /** Обработка PDF задачей пула рендера: тяжёлая работа не блокирует главный поток (§36.4). */
 export function createPoolPdfPostprocessor(pool: Pick<RenderPool, 'run'>): PdfPostprocessor {
@@ -24,10 +30,9 @@ export function createPoolPdfPostprocessor(pool: Pick<RenderPool, 'run'>): PdfPo
       );
       return r.out;
     } catch (e) {
-      if (e instanceof RenderTimeoutError)
-        throw new AppError('TIMEOUT', 504, 'превышено время ожидания');
+      if (e instanceof RenderTimeoutError) throw new AppError('TIMEOUT', 504, { key: 'timeout' });
       if (e instanceof TemplateRenderError) throw failed(e.message);
-      throw failed('поток рендера недоступен', e);
+      throw failed(text('render.workerUnavailable'), e);
     }
   };
 }

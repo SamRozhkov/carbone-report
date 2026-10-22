@@ -1,13 +1,14 @@
 import type { UserDto } from '@carbone-reports/shared';
-import { ROLE_LABELS } from '@carbone-reports/shared';
 import { Lock, LockOpen, Pencil, PersonXmark, Plus, TrashBin } from '@gravity-ui/icons';
 import type { TableColumnConfig } from '@gravity-ui/uikit';
 import { Button, Icon, Label, Loader, Table, Text, useToaster } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/errors';
 import { useMe } from '../../api/session';
+import { useLocale } from '../../i18n';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { ErrorAlert } from '../../components/ErrorAlert';
 import { PageHeader } from '../../components/PageHeader';
@@ -15,6 +16,13 @@ import { formatDate } from '../../lib/format';
 import { CreateUserDialog, EditUserDialog } from './UserDialogs';
 
 export function UsersPage() {
+  const { t } = useTranslation();
+  const locale = useLocale();
+  // В русской таблице роль — строчными, как раньше; в других языках — как название (глоссарий).
+  const roleLabel = (role: UserDto['role']) => {
+    const label = t(`common:role.${role}`);
+    return locale === 'ru' ? label.toLocaleLowerCase('ru') : label;
+  };
   const me = useMe().data;
   const queryClient = useQueryClient();
   const { add } = useToaster();
@@ -74,9 +82,7 @@ export function UsersPage() {
       id: 'role',
       name: 'Роль',
       template: (u) => (
-        <Label theme={u.role === 'user' ? 'normal' : 'info'}>
-          {ROLE_LABELS[u.role].toLowerCase()}
-        </Label>
+        <Label theme={u.role === 'user' ? 'normal' : 'info'}>{roleLabel(u.role)}</Label>
       ),
     },
     {

@@ -1,7 +1,7 @@
 import type { Role } from '@carbone-reports/shared';
 import { screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import { mockApi, renderRoute } from '../test/utils';
+import { describe, expect, it, vi } from 'vitest';
+import { mockApi, pickOption, renderRoute } from '../test/utils';
 import { permissionsOf } from './permissions';
 
 const meAs = (role: Role) => ({
@@ -87,4 +87,33 @@ describe('Маршруты /admin по ролям', () => {
     const { router } = renderRoute(from);
     await waitFor(() => expect(router.state.location.pathname).toBe(to));
   });
+});
+
+describe('Layout: язык интерфейса (§44.1)', () => {
+  it('выбор в меню меняет подписи, <html lang> и сохраняется у пользователя', async () => {
+    const { calls } = mockApi([
+      meAs('admin'),
+      { path: '/api/templates', body: [] },
+      { method: 'PUT', path: '/api/me/locale', status: 204 },
+    ]);
+    renderRoute('/reports');
+    await pickOption(await screen.findByRole('button', { name: 'Язык' }), 'Deutsch');
+    expect(await screen.findByText('Berichte')).toBeInTheDocument();
+    expect(screen.getByText('Datenquellen')).toBeInTheDocument();
+    expect(screen.queryByText('Моя подпись')).not.toBeInTheDocument();
+    expect(document.documentElement.lang).toBe('de');
+    expect(calls.filter((c) => c.method === 'PUT')).toEqual([
+      { method: 'PUT', path: '/api/me/locale', body: { locale: 'de' } },
+    ]);
+
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['fr-CA']);
+    await pickOption(screen.getByRole('button', { name: 'Sprache' }), 'Wie im Browser');
+    expect(await screen.findByText('Rapports')).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === 'PUT').at(-1)).toEqual({
+      method: 'PUT',
+      path: '/api/me/locale',
+      body: { locale: null },
+    });
+    // Два выбора в списке на полном маршруте — дольше стандартных 5 с на загруженном раннере.
+  }, 15_000);
 });

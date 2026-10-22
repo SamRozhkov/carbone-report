@@ -5,7 +5,21 @@
     "access_manager": "安全管理员",
     "user": "用户"
   },
+  "nav": {
+    "reports": "报表",
+    "history": "历史记录",
+    "signature": "我的签名",
+    "templates": "模板",
+    "datasources": "数据源",
+    "users": "用户",
+    "groups": "用户组",
+    "categories": "类别",
+    "access": "报表访问权限",
+    "backups": "备份",
+    "help": "模板帮助"
+  },
   "locale": {
+    "title": "语言",
     "ru": "Русский",
     "en": "English",
     "es": "Español",
@@ -13,7 +27,9 @@
     "fr": "Français",
     "de": "Deutsch",
     "zh-CN": "简体中文",
-    "browser": "跟随浏览器"
+    "browser": "跟随浏览器",
+    "loadFailed": "无法加载语言",
+    "saveFailed": "无法保存语言选择"
   },
   "action": {
     "save": "保存",

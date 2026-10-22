@@ -8,6 +8,7 @@ import { ApiRequestError } from '../../../api/client';
 import { errorMessage } from '../../../api/errors';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { ErrorAlert } from '../../../components/ErrorAlert';
+import { currentLocale } from '../../../i18n';
 import { pickParams } from '../../../lib/params';
 import type { TabProps } from './editorState';
 import { templateKey } from './editorState';
@@ -399,7 +400,7 @@ function LockBar({
   const s = lock.state;
   if (!s || lock.forbidden) return null;
   const time = (iso: string) =>
-    new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    new Date(iso).toLocaleTimeString(currentLocale(), { hour: '2-digit', minute: '2-digit' });
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
       {s.state === 'mine' && <Text color="positive">Вы редактируете</Text>}

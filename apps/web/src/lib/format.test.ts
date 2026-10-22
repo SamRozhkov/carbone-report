@@ -1,9 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { formatDateTime, formatDuration } from './format';
+import { changeLocale } from '../i18n';
+import { formatDate, formatDateTime, formatDuration } from './format';
 
 describe('format', () => {
   it('formatDateTime в локали ru-RU', () => {
     expect(formatDateTime('2026-01-31T09:05:00')).toBe('31.01.2026 09:05');
+  });
+  it('formatDateTime и formatDate на en и de — формат локали Intl как есть', async () => {
+    const iso = '2026-01-31T09:05:00';
+    await changeLocale('en', { persist: 'none' });
+    const en = new Intl.DateTimeFormat('en', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(iso));
+    expect(formatDateTime(iso)).toBe(en);
+    expect(formatDateTime(iso)).toContain(',');
+    expect(formatDate(iso)).toBe('01/31/2026');
+    await changeLocale('de', { persist: 'none' });
+    expect(formatDateTime(iso)).toBe('31.01.2026, 09:05');
+    expect(formatDate(iso)).toBe('31.01.2026');
   });
   it('formatDuration', () => {
     expect(formatDuration(850)).toBe('850 мс');

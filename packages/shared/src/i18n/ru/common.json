@@ -5,7 +5,21 @@
     "access_manager": "Менеджер безопасности",
     "user": "Пользователь"
   },
+  "nav": {
+    "reports": "Отчёты",
+    "history": "История",
+    "signature": "Моя подпись",
+    "templates": "Шаблоны",
+    "datasources": "Источники данных",
+    "users": "Пользователи",
+    "groups": "Группы",
+    "categories": "Категории",
+    "access": "Доступ к отчётам",
+    "backups": "Бэкапы",
+    "help": "Справка по шаблонам"
+  },
   "locale": {
+    "title": "Язык",
     "ru": "Русский",
     "en": "English",
     "es": "Español",
@@ -13,7 +27,9 @@
     "fr": "Français",
     "de": "Deutsch",
     "zh-CN": "简体中文",
-    "browser": "Как в браузере"
+    "browser": "Как в браузере",
+    "loadFailed": "Не удалось загрузить язык",
+    "saveFailed": "Не удалось сохранить выбор языка"
   },
   "action": {
     "save": "Сохранить",

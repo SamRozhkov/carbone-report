@@ -18,14 +18,6 @@ export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export const Role = z.enum(['admin', 'editor', 'access_manager', 'user']);
 export type Role = z.infer<typeof Role>;
 
-/** Подписи ролей в интерфейсе (§43). */
-export const ROLE_LABELS: Record<Role, string> = {
-  admin: 'Администратор',
-  editor: 'Редактор',
-  access_manager: 'Менеджер безопасности',
-  user: 'Пользователь',
-};
-
 export const TemplateExt = z.enum(['docx', 'xlsx', 'odt', 'ods', 'pptx']);
 export type TemplateExt = z.infer<typeof TemplateExt>;
 

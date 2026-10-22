@@ -5,6 +5,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router';
 import { api } from '../api/endpoints';
 import { meKey, useMe } from '../api/session';
 import { ErrorAlert } from '../components/ErrorAlert';
+import { LocaleSwitcher } from '../i18n/LocaleSwitcher';
 
 /** Разрешаем только внутренние пути: «/…», но не «//host» и не «/\host». */
 export function safeNext(next: string | null): string {
@@ -84,6 +85,9 @@ export function LoginPage() {
             Войти
           </Button>
         </form>
+        <div style={{ marginTop: 16 }}>
+          <LocaleSwitcher persist="local" width="max" />
+        </div>
       </Card>
     </div>
   );

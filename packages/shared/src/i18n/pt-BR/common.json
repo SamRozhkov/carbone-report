@@ -5,7 +5,21 @@
     "access_manager": "Gerente de segurança",
     "user": "Usuário"
   },
+  "nav": {
+    "reports": "Relatórios",
+    "history": "Histórico",
+    "signature": "Minha assinatura",
+    "templates": "Modelos",
+    "datasources": "Fontes de dados",
+    "users": "Usuários",
+    "groups": "Grupos",
+    "categories": "Categorias",
+    "access": "Acesso aos relatórios",
+    "backups": "Backups",
+    "help": "Ajuda sobre modelos"
+  },
   "locale": {
+    "title": "Idioma",
     "ru": "Русский",
     "en": "English",
     "es": "Español",
@@ -13,7 +27,9 @@
     "fr": "Français",
     "de": "Deutsch",
     "zh-CN": "简体中文",
-    "browser": "Igual ao navegador"
+    "browser": "Igual ao navegador",
+    "loadFailed": "Não foi possível carregar o idioma",
+    "saveFailed": "Não foi possível salvar o idioma selecionado"
   },
   "action": {
     "save": "Salvar",

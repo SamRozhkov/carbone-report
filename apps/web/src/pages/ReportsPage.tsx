@@ -7,6 +7,7 @@ import { api } from '../api/endpoints';
 import { usePermissions } from '../app/permissions';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { PageHeader } from '../components/PageHeader';
+import { currentLocale } from '../i18n';
 import { formatDate } from '../lib/format';
 
 const NO_CATEGORY = 'Без категории';
@@ -33,7 +34,7 @@ function sectionsOf(list: TemplateSummary[]): Section[] {
   }
   return [...byKey.values()].sort((a, b) => {
     if (!a.key !== !b.key) return a.key ? -1 : 1;
-    return a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, 'ru');
+    return a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, currentLocale());
   });
 }
 

@@ -1,8 +1,8 @@
 import type { Role, UpdateUserBody, UserDto } from '@carbone-reports/shared';
-import { ROLE_LABELS } from '@carbone-reports/shared';
 import { Button, Dialog, Select, Switch, TextInput } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../../api/endpoints';
 import { fieldErrors } from '../../api/errors';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -11,13 +11,15 @@ import { Field } from '../../components/Field';
 import { GeneralError } from '../../components/GeneralError';
 import { sameIds } from '../../lib/ids';
 
-// От меньших прав к большим; подписи — общие с API (§43.5).
-const ROLE_OPTIONS = (['user', 'editor', 'access_manager', 'admin'] as const).map((value) => ({
-  value,
-  content: ROLE_LABELS[value],
-}));
+// От меньших прав к большим; подписи — из каталога common (§43.5, §44.3).
+const ROLES = ['user', 'editor', 'access_manager', 'admin'] as const;
+function useRoleOptions() {
+  const { t } = useTranslation();
+  return ROLES.map((value) => ({ value, content: t(`common:role.${value}`) }));
+}
 
 export function CreateUserDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const roleOptions = useRoleOptions();
   const queryClient = useQueryClient();
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
@@ -64,7 +66,7 @@ export function CreateUserDialog({ open, onClose }: { open: boolean; onClose: ()
           <Field label="Роль">
             <Select
               value={[role]}
-              options={ROLE_OPTIONS}
+              options={roleOptions}
               onUpdate={([v]) => setRole((v as Role) ?? 'user')}
               width="max"
             />
@@ -93,6 +95,7 @@ export function EditUserDialog({
   isSelf: boolean;
   onClose: () => void;
 }) {
+  const roleOptions = useRoleOptions();
   const queryClient = useQueryClient();
   const groups = useQuery({ queryKey: ['groups'], queryFn: api.groups.list });
   const [role, setRole] = useState<Role>(user?.role ?? 'user');
@@ -143,7 +146,7 @@ export function EditUserDialog({
           <Field label="Роль">
             <Select
               value={[role]}
-              options={ROLE_OPTIONS}
+              options={roleOptions}
               onUpdate={([v]) => setRole((v as Role) ?? role)}
               disabled={isSelf}
               aria-label="Роль"

@@ -1,7 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { ROLE_LABELS } from '@carbone-reports/shared';
 import { adminMe, mockApi, pickOption, renderRoute } from '../../test/utils';
 
 const users = [
@@ -464,7 +463,7 @@ describe('UsersPage', () => {
     );
   });
 
-  it('роль: четыре значения с подписями из ROLE_LABELS, в списке — подпись роли (§43.5)', async () => {
+  it('роль: четыре значения с подписями из каталога common, в списке — подпись роли (§43.5)', async () => {
     const { calls } = mockApi([
       adminMe,
       {
@@ -486,10 +485,10 @@ describe('UsersPage', () => {
     await userEvent.click(within(dialog).getByRole('combobox', { name: 'Роль' }));
     const options = await screen.findAllByRole('option');
     expect(options.map((o) => o.textContent)).toEqual([
-      ROLE_LABELS.user,
-      ROLE_LABELS.editor,
-      ROLE_LABELS.access_manager,
-      ROLE_LABELS.admin,
+      'Пользователь',
+      'Редактор',
+      'Менеджер безопасности',
+      'Администратор',
     ]);
     await userEvent.click(screen.getByRole('option', { name: 'Редактор' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Создать' }));

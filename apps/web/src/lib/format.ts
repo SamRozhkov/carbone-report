@@ -1,16 +1,34 @@
 import type { OutputFormat, TemplateExt } from '@carbone-reports/shared';
+import type { Locale } from '@carbone-reports/shared/i18n';
+import { currentLocale } from '../i18n';
 
-const dtf = new Intl.DateTimeFormat('ru-RU', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-});
-const df = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const formatters = new Map<Locale, { dateTime: Intl.DateTimeFormat; date: Intl.DateTimeFormat }>();
+/** Форматы дат текущего языка (§44.3); создаются один раз на язык. */
+function formattersOf(locale: Locale) {
+  let f = formatters.get(locale);
+  if (!f) {
+    f = {
+      dateTime: new Intl.DateTimeFormat(locale, {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      date: new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    };
+    formatters.set(locale, f);
+  }
+  return f;
+}
 
-export const formatDateTime = (iso: string) => dtf.format(new Date(iso)).replace(',', '');
-export const formatDate = (iso: string) => df.format(new Date(iso));
+/** ru — «31.01.2026 09:05» без запятой, как раньше; остальные языки — формат Intl как есть. */
+export function formatDateTime(iso: string): string {
+  const locale = currentLocale();
+  const s = formattersOf(locale).dateTime.format(new Date(iso));
+  return locale === 'ru' ? s.replace(',', '') : s;
+}
+export const formatDate = (iso: string) => formattersOf(currentLocale()).date.format(new Date(iso));
 
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms} мс`;

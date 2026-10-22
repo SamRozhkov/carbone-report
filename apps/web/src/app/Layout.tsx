@@ -8,6 +8,7 @@ import {
   Database,
   FileText,
   Folders,
+  Globe,
   Layers,
   Moon,
   PencilToLine,
@@ -21,10 +22,12 @@ import type { AsideHeaderItem } from '@gravity-ui/navigation';
 import { AsideHeader, FooterItem } from '@gravity-ui/navigation';
 import { useToaster } from '@gravity-ui/uikit';
 import { useQueryClient } from '@tanstack/react-query';
-import { useContext, useState } from 'react';
+import { useContext, useState, type Ref } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { api } from '../api/endpoints';
 import { meKey, useMe } from '../api/session';
+import { LocaleSwitcher } from '../i18n/LocaleSwitcher';
 import { AboutDialog } from './AboutDialog';
 import { webBuild } from './buildInfo';
 import { usePermissions } from './permissions';
@@ -53,6 +56,7 @@ export function Layout() {
   const { theme, setTheme } = useContext(ThemeContext);
   const [compact, setCompact] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const { t } = useTranslation();
 
   const item = (
     id: string,
@@ -68,31 +72,33 @@ export function Layout() {
   });
 
   const menuItems: AsideHeaderItem[] = [
-    item('reports', 'Отчёты', FileText, '/reports'),
-    item('history', 'История', ClockArrowRotateLeft, '/history'),
-    item('signature', 'Моя подпись', PencilToLine, '/signature'),
+    item('reports', t('common:nav.reports'), FileText, '/reports'),
+    item('history', t('common:nav.history'), ClockArrowRotateLeft, '/history'),
+    item('signature', t('common:nav.signature'), PencilToLine, '/signature'),
   ];
   const { isAdmin, canAuthor, canManageAccess } = usePermissions();
   const sectionItems: AsideHeaderItem[] = [
-    ...(canAuthor ? [item('templates', 'Шаблоны', Layers, '/admin/templates')] : []),
+    ...(canAuthor
+      ? [item('templates', t('common:nav.templates'), Layers, '/admin/templates')]
+      : []),
     ...(isAdmin
       ? [
-          item('datasources', 'Источники данных', Database, '/admin/datasources'),
-          item('users', 'Пользователи', Persons, '/admin/users'),
+          item('datasources', t('common:nav.datasources'), Database, '/admin/datasources'),
+          item('users', t('common:nav.users'), Persons, '/admin/users'),
         ]
       : []),
     ...(canManageAccess
       ? [
-          item('groups', 'Группы', PersonsLock, '/admin/groups'),
-          item('categories', 'Категории', Folders, '/admin/categories'),
-          item('access', 'Доступ к отчётам', ShieldCheck, '/admin/access'),
+          item('groups', t('common:nav.groups'), PersonsLock, '/admin/groups'),
+          item('categories', t('common:nav.categories'), Folders, '/admin/categories'),
+          item('access', t('common:nav.access'), ShieldCheck, '/admin/access'),
         ]
       : []),
     // §26.3: пункт есть, только если API настроен на агент бэкапа.
     ...(isAdmin && me?.features?.backups
-      ? [item('backups', 'Бэкапы', Archive, '/admin/backups')]
+      ? [item('backups', t('common:nav.backups'), Archive, '/admin/backups')]
       : []),
-    ...(canAuthor ? [item('help', 'Справка по шаблонам', CircleQuestion, '/admin/help')] : []),
+    ...(canAuthor ? [item('help', t('common:nav.help'), CircleQuestion, '/admin/help')] : []),
   ];
   if (sectionItems.length > 0) {
     menuItems.push({ id: 'admin-divider', title: '', type: 'divider' }, ...sectionItems);
@@ -150,6 +156,25 @@ export function Layout() {
               icon={theme === 'dark' ? Sun : Moon}
               compact={isCompact}
               onItemClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            />
+            <LocaleSwitcher
+              persist="server"
+              renderControl={({ ref, triggerProps }) => (
+                <div ref={ref as Ref<HTMLDivElement>}>
+                  <FooterItem
+                    id="locale"
+                    title={t('common:locale.title')}
+                    icon={Globe}
+                    compact={isCompact}
+                    onItemClick={(_item, _collapsed, e) => triggerProps.onClick?.(e)}
+                    menuItemAriaProps={{
+                      'aria-haspopup': triggerProps['aria-haspopup'],
+                      'aria-expanded': triggerProps['aria-expanded'],
+                      'aria-controls': triggerProps['aria-controls'],
+                    }}
+                  />
+                </div>
+              )}
             />
             <FooterItem id="me" title={me?.login ?? ''} icon={Person} compact={isCompact} />
             <FooterItem

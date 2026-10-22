@@ -5,7 +5,21 @@
     "access_manager": "Responsable de seguridad",
     "user": "Usuario"
   },
+  "nav": {
+    "reports": "Informes",
+    "history": "Historial",
+    "signature": "Mi firma",
+    "templates": "Plantillas",
+    "datasources": "Orígenes de datos",
+    "users": "Usuarios",
+    "groups": "Grupos",
+    "categories": "Categorías",
+    "access": "Acceso a informes",
+    "backups": "Copias de seguridad",
+    "help": "Ayuda sobre plantillas"
+  },
   "locale": {
+    "title": "Idioma",
     "ru": "Русский",
     "en": "English",
     "es": "Español",
@@ -13,7 +27,9 @@
     "fr": "Français",
     "de": "Deutsch",
     "zh-CN": "简体中文",
-    "browser": "Según el navegador"
+    "browser": "Según el navegador",
+    "loadFailed": "No se pudo cargar el idioma",
+    "saveFailed": "No se pudo guardar el idioma seleccionado"
   },
   "action": {
     "save": "Guardar",

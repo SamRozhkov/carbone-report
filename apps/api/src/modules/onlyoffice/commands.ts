@@ -23,14 +23,17 @@ export function createOnlyOfficeCommands(opts: {
           signal: AbortSignal.timeout(10_000),
         });
       } catch {
-        throw new AppError('ONLYOFFICE_ERROR', 502, 'сервер документов недоступен');
+        throw new AppError('ONLYOFFICE_ERROR', 502, { key: 'onlyoffice.unavailable' });
       }
       const { error } = (await res.json().catch(() => ({ error: -1 }))) as { error: number };
       if (error === 0) return;
       // 4 — Document Server не получил правок с прошлого сохранения: callback не придёт, ждать нечего.
-      if (error === 4) throw new AppError('NO_CHANGES', 409, 'нет несохранённых изменений');
-      if (error === 1) throw new AppError('NOT_OPEN', 409, 'документ не открыт в редакторе');
-      throw new AppError('ONLYOFFICE_ERROR', 502, `сервер документов вернул ошибку ${error}`);
+      if (error === 4) throw new AppError('NO_CHANGES', 409, { key: 'onlyoffice.noChanges' });
+      if (error === 1) throw new AppError('NOT_OPEN', 409, { key: 'onlyoffice.notOpen' });
+      throw new AppError('ONLYOFFICE_ERROR', 502, {
+        key: 'onlyoffice.commandError',
+        params: { code: error },
+      });
     },
   };
 }

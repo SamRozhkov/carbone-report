@@ -5,8 +5,15 @@
 import carbone from '@carbone-reports/carbone';
 import { CARBONE_LANG } from '@carbone-reports/shared';
 import JSZip from 'jszip';
-import { communityErrorMessage } from '../apps/api/src/modules/carbone/community';
+import { createTranslator } from '@carbone-reports/shared/i18n/server';
+import { communityError } from '../apps/api/src/modules/carbone/community';
 import { HELP_SECTIONS, type HelpExample } from '../apps/web/src/pages/admin/help/content';
+
+/** Сообщение API о форматтере, недоступном в Community Edition, — по-русски, как в справке. */
+function communityErrorMessage(carboneError: string): string | null {
+  const m = communityError(carboneError);
+  return m && createTranslator('ru')(`errors:${m.key}`, m.params);
+}
 
 const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';

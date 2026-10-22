@@ -1,12 +1,12 @@
 import { outputFormatsFor } from '@carbone-reports/shared';
 import type { CarboneRenderer } from '../../deps';
 import { AppError } from '../../lib/errors';
-import { communityErrorMessage } from '../carbone/community';
+import { communityError } from '../carbone/community';
 import type { RenderHandoff } from './handoff';
 import type { Converter } from './onlyoffice-convert';
 import { RenderTimeoutError, TemplateRenderError, type RenderPool } from './pool';
 
-const timeout = () => new AppError('TIMEOUT', 504, 'превышено время ожидания');
+const timeout = () => new AppError('TIMEOUT', 504, { key: 'timeout' });
 
 /** Сколько предупреждений рендера попадает в журнал; остальные — одной строкой «и ещё N». */
 const MAX_LOGGED_WARNINGS = 20;
@@ -41,11 +41,10 @@ export function createEmbeddedRenderer(opts: {
   const selfUrl = opts.selfUrl.replace(/\/$/, '');
   const renderOne: CarboneRenderer['render'] = async (tpl, data, ro) => {
     if (!outputFormatsFor(tpl.ext).includes(ro.convertTo)) {
-      throw new AppError(
-        'BAD_REQUEST',
-        400,
-        `формат ${ro.convertTo} недоступен для шаблона ${tpl.ext}`,
-      );
+      throw new AppError('BAD_REQUEST', 400, {
+        key: 'render.formatUnavailable',
+        params: { format: ro.convertTo, ext: tpl.ext },
+      });
     }
     const deadlineAt = Date.now() + ro.timeoutMs;
     const template = await tpl.read(); // ошибка чтения — как есть (ENOENT обрабатывают вызывающие)
@@ -81,15 +80,23 @@ export function createEmbeddedRenderer(opts: {
           { templateId: tpl.id, version: tpl.version, carboneError: e.message },
           'ошибка шаблона Carbone',
         );
-        const community = communityErrorMessage(e.message);
+        const community = communityError(e.message);
         if (community) throw new AppError('CARBONE_COMMUNITY', 400, community);
+        // Наш текст (данные не сериализуются) — переводится; текст Carbone — как есть.
+        const message = e.text ?? e.message;
         // Ошибка метки (builder, drop, изображения…): Carbone дописывает « Source: "{метка}"» — R1.
         if (e.message.includes(' Source: "')) {
-          throw new AppError('CARBONE_TEMPLATE', 400, `ошибка шаблона: ${e.message}`);
+          throw new AppError('CARBONE_TEMPLATE', 400, {
+            key: 'render.templateError',
+            params: { message },
+          });
         }
-        throw new AppError('CARBONE_ERROR', 502, `ошибка генерации: ${e.message}`);
+        throw new AppError('CARBONE_ERROR', 502, {
+          key: 'render.generationError',
+          params: { message },
+        });
       }
-      throw new AppError('CARBONE_ERROR', 502, 'сервис генерации недоступен', undefined, e);
+      throw new AppError('CARBONE_ERROR', 502, { key: 'render.unavailable' }, undefined, e);
     }
     if (ro.convertTo === tpl.ext) return out;
 

@@ -21,7 +21,7 @@ export const PDF_COLORS: Record<PdfColor, string> = {
 };
 
 export const PdfWatermark = z.strictObject({
-  text: z.string().trim().min(1, 'укажите текст').max(200),
+  text: z.string().trim().min(1, 'v:pdf.textRequired').max(200),
   opacity: z.number().int().min(10).max(50).default(20),
   color: PdfColor.default('gray'),
   angle: z.enum(['diagonal', 'horizontal']).default('diagonal'),
@@ -37,7 +37,7 @@ export const PdfPageNumbers = z.strictObject({
     .trim()
     .min(1)
     .max(100)
-    .refine((s) => s.includes('{page}'), 'нужен {page} — номер страницы')
+    .refine((s) => s.includes('{page}'), 'v:pdf.pageTagRequired')
     .default(PDF_PAGE_FORMAT_DEFAULT),
   position: PdfPosition.default('bottom-center'),
   skipFirst: z.boolean().default(false),
@@ -57,7 +57,8 @@ export type PdfMetadata = z.infer<typeof PdfMetadata>;
 
 export const PDF_PASSWORD_MIN = 4;
 export const PDF_PASSWORD_MAX = 64;
-export const PDF_PROTECTION_PDFA_MESSAGE = 'PDF/A несовместим с паролем и ограничениями';
+/** Сообщение (ключ каталога validation): PDF/A вместе с паролем или ограничениями. */
+export const PDF_PROTECTION_PDFA_MESSAGE = 'v:pdf.pdfaProtection';
 
 /** Запреты для программ просмотра; `true` — действие запрещено. */
 export const PdfProtection = z.strictObject({
@@ -75,17 +76,21 @@ const isControl = (c: string) => {
 /** Пароль на открытие: длина — в символах, пробелы по краям — часть пароля. */
 export const PdfPassword = z
   .string()
-  .refine((s) => {
-    const n = [...s].length;
-    return n >= PDF_PASSWORD_MIN && n <= PDF_PASSWORD_MAX;
-  }, `пароль — от ${PDF_PASSWORD_MIN} до ${PDF_PASSWORD_MAX} символов`)
-  .refine((s) => ![...s].some(isControl), 'пароль содержит недопустимые символы')
+  .refine(
+    (s) => {
+      const n = [...s].length;
+      return n >= PDF_PASSWORD_MIN && n <= PDF_PASSWORD_MAX;
+    },
+    { message: 'v:pdf.passwordLength', params: { min: PDF_PASSWORD_MIN, max: PDF_PASSWORD_MAX } },
+  )
+  .refine((s) => ![...s].some(isControl), 'v:pdf.passwordControl')
   // Ограничение qpdf 11.3: позиционный пароль с «-» в начале принимается за параметр.
-  .refine((s) => !s.startsWith('-'), 'пароль не может начинаться с «-»');
+  .refine((s) => !s.startsWith('-'), 'v:pdf.passwordDash');
 
 // ---- Электронная подпись (§39) ----
 
-export const PDF_SIGNATURE_PROTECTION_MESSAGE = 'Подпись несовместима с паролем и ограничениями';
+/** Сообщение (ключ каталога validation): подпись вместе с паролем или ограничениями. */
+export const PDF_SIGNATURE_PROTECTION_MESSAGE = 'v:pdf.signatureProtection';
 
 export const PdfSignaturePosition = z.enum(['bottom-left', 'bottom-center', 'bottom-right']);
 export type PdfSignaturePosition = z.infer<typeof PdfSignaturePosition>;
@@ -191,10 +196,10 @@ export function fillPdfText(text: string, data: unknown): string {
   });
 }
 
-/** Ошибка у поля при сохранении: тег с форматтером, циклом или неверным путём. */
-export function pdfTextIssues(text: string): string | null {
+/** Ошибка у поля при сохранении: первый тег с форматтером, циклом или неверным путём; нет — null. */
+export function pdfTextBadTag(text: string): string | null {
   for (const m of text.matchAll(TAG_RE)) {
-    if (!PATH_RE.test(m[1]!)) return `в полях PDF теги без форматтеров: ${m[0]}`;
+    if (!PATH_RE.test(m[1]!)) return m[0];
   }
   return null;
 }

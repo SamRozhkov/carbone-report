@@ -17,7 +17,7 @@ export interface ActiveLock {
 export const lockAlive: SQL = sql`${templateEditLocks.heartbeatAt} > now() - make_interval(secs => ${EDIT_LOCK_TTL_SECONDS})`;
 
 export const lockedError = (login: string) =>
-  new AppError('TEMPLATE_LOCKED', 409, `шаблон редактирует ${login}`);
+  new AppError('TEMPLATE_LOCKED', 409, { key: 'editLock.locked', params: { login } });
 
 export async function activeLock(db: LockDb, templateId: string): Promise<ActiveLock | null> {
   const [r] = await db
@@ -54,7 +54,7 @@ async function shareTemplate(tx: LockDb, templateId: string): Promise<void> {
     .from(templates)
     .where(eq(templates.id, templateId))
     .for('share');
-  if (!row) throw notFound('шаблон');
+  if (!row) throw notFound('template');
 }
 
 /** Захват или продление (§38.1): одна строка — `insert … on conflict … where`. */
@@ -127,7 +127,7 @@ export async function takeOverLock(
       .from(templates)
       .where(eq(templates.id, templateId))
       .for('share');
-    if (!row) throw notFound('шаблон');
+    if (!row) throw notFound('template');
     const before = await activeLock(tx, templateId);
     await tx
       .insert(templateEditLocks)
@@ -161,6 +161,6 @@ export async function assertLockedBy(
   holder: string,
 ): Promise<void> {
   const lock = await activeLock(db, templateId);
-  if (!lock) throw new AppError('TEMPLATE_LOCKED', 409, 'начните редактирование');
+  if (!lock) throw new AppError('TEMPLATE_LOCKED', 409, { key: 'editLock.startEditing' });
   if (lock.holder !== holder) throw lockedError(lock.login);
 }

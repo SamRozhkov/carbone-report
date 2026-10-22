@@ -61,10 +61,9 @@ export const toRunSignature = (r: RunSignatureRow): RunSignature => ({
   method: r.method,
 });
 
-export const snapshotGone = () =>
-  new AppError('GONE', 410, 'файл удалён — сформируйте отчёт заново');
+export const snapshotGone = () => new AppError('GONE', 410, { key: 'run.snapshotGone' });
 export const formatUnavailable = () =>
-  new AppError('VALIDATION', 400, 'формат недоступен для этого отчёта');
+  new AppError('VALIDATION', 400, { key: 'run.formatUnavailable' });
 
 type RunFileFields = Pick<
   RunRow,

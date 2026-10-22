@@ -7,7 +7,7 @@ import type {
 } from '@carbone-reports/shared';
 import type { AppDeps } from '../../deps';
 import type { Deadline } from '../../lib/deadline';
-import { AppError, notFound } from '../../lib/errors';
+import { AppError, notFound, text, type Text } from '../../lib/errors';
 import type { TemplateFull } from '../templates/service';
 import { loadParamOptions, type QueryLimits } from './executor';
 import { orderParams, paramRefs } from './param-deps';
@@ -42,12 +42,12 @@ export async function validateQueryParams(
     toCheck.map((def) => ({ def, params: resolved })),
     limitsOf(deps, deadline),
   );
-  const fields: Record<string, string> = {};
+  const fields: Record<string, Text> = {};
   toCheck.forEach((def, i) => {
-    if (!isAllowed(lists[i]!, resolved[def.name]!)) fields[def.name] = 'значение недоступно';
+    if (!isAllowed(lists[i]!, resolved[def.name]!)) fields[def.name] = text('param.unavailable');
   });
   if (Object.keys(fields).length > 0) {
-    throw new AppError('VALIDATION', 400, 'неверные параметры', { fields });
+    throw new AppError('VALIDATION', 400, { key: 'param.invalid' }, { fields });
   }
 }
 
@@ -95,7 +95,7 @@ export async function optionsForParam(
   input: ParamsInput,
 ): Promise<ParamOptionsResult> {
   const def = full.params.find((p) => p.name === paramName);
-  if (!def || def.type !== 'query') throw notFound('параметр');
+  if (!def || def.type !== 'query') throw notFound('param');
 
   const byName = new Map<string, TemplateParam>(full.params.map((p) => [p.name, p]));
   const resolve = (p: TemplateParam): ParamValue => {

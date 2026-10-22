@@ -7,6 +7,7 @@ import { streebog } from '../src/modules/pdf/sign/gost/streebog';
 import { cleanupGostPending } from '../src/modules/signature/gost-pending';
 import { cleanupOldReports } from '../src/modules/reports/cleanup';
 import { createTemplate, createTestApp, loginAs, type TestApp } from './helpers';
+import { createTranslator } from '@carbone-reports/shared/i18n/server';
 
 const gostFx = (n: string) =>
   readFileSync(new URL(`./fixtures/gost/${n}`, import.meta.url)) as Buffer;
@@ -178,6 +179,23 @@ describe('подготовка подписи ГОСТ (§42.2)', () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toMatchObject({ message });
     expect(await pendingOf(runId)).toHaveLength(0);
+  });
+
+  it('истёкший сертификат — текст на языке запроса (X-Locale), без заголовка — по-русски', async () => {
+    const runId = await render(user.cookie);
+    for (const locale of ['en', 'zh-CN'] as const) {
+      const res = await env.t.app.inject({
+        method: 'POST',
+        url: `/api/runs/${runId}/sign/gost/prepare`,
+        headers: { cookie: user.cookie, 'x-locale': locale },
+        payload: { certificate: certB64('expired256.pem') },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error.message).toBe(createTranslator(locale)('errors:sign.certExpired'));
+      expect(res.json().error.message).not.toMatch(/[а-яё]/i);
+    }
+    const ru = await prepare(user.cookie, runId, certB64('expired256.pem'));
+    expect(ru.json().error.message).toBe('срок действия сертификата истёк');
   });
 
   it('чужой запуск — 404 (и для администратора); .p12-шаблон — 400', async () => {

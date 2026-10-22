@@ -3,9 +3,9 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { templateEditors, templates, users } from '../../db/schema';
 import type { AppDeps } from '../../deps';
-import { AppError } from '../../lib/errors';
+import { AppError, ruText } from '../../lib/errors';
 import { isZip } from '../../lib/http';
-import { editRight, NO_EDIT_RIGHT } from '../access/permissions';
+import { editRight } from '../access/permissions';
 import { discardUncommittedFile, templateFilePath } from '../templates/service';
 import { toInternalDownloadUrl } from './download-url';
 import { verifyOnlyOfficeCallback } from './jwt';
@@ -17,9 +17,11 @@ const Callback = z.object({
   users: z.array(z.string()).optional(),
 });
 
+// Ошибки сохранения хранятся в шаблоне (lastSaveError) по-русски: callback приходит от
+// Document Server, языка пользователя у него нет.
 const SAVE_ERRORS: Record<number, string> = {
-  3: 'OnlyOffice не смог сохранить документ',
-  7: 'ошибка принудительного сохранения OnlyOffice',
+  3: 'onlyoffice.saveFailed',
+  7: 'onlyoffice.forceSaveFailed',
 };
 
 async function verifiedPayload(
@@ -38,10 +40,10 @@ async function verifiedPayload(
   } catch {
     // неверная подпись — ниже
   }
-  throw new AppError('FORBIDDEN', 403, 'неверная подпись OnlyOffice');
+  throw new AppError('FORBIDDEN', 403, { key: 'onlyoffice.invalidSignature' });
 }
 
-const NO_RIGHT_TO_SAVE = `изменения не сохранены: ${NO_EDIT_RIGHT}`;
+const NO_RIGHT_TO_SAVE = ruText('onlyoffice.noRightToSave');
 
 /**
  * Первый из сохраняющих пользователей (id из editor-config), у кого право правки ещё есть.
@@ -89,8 +91,7 @@ export async function handleCallback(
   log?: { info(o: unknown, msg?: string): void; warn(o: unknown, msg?: string): void },
 ): Promise<void> {
   const parsed = Callback.safeParse(await verifiedPayload(deps, body, authorization));
-  if (!parsed.success)
-    throw new AppError('BAD_CALLBACK', 400, 'неверный формат callback OnlyOffice');
+  if (!parsed.success) throw new AppError('BAD_CALLBACK', 400, { key: 'onlyoffice.badCallback' });
   const cb = parsed.data;
   // Каждый callback — в журнал: без статуса не понять, почему сохранение не дошло до версии.
   log?.info({ templateId, status: cb.status }, 'callback OnlyOffice');
@@ -124,18 +125,18 @@ export async function handleCallback(
 
   if (cb.status === 3 || cb.status === 7) {
     log?.warn({ templateId, status: cb.status }, SAVE_ERRORS[cb.status]);
-    await setError(SAVE_ERRORS[cb.status]!);
+    await setError(ruText(SAVE_ERRORS[cb.status]!));
     return;
   }
   if (!cb.url) {
-    await setError('OnlyOffice не передал ссылку на файл');
+    await setError(ruText('onlyoffice.noFileUrl'));
     return;
   }
   // Скачиваем только из кэша Document Server по внутреннему адресу, а не по присланной ссылке.
   const downloadUrl = toInternalDownloadUrl(cb.url, deps.config.onlyofficeInternalUrl);
   if (!downloadUrl) {
     log?.warn({ templateId, status: cb.status }, 'недопустимая ссылка на файл от OnlyOffice');
-    await setError('OnlyOffice передал недопустимую ссылку на файл');
+    await setError(ruText('onlyoffice.badFileUrl'));
     return;
   }
 
@@ -155,11 +156,11 @@ export async function handleCallback(
   try {
     file = await deps.fetchFile(downloadUrl);
   } catch (err) {
-    await setError('не удалось скачать файл из OnlyOffice');
+    await setError(ruText('onlyoffice.downloadFailed'));
     throw err;
   }
   if (!isZip(file)) {
-    await setError('полученный от OnlyOffice файл не является документом');
+    await setError(ruText('onlyoffice.notDocument'));
     return;
   }
 

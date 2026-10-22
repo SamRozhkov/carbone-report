@@ -69,18 +69,18 @@ export const CHART_PALETTES: Record<ChartPalette, string[]> = {
   mono: ['#08306b', '#08519c', '#2171b5', '#4292c6', '#6baed6', '#9ecae1', '#c6dbef'],
 };
 
-const Column = z.string().trim().min(1, 'выберите колонку').max(200);
+const Column = z.string().trim().min(1, 'v:chart.columnRequired').max(200);
 
 export const ChartKey = z
   .string()
-  .regex(KEY_RE, 'ключ: латиница, цифры и _')
-  .max(64, 'ключ — до 64 символов')
-  .refine((k) => !RESERVED.has(k), 'зарезервированное имя');
+  .regex(KEY_RE, 'v:identKey')
+  .max(64, 'v:chart.keyTooLong')
+  .refine((k) => !RESERVED.has(k), 'v:reservedName');
 
 export const ChartSeries = z.strictObject({
   column: Column,
   name: z.string().trim().max(100).optional(),
-  color: z.string().regex(HEX_RE, 'цвет — #RRGGBB').optional(),
+  color: z.string().regex(HEX_RE, 'v:chart.colorHex').optional(),
   kind: z.enum(['bar', 'line']).optional(),
   axis: z.enum(['left', 'right']).optional(),
 });
@@ -94,15 +94,15 @@ export const ChartNumberFormat = z.strictObject({
 export type ChartNumberFormat = z.infer<typeof ChartNumberFormat>;
 
 export const TemplateChartFields = z.strictObject({
-  query: z.string().min(1, 'выберите запрос'),
+  query: z.string().min(1, 'v:chart.queryRequired'),
   type: ChartType,
   stacked: z.boolean().default(false),
   smooth: z.boolean().default(false),
   category: Column,
   series: z
     .array(ChartSeries)
-    .min(1, 'добавьте ряд')
-    .max(MAX_CHART_SERIES, `рядов — не больше ${MAX_CHART_SERIES}`),
+    .min(1, 'v:chart.seriesRequired')
+    .max(MAX_CHART_SERIES, 'v:chart.tooManySeries'),
   splitBy: Column.nullable().default(null),
   title: z.string().trim().max(200).default(''),
   legend: ChartLegend.default('bottom'),
@@ -124,28 +124,24 @@ export const refineTemplateChart = (
 ): void => {
   const issue = (path: (string | number)[], message: string) =>
     ctx.addIssue({ code: 'custom', path, message });
-  if (c.stacked && !STACKABLE.includes(c.type))
-    issue(['stacked'], 'накопление — только у столбцов, линий и областей');
-  if (c.smooth && !SMOOTHABLE.includes(c.type))
-    issue(['smooth'], 'сглаживание — только у линий, областей и комбинированного');
+  if (c.stacked && !STACKABLE.includes(c.type)) issue(['stacked'], 'v:chart.stackedOnly');
+  if (c.smooth && !SMOOTHABLE.includes(c.type)) issue(['smooth'], 'v:chart.smoothOnly');
   if (c.type !== 'combo')
     c.series.forEach((s, i) => {
       if (s.kind !== undefined || s.axis !== undefined)
-        issue(['series', i, 'kind'], 'вид и ось ряда — только у комбинированного');
+        issue(['series', i, 'kind'], 'v:chart.kindOnlyCombo');
     });
   if (isPie(c.type)) {
-    if (c.series.length !== 1) issue(['series'], 'у круговой и кольцевой — ровно один ряд');
-    if (c.splitBy !== null) issue(['splitBy'], 'ряды из данных недоступны у круговой и кольцевой');
+    if (c.series.length !== 1) issue(['series'], 'v:chart.pieOneSeries');
+    if (c.splitBy !== null) issue(['splitBy'], 'v:chart.pieNoSplit');
   } else if (c.splitBy !== null) {
-    if (c.series.length !== 1)
-      issue(['series'], 'с рядами из данных — ровно один ряд (колонка значений)');
+    if (c.series.length !== 1) issue(['series'], 'v:chart.splitOneSeries');
     c.series.forEach((s, i) => {
-      if (s.color !== undefined)
-        issue(['series', i, 'color'], 'цвета рядов из данных — из палитры');
+      if (s.color !== undefined) issue(['series', i, 'color'], 'v:chart.splitColors');
     });
   }
   if (c.axisY2 !== '' && !(c.type === 'combo' && c.series.some((s) => s.axis === 'right')))
-    issue(['axisY2'], 'вторая ось — только у комбинированного с рядом на правой оси');
+    issue(['axisY2'], 'v:chart.axisY2Only');
 };
 
 /** Настройки графика без ключа: так они лежат в `template_charts.config` и в архиве переноса. */
@@ -160,7 +156,7 @@ export type TemplateChart = z.infer<typeof TemplateChart>;
 /** Тело `PUT /api/templates/:id/charts`: весь список графиков шаблона. */
 export const TemplateChartList = z
   .array(TemplateChart)
-  .max(MAX_TEMPLATE_CHARTS, `графиков в шаблоне — не больше ${MAX_TEMPLATE_CHARTS}`)
+  .max(MAX_TEMPLATE_CHARTS, 'v:chart.tooManyCharts')
   .superRefine((charts, ctx) => {
     const seen = new Set<string>();
     charts.forEach((c, i) => {
@@ -168,7 +164,8 @@ export const TemplateChartList = z
         ctx.addIssue({
           code: 'custom',
           path: [i, 'key'],
-          message: `ключ графика «${c.key}» повторяется`,
+          message: 'v:chart.keyDuplicate',
+          params: { key: c.key },
         });
       seen.add(c.key);
     });
@@ -183,7 +180,17 @@ export interface ChartValue {
 }
 
 /** Ошибка данных графика (нет колонки, больше 20 рядов): API отвечает 400 CARBONE_TEMPLATE. */
-export class ChartDataError extends Error {}
+export class ChartDataError extends Error {
+  /** Ключ каталога errors с тем же текстом и его параметры — для перевода на язык запроса. */
+  declare readonly key?: string;
+  declare readonly params?: Record<string, string | number>;
+
+  constructor(message: string, key?: string, params?: Record<string, string | number>) {
+    super(message);
+    // Неперечисляемые: ошибки сравниваются по тексту.
+    Object.defineProperties(this, { key: { value: key }, params: { value: params } });
+  }
+}
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -290,7 +297,11 @@ function requireColumns(chart: TemplateChart, rows: Record<string, unknown>[]): 
     ...(chart.splitBy ? [chart.splitBy] : []),
   ];
   for (const c of columns)
-    if (!Object.hasOwn(first, c)) throw new ChartDataError(`график ${chart.key}: нет колонки ${c}`);
+    if (!Object.hasOwn(first, c))
+      throw new ChartDataError(`график ${chart.key}: нет колонки ${c}`, 'chart.noColumn', {
+        chart: chart.key,
+        column: c,
+      });
 }
 
 function plainData(chart: TemplateChart, rows: Record<string, unknown>[]) {
@@ -322,7 +333,11 @@ function splitData(chart: TemplateChart, rows: Record<string, unknown>[]) {
     const n = chartLabel(r[by]);
     if (!nameIndex.has(n)) {
       if (names.length >= MAX_CHART_SERIES)
-        throw new ChartDataError(`график ${chart.key}: больше ${MAX_CHART_SERIES} рядов`);
+        throw new ChartDataError(
+          `график ${chart.key}: больше ${MAX_CHART_SERIES} рядов`,
+          'chart.tooManySeries',
+          { chart: chart.key, count: MAX_CHART_SERIES },
+        );
       nameIndex.set(n, names.length);
       names.push(n);
     }

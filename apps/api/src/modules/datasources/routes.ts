@@ -48,7 +48,7 @@ export function registerDatasourceRoutes(app: App, deps: AppDeps, guards: Guards
 
   app.post('/api/datasources', { ...pre, schema: { body: DatasourceBody } }, async (req, reply) => {
     const { password, ...rest } = req.body;
-    if (!password) throw badRequest('пароль обязателен');
+    if (!password) throw badRequest('datasource.passwordRequired');
     const [row] = await deps.db
       .insert(datasources)
       .values({ ...rest, passwordEnc: encryptSecret(password, key) })
@@ -68,7 +68,7 @@ export function registerDatasourceRoutes(app: App, deps: AppDeps, guards: Guards
         .set(patch)
         .where(eq(datasources.id, req.params.id))
         .returning();
-      if (!row) throw notFound('источник данных');
+      if (!row) throw notFound('datasource');
       await deps.sources.invalidate(row.id);
       return toDatasourceDto(row);
     },
@@ -83,25 +83,25 @@ export function registerDatasourceRoutes(app: App, deps: AppDeps, guards: Guards
         .from(templates)
         .where(eq(templates.datasourceId, req.params.id))
         .limit(1);
-      if (used.length > 0) throw conflict('источник используется шаблонами');
+      if (used.length > 0) throw conflict('datasource.inUse');
       const [row] = await deps.db
         .delete(datasources)
         .where(eq(datasources.id, req.params.id))
         .returning();
-      if (!row) throw notFound('источник данных');
+      if (!row) throw notFound('datasource');
       await deps.sources.invalidate(row.id);
       return reply.status(204).send();
     },
   );
 
   app.post('/api/datasources/test', { ...pre, schema: { body: DatasourceBody } }, async (req) => {
-    if (!req.body.password) throw badRequest('пароль обязателен');
-    return testConnection({ ...req.body, password: req.body.password });
+    if (!req.body.password) throw badRequest('datasource.passwordRequired');
+    return testConnection({ ...req.body, password: req.body.password }, req.locale);
   });
 
   app.post('/api/datasources/:id/test', { ...pre, schema: { params: IdParams } }, async (req) => {
     const [row] = await deps.db.select().from(datasources).where(eq(datasources.id, req.params.id));
-    if (!row) throw notFound('источник данных');
-    return testConnection(connParamsFromRow(row, key));
+    if (!row) throw notFound('datasource');
+    return testConnection(connParamsFromRow(row, key), req.locale);
   });
 }

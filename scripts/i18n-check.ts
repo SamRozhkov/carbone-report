@@ -12,7 +12,7 @@ import { LOCALES, NAMESPACES } from '@carbone-reports/shared/i18n';
 /** Кириллица в строках кода веба (непереведённый текст); включается в Task 7. */
 const CHECK_WEB_CYRILLIC = false;
 /** Кириллица в аргументах AppError и помощников ошибок API; включается в Task 3. */
-const CHECK_API_ERRORS = false;
+const CHECK_API_ERRORS = true;
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SOURCE = 'ru';

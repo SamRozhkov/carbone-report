@@ -246,7 +246,7 @@ describe('пароль и запреты (§37.2)', () => {
     const id = await newTemplate();
     await putOptions(id, { protection: { noPrint: true } });
     protect.mockRejectedValueOnce(
-      new AppError('PDF_PROTECT_UNAVAILABLE', 503, 'шифрование PDF недоступно: не установлен qpdf'),
+      new AppError('PDF_PROTECT_UNAVAILABLE', 503, { key: 'pdf.protectUnavailable' }),
     );
     const r = await render(id);
     expect(r.statusCode).toBe(503);

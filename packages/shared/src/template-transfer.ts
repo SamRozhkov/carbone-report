@@ -44,7 +44,7 @@ export const transferAttachmentPath = (index: number, n: number) =>
 
 export const ExportTemplatesBody = z.object({
   ids: z
-    .array(z.uuid('неверный идентификатор').transform((id) => id.toLowerCase()))
+    .array(z.uuid('v:invalidId').transform((id) => id.toLowerCase()))
     .min(1)
     .max(MAX_TRANSFER_TEMPLATES),
 });
@@ -92,7 +92,7 @@ export type TransferChart = z.infer<typeof TransferChart>;
 /** Приложенный PDF шаблона (§36.6): файл в архиве, порядок и заявленный PDF/A. */
 export const TransferAttachment = z.strictObject({
   file: z.string().min(1).max(200),
-  sha256: z.string().regex(/^[0-9a-f]{64}$/, 'ожидается sha256 в hex'),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/, 'v:transfer.sha256'),
   name: z.string().min(1).max(200),
   placement: PdfPlacement,
   sortOrder: SortOrder,
@@ -113,7 +113,7 @@ const uniqueBy = <T>(items: T[], pick: (t: T) => string): string | null => {
 /** Путь файла закреплён только в TransferManifest: разбирать архив нужно им, не одним TransferTemplate. */
 export const TransferTemplate = z
   .strictObject({
-    name: z.string().trim().min(1, 'укажите название').max(255),
+    name: z.string().trim().min(1, 'v:nameRequired').max(255),
     description: z.string(),
     fileExt: TemplateExt,
     defaultOutput: OutputFormat,
@@ -133,40 +133,46 @@ export const TransferTemplate = z
     /** Путь файла шаблона в архиве. */
     file: z.string().min(1).max(200),
     /** sha256 файла шаблона, hex в нижнем регистре. */
-    sha256: z.string().regex(/^[0-9a-f]{64}$/, 'ожидается sha256 в hex'),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/, 'v:transfer.sha256'),
   })
   .superRefine((t, ctx) => {
-    const issue = (path: (string | number)[], message: string) =>
-      ctx.addIssue({ code: 'custom', path, message });
+    const issue = (
+      path: (string | number)[],
+      message: string,
+      params?: Record<string, string | number>,
+    ) => ctx.addIssue({ code: 'custom', path, message, params });
     if (!outputFormatsFor(t.fileExt).includes(t.defaultOutput))
-      issue(['defaultOutput'], `формат ${t.defaultOutput} недоступен для .${t.fileExt}`);
+      issue(['defaultOutput'], 'v:transfer.formatUnavailable', {
+        format: t.defaultOutput,
+        ext: t.fileExt,
+      });
     if (!t.file.endsWith(`/template.${t.fileExt}`))
-      issue(['file'], `файл шаблона должен иметь расширение .${t.fileExt}`);
+      issue(['file'], 'v:transfer.fileExt', { ext: t.fileExt });
     const dupGroup = uniqueBy(t.groups, (g) => g.toLowerCase());
-    if (dupGroup !== null) issue(['groups'], `группа "${dupGroup}" повторяется`);
+    if (dupGroup !== null) issue(['groups'], 'v:transfer.groupDuplicate', { name: dupGroup });
     const dupKey = uniqueBy(t.queries, (q) => q.key);
-    if (dupKey !== null) issue(['queries'], `ключ запроса "${dupKey}" повторяется`);
+    if (dupKey !== null) issue(['queries'], 'v:transfer.queryDuplicate', { key: dupKey });
     const dupParam = uniqueBy(t.params, (p) => p.name);
-    if (dupParam !== null) issue(['params'], `параметр "${dupParam}" повторяется`);
+    if (dupParam !== null) issue(['params'], 'v:transfer.paramDuplicate', { name: dupParam });
     const charts = t.charts ?? [];
     const dupChart = uniqueBy(charts, (c) => c.key);
-    if (dupChart !== null) issue(['charts'], `ключ графика "${dupChart}" повторяется`);
+    if (dupChart !== null) issue(['charts'], 'v:transfer.chartDuplicate', { key: dupChart });
     charts.forEach((c, i) => {
       const q = t.queries.find((x) => x.key === c.config.query);
       if (!q)
-        issue(['charts', i, 'config', 'query'], `нет запроса "${c.config.query}" в шаблоне архива`);
+        issue(['charts', i, 'config', 'query'], 'v:transfer.chartNoQuery', {
+          query: c.config.query,
+        });
       else if (q.mode !== 'list')
-        issue(
-          ['charts', i, 'config', 'query'],
-          `запрос "${c.config.query}" должен возвращать список строк`,
-        );
+        issue(['charts', i, 'config', 'query'], 'v:transfer.chartQueryList', {
+          query: c.config.query,
+        });
     });
     if (charts.length > 0 && t.queries.some((q) => q.key === 'charts'))
-      issue(['queries'], 'ключ charts занят графиками');
+      issue(['queries'], 'v:chart.chartsKeyTaken');
     if (t.pdfOptions?.pdfa) {
       (t.attachments ?? []).forEach((a, i) => {
-        if (!a.pdfa)
-          issue(['attachments', i, 'pdfa'], `PDF/A включён: файл «${a.name}» не в формате PDF/A`);
+        if (!a.pdfa) issue(['attachments', i, 'pdfa'], 'v:pdf.attachmentNotPdfa', { name: a.name });
       });
     }
     if (t.pdfOptions?.pdfa && hasPdfProtection(t.pdfOptions, t.pdfPasswordSet ?? false))
@@ -193,21 +199,24 @@ export const TransferManifest = z
       ctx.addIssue({
         code: 'custom',
         path: ['templates', dupName, 'name'],
-        message: `название "${m.templates[dupName]!.name}" повторяется в архиве`,
+        message: 'v:transfer.nameDuplicate',
+        params: { name: m.templates[dupName]!.name },
       });
     m.templates.forEach((t, i) => {
       if (t.file !== transferFilePath(i, t.fileExt))
         ctx.addIssue({
           code: 'custom',
           path: ['templates', i, 'file'],
-          message: `ожидается путь ${transferFilePath(i, t.fileExt)}`,
+          message: 'v:transfer.pathExpected',
+          params: { path: transferFilePath(i, t.fileExt) },
         });
       (t.attachments ?? []).forEach((a, n) => {
         if (a.file !== transferAttachmentPath(i, n))
           ctx.addIssue({
             code: 'custom',
             path: ['templates', i, 'attachments', n, 'file'],
-            message: `ожидается путь ${transferAttachmentPath(i, n)}`,
+            message: 'v:transfer.pathExpected',
+            params: { path: transferAttachmentPath(i, n) },
           });
       });
     });
@@ -228,11 +237,11 @@ export const ImportDecision = z
     index: z.number().int().min(0),
     action: ImportAction,
     datasourceId: z
-      .uuid('неверный идентификатор источника')
+      .uuid('v:invalidDatasourceId')
       .transform((id) => id.toLowerCase())
       .nullish(),
     targetId: z
-      .uuid('неверный идентификатор шаблона')
+      .uuid('v:invalidTemplateId')
       .transform((id) => id.toLowerCase())
       .nullish(),
     /** `existing[].updatedAt` выбранного шаблона из предпросмотра — как есть, без преобразований. */
@@ -242,12 +251,11 @@ export const ImportDecision = z
     const issue = (path: string, message: string) =>
       ctx.addIssue({ code: 'custom', path: [path], message });
     if (d.action === 'update') {
-      if (!d.targetId) issue('targetId', 'укажите обновляемый шаблон');
-      if (!d.targetUpdatedAt) issue('targetUpdatedAt', 'укажите время изменения из предпросмотра');
+      if (!d.targetId) issue('targetId', 'v:import.targetRequired');
+      if (!d.targetUpdatedAt) issue('targetUpdatedAt', 'v:import.targetUpdatedAtRequired');
     } else {
-      if (d.targetId) issue('targetId', 'обновляемый шаблон указывается только для «обновить»');
-      if (d.targetUpdatedAt)
-        issue('targetUpdatedAt', 'время изменения указывается только для «обновить»');
+      if (d.targetId) issue('targetId', 'v:import.targetOnlyUpdate');
+      if (d.targetUpdatedAt) issue('targetUpdatedAt', 'v:import.targetUpdatedAtOnlyUpdate');
     }
   });
 export type ImportDecision = z.infer<typeof ImportDecision>;

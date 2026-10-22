@@ -5,15 +5,17 @@ import {
   type TemplateChart,
   type TemplateQuery,
 } from '@carbone-reports/shared';
-import { AppError } from '../../lib/errors';
+import { AppError, text, type Text } from '../../lib/errors';
 
 /** Ключ данных отчёта с описаниями графиков: `d.charts.<key>` (§35.4). */
 export const CHARTS_DATA_KEY = 'charts';
-export const CHARTS_KEY_TAKEN = 'ключ charts занят графиками';
+/** Сообщение у поля (ключ каталога validation): ключ charts занят графиками. */
+export const CHARTS_KEY_TAKEN = 'v:chart.chartsKeyTaken';
 
+/** Замечание у поля: message — ключ `v:…` или `text(…)`, переводится на язык запроса. */
 export interface ChartIssue {
   path: string;
-  message: string;
+  message: string | Text;
 }
 
 /** Проверки `PUT …/charts` сверх схемы: запрос есть и в режиме «Список строк»; ключ charts свободен. */
@@ -25,11 +27,12 @@ export function chartIssues(
   const byKey = new Map(queries.map((q) => [q.key, q]));
   charts.forEach((c, i) => {
     const q = byKey.get(c.query);
-    if (!q) issues.push({ path: `/${i}/query`, message: `нет запроса «${c.query}»` });
+    if (!q)
+      issues.push({ path: `/${i}/query`, message: text('chart.noQuery', { query: c.query }) });
     else if (q.mode !== 'list')
       issues.push({
         path: `/${i}/query`,
-        message: `запрос «${c.query}» возвращает одну строку — нужен режим «Список строк»`,
+        message: text('chart.querySingle', { query: c.query }),
       });
   });
   if (charts.length > 0 && byKey.has(CHARTS_DATA_KEY))
@@ -50,18 +53,21 @@ export function queryIssuesForCharts(
   for (const c of charts) {
     const i = queries.findIndex((q) => q.key === c.query);
     if (i === -1)
-      issues.push({ path: '', message: `запрос «${c.query}» используется графиком «${c.key}»` });
+      issues.push({
+        path: '',
+        message: text('chart.queryUsed', { query: c.query, chart: c.key }),
+      });
     else if (queries[i]!.mode !== 'list')
       issues.push({
         path: `/${i}/mode`,
-        message: `запрос используется графиком «${c.key}» — нужен режим «Список строк»`,
+        message: text('chart.queryUsedList', { chart: c.key }),
       });
   }
   return issues;
 }
 
 export function assertNoIssues(issues: ChartIssue[]): void {
-  if (issues.length) throw new AppError('VALIDATION', 400, 'неверные данные запроса', issues);
+  if (issues.length) throw new AppError('VALIDATION', 400, { key: 'validation' }, issues);
 }
 
 /**
@@ -80,7 +86,10 @@ export function injectCharts(
       out[c.key] = buildChartOption(c, Array.isArray(rows) ? rows : []);
     } catch (e) {
       if (e instanceof ChartDataError)
-        throw new AppError('CARBONE_TEMPLATE', 400, `ошибка шаблона: ${e.message}`);
+        throw new AppError('CARBONE_TEMPLATE', 400, {
+          key: 'render.templateError',
+          params: { message: e.key ? text(e.key, e.params) : e.message },
+        });
       throw e;
     }
   }

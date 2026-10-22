@@ -52,7 +52,7 @@ export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards
     async (req, reply) => {
       const ok =
         req.query.t && (await verifyFileToken(req.query.t, req.params.id, deps.config.appSecret));
-      if (!ok) throw new AppError('FORBIDDEN', 403, 'неверный токен файла');
+      if (!ok) throw new AppError('FORBIDDEN', 403, { key: 'file.invalidToken' });
       const row = await loadTemplate(deps.db, req.params.id);
       return reply
         .header('content-type', MIME[row.fileExt])

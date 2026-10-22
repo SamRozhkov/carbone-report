@@ -66,10 +66,7 @@ export type ParamValue = z.infer<typeof ParamValue>;
 export const MAX_PARAM_OPTIONS = 1000;
 
 export const TemplateParamFields = z.object({
-  name: z
-    .string()
-    .regex(IDENT_RE, 'имя: латиница, цифры и _')
-    .refine(notReserved, 'зарезервированное имя'),
+  name: z.string().regex(IDENT_RE, 'v:identName').refine(notReserved, 'v:reservedName'),
   label: z.string().min(1),
   type: ParamType,
   required: z.boolean(),
@@ -87,16 +84,16 @@ export const refineTemplateParam = (
   const issue = (path: string, message: string) =>
     ctx.addIssue({ code: 'custom', path: [path], message });
   if (p.type === 'select' && !(p.options && p.options.length > 0))
-    issue('options', 'для select нужен хотя бы один вариант');
+    issue('options', 'v:param.selectNeedsOption');
   if (p.type === 'query') {
-    if (!p.sql || !p.sql.trim()) issue('sql', 'укажите SQL-запрос вариантов');
-    if (p.options !== null) issue('options', 'у SQL-списка варианты задаются запросом');
+    if (!p.sql || !p.sql.trim()) issue('sql', 'v:param.sqlRequired');
+    if (p.options !== null) issue('options', 'v:param.sqlNoOptions');
     if (Array.isArray(p.defaultValue) && !p.multiple)
-      issue('defaultValue', 'несколько значений допустимы только при множественном выборе');
+      issue('defaultValue', 'v:param.multipleDefaults');
   } else {
-    if (p.sql !== null) issue('sql', 'SQL допустим только у типа «SQL-список»');
-    if (p.multiple) issue('multiple', 'множественный выбор допустим только у типа «SQL-список»');
-    if (Array.isArray(p.defaultValue)) issue('defaultValue', 'недопустимое значение');
+    if (p.sql !== null) issue('sql', 'v:param.sqlOnlyQuery');
+    if (p.multiple) issue('multiple', 'v:param.multipleOnlyQuery');
+    if (Array.isArray(p.defaultValue)) issue('defaultValue', 'v:param.invalidValue');
   }
 };
 export const TemplateParam = TemplateParamFields.superRefine(refineTemplateParam);
@@ -112,9 +109,9 @@ export type QueryMode = z.infer<typeof QueryMode>;
 export const TemplateQuery = z.object({
   key: z
     .string()
-    .regex(IDENT_RE, 'ключ: латиница, цифры и _')
-    .refine((k) => k !== 'params', 'ключ "params" зарезервирован')
-    .refine(notReserved, 'зарезервированное имя'),
+    .regex(IDENT_RE, 'v:identKey')
+    .refine((k) => k !== 'params', 'v:query.paramsReserved')
+    .refine(notReserved, 'v:reservedName'),
   sql: z.string().trim().min(1),
   mode: QueryMode,
 });
@@ -168,7 +165,7 @@ export const GroupDto = z.object({
 export type GroupDto = z.infer<typeof GroupDto>;
 
 export const GroupBody = z.object({
-  name: z.string().trim().min(1, 'укажите название').max(100),
+  name: z.string().trim().min(1, 'v:nameRequired').max(100),
   description: z.string().trim().max(1000).default(''),
 });
 export type GroupBody = z.infer<typeof GroupBody>;
@@ -191,7 +188,7 @@ export const CategoryDto = z.object({
 export type CategoryDto = z.infer<typeof CategoryDto>;
 
 export const CategoryBody = z.object({
-  name: z.string().trim().min(1, 'укажите название').max(100),
+  name: z.string().trim().min(1, 'v:nameRequired').max(100),
   sortOrder: z.number().int().min(-1_000_000).max(1_000_000).default(0),
   public: z.boolean().default(false),
 });
@@ -206,8 +203,8 @@ export type CategoryPatch = z.infer<typeof CategoryPatch>;
 
 export const TemplateAccess = z.object({
   public: z.boolean(),
-  categoryId: z.uuid('неверный идентификатор').nullable(),
-  groupIds: z.array(z.uuid('неверный идентификатор')).max(1000),
+  categoryId: z.uuid('v:invalidId').nullable(),
+  groupIds: z.array(z.uuid('v:invalidId')).max(1000),
 });
 export type TemplateAccess = z.infer<typeof TemplateAccess>;
 
@@ -222,12 +219,12 @@ export const AccessTemplateRow = z.object({
 export type AccessTemplateRow = z.infer<typeof AccessTemplateRow>;
 
 export const MembersBody = z.object({
-  userIds: z.array(z.uuid('неверный идентификатор')).max(10000),
+  userIds: z.array(z.uuid('v:invalidId')).max(10000),
 });
 export type MembersBody = z.infer<typeof MembersBody>;
 
 export const GroupIdsBody = z.object({
-  groupIds: z.array(z.uuid('неверный идентификатор')).max(10000),
+  groupIds: z.array(z.uuid('v:invalidId')).max(10000),
 });
 export type GroupIdsBody = z.infer<typeof GroupIdsBody>;
 
@@ -261,13 +258,13 @@ export const DatasourceBody = DatasourceFields.superRefine((d, ctx) => {
     ctx.addIssue({
       code: 'custom',
       path: ['sslCa'],
-      message: 'CA-сертификат указывается только для режима «SSL с проверкой»',
+      message: 'v:datasource.caOnlyVerify',
     });
   } else if (!d.sslCa.includes(PEM_CERT)) {
     ctx.addIssue({
       code: 'custom',
       path: ['sslCa'],
-      message: 'ожидается сертификат в формате PEM',
+      message: 'v:datasource.pemExpected',
     });
   }
 });
@@ -354,11 +351,11 @@ export const TemplateEditors = z.object({
 export type TemplateEditors = z.infer<typeof TemplateEditors>;
 
 export const TemplateEditorsBody = z.object({
-  userIds: z.array(z.uuid('неверный идентификатор')).max(200),
+  userIds: z.array(z.uuid('v:invalidId')).max(200),
 });
 export type TemplateEditorsBody = z.infer<typeof TemplateEditorsBody>;
 
-export const TemplateOwnerBody = z.object({ userId: z.uuid('неверный идентификатор') });
+export const TemplateOwnerBody = z.object({ userId: z.uuid('v:invalidId') });
 export type TemplateOwnerBody = z.infer<typeof TemplateOwnerBody>;
 
 /** Тег с русскими буквами среди латинских (или русским корнем `с`/`С`): такой тег не находит данные. */
@@ -473,7 +470,7 @@ export const ApiError = z.object({
 });
 export type ApiError = z.infer<typeof ApiError>;
 
-export const IdParams = z.object({ id: z.uuid('неверный идентификатор') });
+export const IdParams = z.object({ id: z.uuid('v:invalidId') });
 export type IdParams = z.infer<typeof IdParams>;
 
 /** Где SQL сравнивает параметры — для подсказок `= :имя` против `= any(:имя)`. */
@@ -509,7 +506,7 @@ export function sqlCompareRefs(sql: string): SqlCompareRefs {
 export const BACKUP_NAME_RE = /^(pre-restore-)?\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$/;
 
 export const BackupNameParams = z.object({
-  name: z.string().regex(BACKUP_NAME_RE, 'неверное имя бэкапа'),
+  name: z.string().regex(BACKUP_NAME_RE, 'v:backupName'),
 });
 export type BackupNameParams = z.infer<typeof BackupNameParams>;
 
@@ -568,7 +565,7 @@ export type MaintenanceStatus =
     };
 
 export const RecoveryBody = z.object({
-  code: z.string().trim().min(1, 'введите код восстановления').max(64),
+  code: z.string().trim().min(1, 'v:recoveryCodeRequired').max(64),
   target: z.enum(['same', 'pre-restore']),
 });
 export type RecoveryBody = z.infer<typeof RecoveryBody>;

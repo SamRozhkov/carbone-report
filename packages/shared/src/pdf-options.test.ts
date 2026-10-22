@@ -8,9 +8,22 @@ import {
   PdfOptions,
   PdfPassword,
   pdfStaticText,
-  pdfTextIssues,
+  pdfTextBadTag,
   SavePdfOptionsBody,
 } from './pdf-options';
+import { createTranslator } from './i18n/server';
+
+/** Сообщение zod по-русски: ключ `v:…` — из каталога validation. */
+const ruMessage = (i: { message: string; params?: Record<string, unknown> }) =>
+  i.message.startsWith('v:')
+    ? createTranslator('ru')(`validation:${i.message.slice(2)}`, i.params)
+    : i.message;
+
+/** Сообщение у поля по-русски. */
+const pdfTextIssues = (text: string) => {
+  const tag = pdfTextBadTag(text);
+  return tag && createTranslator('ru')('validation:pdf.tagFormatter', { tag });
+};
 
 describe('PdfOptions', () => {
   it('пустой объект — PDF/A выключен, блоков нет', () => {
@@ -146,7 +159,7 @@ describe('защита PDF (§37.1)', () => {
   });
 
   it('PdfPassword: 4–64 символа по символам, пробелы сохраняются', () => {
-    expect(PdfPassword.safeParse('abc').error?.issues[0]?.message).toBe(
+    expect(ruMessage(PdfPassword.safeParse('abc').error!.issues[0] as never)).toBe(
       'пароль — от 4 до 64 символов',
     );
     expect(PdfPassword.parse(' пар ')).toBe(' пар ');
@@ -157,7 +170,7 @@ describe('защита PDF (§37.1)', () => {
 
   it('PdfPassword: управляющие символы запрещены', () => {
     for (const bad of ['abcd\n', 'ab\tcd', 'abc\u0000d', 'abc\u007fd', 'abc\u0085d']) {
-      expect(PdfPassword.safeParse(bad).error?.issues.map((i) => i.message)).toContain(
+      expect(PdfPassword.safeParse(bad).error?.issues.map((i) => ruMessage(i as never))).toContain(
         'пароль содержит недопустимые символы',
       );
     }
@@ -165,7 +178,7 @@ describe('защита PDF (§37.1)', () => {
 
   it('PdfPassword: «-» в начале запрещён', () => {
     for (const bad of ['-abcd', '--abcd']) {
-      expect(PdfPassword.safeParse(bad).error?.issues.map((i) => i.message)).toContain(
+      expect(PdfPassword.safeParse(bad).error?.issues.map((i) => ruMessage(i as never))).toContain(
         'пароль не может начинаться с «-»',
       );
     }

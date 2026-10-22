@@ -12,6 +12,13 @@ import {
   TemplateChartList,
   type TemplateChart as Chart,
 } from './charts';
+import { createTranslator } from './i18n/server';
+
+/** Сообщение zod по-русски: ключ `v:…` — из каталога validation. */
+const ruMessage = (i: { message: string; params?: Record<string, unknown> }) =>
+  i.message.startsWith('v:')
+    ? createTranslator('ru')(`validation:${i.message.slice(2)}`, i.params)
+    : i.message;
 
 const NB = ' ';
 const FMT = `cr:number:${JSON.stringify({ decimals: null, thousands: false, suffix: '' })}`;
@@ -30,7 +37,10 @@ const ROWS = [
   { month: 'Мар', total: null, cnt: '1e3' },
 ];
 const issues = (v: unknown) =>
-  (TemplateChart.safeParse(v).error?.issues ?? []).map((i) => [i.path.join('.'), i.message]);
+  (TemplateChart.safeParse(v).error?.issues ?? []).map((i) => [
+    i.path.join('.'),
+    ruMessage(i as never),
+  ]);
 
 describe('TemplateChart: схема (§35.3)', () => {
   it('минимальный график — значения по умолчанию', () => {
@@ -108,7 +118,7 @@ describe('TemplateChart: схема (§35.3)', () => {
       ).success,
     ).toBe(false);
     const dup = TemplateChartList.safeParse([c, { ...c }]);
-    expect(dup.error?.issues.map((i) => [i.path.join('.'), i.message])).toEqual([
+    expect(dup.error?.issues.map((i) => [i.path.join('.'), ruMessage(i as never)])).toEqual([
       ['1.key', 'ключ графика «a» повторяется'],
     ]);
   });

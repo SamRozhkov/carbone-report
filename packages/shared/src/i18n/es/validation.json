@@ -1,3 +1,76 @@
 {
-  "invalidId": "identificador no válido"
+  "invalidId": "identificador no válido",
+  "invalidDatasourceId": "identificador de origen de datos no válido",
+  "invalidTemplateId": "identificador de plantilla no válido",
+  "identName": "nombre: letras latinas, dígitos y _",
+  "identKey": "clave: letras latinas, dígitos y _",
+  "reservedName": "nombre reservado",
+  "nameRequired": "indique el nombre",
+  "backupName": "nombre de copia de seguridad no válido",
+  "recoveryCodeRequired": "introduzca el código de recuperación",
+  "query": {
+    "paramsReserved": "la clave «params» está reservada"
+  },
+  "param": {
+    "selectNeedsOption": "select necesita al menos una opción",
+    "sqlRequired": "indique la consulta SQL de las opciones",
+    "sqlNoOptions": "las opciones de una lista SQL las define la consulta",
+    "multipleDefaults": "varios valores solo se permiten con selección múltiple",
+    "sqlOnlyQuery": "SQL solo se permite en el tipo «Lista SQL»",
+    "multipleOnlyQuery": "la selección múltiple solo se permite en el tipo «Lista SQL»",
+    "invalidValue": "valor no válido"
+  },
+  "datasource": {
+    "caOnlyVerify": "el certificado de CA solo se indica en el modo «SSL con verificación»",
+    "pemExpected": "se espera un certificado en formato PEM"
+  },
+  "chart": {
+    "columnRequired": "elija una columna",
+    "keyTooLong": "clave: hasta 64 caracteres",
+    "colorHex": "color: #RRGGBB",
+    "queryRequired": "elija una consulta",
+    "seriesRequired": "añada una serie",
+    "tooManySeries": "series: como máximo {{maximum}}",
+    "stackedOnly": "apilado: solo en columnas, líneas y áreas",
+    "smoothOnly": "suavizado: solo en líneas, áreas y gráficos combinados",
+    "kindOnlyCombo": "tipo y eje de la serie: solo en gráficos combinados",
+    "pieOneSeries": "gráficos circulares y de anillo: exactamente una serie",
+    "pieNoSplit": "las series a partir de los datos no están disponibles en gráficos circulares y de anillo",
+    "splitOneSeries": "con series a partir de los datos: exactamente una serie (columna de valores)",
+    "splitColors": "los colores de las series a partir de los datos se toman de la paleta",
+    "axisY2Only": "eje secundario: solo en un gráfico combinado con una serie en el eje derecho",
+    "tooManyCharts": "gráficos por plantilla: como máximo {{maximum}}",
+    "keyDuplicate": "la clave de gráfico «{{key}}» está repetida",
+    "chartsKeyTaken": "la clave charts está ocupada por los gráficos"
+  },
+  "pdf": {
+    "textRequired": "introduzca el texto",
+    "pageTagRequired": "se necesita {page}: el número de página",
+    "pdfaProtection": "PDF/A no es compatible con la contraseña ni con las restricciones",
+    "passwordLength": "contraseña: de {{min}} a {{max}} caracteres",
+    "passwordControl": "la contraseña contiene caracteres no válidos",
+    "passwordDash": "la contraseña no puede empezar por «-»",
+    "signatureProtection": "La firma no es compatible con la contraseña ni con las restricciones",
+    "tagFormatter": "en los campos del PDF solo se admiten etiquetas sin formateadores: {{tag}}",
+    "attachmentNotPdfa": "PDF/A está activado: el archivo «{{name}}» no está en formato PDF/A"
+  },
+  "transfer": {
+    "sha256": "se espera un sha256 en hexadecimal",
+    "formatUnavailable": "el formato {{format}} no está disponible para .{{ext}}",
+    "fileExt": "el archivo de la plantilla debe tener la extensión .{{ext}}",
+    "groupDuplicate": "el grupo «{{name}}» está repetido",
+    "queryDuplicate": "la clave de consulta «{{key}}» está repetida",
+    "paramDuplicate": "el parámetro «{{name}}» está repetido",
+    "chartDuplicate": "la clave de gráfico «{{key}}» está repetida",
+    "chartNoQuery": "no hay consulta «{{query}}» en la plantilla del archivo ZIP",
+    "chartQueryList": "la consulta «{{query}}» debe devolver una lista de filas",
+    "nameDuplicate": "el nombre «{{name}}» se repite en el archivo ZIP",
+    "pathExpected": "se espera la ruta {{path}}"
+  },
+  "import": {
+    "targetRequired": "indique la plantilla que se actualizará",
+    "targetUpdatedAtRequired": "indique la hora de modificación de la vista previa",
+    "targetOnlyUpdate": "la plantilla que se actualizará solo se indica para «actualizar»",
+    "targetUpdatedAtOnlyUpdate": "la hora de modificación solo se indica para «actualizar»"
+  }
 }

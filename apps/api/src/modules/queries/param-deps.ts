@@ -1,5 +1,5 @@
 import type { TemplateParam } from '@carbone-reports/shared';
-import { AppError } from '../../lib/errors';
+import { AppError, text, type Text } from '../../lib/errors';
 import { parseSqlParams, SqlParamError } from './sql-params';
 
 /** Уникальные имена :x из SQL параметра типа query в порядке появления. */
@@ -9,8 +9,10 @@ export function paramRefs(def: TemplateParam): string[] {
 }
 
 // Путь — JSON-pointer, как у ошибок схемы (ajv instancePath): fieldErrors() на фронте превращает '/1/sql' в '1.sql'.
-function fail(index: number, message: string): never {
-  throw new AppError('VALIDATION', 400, 'неверные параметры', [{ path: `/${index}/sql`, message }]);
+function fail(index: number, message: Text): never {
+  throw new AppError('VALIDATION', 400, { key: 'param.invalid' }, [
+    { path: `/${index}/sql`, message },
+  ]);
 }
 
 /**
@@ -24,13 +26,13 @@ export function orderParams(defs: TemplateParam[]): TemplateParam[] {
     try {
       names = paramRefs(def);
     } catch (e) {
-      if (e instanceof SqlParamError) return fail(i, e.message);
+      if (e instanceof SqlParamError) return fail(i, text(e.key));
       throw e;
     }
     return names.map((name) => {
       const j = index.get(name);
-      if (j === undefined) return fail(i, `неизвестный параметр :${name}`);
-      if (j === i) return fail(i, 'параметр не может ссылаться на себя');
+      if (j === undefined) return fail(i, text('param.unknownRef', { name }));
+      if (j === i) return fail(i, text('param.selfRef'));
       return j;
     });
   });
@@ -69,5 +71,8 @@ export function orderParams(defs: TemplateParam[]): TemplateParam[] {
     return null;
   };
   const cycle = visit(start) ?? [start, start];
-  return fail(cycle[0]!, `циклическая зависимость: ${cycle.map((i) => defs[i]!.name).join(' → ')}`);
+  return fail(
+    cycle[0]!,
+    text('param.cycle', { names: cycle.map((i) => defs[i]!.name).join(' → ') }),
+  );
 }

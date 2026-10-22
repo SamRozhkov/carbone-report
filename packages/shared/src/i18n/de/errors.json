@@ -8,5 +8,286 @@
   "tooManyParts": "zu viele Dateien oder Felder in der Anfrage",
   "invalidJson": "ungültiges JSON im Anfragetext",
   "bodyTooLarge": "Anfragetext ist zu groß",
-  "unsupportedMediaType": "nicht unterstützter Inhaltstyp"
+  "unsupportedMediaType": "nicht unterstützter Inhaltstyp",
+  "timeout": "Zeitüberschreitung",
+  "noChanges": "keine Änderungen",
+  "notFound": {
+    "template": "Vorlage nicht gefunden",
+    "user": "Benutzer nicht gefunden",
+    "group": "Gruppe nicht gefunden",
+    "category": "Kategorie nicht gefunden",
+    "datasource": "Datenquelle nicht gefunden",
+    "run": "Ausführung nicht gefunden",
+    "file": "Datei nicht gefunden",
+    "param": "Parameter nicht gefunden",
+    "attachment": "angehängte Datei nicht gefunden",
+    "oidc": "OIDC nicht gefunden"
+  },
+  "access": {
+    "relatedDeleted": "ein verknüpfter Datensatz wurde gelöscht, versuchen Sie es erneut",
+    "groupNameTaken": "eine Gruppe mit diesem Namen existiert bereits",
+    "categoryNameTaken": "eine Kategorie mit diesem Namen existiert bereits",
+    "unknownUser": "unbekannter Benutzer",
+    "unknownGroup": "unbekannte Gruppe",
+    "unknownCategory": "unbekannte Kategorie",
+    "noEditRight": "kein Recht zum Bearbeiten der Vorlage",
+    "grantEditorOnly": "kann nur einem Benutzer mit der Rolle „Bearbeiter“ erteilt werden",
+    "ownerAlreadyEditor": "der Eigentümer kann die Vorlage bereits bearbeiten",
+    "ownerEditorOnly": "Eigentümer kann nur ein Benutzer mit der Rolle „Bearbeiter“ sein"
+  },
+  "datasource": {
+    "passwordRequired": "Passwort ist erforderlich",
+    "inUse": "die Datenquelle wird von Vorlagen verwendet",
+    "certFailed": "Zertifikatsprüfung fehlgeschlagen: {{message}}",
+    "connectFailed": "Verbindung zur Datenquelle „{{name}}“ fehlgeschlagen",
+    "connectionLost": "Verbindung zur Datenquelle „{{name}}“ unterbrochen"
+  },
+  "user": {
+    "loginTaken": "ein Benutzer mit diesem Login existiert bereits",
+    "cannotDemoteSelf": "Sie können Ihr eigenes Konto nicht sperren oder herabstufen",
+    "cannotEndOwnSessions": "Sie können Ihre eigenen Sitzungen nicht beenden — verwenden Sie „Überall abmelden“",
+    "cannotDeleteSelf": "Sie können Ihr eigenes Konto nicht löschen"
+  },
+  "auth": {
+    "tooManyAttempts": "zu viele Anmeldeversuche, versuchen Sie es in einer Minute erneut",
+    "tooManyAttemptsIp": "zu viele Anmeldeversuche von dieser Adresse, versuchen Sie es in einer Minute erneut",
+    "invalidCredentials": "falscher Login oder falsches Passwort"
+  },
+  "oidc": {
+    "loginUnavailable": "die Anmeldung über Keycloak ist für dieses Konto nicht verfügbar — wenden Sie sich an den Administrator",
+    "signInUnavailable": "Anmeldung nicht verfügbar",
+    "redisRequired": "OIDC erfordert ein verfügbares Redis",
+    "unavailableUseLogin": "Keycloak ist nicht verfügbar, verwenden Sie die normale Anmeldung",
+    "invalidUsername": "der Login aus Keycloak (preferred_username) ist ungültig: 3 bis 64 Zeichen, ohne Steuer- und unsichtbare Zeichen",
+    "invalidResponse": "die Anmeldung über Keycloak konnte nicht bestätigt werden",
+    "unavailable": "Keycloak ist nicht verfügbar, versuchen Sie es später erneut",
+    "invalidLogoutToken": "ungültiges Logout-Token",
+    "accountReserved": "dieses Konto kann nicht verknüpft werden",
+    "alreadyLinked": "das externe Konto ist bereits verknüpft"
+  },
+  "p12": {
+    "badFile": "falsches Passwort oder beschädigte Datei",
+    "oneKey": "die Datei muss genau einen Schlüssel und sein Zertifikat enthalten",
+    "unsupportedAlg": "der Schlüsselalgorithmus wird nicht unterstützt",
+    "gost": "GOST-Zertifikate werden über CryptoPro signiert — noch nicht unterstützt",
+    "tooManyIterations": "Zertifikatsdatei nicht unterstützt: zu viele Verschlüsselungsiterationen",
+    "fileTooLarge": "Datei ist größer als 50 KB",
+    "passwordRequired": "geben Sie das Passwort ein",
+    "tooManyUploads": "zu viele Zertifikat-Uploads — versuchen Sie es in einer Minute erneut"
+  },
+  "sign": {
+    "certNotYetValid": "das Zertifikat ist noch nicht gültig",
+    "certExpired": "das Zertifikat ist abgelaufen",
+    "certNotForSigning": "das Zertifikat ist nicht zum Signieren bestimmt",
+    "tsaUnavailable": "der Zeitstempeldienst ist nicht verfügbar",
+    "unavailable": "für diesen Bericht ist keine Signatur verfügbar",
+    "wrongKeyPassword": "falsches Schlüsselpasswort",
+    "tooManyPasswords_one": "zu viele falsche Passwörter — versuchen Sie es in {{count}} Minute erneut",
+    "tooManyPasswords_other": "zu viele falsche Passwörter — versuchen Sie es in {{count}} Minuten erneut",
+    "busy": "eine andere Signatur wird bereits ausgeführt — versuchen Sie es in einigen Sekunden erneut",
+    "uploadCertificate": "laden Sie ein Zertifikat auf der Seite „Meine Signatur“ hoch",
+    "alreadySigned": "der Bericht ist bereits signiert"
+  },
+  "gost": {
+    "format": "ungültiges Signaturformat",
+    "otherCert": "die Signatur wurde mit einem anderen Zertifikat erstellt",
+    "document": "die Signatur passt nicht zum Dokument",
+    "invalid": "die Signatur ist ungültig",
+    "noTimestamp": "kein Zeitstempel",
+    "timestamp": "der Zeitstempel ist ungültig",
+    "badCertificate": "ungültiges Zertifikat",
+    "restart": "beginnen Sie das Signieren erneut",
+    "unsupportedCertificate": "das Zertifikat ist kein GOST R 34.10-2012 oder wird nicht unterstützt",
+    "signatureTooLarge": "die Signatur ist größer als 64 KB"
+  },
+  "carbone": {
+    "communityFormatter": "die Vorlage verwendet {{name}} — in der kostenlosen Version von Carbone nicht verfügbar, siehe „Hilfe zu Vorlagen“",
+    "communityUnknown": "die Vorlage verwendet einen Formatierer, der in der kostenlosen Version von Carbone nicht verfügbar ist, siehe „Hilfe zu Vorlagen“"
+  },
+  "render": {
+    "dataNotJson": "die Berichtsdaten lassen sich nicht als JSON serialisieren",
+    "dataNotJsonDetail": "die Berichtsdaten lassen sich nicht als JSON serialisieren: {{message}}",
+    "formatUnavailable": "das Format {{format}} ist für eine {{ext}}-Vorlage nicht verfügbar",
+    "templateError": "Vorlagenfehler: {{message}}",
+    "generationError": "Fehler bei der Erstellung: {{message}}",
+    "unavailable": "der Erstellungsdienst ist nicht verfügbar",
+    "workerUnavailable": "der Render-Thread ist nicht verfügbar"
+  },
+  "convert": {
+    "unavailable": "der Konvertierungsdienst ist nicht verfügbar",
+    "failed": "Konvertierungsfehler (Code {{code}})"
+  },
+  "file": {
+    "invalidToken": "ungültiges Datei-Token",
+    "gone": "die Datei wurde bereits ausgeliefert oder ist abgelaufen"
+  },
+  "onlyoffice": {
+    "unavailable": "der Dokumentserver ist nicht verfügbar",
+    "noChanges": "keine ungespeicherten Änderungen",
+    "notOpen": "das Dokument ist nicht im Editor geöffnet",
+    "commandError": "der Dokumentserver hat den Fehler {{code}} zurückgegeben",
+    "saveFailed": "OnlyOffice konnte das Dokument nicht speichern",
+    "forceSaveFailed": "Fehler beim erzwungenen Speichern in OnlyOffice",
+    "invalidSignature": "ungültige OnlyOffice-Signatur",
+    "noRightToSave": "Änderungen nicht gespeichert: kein Recht zum Bearbeiten der Vorlage",
+    "badCallback": "ungültiges Format des OnlyOffice-Callbacks",
+    "noFileUrl": "OnlyOffice hat keinen Dateilink übermittelt",
+    "badFileUrl": "OnlyOffice hat einen unzulässigen Dateilink übermittelt",
+    "downloadFailed": "die Datei konnte nicht von OnlyOffice heruntergeladen werden",
+    "notDocument": "die von OnlyOffice empfangene Datei ist kein Dokument"
+  },
+  "pdf": {
+    "processingError": "Fehler bei der PDF-Verarbeitung: {{message}}",
+    "signPrepareError": "Fehler beim Vorbereiten des PDF zum Signieren: {{message}}",
+    "protectUnavailable": "PDF-Verschlüsselung nicht verfügbar: qpdf ist nicht installiert",
+    "protectFailed": "das PDF konnte nicht verschlüsselt werden",
+    "notPdf": "die Datei ist kein PDF",
+    "encrypted": "das PDF ist passwortgeschützt",
+    "damaged": "das PDF ist beschädigt",
+    "attachmentUnavailable": "die angehängte Datei „{{name}}“ ist nicht verfügbar",
+    "resultTooLarge": "das resultierende PDF ist größer als {{size}} MB",
+    "attachmentNotPdfa": "PDF/A ist aktiviert: die Datei „{{name}}“ ist nicht im PDF/A-Format",
+    "numberingTags": "Tags {d.…} werden in der Seitennummerierung nicht unterstützt",
+    "tagFormatter": "in PDF-Feldern sind nur Tags ohne Formatierer zulässig: {{tag}}",
+    "unsupportedChar": "das Zeichen „{{char}}“ wird von der PDF-Schrift nicht unterstützt",
+    "tooManyPages_one": "die angehängten Dateien einer Vorlage dürfen höchstens {{count}} Seite haben",
+    "tooManyPages_other": "die angehängten Dateien einer Vorlage dürfen höchstens {{count}} Seiten haben",
+    "placement": "placement: start oder end",
+    "tooManyAttachments_one": "eine Vorlage darf höchstens {{count}} angehängte Datei haben",
+    "tooManyAttachments_other": "eine Vorlage darf höchstens {{count}} angehängte Dateien haben"
+  },
+  "upload": {
+    "fileField": "die Datei muss im Feld „file“ übermittelt werden",
+    "noFile": "keine Datei übermittelt",
+    "archiveField": "das Archiv muss im Feld „file“ übermittelt werden"
+  },
+  "run": {
+    "snapshotGone": "die Datei wurde gelöscht — erstellen Sie den Bericht erneut",
+    "formatUnavailable": "das Format ist für diesen Bericht nicht verfügbar",
+    "fileExpired": "die Datei wurde nach Ablauf der Aufbewahrungsfrist gelöscht"
+  },
+  "reportTimeout": "Zeitüberschreitung beim Erstellen des Berichts",
+  "editLock": {
+    "locked": "die Vorlage wird von {{login}} bearbeitet",
+    "startEditing": "beginnen Sie mit der Bearbeitung"
+  },
+  "backup": {
+    "disabled": "die Verwaltung von Sicherungen ist deaktiviert: setzen Sie BACKUP_AGENT_URL und BACKUP_AGENT_TOKEN",
+    "agentUnavailable": "der Sicherungsagent ist nicht verfügbar"
+  },
+  "maintenance": {
+    "restoring": "Wiederherstellung aus einer Sicherung läuft, versuchen Sie es später erneut",
+    "tooManyAttempts_one": "zu viele Versuche der Codeeingabe, versuchen Sie es in {{count}} Minute erneut",
+    "tooManyAttempts_other": "zu viele Versuche der Codeeingabe, versuchen Sie es in {{count}} Minuten erneut"
+  },
+  "sql": {
+    "query": "Abfrage „{{key}}“",
+    "param": "Parameter „{{label}}“",
+    "readOnly": "{{what}}: Schreiben ist nicht erlaubt — Abfragen werden nur lesend ausgeführt",
+    "error": "{{what}}: {{message}}",
+    "errorHint": "{{what}}: {{message}} ({{hint}})",
+    "txForbidden": "{{what}}: Transaktionssteuerung ist nicht erlaubt",
+    "unknownParam": "{{what}}: unbekannter Parameter :{{name}}",
+    "tooManyRows_one": "die Abfrage „{{key}}“ hat mehr als {{count}} Zeile zurückgegeben",
+    "tooManyRows_other": "die Abfrage „{{key}}“ hat mehr als {{count}} Zeilen zurückgegeben",
+    "tooManyOptions_one": "{{what}}: mehr als {{count}} Option — präzisieren Sie die Abfrage",
+    "tooManyOptions_other": "{{what}}: mehr als {{count}} Optionen — präzisieren Sie die Abfrage",
+    "positionalParams": "verwenden Sie benannte Parameter :name statt $1",
+    "hintMissingOperator": "vor any ist ein Vergleichsoperator erforderlich: = any(:name)",
+    "hintArray": "Parameter :{{name}} ist eine Mehrfachauswahl: vergleichen Sie mit = any(:{{name}})",
+    "hintArrays": "die Parameter {{list}} sind Mehrfachauswahlen: vergleichen Sie mit = any(:name)",
+    "hintScalar": "Parameter :{{name}} ist ein Einzelwert: vergleichen Sie mit = :{{name}}"
+  },
+  "param": {
+    "invalid": "ungültige Parameter",
+    "expectedList": "eine Liste von Werten wird erwartet",
+    "expectedOne": "ein einzelner Wert wird erwartet",
+    "invalidValue": "unzulässiger Wert",
+    "expectedString": "eine Zeichenkette wird erwartet",
+    "expectedNumber": "eine Zahl wird erwartet",
+    "expectedDate": "ein Datum im Format JJJJ-MM-TT wird erwartet",
+    "expectedBoolean": "ja/nein wird erwartet",
+    "required": "Pflichtparameter",
+    "defaultInvalid": "Standardwert: {{message}}",
+    "unavailable": "Wert nicht verfügbar",
+    "unknownRef": "unbekannter Parameter :{{name}}",
+    "selfRef": "ein Parameter kann nicht auf sich selbst verweisen",
+    "cycle": "zirkuläre Abhängigkeit: {{names}}"
+  },
+  "chart": {
+    "noColumn": "Diagramm {{chart}}: keine Spalte {{column}}",
+    "tooManySeries_one": "Diagramm {{chart}}: mehr als {{count}} Datenreihe",
+    "tooManySeries_other": "Diagramm {{chart}}: mehr als {{count}} Datenreihen",
+    "noQuery": "keine Abfrage „{{query}}“",
+    "querySingle": "die Abfrage „{{query}}“ gibt eine einzelne Zeile zurück — der Modus „Liste von Zeilen“ ist erforderlich",
+    "queryUsed": "die Abfrage „{{query}}“ wird vom Diagramm „{{chart}}“ verwendet",
+    "queryUsedList": "die Abfrage wird vom Diagramm „{{chart}}“ verwendet — der Modus „Liste von Zeilen“ ist erforderlich"
+  },
+  "archive": {
+    "partTooLarge": "Teil zu groß",
+    "notZip": "die Datei ist kein ZIP-Archiv",
+    "zip64": "ZIP64-Archive werden nicht unterstützt",
+    "multiVolume": "mehrteilige Archive werden nicht unterstützt",
+    "tooManyEntries_one": "das Archiv enthält mehr als {{count}} Eintrag",
+    "tooManyEntries_other": "das Archiv enthält mehr als {{count}} Einträge",
+    "damaged": "das Archiv ist beschädigt",
+    "damagedEntry": "das Archiv ist beschädigt: {{name}}",
+    "badPath": "unzulässiger Pfad im Archiv: {{path}}",
+    "encrypted": "verschlüsselte Archive werden nicht unterstützt: {{name}}",
+    "unsupportedMethod": "nicht unterstützte Komprimierungsmethode im Archiv: {{name}}",
+    "tooLarge": "das Archiv ist größer als {{size}} MB",
+    "duplicateEntry": "doppelter Eintrag im Archiv: {{name}}",
+    "unpackedTooLarge": "das entpackte Archiv ist größer als {{size}} MB",
+    "noManifest": "im Archiv fehlt {{file}}",
+    "extraFile": "überzählige Datei im Archiv: {{name}}",
+    "missingFile": "im Archiv fehlt die Datei {{file}}",
+    "checksum": "die Datei {{file}} stimmt nicht mit der Prüfsumme aus dem Manifest überein",
+    "notOffice": "die Datei {{file}} ist kein Office-Dokument"
+  },
+  "import": {
+    "manifestJson": "{{file}}: ungültiges JSON",
+    "notTransferArchive": "dies ist kein Vorlagenarchiv von carbone-reports",
+    "formatVersion": "die Archivformatversion {{version}} wird nicht unterstützt (erwartet: {{expected}})",
+    "manifestTemplate": "{{file}}: Vorlage {{index}}: {{message}}",
+    "manifestTemplatePath": "{{file}}: Vorlage {{index}} ({{path}}): {{message}}",
+    "manifestPath": "{{file}}: {{path}}: {{message}}",
+    "manifest": "{{file}}: Manifest: {{message}}",
+    "manifestTooLarge": "{{file}} ist größer als {{size}} MB",
+    "attachmentError": "Vorlage „{{template}}“: Datei „{{name}}“: {{message}}",
+    "templateError": "Vorlage „{{template}}“: {{message}}",
+    "paramError": "Parameter „{{name}}“: {{message}}",
+    "changedSincePreview": "die Vorlage „{{name}}“ wurde nach der Vorschau geändert — wiederholen Sie die Vorschau",
+    "noTemplateIndex": "im Archiv gibt es keine Vorlage mit der Nummer {{index}}",
+    "decisionDuplicate": "die Entscheidung für Vorlage {{index}} ist doppelt",
+    "noAction": "Vorlage „{{template}}“: keine Aktion ausgewählt",
+    "datasourceRequired": "Vorlage „{{template}}“: wählen Sie eine Datenquelle",
+    "datasourceGone": "Vorlage „{{template}}“: Datenquelle nicht gefunden — wiederholen Sie die Vorschau",
+    "nameTaken": "die Vorlage „{{template}}“ existiert bereits — wiederholen Sie die Vorschau und wählen Sie „aktualisieren“, „Kopie“ oder „überspringen“",
+    "targetRequired": "Vorlage „{{template}}“: geben Sie die zu aktualisierende Vorlage an",
+    "targetUpdatedAtRequired": "Vorlage „{{template}}“: geben Sie den Änderungszeitpunkt aus der Vorschau an",
+    "updatedTwice": "die Vorlage „{{template}}“ wird zweimal aktualisiert",
+    "templateLocked": "die Vorlage „{{template}}“ wird von {{login}} bearbeitet — versuchen Sie es später erneut",
+    "concurrentChange": "die Daten haben sich während des Imports geändert (Datenquelle, Gruppe oder Kategorie) — wiederholen Sie die Vorschau",
+    "noDecisions": "keine Entscheidungen zu den Vorlagen übermittelt (decisions)",
+    "invalidDecisions": "ungültige Entscheidungen zu den Vorlagen: {{message}}",
+    "invalidDecisionsPath": "ungültige Entscheidungen zu den Vorlagen: {{path}} {{message}}"
+  },
+  "export": {
+    "invalid": "das Archiv besteht die Prüfung nicht: {{message}}",
+    "templateInvalid": "die Vorlage „{{name}}“ kann nicht exportiert werden: {{message}}",
+    "templateInvalidPath": "die Vorlage „{{name}}“ kann nicht exportiert werden ({{path}}): {{message}}",
+    "manifestTooLarge": "die Vorlagenbeschreibung ({{file}}) ist größer als {{size}} MB — exportieren Sie die Vorlagen in Teilen",
+    "nameDuplicate": "der Name „{{name}}“ kommt unter den ausgewählten Vorlagen mehrfach vor",
+    "filesTooLarge": "die Dateien der ausgewählten Vorlagen passen nicht in ein Archiv von {{size}} MB — exportieren Sie sie in Teilen",
+    "archiveTooLarge": "das Archiv würde größer als {{size}} MB — exportieren Sie die Vorlagen in Teilen"
+  },
+  "template": {
+    "unsupportedFile": "unterstützte Dateien: docx, xlsx, odt, ods, pptx",
+    "notOffice": "die Datei ist beschädigt oder kein Office-Dokument",
+    "nameAndDatasource": "geben Sie einen Namen und eine Datenquelle an",
+    "extExpected": "eine .{{ext}}-Datei wird erwartet",
+    "formatUnavailable": "das Format {{format}} ist für .{{ext}} nicht verfügbar",
+    "queryKeyDuplicate": "der Abfrageschlüssel „{{value}}“ ist doppelt",
+    "paramDuplicate": "der Parameter „{{value}}“ ist doppelt"
+  }
 }

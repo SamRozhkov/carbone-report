@@ -98,7 +98,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
         .trim()
         .toLowerCase(),
     errorResponseBuilder: () =>
-      new AppError('TOO_MANY_ATTEMPTS', 429, 'слишком много попыток входа, повторите через минуту'),
+      new AppError('TOO_MANY_ATTEMPTS', 429, { key: 'auth.tooManyAttempts' }),
   };
 
   // Лимит по IP поверх лимита по логину: перебор многих логинов с одного адреса.
@@ -128,11 +128,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
             .header('retry-after', r.ttlInSeconds)
             .header('x-ratelimit-limit', r.max)
             .header('x-ratelimit-remaining', 0);
-          throw new AppError(
-            'TOO_MANY_ATTEMPTS',
-            429,
-            'слишком много попыток входа с этого адреса, повторите через минуту',
-          );
+          throw new AppError('TOO_MANY_ATTEMPTS', 429, { key: 'auth.tooManyAttemptsIp' });
         }
       },
     },
@@ -155,7 +151,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
       if (canonicalLogin) {
         const rejectLdap = (reason: string, accountLogin: string): never => {
           req.log.warn({ login: accountLogin }, `вход через LDAP отклонён: ${reason}`);
-          throw new AppError('INVALID_CREDENTIALS', 401, 'неверный логин или пароль');
+          throw new AppError('INVALID_CREDENTIALS', 401, { key: 'auth.invalidCredentials' });
         };
         // Канонический логин из каталога (например, uid записи, найденной по почте) совпал
         // с ADMIN_LOGIN — отказ без отката на локальный пароль с этим вводом.
@@ -176,7 +172,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
         }
         const ldapUser = existing ?? (await provisionLdapUser(deps, canonicalLogin));
         if (!ldapUser || ldapUser.blocked) {
-          throw new AppError('INVALID_CREDENTIALS', 401, 'неверный логин или пароль');
+          throw new AppError('INVALID_CREDENTIALS', 401, { key: 'auth.invalidCredentials' });
         }
         // Найденный (или найденный при гонке заведения) аккаунт — встроенный администратор.
         if (isAdminLogin(ldapUser.login))
@@ -192,7 +188,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
 
       const ok = await verifyPassword(row?.passwordHash ?? (await DUMMY_HASH_PROMISE), password);
       if (!row || !ok || row.blocked) {
-        throw new AppError('INVALID_CREDENTIALS', 401, 'неверный логин или пароль');
+        throw new AppError('INVALID_CREDENTIALS', 401, { key: 'auth.invalidCredentials' });
       }
       const user = { id: row.id, login: row.login, role: row.role };
       await setSessionCookie(reply, deps, user, row.sessionVersion);

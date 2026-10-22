@@ -12,7 +12,13 @@ export interface AgentClient {
 
 /** 502 (§26.3). internal — причина только для журнала API, без токена. */
 export const agentUnavailable = (internal?: unknown) =>
-  new AppError('backup_agent_unavailable', 502, 'Агент бэкапа недоступен', undefined, internal);
+  new AppError(
+    'backup_agent_unavailable',
+    502,
+    { key: 'backup.agentUnavailable' },
+    undefined,
+    internal,
+  );
 
 export function createAgentClient(o: {
   url: string;

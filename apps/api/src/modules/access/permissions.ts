@@ -10,7 +10,7 @@ export const AUTHOR_ROLES = ['admin', 'editor'] as const;
 /** Роли, которые ведут доступ к шаблонам, группы и категории (§43.2). */
 export const ACCESS_ROLES = ['admin', 'access_manager'] as const;
 
-export const NO_EDIT_RIGHT = 'нет права на правку шаблона';
+export const NO_EDIT_RIGHT = 'access.noEditRight';
 
 /** Чистое правило §43.1: роль + владелец + список редакторов. */
 export function editRight(
@@ -64,7 +64,7 @@ export async function canEditTemplate(db: Db, user: SessionUser, id: string): Pr
 export async function assertTemplateEdit(db: Db, user: SessionUser, id: string): Promise<void> {
   if (await canEditTemplate(db, user, id)) return;
   // Админ правит любой шаблон: отказ означает, что шаблона нет.
-  if (user.role === 'admin') throw notFound('шаблон');
+  if (user.role === 'admin') throw notFound('template');
   // Несуществующий и невидимый по §19 шаблон неотличимы: 404.
   await assertTemplateAccess(db, user, id);
   throw forbidden(NO_EDIT_RIGHT);
@@ -78,6 +78,6 @@ export async function assertTemplateOwner(db: Db, user: SessionUser, id: string)
     .select({ ownerId: templates.ownerId })
     .from(templates)
     .where(eq(templates.id, id));
-  if (!row) throw notFound('шаблон');
+  if (!row) throw notFound('template');
   if (!deleteRight(user, row)) throw forbidden(NO_EDIT_RIGHT);
 }

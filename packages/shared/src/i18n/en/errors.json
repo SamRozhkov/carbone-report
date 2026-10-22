@@ -8,5 +8,286 @@
   "tooManyParts": "too many files or fields in the request",
   "invalidJson": "invalid JSON in the request body",
   "bodyTooLarge": "request body is too large",
-  "unsupportedMediaType": "unsupported content type"
+  "unsupportedMediaType": "unsupported content type",
+  "timeout": "timed out",
+  "noChanges": "no changes",
+  "notFound": {
+    "template": "template not found",
+    "user": "user not found",
+    "group": "group not found",
+    "category": "category not found",
+    "datasource": "data source not found",
+    "run": "run not found",
+    "file": "file not found",
+    "param": "parameter not found",
+    "attachment": "attached file not found",
+    "oidc": "OIDC not found"
+  },
+  "access": {
+    "relatedDeleted": "a related record was deleted, please try again",
+    "groupNameTaken": "a group with this name already exists",
+    "categoryNameTaken": "a category with this name already exists",
+    "unknownUser": "unknown user",
+    "unknownGroup": "unknown group",
+    "unknownCategory": "unknown category",
+    "noEditRight": "no right to edit the template",
+    "grantEditorOnly": "can only be granted to a user with the “Editor” role",
+    "ownerAlreadyEditor": "the owner can already edit the template",
+    "ownerEditorOnly": "only a user with the “Editor” role can be the owner"
+  },
+  "datasource": {
+    "passwordRequired": "password is required",
+    "inUse": "the data source is used by templates",
+    "certFailed": "certificate verification failed: {{message}}",
+    "connectFailed": "could not connect to data source “{{name}}”",
+    "connectionLost": "connection to data source “{{name}}” was lost"
+  },
+  "user": {
+    "loginTaken": "a user with this login already exists",
+    "cannotDemoteSelf": "you cannot block or demote your own account",
+    "cannotEndOwnSessions": "you cannot end your own sessions — use “Sign out everywhere”",
+    "cannotDeleteSelf": "you cannot delete your own account"
+  },
+  "auth": {
+    "tooManyAttempts": "too many sign-in attempts, try again in a minute",
+    "tooManyAttemptsIp": "too many sign-in attempts from this address, try again in a minute",
+    "invalidCredentials": "invalid login or password"
+  },
+  "oidc": {
+    "loginUnavailable": "sign-in via Keycloak is not available for this account — contact your administrator",
+    "signInUnavailable": "sign-in is not available",
+    "redisRequired": "OIDC requires an available Redis",
+    "unavailableUseLogin": "Keycloak is unavailable, use the regular sign-in",
+    "invalidUsername": "the Keycloak login (preferred_username) is not valid: 3 to 64 characters, no control or invisible characters",
+    "invalidResponse": "could not confirm sign-in via Keycloak",
+    "unavailable": "Keycloak is unavailable, try again later",
+    "invalidLogoutToken": "invalid logout token",
+    "accountReserved": "this account cannot be linked",
+    "alreadyLinked": "the external account is already linked"
+  },
+  "p12": {
+    "badFile": "wrong password or damaged file",
+    "oneKey": "the file must contain exactly one key and its certificate",
+    "unsupportedAlg": "the key algorithm is not supported",
+    "gost": "GOST certificates are signed via CryptoPro — not supported yet",
+    "tooManyIterations": "certificate file not supported: too many encryption iterations",
+    "fileTooLarge": "file is larger than 50 KB",
+    "passwordRequired": "enter the password",
+    "tooManyUploads": "too many certificate uploads — try again in a minute"
+  },
+  "sign": {
+    "certNotYetValid": "the certificate is not valid yet",
+    "certExpired": "the certificate has expired",
+    "certNotForSigning": "the certificate is not intended for signing",
+    "tsaUnavailable": "the timestamp service is unavailable",
+    "unavailable": "signing is not available for this report",
+    "wrongKeyPassword": "wrong key password",
+    "tooManyPasswords_one": "too many wrong passwords — try again in {{count}} minute",
+    "tooManyPasswords_other": "too many wrong passwords — try again in {{count}} minutes",
+    "busy": "another signing is in progress — try again in a few seconds",
+    "uploadCertificate": "upload a certificate on the “My signature” page",
+    "alreadySigned": "the report is already signed"
+  },
+  "gost": {
+    "format": "invalid signature format",
+    "otherCert": "the signature was made with a different certificate",
+    "document": "the signature does not match the document",
+    "invalid": "the signature is invalid",
+    "noTimestamp": "no timestamp",
+    "timestamp": "the timestamp is invalid",
+    "badCertificate": "invalid certificate",
+    "restart": "start signing again",
+    "unsupportedCertificate": "the certificate is not GOST R 34.10-2012 or is not supported",
+    "signatureTooLarge": "the signature is larger than 64 KB"
+  },
+  "carbone": {
+    "communityFormatter": "the template uses {{name}} — not available in the free edition of Carbone, see “Template help”",
+    "communityUnknown": "the template uses a formatter that is not available in the free edition of Carbone, see “Template help”"
+  },
+  "render": {
+    "dataNotJson": "report data cannot be serialized to JSON",
+    "dataNotJsonDetail": "report data cannot be serialized to JSON: {{message}}",
+    "formatUnavailable": "format {{format}} is not available for a {{ext}} template",
+    "templateError": "template error: {{message}}",
+    "generationError": "generation error: {{message}}",
+    "unavailable": "the generation service is unavailable",
+    "workerUnavailable": "the render worker is unavailable"
+  },
+  "convert": {
+    "unavailable": "the conversion service is unavailable",
+    "failed": "conversion error (code {{code}})"
+  },
+  "file": {
+    "invalidToken": "invalid file token",
+    "gone": "the file has already been delivered or has expired"
+  },
+  "onlyoffice": {
+    "unavailable": "the document server is unavailable",
+    "noChanges": "no unsaved changes",
+    "notOpen": "the document is not open in the editor",
+    "commandError": "the document server returned error {{code}}",
+    "saveFailed": "OnlyOffice could not save the document",
+    "forceSaveFailed": "OnlyOffice forced save error",
+    "invalidSignature": "invalid OnlyOffice signature",
+    "noRightToSave": "changes not saved: no right to edit the template",
+    "badCallback": "invalid OnlyOffice callback format",
+    "noFileUrl": "OnlyOffice did not send a file link",
+    "badFileUrl": "OnlyOffice sent an invalid file link",
+    "downloadFailed": "could not download the file from OnlyOffice",
+    "notDocument": "the file received from OnlyOffice is not a document"
+  },
+  "pdf": {
+    "processingError": "PDF processing error: {{message}}",
+    "signPrepareError": "error preparing the PDF for signing: {{message}}",
+    "protectUnavailable": "PDF encryption is unavailable: qpdf is not installed",
+    "protectFailed": "could not encrypt the PDF",
+    "notPdf": "the file is not a PDF",
+    "encrypted": "the PDF is password-protected",
+    "damaged": "the PDF is damaged",
+    "attachmentUnavailable": "attached file “{{name}}” is unavailable",
+    "resultTooLarge": "the resulting PDF is larger than {{size}} MB",
+    "attachmentNotPdfa": "PDF/A is enabled: file “{{name}}” is not in PDF/A format",
+    "numberingTags": "{d.…} tags are not supported in page numbering",
+    "tagFormatter": "PDF fields allow tags without formatters only: {{tag}}",
+    "unsupportedChar": "character “{{char}}” is not supported by the PDF font",
+    "tooManyPages_one": "attached files of a template may have at most {{count}} page",
+    "tooManyPages_other": "attached files of a template may have at most {{count}} pages",
+    "placement": "placement: start or end",
+    "tooManyAttachments_one": "a template may have at most {{count}} attached file",
+    "tooManyAttachments_other": "a template may have at most {{count}} attached files"
+  },
+  "upload": {
+    "fileField": "the file must be sent in the “file” field",
+    "noFile": "no file was sent",
+    "archiveField": "the archive must be sent in the “file” field"
+  },
+  "run": {
+    "snapshotGone": "the file was deleted — generate the report again",
+    "formatUnavailable": "this format is not available for this report",
+    "fileExpired": "the file was deleted after the retention period"
+  },
+  "reportTimeout": "report generation timed out",
+  "editLock": {
+    "locked": "the template is being edited by {{login}}",
+    "startEditing": "start editing"
+  },
+  "backup": {
+    "disabled": "backup management is disabled: set BACKUP_AGENT_URL and BACKUP_AGENT_TOKEN",
+    "agentUnavailable": "the backup agent is unavailable"
+  },
+  "maintenance": {
+    "restoring": "restoring from a backup, try again later",
+    "tooManyAttempts_one": "too many code attempts, try again in {{count}} minute",
+    "tooManyAttempts_other": "too many code attempts, try again in {{count}} minutes"
+  },
+  "sql": {
+    "query": "query “{{key}}”",
+    "param": "parameter “{{label}}”",
+    "readOnly": "{{what}}: writing is not allowed — queries are read-only",
+    "error": "{{what}}: {{message}}",
+    "errorHint": "{{what}}: {{message}} ({{hint}})",
+    "txForbidden": "{{what}}: transaction control is not allowed",
+    "unknownParam": "{{what}}: unknown parameter :{{name}}",
+    "tooManyRows_one": "query “{{key}}” returned more than {{count}} row",
+    "tooManyRows_other": "query “{{key}}” returned more than {{count}} rows",
+    "tooManyOptions_one": "{{what}}: more than {{count}} option — refine the query",
+    "tooManyOptions_other": "{{what}}: more than {{count}} options — refine the query",
+    "positionalParams": "use named parameters :name instead of $1",
+    "hintMissingOperator": "a comparison operator is required before any: = any(:name)",
+    "hintArray": "parameter :{{name}} is multiple choice: compare with = any(:{{name}})",
+    "hintArrays": "parameters {{list}} are multiple choice: compare with = any(:name)",
+    "hintScalar": "parameter :{{name}} is a single value: compare with = :{{name}}"
+  },
+  "param": {
+    "invalid": "invalid parameters",
+    "expectedList": "a list of values is expected",
+    "expectedOne": "a single value is expected",
+    "invalidValue": "invalid value",
+    "expectedString": "a string is expected",
+    "expectedNumber": "a number is expected",
+    "expectedDate": "a date in YYYY-MM-DD format is expected",
+    "expectedBoolean": "yes/no is expected",
+    "required": "required parameter",
+    "defaultInvalid": "default value: {{message}}",
+    "unavailable": "value is not available",
+    "unknownRef": "unknown parameter :{{name}}",
+    "selfRef": "a parameter cannot refer to itself",
+    "cycle": "circular dependency: {{names}}"
+  },
+  "chart": {
+    "noColumn": "chart {{chart}}: no column {{column}}",
+    "tooManySeries_one": "chart {{chart}}: more than {{count}} series",
+    "tooManySeries_other": "chart {{chart}}: more than {{count}} series",
+    "noQuery": "no query “{{query}}”",
+    "querySingle": "query “{{query}}” returns a single row — the “List of rows” mode is required",
+    "queryUsed": "query “{{query}}” is used by chart “{{chart}}”",
+    "queryUsedList": "the query is used by chart “{{chart}}” — the “List of rows” mode is required"
+  },
+  "archive": {
+    "partTooLarge": "part is too large",
+    "notZip": "the file is not a ZIP archive",
+    "zip64": "ZIP64 archives are not supported",
+    "multiVolume": "multi-volume archives are not supported",
+    "tooManyEntries_one": "the archive has more than {{count}} entry",
+    "tooManyEntries_other": "the archive has more than {{count}} entries",
+    "damaged": "the archive is damaged",
+    "damagedEntry": "the archive is damaged: {{name}}",
+    "badPath": "invalid path in the archive: {{path}}",
+    "encrypted": "encrypted archives are not supported: {{name}}",
+    "unsupportedMethod": "unsupported compression method in the archive: {{name}}",
+    "tooLarge": "the archive is larger than {{size}} MB",
+    "duplicateEntry": "duplicate entry in the archive: {{name}}",
+    "unpackedTooLarge": "the unpacked archive is larger than {{size}} MB",
+    "noManifest": "the archive has no {{file}}",
+    "extraFile": "unexpected file in the archive: {{name}}",
+    "missingFile": "the archive has no file {{file}}",
+    "checksum": "file {{file}} does not match the checksum in the manifest",
+    "notOffice": "file {{file}} is not an Office document"
+  },
+  "import": {
+    "manifestJson": "{{file}}: invalid JSON",
+    "notTransferArchive": "this is not a carbone-reports template archive",
+    "formatVersion": "archive format version {{version}} is not supported (expected {{expected}})",
+    "manifestTemplate": "{{file}}: template {{index}}: {{message}}",
+    "manifestTemplatePath": "{{file}}: template {{index}} ({{path}}): {{message}}",
+    "manifestPath": "{{file}}: {{path}}: {{message}}",
+    "manifest": "{{file}}: manifest: {{message}}",
+    "manifestTooLarge": "{{file}} is larger than {{size}} MB",
+    "attachmentError": "template “{{template}}”: file “{{name}}”: {{message}}",
+    "templateError": "template “{{template}}”: {{message}}",
+    "paramError": "parameter “{{name}}”: {{message}}",
+    "changedSincePreview": "template “{{name}}” has changed since the preview — repeat the preview",
+    "noTemplateIndex": "the archive has no template number {{index}}",
+    "decisionDuplicate": "the decision for template {{index}} is duplicated",
+    "noAction": "template “{{template}}”: no action selected",
+    "datasourceRequired": "template “{{template}}”: select a data source",
+    "datasourceGone": "template “{{template}}”: data source not found — repeat the preview",
+    "nameTaken": "template “{{template}}” already exists — repeat the preview and choose “update”, “copy” or “skip”",
+    "targetRequired": "template “{{template}}”: specify the template to update",
+    "targetUpdatedAtRequired": "template “{{template}}”: specify the modification time from the preview",
+    "updatedTwice": "template “{{template}}” is updated twice",
+    "templateLocked": "template “{{template}}” is being edited by {{login}} — try again later",
+    "concurrentChange": "data changed during the import (data source, group or category) — repeat the preview",
+    "noDecisions": "no template decisions were sent (decisions)",
+    "invalidDecisions": "invalid template decisions: {{message}}",
+    "invalidDecisionsPath": "invalid template decisions: {{path}} {{message}}"
+  },
+  "export": {
+    "invalid": "the archive does not pass validation: {{message}}",
+    "templateInvalid": "template “{{name}}” cannot be exported: {{message}}",
+    "templateInvalidPath": "template “{{name}}” cannot be exported ({{path}}): {{message}}",
+    "manifestTooLarge": "the template description ({{file}}) is larger than {{size}} MB — export the templates in parts",
+    "nameDuplicate": "name “{{name}}” is repeated among the selected templates",
+    "filesTooLarge": "the files of the selected templates will not fit into a {{size}} MB archive — export them in parts",
+    "archiveTooLarge": "the archive would be larger than {{size}} MB — export the templates in parts"
+  },
+  "template": {
+    "unsupportedFile": "supported files: docx, xlsx, odt, ods, pptx",
+    "notOffice": "the file is damaged or is not an Office document",
+    "nameAndDatasource": "enter a name and a data source",
+    "extExpected": "a .{{ext}} file is expected",
+    "formatUnavailable": "format {{format}} is not available for .{{ext}}",
+    "queryKeyDuplicate": "query key “{{value}}” is duplicated",
+    "paramDuplicate": "parameter “{{value}}” is duplicated"
+  }
 }

@@ -94,7 +94,7 @@ export async function findTagWarnings(
           file,
           entry,
           budget,
-          () => new AppError('TOO_BIG', 400, 'слишком большая часть'),
+          () => new AppError('TOO_BIG', 400, { key: 'archive.partTooLarge' }),
         );
       } catch {
         continue; // слишком большая или повреждённая часть пропускается

@@ -4,16 +4,20 @@
 import { createHash } from 'node:crypto';
 import * as asn1js from 'asn1js';
 import * as pkijs from 'pkijs';
+import { ruText } from '../../../../lib/errors';
 import { gostPublicKeyFromSpki, verifyGost, type GostPublicKey } from './gost3410';
 import { GOST_OID as OID } from './oids';
 import { streebog, type StreebogBits } from './streebog';
 
 export type GostHashAlg = 'streebog256' | 'streebog512';
 
-/** Отказ проверки; message — текст §42.4 дословно (показывается пользователю). */
+/**
+ * Отказ проверки: key — ключ каталога errors (текст §42.4, показывается пользователю на языке
+ * запроса), message — тот же текст по-русски.
+ */
 export class CadesError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(public readonly key: string) {
+    super(ruText(key));
     this.name = 'CadesError';
   }
 }
@@ -46,13 +50,13 @@ export interface CadesResult {
 }
 
 const E = {
-  format: 'неверный формат подписи',
-  otherCert: 'подпись сделана другим сертификатом',
-  document: 'подпись не соответствует документу',
-  invalid: 'подпись недействительна',
-  noTimestamp: 'нет метки времени',
-  timestamp: 'метка времени недействительна',
-  expired: 'срок действия сертификата истёк',
+  format: 'gost.format',
+  otherCert: 'gost.otherCert',
+  document: 'gost.document',
+  invalid: 'gost.invalid',
+  noTimestamp: 'gost.noTimestamp',
+  timestamp: 'gost.timestamp',
+  expired: 'sign.certExpired',
 } as const;
 
 const DIGEST_OID: Record<StreebogBits, string> = { 256: OID.streebog256, 512: OID.streebog512 };

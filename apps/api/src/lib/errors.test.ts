@@ -8,8 +8,12 @@ import {
   badRequest,
   conflict,
   forbidden,
+  issueText,
+  localizedSafeParse,
   notFound,
   registerErrorHandler,
+  ruText,
+  text,
   unauthorized,
 } from './errors';
 import { registerRequestLocale } from './locale';
@@ -25,7 +29,12 @@ async function appWith(handler: () => unknown) {
 describe('registerErrorHandler', () => {
   it('AppError → его статус и тело {error}', async () => {
     const app = await appWith(() => {
-      throw new AppError('SQL_ERROR', 400, 'запрос "a": ошибка', { key: 'a' });
+      throw new AppError(
+        'SQL_ERROR',
+        400,
+        { key: 'sql.error', params: { what: text('sql.query', { key: 'a' }), message: 'ошибка' } },
+        { key: 'a' },
+      );
     });
     const res = await app.inject({ method: 'POST', url: '/t', payload: { n: 1 } });
     expect(res.statusCode).toBe(400);
@@ -111,20 +120,77 @@ describe('перевод ошибок на язык запроса', () => {
     expect((await post(app, 'de', { n: 1 })).json().error.message).toContain('20');
   });
 
-  it('AppError со строкой (до перевода вызовов на ключи) — текст как есть на любом языке', async () => {
-    const app = await localized(() => {
-      throw new AppError('CONFLICT', 409, 'логин уже занят');
+  it('вложенные сообщения и text(…) в details — на языке запроса; err.details — по-русски', async () => {
+    const err = new AppError(
+      'IMPORT_INVALID',
+      400,
+      {
+        key: 'import.templateError',
+        params: { template: 'Счёт', message: text('pdf.tooManyPages', { count: 500 }) },
+      },
+      { fields: { a: text('param.required') }, list: [{ path: '/x', message: 'v:invalidId' }] },
+    );
+    expect(err.message).toBe('шаблон «Счёт»: в приложенных файлах шаблона не больше 500 страниц');
+    expect(err.details).toEqual({
+      fields: { a: 'обязательный параметр' },
+      list: [{ path: '/x', message: 'неверный идентификатор' }],
     });
-    expect((await post(app, 'en', { n: 1 })).json().error.message).toBe('логин уже занят');
+    const app = await localized(() => {
+      throw err;
+    });
+    const en = createTranslator('en');
+    const body = (await post(app, 'en', { n: 1 })).json().error;
+    expect(body.message).toBe(
+      en('errors:import.templateError', {
+        template: 'Счёт',
+        message: en('errors:pdf.tooManyPages', { count: 500 }),
+      }),
+    );
+    expect(body.details).toEqual({
+      fields: { a: en('errors:param.required') },
+      list: [{ path: '/x', message: en('validation:invalidId') }],
+    });
+    expect(JSON.stringify(body)).not.toMatch(/[а-яё]+ [а-яё]+/i);
   });
 
-  it('помощники: ключ каталога переводится, прежний русский текст остаётся', async () => {
+  it('issueText: сообщение zod строится на языке запроса, ввод в ответ не попадает', async () => {
+    const r = localizedSafeParse(z.object({ n: z.number() }), { n: 'секрет' });
+    expect(r.success).toBe(false);
+    const app = await localized(() => {
+      throw badRequest('import.invalidDecisions', { message: issueText(r.error!.issues[0]!) });
+    });
+    const ru = (await post(app, null, { n: 1 })).json().error.message;
+    expect(ru).toBe(
+      `неверные решения по шаблонам: ${zodLocale('ru').localeError({ code: 'invalid_type', expected: 'number', input: 'секрет' } as never)}`,
+    );
+    const de = (await post(app, 'de', { n: 1 })).json().error.message;
+    expect(de).not.toMatch(/[а-яё]/i);
+    expect(de).not.toContain('секрет');
+  });
+
+  it('помощники: только ключи каталога', async () => {
     expect(forbidden().msg).toEqual({ key: 'forbidden', params: undefined });
     expect(unauthorized().msg).toEqual({ key: 'unauthorized' });
     expect(badRequest('fileTooLarge', { size: 5 }).message).toBe('файл больше 5 МБ');
-    expect(badRequest('укажите название').msg).toBe('укажите название');
-    expect(notFound('шаблон').message).toBe('шаблон не найден');
-    expect(conflict('логин уже занят').msg).toBe('логин уже занят');
+    expect(notFound('template').message).toBe('шаблон не найден');
+    expect(notFound('group').message).toBe('группа не найдена');
+    expect(conflict('user.loginTaken').msg).toEqual({ key: 'user.loginTaken', params: undefined });
+  });
+
+  it('множественное число по count: ru 1/2/5/21, en 1/2', () => {
+    const ru = (count: number) => ruText('sign.tooManyPasswords', { count });
+    expect(ru(1)).toBe('слишком много неверных паролей — попробуйте через 1 минуту');
+    expect(ru(2)).toBe('слишком много неверных паролей — попробуйте через 2 минуты');
+    expect(ru(5)).toBe('слишком много неверных паролей — попробуйте через 5 минут');
+    expect(ru(21)).toBe('слишком много неверных паролей — попробуйте через 21 минуту');
+    expect(ru(15)).toBe('слишком много неверных паролей — попробуйте через 15 минут');
+    const en = createTranslator('en');
+    expect(en('errors:sign.tooManyPasswords', { count: 1 })).toBe(
+      'too many wrong passwords — try again in 1 minute',
+    );
+    expect(en('errors:sign.tooManyPasswords', { count: 2 })).toBe(
+      'too many wrong passwords — try again in 2 minutes',
+    );
   });
 
   it('встроенные сообщения zod — на языке запроса, по умолчанию по-русски', async () => {

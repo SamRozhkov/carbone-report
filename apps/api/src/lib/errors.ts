@@ -1,70 +1,97 @@
 import { zodLocale, type Locale } from '@carbone-reports/shared/i18n';
-import { createTranslator, resources, type Translate } from '@carbone-reports/shared/i18n/server';
+import { createTranslator } from '@carbone-reports/shared/i18n/server';
 import type { FastifySchemaCompiler, FastifySchemaValidationError } from 'fastify';
 import { safeParse, type $ZodIssue, type $ZodType } from 'zod/v4/core';
 import type { App } from '../app';
 
-/** Сообщение ошибки: ключ каталога errors (без префикса `errors:`) и параметры. */
-export type Msg = { key: string; params?: Record<string, string | number> };
+type Param = string | number | Msg | IssueText;
+type Params = Record<string, Param>;
 
-const translate = (t: Translate, msg: Msg | string) =>
-  typeof msg === 'string' ? msg : t(`errors:${msg.key}`, msg.params);
+/**
+ * Сообщение ошибки: ключ каталога errors (без префикса `errors:`) и параметры.
+ * Параметр-сообщение (`text(…)`, `issueText(…)`) переводится на тот же язык и подставляется
+ * готовым текстом.
+ */
+export type Msg = { key: string; params?: Params };
+
+/** Переводимый текст в details и в параметрах: обработчик переводит его на язык запроса. */
+export class Text implements Msg {
+  constructor(
+    readonly key: string,
+    readonly params?: Params,
+  ) {}
+}
+export const text = (key: string, params?: Params) => new Text(key, params);
+
+/**
+ * Сообщение zod (issue из localizedSafeParse) в параметре или в details: текст строится на языке
+ * запроса так же, как у ошибок проверки тела запроса. Issue содержит ввод — в ответ попадает
+ * только текст.
+ */
+export class IssueText {
+  constructor(readonly issue: $ZodIssue) {}
+}
+export const issueText = (issue: $ZodIssue) => new IssueText(issue);
+
+const renderParam = (v: Param, locale: Locale): string | number =>
+  v instanceof IssueText
+    ? issueMessage(v.issue, locale)
+    : typeof v === 'object'
+      ? translateMsg(locale, v)
+      : v;
+
+export function translateMsg(locale: Locale, msg: Msg): string {
+  const params =
+    msg.params &&
+    Object.fromEntries(Object.entries(msg.params).map(([k, v]) => [k, renderParam(v, locale)]));
+  return createTranslator(locale)(`errors:${msg.key}`, params);
+}
+
+/** Текст по-русски — для журнала, err.message и сохраняемых в БД текстов. */
+export const ruText = (key: string, params?: Params) => translateMsg('ru', { key, params });
 
 export class AppError extends Error {
+  /** details по-русски (журнал, тесты); в ответ идут переведённые — detailsIn(locale). */
+  public readonly details?: unknown;
+  /** details как переданы: `text(…)`, `issueText(…)` и ключи `v:…` переводятся на язык запроса. */
+  readonly #details: unknown;
+
   constructor(
     public readonly code: string,
     public readonly status: number,
-    /**
-     * Ключ каталога errors — переводится на язык запроса. Строка — готовый русский текст:
-     * временно, пока вызовы не переведены на ключи (§44.4).
-     */
-    public readonly msg: Msg | string,
-    public readonly details?: unknown,
+    /** Ключ каталога errors — переводится на язык запроса (§44.4). */
+    public readonly msg: Msg,
+    details?: unknown,
     /** Внутренняя причина: только в лог, никогда в ответ. */
     public readonly internal?: unknown,
   ) {
     // Для журнала — по-русски.
-    super(translate(createTranslator('ru'), msg));
+    super(translateMsg('ru', msg));
+    this.#details = details;
+    if (details !== undefined) this.details = translateDetails(details, 'ru');
+  }
+
+  /** Текст ошибки на языке locale. */
+  textIn(locale: Locale): string {
+    return translateMsg(locale, this.msg);
+  }
+
+  /** details на языке locale. */
+  detailsIn(locale: Locale): unknown {
+    return translateDetails(this.#details, locale);
   }
 }
-
-type Params = Msg['params'];
-
-/** Есть ли ключ в каталоге errors (с учётом форм множественного числа). */
-function isErrorKey(key: string): boolean {
-  let node: unknown = resources.ru.errors;
-  const parts = key.split('.');
-  const last = parts.pop()!;
-  for (const p of parts) {
-    if (node === null || typeof node !== 'object') return false;
-    node = (node as Record<string, unknown>)[p];
-  }
-  if (node === null || typeof node !== 'object') return false;
-  const obj = node as Record<string, unknown>;
-  return typeof obj[last] === 'string' || typeof obj[`${last}_other`] === 'string';
-}
-
-/**
- * Ключ каталога или — временно, до перевода вызовов на ключи — прежний русский текст:
- * строка без параметров, которой нет среди ключей errors, отдаётся как есть.
- */
-const msgOf = (keyOrText: string, params?: Params): Msg | string =>
-  params === undefined && !isErrorKey(keyOrText) ? keyOrText : { key: keyOrText, params };
 
 export const badRequest = (key: string, params?: Params, details?: unknown) =>
-  new AppError('BAD_REQUEST', 400, msgOf(key, params), details);
+  new AppError('BAD_REQUEST', 400, { key, params }, details);
 export const unauthorized = () => new AppError('UNAUTHORIZED', 401, { key: 'unauthorized' });
 export const forbidden = (key = 'forbidden', params?: Params) =>
-  new AppError('FORBIDDEN', 403, msgOf(key, params));
-/** `notFound('template')` → ключ `notFound.template`; прежняя форма `notFound('шаблон')` — «шаблон не найден». */
+  new AppError('FORBIDDEN', 403, { key, params });
+/** `notFound('template')` → ключ `notFound.template` («шаблон не найден»). */
 export const notFound = (what: string) =>
-  new AppError(
-    'NOT_FOUND',
-    404,
-    isErrorKey(`notFound.${what}`) ? { key: `notFound.${what}` } : `${what} не найден`,
-  );
+  new AppError('NOT_FOUND', 404, { key: `notFound.${what}` });
 export const conflict = (key: string, params?: Params) =>
-  new AppError('CONFLICT', 409, msgOf(key, params));
+  new AppError('CONFLICT', 409, { key, params });
 
 const CLIENT_ERROR_MESSAGES: Record<string, Msg> = {
   FST_REQ_FILE_TOO_LARGE: { key: 'fileTooLarge', params: { size: 20 } },
@@ -106,7 +133,10 @@ export const validatorCompiler: FastifySchemaCompiler<$ZodType> =
       instancePath: `/${issue.path.join('/')}`,
       schemaPath: `#/${issue.path.join('/')}/${issue.code}`,
       message: issue.message,
-      params: { issue },
+      // Неперечисляемое: issue содержит ввод запроса — не попадает в журнал и сериализацию.
+      params: Object.defineProperty({}, 'issue', { value: issue, enumerable: false }) as {
+        issue: $ZodIssue;
+      },
     }));
     return { error: validation as unknown as Error };
   };
@@ -120,22 +150,49 @@ function isRequestValidation(err: unknown): err is { validation: RequestValidati
 const validationKey = (message: string) =>
   message.startsWith('v:') ? `validation:${message.slice(2)}` : null;
 
-function issueMessage(issue: $ZodIssue, locale: Locale, t: Translate): string {
+/** Параметры сообщения `v:…`: у custom — заданные в схеме, у too_big/too_small — граница. */
+function issueParams(issue: $ZodIssue): Record<string, unknown> | undefined {
+  if (issue.code === 'custom') return issue.params;
+  if (issue.code === 'too_big') return { maximum: Number(issue.maximum) };
+  if (issue.code === 'too_small') return { minimum: Number(issue.minimum) };
+  return undefined;
+}
+
+function issueMessage(issue: $ZodIssue, locale: Locale): string {
+  const t = createTranslator(locale);
   const key = validationKey(issue.message);
-  if (key) return t(key);
+  if (key) return t(key, issueParams(issue));
   if (issue.message !== ZOD_BUILTIN) return issue.message;
   const m = zodLocale(locale).localeError(issue as never);
   return (typeof m === 'string' ? m : m?.message) ?? t('errors:validation');
 }
 
-/** Тексты полей в details AppError: ключи `v:…` переводятся, прочее — как есть. */
-function translateDetails(details: unknown, t: Translate): unknown {
-  if (!Array.isArray(details)) return details;
-  return details.map((d: unknown) => {
-    const message = (d as { message?: unknown } | null)?.message;
-    const key = typeof message === 'string' ? validationKey(message) : null;
-    return key ? { ...(d as object), message: t(key) } : d;
-  });
+/**
+ * safeParse, чьи issues переводятся на язык запроса через issueText: встроенные сообщения zod
+ * строятся при переводе, а не на языке по умолчанию.
+ */
+export const localizedSafeParse = <T extends $ZodType>(schema: T, data: unknown) =>
+  safeParse(schema, data, { reportInput: true, error: () => ZOD_BUILTIN });
+
+/** details по-русски — как их увидит пользователь с языком ru (журнал, тесты). */
+export const ruDetails = (details: unknown) => translateDetails(details, 'ru');
+
+/**
+ * Тексты в details AppError: `text(…)`, `issueText(…)` (в любом месте структуры) и ключи `v:…`
+ * в полях message переводятся, прочее — как есть.
+ */
+function translateDetails(details: unknown, locale: Locale): unknown {
+  if (details instanceof Text) return translateMsg(locale, details);
+  if (details instanceof IssueText) return issueMessage(details.issue, locale);
+  if (Array.isArray(details)) return details.map((d) => translateDetails(d, locale));
+  if (details === null || typeof details !== 'object' || details.constructor !== Object)
+    return details;
+  return Object.fromEntries(
+    Object.entries(details).map(([k, v]) => {
+      const key = k === 'message' && typeof v === 'string' ? validationKey(v) : null;
+      return [k, key ? createTranslator(locale)(key) : translateDetails(v, locale)];
+    }),
+  );
 }
 
 export function registerErrorHandler(app: App): void {
@@ -148,9 +205,9 @@ export function registerErrorHandler(app: App): void {
         req.log.warn({ err: err.internal, code: err.code }, err.message);
       const body: { code: string; message: string; details?: unknown } = {
         code: err.code,
-        message: translate(t, err.msg),
+        message: err.textIn(locale),
       };
-      if (err.details !== undefined) body.details = translateDetails(err.details, t);
+      if (err.details !== undefined) body.details = err.detailsIn(locale);
       return reply.status(err.status).send({ error: body });
     }
     if (isRequestValidation(err)) {
@@ -160,7 +217,7 @@ export function registerErrorHandler(app: App): void {
           message: t('errors:validation'),
           details: err.validation.map((v) => ({
             path: v.instancePath,
-            message: issueMessage(v.params.issue, locale, t),
+            message: issueMessage(v.params.issue, locale),
           })),
         },
       });
@@ -170,7 +227,7 @@ export function registerErrorHandler(app: App): void {
       const code = (err as { code?: string }).code;
       const msg = (code && CLIENT_ERROR_MESSAGES[code]) || { key: 'badRequest' };
       return reply.status(status).send({
-        error: { code: code ?? 'BAD_REQUEST', message: translate(t, msg) },
+        error: { code: code ?? 'BAD_REQUEST', message: translateMsg(locale, msg) },
       });
     }
     req.log.error(err);

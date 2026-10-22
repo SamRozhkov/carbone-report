@@ -16,7 +16,6 @@ import {
   type TransferTemplate,
 } from '@carbone-reports/shared/template-transfer';
 import { PdfOptions } from '@carbone-reports/shared';
-import { zodLocale } from '@carbone-reports/shared/i18n';
 import { asc, eq, inArray } from 'drizzle-orm';
 import JSZip from 'jszip';
 import {
@@ -31,7 +30,7 @@ import {
   templates,
 } from '../../../db/schema';
 import type { AppDeps } from '../../../deps';
-import { AppError, badRequest, notFound } from '../../../lib/errors';
+import { AppError, badRequest, issueText, localizedSafeParse, notFound } from '../../../lib/errors';
 import { templateFileRef } from '../service';
 
 export type ExportDeps = Pick<AppDeps, 'db' | 'storage'> & {
@@ -109,23 +108,25 @@ export async function buildArchive(
   };
   // Архив должен загрузиться: та же схема, что при загрузке (длина имени, правила параметров
   // и запросов могли ужесточиться после сохранения шаблона).
-  // Сообщение issue входит в русский текст ошибки (до перевода на ключи, §44.4).
-  const checked = TransferManifest.safeParse(manifest, { error: zodLocale('ru').localeError });
+  // Сообщение issue входит в текст ошибки и переводится на язык запроса (§44.4).
+  const checked = localizedSafeParse(TransferManifest, manifest);
   if (!checked.success) {
     const issue = checked.error.issues[0]!;
     const [first, index, ...rest] = issue.path;
     const name =
       first === 'templates' && typeof index === 'number' ? manifest.templates[index]?.name : null;
-    const where = rest.length ? ` (${rest.join('.')})` : '';
-    throw badRequest(
-      name !== null && name !== undefined
-        ? `шаблон «${name}» нельзя выгрузить${where}: ${issue.message}`
-        : `архив не проходит проверку: ${issue.message}`,
-    );
+    const message = issueText(issue);
+    if (name === null || name === undefined) throw badRequest('export.invalid', { message });
+    throw rest.length
+      ? badRequest('export.templateInvalidPath', { name, path: rest.join('.'), message })
+      : badRequest('export.templateInvalid', { name, message });
   }
   const manifestJson = Buffer.from(JSON.stringify(manifest, null, 2));
   if (manifestJson.length > MAX_TRANSFER_MANIFEST_BYTES) {
-    throw badRequest('описание шаблонов (manifest.json) больше 20 МБ — выгрузите их частями');
+    throw badRequest('export.manifestTooLarge', {
+      file: TRANSFER_MANIFEST_FILE,
+      size: MAX_TRANSFER_MANIFEST_BYTES / 1024 / 1024,
+    });
   }
   zip.file(TRANSFER_MANIFEST_FILE, manifestJson);
   manifest.templates.forEach((t, i) =>
@@ -195,7 +196,7 @@ async function runExport(
   const byId = new Map(rows.map((r) => [r.row.id, r]));
   const missing = uniqueIds.filter((id) => !byId.has(id));
   if (missing.length) {
-    throw new AppError('NOT_FOUND', 404, notFound('шаблон').message, { ids: missing });
+    throw new AppError('NOT_FOUND', 404, notFound('template').msg, { ids: missing });
   }
 
   const [gs, qs, ps, cs, as] = await Promise.all([
@@ -231,8 +232,7 @@ async function runExport(
   const seenNames = new Set<string>();
   for (const { row } of byId.values()) {
     const k = row.name.toLowerCase();
-    if (seenNames.has(k))
-      throw badRequest(`название "${row.name}" повторяется среди выбранных шаблонов`);
+    if (seenNames.has(k)) throw badRequest('export.nameDuplicate', { name: row.name });
     seenNames.add(k);
   }
 
@@ -244,9 +244,7 @@ async function runExport(
     total += data.length;
     // Файлы кладутся без сжатия: если они одни не помещаются в архив, дальше не читаем.
     if (total > MAX_TRANSFER_ARCHIVE_BYTES) {
-      throw badRequest(
-        'файлы выбранных шаблонов не поместятся в архив 50 МБ — выгрузите их частями',
-      );
+      throw badRequest('export.filesTooLarge', { size: MAX_TRANSFER_ARCHIVE_BYTES / 1024 / 1024 });
     }
     const rowsOf = as.filter((a) => a.templateId === id);
     const ordered = [
@@ -258,9 +256,9 @@ async function runExport(
       const buf = await deps.storage.read(a.filePath);
       total += buf.length;
       if (total > MAX_TRANSFER_ARCHIVE_BYTES) {
-        throw badRequest(
-          'файлы выбранных шаблонов не поместятся в архив 50 МБ — выгрузите их частями',
-        );
+        throw badRequest('export.filesTooLarge', {
+          size: MAX_TRANSFER_ARCHIVE_BYTES / 1024 / 1024,
+        });
       }
       attachmentData.push(buf);
     }
@@ -324,7 +322,7 @@ async function runExport(
 
   const buffer = await buildArchive(items, { appVersion: deps.config.appVersion, now });
   if (buffer.length > MAX_TRANSFER_ARCHIVE_BYTES) {
-    throw badRequest('архив получается больше 50 МБ — выгрузите шаблоны частями');
+    throw badRequest('export.archiveTooLarge', { size: MAX_TRANSFER_ARCHIVE_BYTES / 1024 / 1024 });
   }
   const filename =
     items.length === 1

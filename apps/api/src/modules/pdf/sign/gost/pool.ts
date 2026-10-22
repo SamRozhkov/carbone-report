@@ -16,8 +16,8 @@ const VerifyMeta = z.object({
   timestamped: z.boolean(),
 });
 
-const timeout = () => new AppError('TIMEOUT', 504, 'превышено время ожидания');
-const invalid = (message: string) => new AppError('GOST_INVALID', 400, message);
+const timeout = () => new AppError('TIMEOUT', 504, { key: 'timeout' });
+const invalid = (key: string) => new AppError('GOST_INVALID', 400, { key });
 
 /** Штамп без поля подписи и хеш Стрибог — задачей пула рендера: pdf-lib не блокирует главный поток (§42). */
 export function createPoolGostPreparer(pool: Pick<RenderPool, 'run'>): GostPreparer {
@@ -70,7 +70,8 @@ export function createPoolGostVerifier(pool: Pick<RenderPool, 'run'>): GostVerif
       );
     } catch (e) {
       if (e instanceof RenderTimeoutError) throw timeout();
-      if (e instanceof TemplateRenderError && e.field === 'gost') throw invalid(e.message);
+      if (e instanceof TemplateRenderError && e.field === 'gost')
+        throw invalid(e.text?.key ?? 'gost.invalid');
       throw new Error('проверка подписи ГОСТ в пуле рендера не удалась', { cause: e });
     }
     const parsed = VerifyMeta.safeParse(r.meta);
@@ -91,7 +92,7 @@ export const inProcessGostVerifier: GostVerifier = async (input) => {
   try {
     return await verifyCades(input);
   } catch (e) {
-    if (e instanceof CadesError) throw invalid(e.message);
+    if (e instanceof CadesError) throw invalid(e.key);
     throw e;
   }
 };

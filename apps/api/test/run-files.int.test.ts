@@ -334,7 +334,10 @@ describe('снимок запуска', () => {
     const runId = await newRun();
     const message =
       'в шаблоне используется html — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»';
-    failWith = new AppError('CARBONE_COMMUNITY', 400, message);
+    failWith = new AppError('CARBONE_COMMUNITY', 400, {
+      key: 'carbone.communityFormatter',
+      params: { name: 'html' },
+    });
     const r = await file(userA, runId, '?format=docx');
     expect(r.statusCode).toBe(400);
     expect(r.json().error).toEqual({ code: 'CARBONE_COMMUNITY', message });
@@ -355,7 +358,10 @@ describe('снимок запуска', () => {
   });
 
   it('ошибка Carbone при формировании → 502; запуск со status=error без формата и снимка; каталог удалён', async () => {
-    failWith = new AppError('CARBONE_ERROR', 502, 'ошибка генерации: boom');
+    failWith = new AppError('CARBONE_ERROR', 502, {
+      key: 'render.generationError',
+      params: { message: 'boom' },
+    });
     const r = await render(userA);
     expect(r.statusCode).toBe(502);
     const [run] = await t.deps.db
@@ -495,7 +501,7 @@ describe('пул сборки (createRunFileGate)', () => {
     pool.on('error', () => {});
     const gate = createRunFileGate(pool);
     try {
-      const boom = new AppError('CARBONE_ERROR', 502, 'boom');
+      const boom = new AppError('CARBONE_ERROR', 502, { key: 'render.unavailable' });
       await expect(
         gate(RUN_FILE_LOCK_CLASS, 'gate-err', new Deadline(2000), async () => {
           throw boom;
@@ -517,7 +523,7 @@ describe('пул сборки (createRunFileGate)', () => {
     let release!: () => void;
     const held = new Promise<void>((r) => (release = r));
     try {
-      const busy = () => new AppError('SIGN_BUSY', 409, 'занято');
+      const busy = () => new AppError('SIGN_BUSY', 409, { key: 'sign.busy' });
       let entered!: () => void;
       const inside = new Promise<void>((r) => (entered = r));
       const first = gate(7, 'k', new Deadline(10_000), async () => {

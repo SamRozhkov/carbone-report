@@ -1,7 +1,12 @@
 import { decodePDFRawStream, PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
+import { ruText } from '../../lib/errors';
 
-/** Файл не подходит как приложение: текст — для пользователя. */
-export class PdfInputError extends Error {}
+/** Файл не подходит как приложение: key — ключ каталога errors для пользователя, message — по-русски. */
+export class PdfInputError extends Error {
+  constructor(readonly key: string) {
+    super(ruText(key));
+  }
+}
 
 const PDFAID_RE = /pdfaid:part\s*(?:=\s*["']\s*[1-4]|>\s*[1-4]\s*<)/;
 
@@ -16,19 +21,19 @@ export function readXmp(doc: PDFDocument): string | null {
 /** Проверка приложенного файла (§36.3): PDF, не повреждён, без шифрования; страницы и заявленный PDF/A. */
 export async function inspectPdf(data: Uint8Array): Promise<{ pages: number; pdfa: boolean }> {
   if (Buffer.from(data.subarray(0, 5)).toString('latin1') !== '%PDF-') {
-    throw new PdfInputError('файл не PDF');
+    throw new PdfInputError('pdf.notPdf');
   }
   let doc: PDFDocument;
   let pages: number;
   try {
     doc = await PDFDocument.load(data, { ignoreEncryption: true, updateMetadata: false });
-    if (doc.isEncrypted) throw new PdfInputError('PDF защищён паролем');
+    if (doc.isEncrypted) throw new PdfInputError('pdf.encrypted');
     pages = doc.getPageCount();
   } catch (e) {
     if (e instanceof PdfInputError) throw e;
-    throw new PdfInputError('PDF повреждён');
+    throw new PdfInputError('pdf.damaged');
   }
-  if (pages === 0) throw new PdfInputError('PDF повреждён');
+  if (pages === 0) throw new PdfInputError('pdf.damaged');
   let xmp: string | null;
   try {
     xmp = readXmp(doc);

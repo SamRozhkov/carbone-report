@@ -1,3 +1,76 @@
 {
-  "invalidId": "неверный идентификатор"
+  "invalidId": "неверный идентификатор",
+  "invalidDatasourceId": "неверный идентификатор источника",
+  "invalidTemplateId": "неверный идентификатор шаблона",
+  "identName": "имя: латиница, цифры и _",
+  "identKey": "ключ: латиница, цифры и _",
+  "reservedName": "зарезервированное имя",
+  "nameRequired": "укажите название",
+  "backupName": "неверное имя бэкапа",
+  "recoveryCodeRequired": "введите код восстановления",
+  "query": {
+    "paramsReserved": "ключ \"params\" зарезервирован"
+  },
+  "param": {
+    "selectNeedsOption": "для select нужен хотя бы один вариант",
+    "sqlRequired": "укажите SQL-запрос вариантов",
+    "sqlNoOptions": "у SQL-списка варианты задаются запросом",
+    "multipleDefaults": "несколько значений допустимы только при множественном выборе",
+    "sqlOnlyQuery": "SQL допустим только у типа «SQL-список»",
+    "multipleOnlyQuery": "множественный выбор допустим только у типа «SQL-список»",
+    "invalidValue": "недопустимое значение"
+  },
+  "datasource": {
+    "caOnlyVerify": "CA-сертификат указывается только для режима «SSL с проверкой»",
+    "pemExpected": "ожидается сертификат в формате PEM"
+  },
+  "chart": {
+    "columnRequired": "выберите колонку",
+    "keyTooLong": "ключ — до 64 символов",
+    "colorHex": "цвет — #RRGGBB",
+    "queryRequired": "выберите запрос",
+    "seriesRequired": "добавьте ряд",
+    "tooManySeries": "рядов — не больше {{maximum}}",
+    "stackedOnly": "накопление — только у столбцов, линий и областей",
+    "smoothOnly": "сглаживание — только у линий, областей и комбинированного",
+    "kindOnlyCombo": "вид и ось ряда — только у комбинированного",
+    "pieOneSeries": "у круговой и кольцевой — ровно один ряд",
+    "pieNoSplit": "ряды из данных недоступны у круговой и кольцевой",
+    "splitOneSeries": "с рядами из данных — ровно один ряд (колонка значений)",
+    "splitColors": "цвета рядов из данных — из палитры",
+    "axisY2Only": "вторая ось — только у комбинированного с рядом на правой оси",
+    "tooManyCharts": "графиков в шаблоне — не больше {{maximum}}",
+    "keyDuplicate": "ключ графика «{{key}}» повторяется",
+    "chartsKeyTaken": "ключ charts занят графиками"
+  },
+  "pdf": {
+    "textRequired": "укажите текст",
+    "pageTagRequired": "нужен {page} — номер страницы",
+    "pdfaProtection": "PDF/A несовместим с паролем и ограничениями",
+    "passwordLength": "пароль — от {{min}} до {{max}} символов",
+    "passwordControl": "пароль содержит недопустимые символы",
+    "passwordDash": "пароль не может начинаться с «-»",
+    "signatureProtection": "Подпись несовместима с паролем и ограничениями",
+    "tagFormatter": "в полях PDF теги без форматтеров: {{tag}}",
+    "attachmentNotPdfa": "PDF/A включён: файл «{{name}}» не в формате PDF/A"
+  },
+  "transfer": {
+    "sha256": "ожидается sha256 в hex",
+    "formatUnavailable": "формат {{format}} недоступен для .{{ext}}",
+    "fileExt": "файл шаблона должен иметь расширение .{{ext}}",
+    "groupDuplicate": "группа \"{{name}}\" повторяется",
+    "queryDuplicate": "ключ запроса \"{{key}}\" повторяется",
+    "paramDuplicate": "параметр \"{{name}}\" повторяется",
+    "chartDuplicate": "ключ графика \"{{key}}\" повторяется",
+    "chartNoQuery": "нет запроса \"{{query}}\" в шаблоне архива",
+    "chartQueryList": "запрос \"{{query}}\" должен возвращать список строк",
+    "nameDuplicate": "название \"{{name}}\" повторяется в архиве",
+    "pathExpected": "ожидается путь {{path}}"
+  },
+  "import": {
+    "targetRequired": "укажите обновляемый шаблон",
+    "targetUpdatedAtRequired": "укажите время изменения из предпросмотра",
+    "targetOnlyUpdate": "обновляемый шаблон указывается только для «обновить»",
+    "targetUpdatedAtOnlyUpdate": "время изменения указывается только для «обновить»"
+  }
 }

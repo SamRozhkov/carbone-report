@@ -83,7 +83,7 @@ export async function discardUncommittedFile(
 
 export async function loadTemplate(db: Db, id: string): Promise<TemplateRow> {
   const [row] = await db.select().from(templates).where(eq(templates.id, id));
-  if (!row) throw notFound('шаблон');
+  if (!row) throw notFound('template');
   return row;
 }
 
@@ -96,7 +96,7 @@ export async function lockTemplate(tx: DbTx, id: string): Promise<void> {
     .from(templates)
     .where(eq(templates.id, id))
     .for('update');
-  if (!row) throw notFound('шаблон');
+  if (!row) throw notFound('template');
 }
 
 export async function loadTemplateQueries(db: Db | DbTx, id: string): Promise<TemplateQuery[]> {

@@ -35,10 +35,9 @@ export function createPoolP12Reader(pool: Pick<RenderPool, 'run'>): P12Reader {
         deadlineAt,
       );
     } catch (e) {
-      if (e instanceof RenderTimeoutError)
-        throw new AppError('TIMEOUT', 504, 'превышено время ожидания');
+      if (e instanceof RenderTimeoutError) throw new AppError('TIMEOUT', 504, { key: 'timeout' });
       if (e instanceof TemplateRenderError && (e.field === 'file' || e.field === 'password'))
-        throw new P12Error(e.field, e.message);
+        throw new P12Error(e.field, e.text?.key ?? 'p12.badFile');
       // Прочее — внутренняя ошибка; текст потока пользователю не нужен.
       throw new Error('разбор .p12 в пуле рендера не удался', { cause: e });
     }

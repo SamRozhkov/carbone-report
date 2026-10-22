@@ -6,11 +6,7 @@ import { currentUser, type Guards } from '../auth/guards';
 import type { AgentClient } from './agent-client';
 
 export const backupsDisabled = () =>
-  new AppError(
-    'backups_disabled',
-    404,
-    'управление бэкапами выключено: задайте BACKUP_AGENT_URL и BACKUP_AGENT_TOKEN',
-  );
+  new AppError('backups_disabled', 404, { key: 'backup.disabled' });
 
 /** Прокси к агенту бэкапа (§26.3), только роль admin. */
 export function registerBackupRoutes(app: App, deps: AppDeps, guards: Guards): void {

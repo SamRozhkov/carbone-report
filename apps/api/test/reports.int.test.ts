@@ -59,7 +59,11 @@ const TEMPLATE_MESSAGE = `ошибка шаблона: ${TEMPLATE_CARBONE_ERROR}
 // Поддельный Carbone возвращает JSON того, что ему передали.
 const carbone: CarboneRenderer = {
   async render(tpl, data, opts) {
-    if (carboneFails) throw new AppError('CARBONE_ERROR', 502, 'ошибка генерации: boom');
+    if (carboneFails)
+      throw new AppError('CARBONE_ERROR', 502, {
+        key: 'render.generationError',
+        params: { message: 'boom' },
+      });
     if (carboneCommunity) return communityCarbone().render(tpl, data, opts);
     if (carboneTemplate) return failingCarbone(TEMPLATE_CARBONE_ERROR).render(tpl, data, opts);
     if (liveCarbone) return liveCarbone.render(tpl, data, opts);

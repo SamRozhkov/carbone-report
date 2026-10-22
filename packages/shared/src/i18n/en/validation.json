@@ -1,3 +1,76 @@
 {
-  "invalidId": "invalid identifier"
+  "invalidId": "invalid identifier",
+  "invalidDatasourceId": "invalid data source identifier",
+  "invalidTemplateId": "invalid template identifier",
+  "identName": "name: Latin letters, digits and _",
+  "identKey": "key: Latin letters, digits and _",
+  "reservedName": "reserved name",
+  "nameRequired": "enter a name",
+  "backupName": "invalid backup name",
+  "recoveryCodeRequired": "enter the recovery code",
+  "query": {
+    "paramsReserved": "the key “params” is reserved"
+  },
+  "param": {
+    "selectNeedsOption": "select requires at least one option",
+    "sqlRequired": "enter the SQL query for the options",
+    "sqlNoOptions": "options of an SQL list are defined by the query",
+    "multipleDefaults": "several values are allowed only with multiple choice",
+    "sqlOnlyQuery": "SQL is allowed only for the “SQL list” type",
+    "multipleOnlyQuery": "multiple choice is allowed only for the “SQL list” type",
+    "invalidValue": "invalid value"
+  },
+  "datasource": {
+    "caOnlyVerify": "a CA certificate is set only for the “SSL with verification” mode",
+    "pemExpected": "a certificate in PEM format is expected"
+  },
+  "chart": {
+    "columnRequired": "select a column",
+    "keyTooLong": "key — up to 64 characters",
+    "colorHex": "color — #RRGGBB",
+    "queryRequired": "select a query",
+    "seriesRequired": "add a series",
+    "tooManySeries": "series — at most {{maximum}}",
+    "stackedOnly": "stacking — only for bars, lines and areas",
+    "smoothOnly": "smoothing — only for lines, areas and combined charts",
+    "kindOnlyCombo": "series type and axis — only for combined charts",
+    "pieOneSeries": "pie and doughnut charts — exactly one series",
+    "pieNoSplit": "series from data are not available for pie and doughnut charts",
+    "splitOneSeries": "with series from data — exactly one series (value column)",
+    "splitColors": "colors of series from data come from the palette",
+    "axisY2Only": "secondary axis — only for a combined chart with a series on the right axis",
+    "tooManyCharts": "charts per template — at most {{maximum}}",
+    "keyDuplicate": "chart key “{{key}}” is duplicated",
+    "chartsKeyTaken": "the key charts is taken by charts"
+  },
+  "pdf": {
+    "textRequired": "enter the text",
+    "pageTagRequired": "{page} is required — the page number",
+    "pdfaProtection": "PDF/A is incompatible with a password and restrictions",
+    "passwordLength": "password — {{min}} to {{max}} characters",
+    "passwordControl": "the password contains invalid characters",
+    "passwordDash": "the password cannot start with “-”",
+    "signatureProtection": "Signature is incompatible with a password and restrictions",
+    "tagFormatter": "PDF fields allow tags without formatters only: {{tag}}",
+    "attachmentNotPdfa": "PDF/A is enabled: file “{{name}}” is not in PDF/A format"
+  },
+  "transfer": {
+    "sha256": "a hex sha256 is expected",
+    "formatUnavailable": "format {{format}} is not available for .{{ext}}",
+    "fileExt": "the template file must have the .{{ext}} extension",
+    "groupDuplicate": "group “{{name}}” is duplicated",
+    "queryDuplicate": "query key “{{key}}” is duplicated",
+    "paramDuplicate": "parameter “{{name}}” is duplicated",
+    "chartDuplicate": "chart key “{{key}}” is duplicated",
+    "chartNoQuery": "no query “{{query}}” in the archive template",
+    "chartQueryList": "query “{{query}}” must return a list of rows",
+    "nameDuplicate": "name “{{name}}” is repeated in the archive",
+    "pathExpected": "path {{path}} is expected"
+  },
+  "import": {
+    "targetRequired": "specify the template to update",
+    "targetUpdatedAtRequired": "specify the modification time from the preview",
+    "targetOnlyUpdate": "the template to update is specified only for “update”",
+    "targetUpdatedAtOnlyUpdate": "the modification time is specified only for “update”"
+  }
 }

@@ -1,9 +1,16 @@
+import { ruText } from '../../lib/errors';
+
 export interface ParsedSql {
   text: string;
   names: string[];
 }
 
-export class SqlParamError extends Error {}
+/** Ошибка разбора параметров SQL: key — ключ каталога errors, message — тот же текст по-русски. */
+export class SqlParamError extends Error {
+  constructor(readonly key: string) {
+    super(ruText(key));
+  }
+}
 
 const IDENT_START = /[A-Za-z_]/;
 const IDENT_PART = /[A-Za-z0-9_]/;
@@ -103,7 +110,7 @@ export function parseSqlParams(sql: string): ParsedSql {
         continue;
       }
       if (next !== undefined && /[0-9]/.test(next)) {
-        throw new SqlParamError('используйте именованные параметры :name вместо $1');
+        throw new SqlParamError('sql.positionalParams');
       }
     }
 

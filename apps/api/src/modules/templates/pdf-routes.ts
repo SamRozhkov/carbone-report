@@ -37,7 +37,7 @@ import {
   toAdminDetails,
 } from './service';
 
-const AttachmentParams = IdParams.extend({ aid: z.uuid('неверный идентификатор') });
+const AttachmentParams = IdParams.extend({ aid: z.uuid('v:invalidId') });
 
 /** Настройки PDF и приложенные файлы шаблона (§36.1, §36.3); всё — под блокировкой строки шаблона. */
 export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guards): void {
@@ -66,13 +66,13 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
     const fields: Record<string, string> = {};
     for await (const part of req.parts({ limits: { fileSize: MAX_PDF_ATTACHMENT_BYTES } })) {
       if (part.type === 'file') {
-        if (part.fieldname !== 'file') throw badRequest('файл передаётся в поле file');
+        if (part.fieldname !== 'file') throw badRequest('upload.fileField');
         file = { filename: part.filename, data: await part.toBuffer() };
       } else fields[part.fieldname] = String(part.value);
     }
-    if (!file) throw badRequest('файл не передан');
+    if (!file) throw badRequest('upload.noFile');
     const placement = PdfPlacement.safeParse(fields.placement ?? 'end');
-    if (!placement.success) throw badRequest('placement: start или end');
+    if (!placement.success) throw badRequest('pdf.placement');
     const name = basename(file.filename || 'file.pdf').slice(0, 200) || 'file.pdf';
     return { name, data: file.data, placement: placement.data };
   }
@@ -150,7 +150,7 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
       try {
         info = await inspectPdf(data);
       } catch (e) {
-        if (e instanceof PdfInputError) throw badRequest(e.message);
+        if (e instanceof PdfInputError) throw badRequest(e.key);
         throw e;
       }
       const path = templateAttachmentPath(row.id, randomUUID());
@@ -160,17 +160,15 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
           await lockTemplate(tx, row.id);
           const cur = await loadTemplateAttachments(tx, row.id);
           if (cur.length >= MAX_PDF_ATTACHMENTS)
-            throw badRequest(`в шаблоне не больше ${MAX_PDF_ATTACHMENTS} приложенных файлов`);
+            throw badRequest('pdf.tooManyAttachments', { count: MAX_PDF_ATTACHMENTS });
           if (cur.reduce((s, a) => s + a.pages, 0) + info.pages > MAX_PDF_ATTACHMENT_PAGES)
-            throw badRequest(
-              `в приложенных файлах шаблона не больше ${MAX_PDF_ATTACHMENT_PAGES} страниц`,
-            );
+            throw badRequest('pdf.tooManyPages', { count: MAX_PDF_ATTACHMENT_PAGES });
           const [t] = await tx
             .select({ pdfOptions: templates.pdfOptions })
             .from(templates)
             .where(eq(templates.id, row.id));
           if (PdfOptions.parse(t!.pdfOptions).pdfa && !info.pdfa)
-            throw badRequest(pdfaMessage(name));
+            throw badRequest('pdf.attachmentNotPdfa', { name });
           await tx.insert(templateAttachments).values({
             templateId: row.id,
             placement,
@@ -204,7 +202,7 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
         await lockTemplate(tx, row.id);
         const rows = await loadTemplateAttachments(tx, row.id);
         const cur = rows.find((r) => r.id === req.params.aid);
-        if (!cur) throw notFound('приложенный файл');
+        if (!cur) throw notFound('attachment');
         const target = req.body.placement ?? cur.placement;
         const rest = rows.filter((r) => r.id !== cur.id);
         const group = rest.filter((r) => r.placement === target);
@@ -237,7 +235,7 @@ export function registerTemplatePdfRoutes(app: App, deps: AppDeps, guards: Guard
             ),
           )
           .returning();
-        if (!del) throw notFound('приложенный файл');
+        if (!del) throw notFound('attachment');
         await renumber(tx, await loadTemplateAttachments(tx, row.id));
         await touch(tx, row.id, currentUser(req).id);
         return del;

@@ -188,7 +188,7 @@ describe('сертификат пользователя (§39.1)', () => {
   it('разбор .p12 не успел (TIMEOUT пула) — 504, сертификат не сохранён (§39.8)', async () => {
     const slow = await createTestApp({
       p12Read: async () => {
-        throw new AppError('TIMEOUT', 504, 'превышено время ожидания');
+        throw new AppError('TIMEOUT', 504, { key: 'timeout' });
       },
     });
     try {

@@ -131,14 +131,31 @@ describe('перевод ошибок', () => {
     expect(r.json().error.details[0].message).toBe(zodLocale('fr').localeError(tooShort));
   });
 
-  it('AppError со строкой (до перевода вызовов) — русский текст на любом языке', async () => {
-    const r = await t.app.inject({
-      method: 'POST',
-      url: `/api/datasources/${crypto.randomUUID()}/test`,
-      headers: { cookie: admin.cookie, 'x-locale': 'en' },
-    });
-    expect(r.statusCode).toBe(404);
-    expect(r.json().error.message).toBe('источник данных не найден');
+  it('404 источника и шаблона — на языке запроса, без заголовка — по-русски', async () => {
+    const source = (locale?: string) =>
+      t.app.inject({
+        method: 'POST',
+        url: `/api/datasources/${crypto.randomUUID()}/test`,
+        headers: { cookie: admin.cookie, ...(locale ? { 'x-locale': locale } : {}) },
+      });
+    const en = await source('en');
+    expect(en.statusCode).toBe(404);
+    expect(en.json().error.message).toBe(createTranslator('en')('errors:notFound.datasource'));
+    expect((await source()).json().error.message).toBe('источник данных не найден');
+
+    const template = (locale?: string) =>
+      t.app.inject({
+        method: 'GET',
+        url: `/api/templates/${crypto.randomUUID()}`,
+        headers: { cookie: admin.cookie, ...(locale ? { 'x-locale': locale } : {}) },
+      });
+    for (const locale of ['en', 'zh-CN'] as const) {
+      const r = await template(locale);
+      expect(r.statusCode).toBe(404);
+      expect(r.json().error.message).toBe(createTranslator(locale)('errors:notFound.template'));
+      expect(r.json().error.message).not.toMatch(CYRILLIC);
+    }
+    expect((await template()).json().error.message).toBe('шаблон не найден');
   });
 
   it('базовые ошибки переводятся: 401 и 403', async () => {

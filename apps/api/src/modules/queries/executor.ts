@@ -9,7 +9,7 @@ import {
 import type pg from 'pg';
 import Cursor from 'pg-cursor';
 import type { Deadline } from '../../lib/deadline';
-import { AppError } from '../../lib/errors';
+import { AppError, text, type Msg } from '../../lib/errors';
 import type { QueryResult } from './build-data';
 import { sqlParamHint } from './sql-hints';
 import { parseSqlParams, SqlParamError } from './sql-params';
@@ -28,7 +28,8 @@ export interface QueryLimits {
 
 type Row = Record<string, unknown>;
 
-const TX_FORBIDDEN = 'управление транзакциями запрещено';
+/** Чей SQL — начало текста ошибки: запрос шаблона или параметр со списком из запроса. */
+const queryWhat = (key: string) => text('sql.query', { key });
 
 // Ошибки уровня соединения (класс 08, остановка сервера) — не вина запроса.
 function isConnectionError(e: unknown): boolean {
@@ -36,19 +37,20 @@ function isConnectionError(e: unknown): boolean {
   return !code || code.startsWith('08') || ['57P01', '57P02', '57P03'].includes(code);
 }
 
-function mapPgError(key: string, e: unknown, hint?: string): unknown {
+function mapPgError(what: Msg, e: unknown, hint?: Msg): unknown {
   if (isConnectionError(e)) return e;
   const code = (e as { code?: string }).code;
-  if (code === '57014') return new AppError('TIMEOUT', 504, 'превышено время ожидания');
-  if (code === '25006') {
-    return new AppError(
-      'SQL_ERROR',
-      400,
-      `запрос "${key}": запись запрещена — запросы выполняются только на чтение`,
-    );
-  }
-  const msg = `запрос "${key}": ${(e as Error).message}`;
-  return new AppError('SQL_ERROR', 400, hint ? `${msg} (${hint})` : msg);
+  if (code === '57014') return new AppError('TIMEOUT', 504, { key: 'timeout' });
+  if (code === '25006')
+    return new AppError('SQL_ERROR', 400, { key: 'sql.readOnly', params: { what } });
+  const message = (e as Error).message;
+  return new AppError(
+    'SQL_ERROR',
+    400,
+    hint
+      ? { key: 'sql.errorHint', params: { what, message, hint } }
+      : { key: 'sql.error', params: { what, message } },
+  );
 }
 
 interface TxState {
@@ -59,7 +61,7 @@ interface TxState {
 interface Tx {
   client: pg.PoolClient;
   /** Проверяет, что запрос пользователя не вышел из READ ONLY транзакции (COMMIT/ROLLBACK/END [AND CHAIN]). */
-  guard(key: string): Promise<void>;
+  guard(what: Msg): Promise<void>;
   /**
    * С общим сроком: перед запросом проверить срок и урезать statement_timeout до остатка
    * (SET LOCAL в начале транзакции считался от её начала). guard принимает новое значение.
@@ -80,7 +82,7 @@ async function withReadOnly<T>(
     throw new AppError(
       'DATASOURCE_UNAVAILABLE',
       502,
-      `не удалось подключиться к источнику "${sourceName}"`,
+      { key: 'datasource.connectFailed', params: { name: sourceName } },
       undefined,
       (e as Error).message,
     );
@@ -110,14 +112,14 @@ async function withReadOnly<T>(
         );
         base.st = rows[0]!.st;
       },
-      guard: async (key) => {
+      guard: async (what) => {
         const { rows } = await client.query<TxState & { ro: string }>(
           "select pg_catalog.transaction_timestamp()::text as ts, pg_catalog.current_setting('transaction_read_only') as ro, pg_catalog.current_setting('statement_timeout') as st",
         );
         const cur = rows[0]!;
         if (cur.ts !== base.ts || cur.ro !== 'on' || cur.st !== base.st) {
           broken = true; // сессия могла быть изменена — в пул не возвращаем
-          throw new AppError('SQL_ERROR', 400, `запрос "${key}": ${TX_FORBIDDEN}`);
+          throw new AppError('SQL_ERROR', 400, { key: 'sql.txForbidden', params: { what } });
         }
       },
     });
@@ -127,7 +129,7 @@ async function withReadOnly<T>(
     throw new AppError(
       'DATASOURCE_UNAVAILABLE',
       502,
-      `соединение с источником "${sourceName}" прервано`,
+      { key: 'datasource.connectionLost', params: { name: sourceName } },
       undefined,
       (e as Error).message,
     );
@@ -157,7 +159,7 @@ function readBatch(
 
 async function readQuery(
   client: pg.PoolClient,
-  key: string,
+  what: Msg,
   sql: string,
   params: Record<string, ParamValue>,
   limit: number,
@@ -169,12 +171,18 @@ async function readQuery(
     parsed = parseSqlParams(sql);
   } catch (e) {
     if (e instanceof SqlParamError)
-      throw new AppError('SQL_ERROR', 400, `запрос "${key}": ${e.message}`);
+      throw new AppError('SQL_ERROR', 400, {
+        key: 'sql.error',
+        params: { what, message: text(e.key) },
+      });
     throw e;
   }
   const values = parsed.names.map((name) => {
     if (!Object.hasOwn(params, name))
-      throw new AppError('CONFIG', 400, `запрос "${key}": неизвестный параметр :${name}`);
+      throw new AppError('CONFIG', 400, {
+        key: 'sql.unknownParam',
+        params: { what, name },
+      });
     return params[name];
   });
 
@@ -192,7 +200,7 @@ async function readQuery(
     }
     // Ошибка pg: cursor.close() после неё читает ReadyForQuery и на оборванном соединении
     // не завершится никогда — не закрываем.
-    throw mapPgError(key, e, sqlParamHint(sql, parsed.names, params, e));
+    throw mapPgError(what, e, sqlParamHint(sql, parsed.names, params, e));
   }
   await cursor.close().catch(() => {});
   return result;
@@ -231,16 +239,16 @@ export function runQueries(
     for (const q of queries) {
       const limit = q.mode === 'single' ? 1 : limits.maxRows;
       await tx.beforeQuery(limits.deadline, limits.timeoutMs);
-      const r = await readQuery(tx.client, q.key, q.sql, params, limit, limits.deadline);
+      const what = queryWhat(q.key);
+      const r = await readQuery(tx.client, what, q.sql, params, limit, limits.deadline);
       // Сначала guard: попытка выйти из транзакции или снять таймаут обнаруживается всегда.
-      await tx.guard(q.key);
+      await tx.guard(what);
       limits.deadline?.check();
       if (q.mode === 'list' && r.truncated) {
-        throw new AppError(
-          'TOO_MANY_ROWS',
-          400,
-          `запрос "${q.key}" вернул больше ${limits.maxRows} строк`,
-        );
+        throw new AppError('TOO_MANY_ROWS', 400, {
+          key: 'sql.tooManyRows',
+          params: { key: q.key, count: limits.maxRows },
+        });
       }
       results.push({ key: q.key, mode: q.mode, columns: r.columns, rows: r.rows });
     }
@@ -256,8 +264,9 @@ export function previewQuery(
   limits: QueryLimits & { previewRows: number },
 ): Promise<RunQueryResult> {
   return withReadOnly(pool, sourceName, limits.timeoutMs, async (tx) => {
-    const r = await readQuery(tx.client, 'preview', sql, params, limits.previewRows);
-    await tx.guard('preview');
+    const what = queryWhat('preview');
+    const r = await readQuery(tx.client, what, sql, params, limits.previewRows);
+    await tx.guard(what);
     return r;
   });
 }
@@ -308,25 +317,24 @@ export function loadParamOptions(
   return withReadOnly(pool, sourceName, limits.timeoutMs, async (tx) => {
     const out: SelectOptionValue[][] = [];
     for (const { def, params } of items) {
-      const key = `параметр "${def.label}"`;
+      const what = text('sql.param', { label: def.label });
       // readQuery читает limit + 1 строку: truncated — вариантов больше MAX_PARAM_OPTIONS.
       await tx.beforeQuery(limits.deadline, limits.timeoutMs);
       const r = await readQuery(
         tx.client,
-        key,
+        what,
         def.sql!,
         params,
         MAX_PARAM_OPTIONS,
         limits.deadline,
       );
-      await tx.guard(key);
+      await tx.guard(what);
       limits.deadline?.check();
       if (r.truncated) {
-        throw new AppError(
-          'TOO_MANY_OPTIONS',
-          400,
-          `${key}: больше ${MAX_PARAM_OPTIONS} вариантов — уточните запрос`,
-        );
+        throw new AppError('TOO_MANY_OPTIONS', 400, {
+          key: 'sql.tooManyOptions',
+          params: { what, count: MAX_PARAM_OPTIONS },
+        });
       }
       const options = rowsToOptions(r.columns, r.rows);
       out.push(options);

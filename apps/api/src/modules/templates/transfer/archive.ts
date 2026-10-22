@@ -12,14 +12,14 @@ import {
   TransferManifest,
 } from '@carbone-reports/shared/template-transfer';
 import { MAX_PDF_ATTACHMENT_BYTES, MAX_PDF_ATTACHMENT_PAGES } from '@carbone-reports/shared';
-import { zodLocale } from '@carbone-reports/shared/i18n';
-import { AppError } from '../../../lib/errors';
+import { AppError, issueText, localizedSafeParse, text, type Msg } from '../../../lib/errors';
 import { isZip } from '../../../lib/http';
 import { inspectPdf, PdfInputError } from '../../pdf/inspect';
 
 const inflateRawAsync = promisify(inflateRaw);
 
-export const importInvalid = (message: string) => new AppError('IMPORT_INVALID', 400, message);
+export const importInvalid = (key: string, params?: Msg['params']) =>
+  new AppError('IMPORT_INVALID', 400, { key, params });
 
 export interface ArchiveLimits {
   archiveBytes: number;
@@ -35,7 +35,7 @@ export const DEFAULT_LIMITS: ArchiveLimits = {
   entries: MAX_TRANSFER_ENTRIES,
 };
 
-const mb = (n: number) => `${Math.round(n / 1024 / 1024)} МБ`;
+const mb = (n: number) => Math.round(n / 1024 / 1024);
 
 /** Запись центрального каталога zip. Размеры из заголовков — только для сверки, не для лимитов. */
 export interface ZipEntry {
@@ -64,7 +64,7 @@ export function readDirectory(buf: Buffer, limits: ArchiveLimits): ZipEntry[] {
       break;
     }
   }
-  if (eocd < 0) throw importInvalid('файл не является zip-архивом');
+  if (eocd < 0) throw importInvalid('archive.notZip');
   const disk = buf.readUInt16LE(eocd + 4);
   const cdDisk = buf.readUInt16LE(eocd + 6);
   const onDisk = buf.readUInt16LE(eocd + 8);
@@ -72,24 +72,25 @@ export function readDirectory(buf: Buffer, limits: ArchiveLimits): ZipEntry[] {
   const cdSize = buf.readUInt32LE(eocd + 12);
   const cdOffset = buf.readUInt32LE(eocd + 16);
   if (count === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) {
-    throw importInvalid('архивы ZIP64 не поддерживаются');
+    throw importInvalid('archive.zip64');
   }
   if (disk !== 0 || cdDisk !== 0 || onDisk !== count) {
-    throw importInvalid('многотомные архивы не поддерживаются');
+    throw importInvalid('archive.multiVolume');
   }
-  if (count > limits.entries) throw importInvalid(`в архиве больше ${limits.entries} записей`);
-  if (cdOffset + cdSize > eocd) throw importInvalid('архив повреждён');
+  if (count > limits.entries)
+    throw importInvalid('archive.tooManyEntries', { count: limits.entries });
+  if (cdOffset + cdSize > eocd) throw importInvalid('archive.damaged');
 
   const entries: ZipEntry[] = [];
   let p = cdOffset;
   const end = cdOffset + cdSize;
   for (let k = 0; k < count; k++) {
-    if (p + 46 > end || buf.readUInt32LE(p) !== SIG_CENTRAL) throw importInvalid('архив повреждён');
+    if (p + 46 > end || buf.readUInt32LE(p) !== SIG_CENTRAL) throw importInvalid('archive.damaged');
     const nameLen = buf.readUInt16LE(p + 28);
     const extraLen = buf.readUInt16LE(p + 30);
     const commentLen = buf.readUInt16LE(p + 32);
     const next = p + 46 + nameLen + extraLen + commentLen;
-    if (next > end) throw importInvalid('архив повреждён');
+    if (next > end) throw importInvalid('archive.damaged');
     entries.push({
       flags: buf.readUInt16LE(p + 8),
       method: buf.readUInt16LE(p + 10),
@@ -113,7 +114,7 @@ function checkPath(name: string): void {
     // eslint-disable-next-line no-control-regex
     /[\\:\u0000-\u001f\u007f]/.test(name) ||
     segments.some((s) => s === '' || s === '.' || s === '..');
-  if (bad) throw importInvalid(`недопустимый путь в архиве: ${JSON.stringify(name)}`);
+  if (bad) throw importInvalid('archive.badPath', { path: JSON.stringify(name) });
 }
 
 /**
@@ -126,14 +127,14 @@ export async function extract(
   budget: number,
   tooBig: () => AppError,
 ): Promise<Buffer> {
-  if (e.flags & 0x1) throw importInvalid(`зашифрованные архивы не поддерживаются: ${e.name}`);
+  if (e.flags & 0x1) throw importInvalid('archive.encrypted', { name: e.name });
   const off = e.localOffset;
   if (off + 30 > buf.length || buf.readUInt32LE(off) !== SIG_LOCAL) {
-    throw importInvalid('архив повреждён');
+    throw importInvalid('archive.damaged');
   }
   const start = off + 30 + buf.readUInt16LE(off + 26) + buf.readUInt16LE(off + 28);
   const stop = start + e.compressedSize;
-  if (stop > buf.length) throw importInvalid('архив повреждён');
+  if (stop > buf.length) throw importInvalid('archive.damaged');
   const packed = buf.subarray(start, stop);
   let data: Buffer;
   if (e.method === 0) {
@@ -145,13 +146,13 @@ export async function extract(
       data = await inflateRawAsync(packed, { maxOutputLength: budget });
     } catch (err) {
       if ((err as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') throw tooBig();
-      throw importInvalid(`архив повреждён: ${e.name}`);
+      throw importInvalid('archive.damagedEntry', { name: e.name });
     }
   } else {
-    throw importInvalid(`неподдерживаемый метод сжатия в архиве: ${e.name}`);
+    throw importInvalid('archive.unsupportedMethod', { name: e.name });
   }
   if (data.length !== e.size || crc32(data) !== e.crc) {
-    throw importInvalid(`архив повреждён: ${e.name}`);
+    throw importInvalid('archive.damagedEntry', { name: e.name });
   }
   return data;
 }
@@ -169,29 +170,39 @@ function parseManifest(raw: Buffer): TransferManifest {
   try {
     json = JSON.parse(raw.toString('utf8'));
   } catch {
-    throw importInvalid(`${TRANSFER_MANIFEST_FILE}: неверный JSON`);
+    throw importInvalid('import.manifestJson', { file: TRANSFER_MANIFEST_FILE });
   }
   const head = (json ?? {}) as { format?: unknown; formatVersion?: unknown };
   if (head.format !== TRANSFER_FORMAT) {
-    throw importInvalid('это не архив шаблонов carbone-reports');
+    throw importInvalid('import.notTransferArchive');
   }
   if (head.formatVersion !== TRANSFER_FORMAT_VERSION) {
-    throw importInvalid(
-      `версия формата архива ${JSON.stringify(head.formatVersion)} не поддерживается (ожидается ${TRANSFER_FORMAT_VERSION})`,
-    );
+    throw importInvalid('import.formatVersion', {
+      version: JSON.stringify(head.formatVersion),
+      expected: TRANSFER_FORMAT_VERSION,
+    });
   }
-  // Сообщение issue входит в русский текст ошибки (до перевода на ключи, §44.4).
-  const parsed = TransferManifest.safeParse(json, { error: zodLocale('ru').localeError });
+  // Сообщение issue входит в текст ошибки и переводится на язык запроса (§44.4).
+  const parsed = localizedSafeParse(TransferManifest, json);
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
     const [first, index, ...rest] = issue.path;
-    const where =
-      first === 'templates' && typeof index === 'number'
-        ? `шаблон ${index + 1}${rest.length ? ` (${rest.join('.')})` : ''}`
-        : issue.path.join('.') || 'манифест';
-    throw importInvalid(`${TRANSFER_MANIFEST_FILE}: ${where}: ${issue.message}`);
+    const file = TRANSFER_MANIFEST_FILE;
+    const message = issueText(issue);
+    if (first === 'templates' && typeof index === 'number')
+      throw rest.length
+        ? importInvalid('import.manifestTemplatePath', {
+            file,
+            index: index + 1,
+            path: rest.join('.'),
+            message,
+          })
+        : importInvalid('import.manifestTemplate', { file, index: index + 1, message });
+    throw issue.path.length
+      ? importInvalid('import.manifestPath', { file, path: issue.path.join('.'), message })
+      : importInvalid('import.manifest', { file, message });
   }
-  return parsed.data;
+  return parsed.data as TransferManifest;
 }
 
 /**
@@ -205,13 +216,13 @@ export async function readTransferArchive(
   limits: ArchiveLimits = DEFAULT_LIMITS,
 ): Promise<TransferArchive> {
   if (buf.length > limits.archiveBytes) {
-    throw importInvalid(`архив больше ${mb(limits.archiveBytes)}`);
+    throw importInvalid('archive.tooLarge', { size: mb(limits.archiveBytes) });
   }
   try {
     return await readChecked(buf, limits);
   } catch (err) {
     if (err instanceof AppError) throw err;
-    throw importInvalid('архив повреждён');
+    throw importInvalid('archive.damaged');
   }
 }
 
@@ -220,12 +231,13 @@ async function readChecked(buf: Buffer, limits: ArchiveLimits): Promise<Transfer
   const byName = new Map<string, ZipEntry>();
   for (const e of entries) {
     checkPath(e.name);
-    if (byName.has(e.name)) throw importInvalid(`запись повторяется в архиве: ${e.name}`);
+    if (byName.has(e.name)) throw importInvalid('archive.duplicateEntry', { name: e.name });
     byName.set(e.name, e);
   }
 
   let used = 0;
-  const totalTooBig = () => importInvalid(`распакованный архив больше ${mb(limits.unpackedBytes)}`);
+  const totalTooBig = () =>
+    importInvalid('archive.unpackedTooLarge', { size: mb(limits.unpackedBytes) });
   const take = async (e: ZipEntry) => {
     const data = await extract(buf, e, limits.unpackedBytes - used, totalTooBig);
     used += data.length;
@@ -233,7 +245,7 @@ async function readChecked(buf: Buffer, limits: ArchiveLimits): Promise<Transfer
   };
 
   const manifestEntry = byName.get(TRANSFER_MANIFEST_FILE);
-  if (!manifestEntry) throw importInvalid(`в архиве нет ${TRANSFER_MANIFEST_FILE}`);
+  if (!manifestEntry) throw importInvalid('archive.noManifest', { file: TRANSFER_MANIFEST_FILE });
   // Свой лимит манифеста: JSON.parse и проверка схемы на сотнях МБ надолго заняли бы процесс.
   const manifestCap = limits.manifestBytes ?? MAX_TRANSFER_MANIFEST_BYTES;
   const manifestRaw = await extract(
@@ -242,7 +254,10 @@ async function readChecked(buf: Buffer, limits: ArchiveLimits): Promise<Transfer
     Math.min(manifestCap, limits.unpackedBytes),
     () =>
       manifestCap < limits.unpackedBytes
-        ? importInvalid(`${TRANSFER_MANIFEST_FILE} больше ${mb(manifestCap)}`)
+        ? importInvalid('import.manifestTooLarge', {
+            file: TRANSFER_MANIFEST_FILE,
+            size: mb(manifestCap),
+          })
         : totalTooBig(),
   );
   used += manifestRaw.length;
@@ -262,18 +277,18 @@ async function readChecked(buf: Buffer, limits: ArchiveLimits): Promise<Transfer
   for (const e of entries) {
     const isDir = e.name.endsWith('/');
     const ok = isDir ? dirs.has(e.name) && e.size === 0 : expected.has(e.name);
-    if (!ok) throw importInvalid(`лишний файл в архиве: ${e.name}`);
+    if (!ok) throw importInvalid('archive.extraFile', { name: e.name });
   }
 
   const files: Buffer[] = [];
   for (const t of manifest.templates) {
     const e = byName.get(t.file);
-    if (!e) throw importInvalid(`в архиве нет файла ${t.file}`);
+    if (!e) throw importInvalid('archive.missingFile', { file: t.file });
     const data = await take(e);
     if (createHash('sha256').update(data).digest('hex') !== t.sha256) {
-      throw importInvalid(`файл ${t.file} не совпадает с контрольной суммой из манифеста`);
+      throw importInvalid('archive.checksum', { file: t.file });
     }
-    if (!isZip(data)) throw importInvalid(`файл ${t.file} не является документом Office`);
+    if (!isZip(data)) throw importInvalid('archive.notOffice', { file: t.file });
     files.push(data);
   }
 
@@ -282,31 +297,41 @@ async function readChecked(buf: Buffer, limits: ArchiveLimits): Promise<Transfer
     const list: TransferArchive['attachments'][number] = [];
     for (const a of t.attachments ?? []) {
       const e = byName.get(a.file);
-      if (!e) throw importInvalid(`в архиве нет файла ${a.file}`);
+      if (!e) throw importInvalid('archive.missingFile', { file: a.file });
       const data = await take(e);
       if (data.length > MAX_PDF_ATTACHMENT_BYTES)
-        throw importInvalid(`шаблон «${t.name}»: файл «${a.name}»: файл больше 20 МБ`);
+        throw importInvalid('import.attachmentError', {
+          template: t.name,
+          name: a.name,
+          message: text('fileTooLarge', { size: mb(MAX_PDF_ATTACHMENT_BYTES) }),
+        });
       if (createHash('sha256').update(data).digest('hex') !== a.sha256) {
-        throw importInvalid(`файл ${a.file} не совпадает с контрольной суммой из манифеста`);
+        throw importInvalid('archive.checksum', { file: a.file });
       }
       try {
         list.push({ data, ...(await inspectPdf(data)) });
       } catch (err) {
         if (err instanceof PdfInputError)
-          throw importInvalid(`шаблон «${t.name}»: файл «${a.name}»: ${err.message}`);
+          throw importInvalid('import.attachmentError', {
+            template: t.name,
+            name: a.name,
+            message: text(err.key),
+          });
         throw err;
       }
     }
     if (list.reduce((s, x) => s + x.pages, 0) > MAX_PDF_ATTACHMENT_PAGES)
-      throw importInvalid(
-        `шаблон «${t.name}»: в приложенных файлах шаблона не больше ${MAX_PDF_ATTACHMENT_PAGES} страниц`,
-      );
+      throw importInvalid('import.templateError', {
+        template: t.name,
+        message: text('pdf.tooManyPages', { count: MAX_PDF_ATTACHMENT_PAGES }),
+      });
     if (t.pdfOptions?.pdfa) {
       const bad = (t.attachments ?? []).find((_, n) => !list[n]!.pdfa);
       if (bad)
-        throw importInvalid(
-          `шаблон «${t.name}»: PDF/A включён: файл «${bad.name}» не в формате PDF/A`,
-        );
+        throw importInvalid('import.templateError', {
+          template: t.name,
+          message: text('pdf.attachmentNotPdfa', { name: bad.name }),
+        });
     }
     attachments.push(list);
   }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { communityErrorMessage } from './community';
+import { ruText } from '../../lib/errors';
+import { communityError } from './community';
+
+/** Сообщение по-русски. */
+const communityErrorMessage = (e: string) => {
+  const m = communityError(e);
+  return m && ruText(m.key, m.params);
+};
 
 const msg = (name: string) =>
   `в шаблоне используется ${name} — недоступно в бесплатной версии Carbone, см. «Справка по шаблонам»`;

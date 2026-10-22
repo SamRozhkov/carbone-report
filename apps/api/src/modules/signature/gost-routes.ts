@@ -40,8 +40,8 @@ const PENDING_TTL_MS = 15 * 60 * 1000;
 const MAX_SIGNATURE_BYTES = 64 * 1024;
 const OID_KEY_USAGE = '2.5.29.15';
 
-const badCert = () => badRequest('неверный сертификат');
-const restart = () => conflict('начните подписание заново');
+const badCert = () => badRequest('gost.badCertificate');
+const restart = () => conflict('gost.restart');
 
 /** Подписываемый запуск ГОСТ (§42.2): свой, условия signable §39.3 и способ из снимка — 'gost'. */
 type GostRun = RunRow & {
@@ -52,7 +52,7 @@ type GostRun = RunRow & {
 async function loadGostRun(deps: AppDeps, runId: string, userId: string): Promise<GostRun> {
   const [run] = await deps.db.select().from(reportRuns).where(eq(reportRuns.id, runId));
   // Подписывает только владелец (§39.3): чужой запуск неотличим от несуществующего, и для администратора.
-  if (!run || run.userId !== userId) throw notFound('запуск');
+  if (!run || run.userId !== userId) throw notFound('run');
   if (
     !run.snapshot ||
     run.status !== 'ok' ||
@@ -67,7 +67,7 @@ async function loadGostRun(deps: AppDeps, runId: string, userId: string): Promis
     .select({ runId: reportRunSignatures.runId })
     .from(reportRunSignatures)
     .where(eq(reportRunSignatures.runId, run.id));
-  if (done) throw conflict('отчёт уже подписан');
+  if (done) throw conflict('sign.alreadySigned');
   return run as GostRun;
 }
 
@@ -86,7 +86,7 @@ async function lockRun(tx: RunFileTx, runId: string): Promise<void> {
     .select({ runId: reportRunSignatures.runId })
     .from(reportRunSignatures)
     .where(eq(reportRunSignatures.runId, runId));
-  if (done) throw conflict('отчёт уже подписан');
+  if (done) throw conflict('sign.alreadySigned');
 }
 
 /** `keyUsage` нет — подпись не запрещена; есть — нужен digitalSignature (§42.2). */
@@ -109,10 +109,10 @@ function checkCertificate(der: Buffer, now: Date): { info: CertificateInfo; hash
     throw badCert();
   }
   const key = gostPublicKeyFromSpki(new Uint8Array(cert.subjectPublicKeyInfo.toSchema().toBER()));
-  if (!key) throw badRequest('сертификат не ГОСТ Р 34.10-2012 или не поддерживается');
-  if (now < cert.notBefore.value) throw badRequest('сертификат ещё не действует');
-  if (now > cert.notAfter.value) throw badRequest('срок действия сертификата истёк');
-  if (!allowsDigitalSignature(cert)) throw badRequest('сертификат не предназначен для подписи');
+  if (!key) throw badRequest('gost.unsupportedCertificate');
+  if (now < cert.notBefore.value) throw badRequest('sign.certNotYetValid');
+  if (now > cert.notAfter.value) throw badRequest('sign.certExpired');
+  if (!allowsDigitalSignature(cert)) throw badRequest('sign.certNotForSigning');
   let info: CertificateInfo;
   try {
     info = certInfo(der, `ГОСТ Р 34.10-2012 (${key.curve.bits})`);
@@ -167,7 +167,7 @@ export function registerGostSignRoutes(app: App, deps: AppDeps, guards: Guards):
             Date.now() + deadline.remaining(),
           );
           if (prepared.pdf.length > MAX_PDF_RESULT_BYTES)
-            throw badRequest('итоговый PDF больше 100 МБ');
+            throw badRequest('pdf.resultTooLarge', { size: 100 });
           const draftPath = gostDraftPath(run.id);
           // Черновик пишется до строки: строка ожидания всегда указывает на записанный файл.
           // Путь у каждой подготовки свой: прежний черновик не трогается до фиксации новой строки
@@ -216,7 +216,7 @@ export function registerGostSignRoutes(app: App, deps: AppDeps, guards: Guards):
       const me = currentUser(req);
       const run = await loadGostRun(deps, req.params.id, me.id);
       const signature = Buffer.from(req.body.signature, 'base64');
-      if (signature.length > MAX_SIGNATURE_BYTES) throw badRequest('подпись больше 64 КБ');
+      if (signature.length > MAX_SIGNATURE_BYTES) throw badRequest('gost.signatureTooLarge');
       const outcome = await deps.runFileGate(
         RUN_FILE_LOCK_CLASS,
         `sign:${me.id}`,

@@ -858,6 +858,51 @@ describe('язык отчёта (§45.2)', () => {
     expect(seenOpts[0]).toMatchObject({ lang: 'ru', region: 'ru-RU' });
   });
 
+  it("'user' без языка профиля и заголовков — DEFAULT_LOCALE приложения (de); Accept-Language — его язык", async () => {
+    // Отдельное приложение с DEFAULT_LOCALE=de: умолчание тестов (ru) не отличить от зашитого 'ru'.
+    const d = await createTestApp({ carbone }, { defaultLocale: 'de' });
+    try {
+      const dAdmin = (await loginAs(d, 'admin')).cookie;
+      const ds = await d.app.inject({
+        method: 'POST',
+        url: '/api/datasources',
+        headers: { cookie: dAdmin },
+        payload: {
+          name: 'src',
+          host: 'localhost',
+          port: 5432,
+          database: 'x',
+          username: 'x',
+          password: 'x',
+          sslMode: 'disable',
+        },
+      });
+      const id = await createTemplate(d, dAdmin, ds.json().id as string, { public: true });
+      await d.deps.db.update(templates).set({ reportLocale: 'user' }).where(eq(templates.id, id));
+      const u = await loginAs(d, 'user');
+      expect(u.user.locale).toBeNull();
+      const buildIn = async (headers: Record<string, string>) => {
+        const r = await d.app.inject({
+          method: 'POST',
+          url: `/api/reports/${id}/render`,
+          headers: { cookie: u.cookie, ...headers },
+          payload: { params: {} },
+        });
+        expect(r.statusCode).toBe(201);
+        const runId = r.json().runId as string;
+        return (await d.deps.db.select().from(reportRuns).where(eq(reportRuns.id, runId)))[0]!
+          .reportLocale;
+      };
+      seenOpts.length = 0;
+      expect(await buildIn({})).toBe('de');
+      expect(seenOpts.at(-1)).toMatchObject({ lang: 'de-de', region: 'de-DE' });
+      expect(await buildIn({ 'accept-language': 'fr' })).toBe('fr');
+      expect(seenOpts.at(-1)).toMatchObject({ lang: 'fr-fr', region: 'fr-FR' });
+    } finally {
+      await d.close();
+    }
+  });
+
   it('превью — по тому же правилу', async () => {
     await setLocale('user');
     const preview = (headers: Record<string, string>) =>

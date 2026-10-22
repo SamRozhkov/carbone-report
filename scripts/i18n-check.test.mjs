@@ -147,3 +147,60 @@ test('вложенность глубже двух уровней', () => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /ru\/common: ключ menu\.sub вложен глубже двух уровней/);
 });
+
+/** Пишет исходники веба во временный каталог: { 'путь/файл.tsx': 'код' }. */
+function webSrc(files) {
+  const dir = mkdtempSync(join(base, 'web-'));
+  for (const [rel, code] of Object.entries(files)) {
+    mkdirSync(join(dir, rel, '..'), { recursive: true });
+    writeFileSync(join(dir, rel), code);
+  }
+  return dir;
+}
+
+/** Каталоги — корректный набор, исходники веба — из webSrc. */
+function runWeb(files) {
+  const cat = validCatalogs();
+  const dir = mkdtempSync(join(base, 'c-'));
+  for (const [l, nss] of Object.entries(cat)) {
+    mkdirSync(join(dir, l));
+    for (const [ns, data] of Object.entries(nss))
+      writeFileSync(join(dir, l, `${ns}.json`), JSON.stringify(data));
+  }
+  return spawnSync(tsx, [script, dir, `--web-src=${webSrc(files)}`], { encoding: 'utf8' });
+}
+
+test('кириллица в коде веба: текст JSX, строка и шаблонная строка', () => {
+  const r = runWeb({
+    'pages/Page.tsx': [
+      'export const Page = () => (',
+      '  <div title="Заголовок">',
+      '    Текст страницы',
+      '  </div>',
+      ');',
+      'export const s = `Шаблон ${1}`;',
+      '',
+    ].join('\n'),
+  });
+  assert.equal(r.status, 1);
+  const hits = r.stderr.split('\n').filter((l) => l.includes('кириллица в коде веба'));
+  assert.equal(hits.length, 3, r.stderr);
+  assert.match(r.stderr, /Page\.tsx:2: Заголовок/);
+  assert.match(r.stderr, /Page\.tsx:3: Текст страницы/);
+  assert.match(r.stderr, /Page\.tsx:6: Шаблон/);
+});
+
+test('кириллица в коде веба: справка, тесты, test/ и комментарии не проверяются', () => {
+  const r = runWeb({
+    'pages/admin/help/Help.tsx': 'export const h = <p>Справка</p>;\n',
+    'pages/Page.test.tsx': "it('строка', () => {});\n",
+    'test/fixtures.ts': "export const name = 'Отчёт';\n",
+    'lib/ok.ts': [
+      '// Комментарий по-русски',
+      '/** И документирующий комментарий. */',
+      "export const label = 'Report';",
+      '',
+    ].join('\n'),
+  });
+  assert.equal(r.status, 0, r.stderr);
+});

@@ -160,7 +160,7 @@
     "limit_bytes": "Un informe con este gráfico no se generará: la descripción del gráfico supera 1 MB",
     "limit_series": "Un informe con este gráfico no se generará: el gráfico tiene más de 20 series",
     "limit_points": "Un informe con este gráfico no se generará: el gráfico tiene más de 10 000 puntos",
-    "noColumn": "gráfico {{chart}}: no existe la columna {{column}}",
+    "noColumn": "gráfico {{chart}}: no hay columna {{column}}",
     "tooManySeries_one": "gráfico {{chart}}: más de {{count}} serie",
     "tooManySeries_many": "gráfico {{chart}}: más de {{count}} series",
     "tooManySeries_other": "gráfico {{chart}}: más de {{count}} series",

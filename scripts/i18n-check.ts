@@ -1,6 +1,7 @@
 // Проверка каталогов переводов (§44.6).
 // Запуск: pnpm i18n:check            — каталоги packages/shared/src/i18n;
-//         pnpm i18n:check <каталог> — другой каталог с теми же подкаталогами языков (тесты).
+//         pnpm i18n:check <каталог> — другой каталог с теми же подкаталогами языков (тесты);
+//         --web-src=<каталог>       — другой каталог вместо apps/web/src для поиска кириллицы (тесты).
 // Сверка с `ru` (источник): набор ключей, параметры {{…}}, формы множественного числа
 // по CLDR, пустые строки. Ошибки выводятся списком, код выхода 1.
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -226,7 +227,7 @@ const WEB_CYRILLIC_EXCEPTIONS = [
 ];
 
 /** Непереведённые строки веба: всё в apps/web/src, кроме тестов и исключений выше. */
-function findCyrillicInWeb(dir = join(ROOT, 'apps/web/src')): string[] {
+function findCyrillicInWeb(dir: string): string[] {
   const found: string[] = [];
   const skip = (rel: string) => WEB_CYRILLIC_EXCEPTIONS.some((p) => rel.startsWith(p));
   for (const f of sourceFiles(dir, skip)) {
@@ -261,11 +262,15 @@ function findCyrillicInAppErrors(dir = join(ROOT, 'apps/api/src')): string[] {
 }
 
 function main() {
-  const arg = process.argv.slice(2).find((a) => a !== '--');
+  const args = process.argv.slice(2).filter((a) => a !== '--');
+  const WEB_SRC = '--web-src=';
+  const arg = args.find((a) => !a.startsWith('--'));
+  const webArg = args.find((a) => a.startsWith(WEB_SRC))?.slice(WEB_SRC.length);
   const dir = resolve(arg ?? join(ROOT, 'packages/shared/src/i18n'));
+  const webDir = resolve(webArg ?? join(ROOT, 'apps/web/src'));
   const errors = checkCatalogs(dir);
   if (CHECK_WEB_CYRILLIC)
-    errors.push(...findCyrillicInWeb().map((s) => `кириллица в коде веба: ${s}`));
+    errors.push(...findCyrillicInWeb(webDir).map((s) => `кириллица в коде веба: ${s}`));
   if (CHECK_API_ERRORS)
     errors.push(...findCyrillicInAppErrors().map((s) => `кириллица в ошибке API: ${s}`));
   if (errors.length) {

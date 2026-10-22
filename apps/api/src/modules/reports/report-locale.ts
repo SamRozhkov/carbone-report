@@ -4,14 +4,15 @@ import { isLocale, type Locale, type ReportLocale } from '@carbone-reports/share
 
 /**
  * Язык шаблона; для 'user' — язык профиля строящего (если это один из LOCALES), иначе язык
- * запроса (X-Locale → Accept-Language → DEFAULT_LOCALE, lib/locale.ts).
+ * запроса (X-Locale → Accept-Language → DEFAULT_LOCALE, lib/locale.ts). Значение шаблона вне
+ * LOCALES (ограничения в БД нет — прямой SQL, восстановление) — ru, как у runLocale.
  */
 export function resolveReportLocale(
   setting: ReportLocale,
   userLocale: string | null,
   reqLocale: Locale,
 ): Locale {
-  if (setting !== 'user') return setting;
+  if (setting !== 'user') return isLocale(setting) ? setting : 'ru';
   return isLocale(userLocale) ? userLocale : reqLocale;
 }
 

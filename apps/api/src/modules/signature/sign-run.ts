@@ -114,7 +114,7 @@ export function registerSignRunRoute(app: App, deps: AppDeps, guards: Guards): v
               await recordSignFailure(tx, me.id);
               return { wrongPassword: true };
             }
-            if (e instanceof P12Error) throw badRequest(e.message);
+            if (e instanceof P12Error) throw badRequest(e.key);
             throw e;
           }
           const signer = new P12Signer(

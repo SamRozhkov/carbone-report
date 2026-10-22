@@ -124,7 +124,7 @@ export async function handleCallback(
   });
 
   if (cb.status === 3 || cb.status === 7) {
-    log?.warn({ templateId, status: cb.status }, SAVE_ERRORS[cb.status]);
+    log?.warn({ templateId, status: cb.status }, ruText(SAVE_ERRORS[cb.status]!));
     await setError(ruText(SAVE_ERRORS[cb.status]!));
     return;
   }

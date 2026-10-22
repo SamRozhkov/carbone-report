@@ -29,7 +29,12 @@ export const text = (key: string, params?: Params) => new Text(key, params);
  * только текст.
  */
 export class IssueText {
-  constructor(readonly issue: $ZodIssue) {}
+  declare readonly issue: $ZodIssue;
+
+  constructor(issue: $ZodIssue) {
+    // Неперечисляемое: issue содержит ввод запроса — не попадает в журнал и сериализацию.
+    Object.defineProperty(this, 'issue', { value: issue });
+  }
 }
 export const issueText = (issue: $ZodIssue) => new IssueText(issue);
 
@@ -203,9 +208,15 @@ export function registerErrorHandler(app: App): void {
     if (err instanceof AppError) {
       if (err.internal !== undefined)
         req.log.warn({ err: err.internal, code: err.code }, err.message);
+      // Ключа нет в каталоге (опечатка в коде) — в ответ общий текст, а не «errors:<ключ>».
+      let message = err.textIn(locale);
+      if (message === `errors:${err.msg.key}` || message === err.msg.key) {
+        req.log.warn({ key: err.msg.key, code: err.code }, 'нет ключа в каталоге errors');
+        message = t(err.status >= 500 ? 'errors:internal' : 'errors:badRequest');
+      }
       const body: { code: string; message: string; details?: unknown } = {
         code: err.code,
-        message: err.textIn(locale),
+        message,
       };
       if (err.details !== undefined) body.details = err.detailsIn(locale);
       return reply.status(err.status).send({ error: body });

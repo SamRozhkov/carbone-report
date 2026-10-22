@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { zodLocale } from '@carbone-reports/shared/i18n';
 import { createTranslator } from '@carbone-reports/shared/i18n/server';
@@ -166,6 +166,44 @@ describe('перевод ошибок на язык запроса', () => {
     const de = (await post(app, 'de', { n: 1 })).json().error.message;
     expect(de).not.toMatch(/[а-яё]/i);
     expect(de).not.toContain('секрет');
+  });
+
+  it('ключа нет в каталоге — общий текст по статусу и предупреждение в журнал', async () => {
+    const warn = vi.fn();
+    const app = createFastify();
+    registerRequestLocale(app, 'ru');
+    registerErrorHandler(app);
+    app.addHook('onRequest', async (req) => {
+      req.log.warn = warn as never;
+    });
+    app.get('/400', async () => {
+      throw badRequest('нет.такого');
+    });
+    app.get('/502', async () => {
+      throw new AppError('X', 502, { key: 'missing.key' });
+    });
+    await app.ready();
+    const get = (url: string, locale?: string) =>
+      app.inject({ method: 'GET', url, headers: locale ? { 'x-locale': locale } : {} });
+    expect((await get('/400')).json().error).toEqual({
+      code: 'BAD_REQUEST',
+      message: 'некорректный запрос',
+    });
+    expect((await get('/400', 'en')).json().error.message).toBe(
+      createTranslator('en')('errors:badRequest'),
+    );
+    expect(warn).toHaveBeenCalledWith(
+      { key: 'нет.такого', code: 'BAD_REQUEST' },
+      'нет ключа в каталоге errors',
+    );
+    expect((await get('/502', 'en')).json().error.message).toBe(
+      createTranslator('en')('errors:internal'),
+    );
+  });
+
+  it('issueText не отдаёт ввод при сериализации', () => {
+    const r = localizedSafeParse(z.object({ n: z.number() }), { n: 'секрет' });
+    expect(JSON.stringify(issueText(r.error!.issues[0]!))).not.toContain('секрет');
   });
 
   it('помощники: только ключи каталога', async () => {

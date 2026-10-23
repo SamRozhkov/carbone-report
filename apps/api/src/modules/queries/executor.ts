@@ -1,4 +1,5 @@
 import {
+  checkReadOnlySql,
   MAX_PARAM_OPTIONS,
   type ParamValue,
   type RunQueryResult,
@@ -30,6 +31,16 @@ type Row = Record<string, unknown>;
 
 /** Чей SQL — начало текста ошибки: запрос шаблона или параметр со списком из запроса. */
 const queryWhat = (key: string) => text('sql.query', { key });
+
+/** Статическая проверка «только чтение» (§47.1) — до соединения с источником. */
+function assertReadOnly(what: Msg, sql: string): void {
+  const r = checkReadOnlySql(sql);
+  if (!r.ok)
+    throw new AppError('SQL_ERROR', 400, {
+      key: 'sql.notReadOnly',
+      params: { what, found: r.found },
+    });
+}
 
 // Ошибки уровня соединения (класс 08, остановка сервера) — не вина запроса.
 function isConnectionError(e: unknown): boolean {
@@ -96,6 +107,8 @@ async function withReadOnly<T>(
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await client.query(`SET LOCAL statement_timeout = ${Math.floor(timeoutMs)}`);
+    // Строки '…' разбираются как в scanSql (§47.1): \' не экранирует кавычку, даже если у источника off.
+    await client.query('SET LOCAL standard_conforming_strings = on');
     const base = (
       await client.query<TxState>(
         "select pg_catalog.transaction_timestamp()::text as ts, pg_catalog.current_setting('statement_timeout') as st",
@@ -227,13 +240,14 @@ async function readAll(
   }
 }
 
-export function runQueries(
+export async function runQueries(
   pool: pg.Pool,
   sourceName: string,
   queries: TemplateQuery[],
   params: Record<string, ParamValue>,
   limits: QueryLimits,
 ): Promise<QueryResult[]> {
+  for (const q of queries) assertReadOnly(queryWhat(q.key), q.sql);
   return withReadOnly(pool, sourceName, limits.timeoutMs, async (tx) => {
     const results: QueryResult[] = [];
     for (const q of queries) {
@@ -256,13 +270,14 @@ export function runQueries(
   });
 }
 
-export function previewQuery(
+export async function previewQuery(
   pool: pg.Pool,
   sourceName: string,
   sql: string,
   params: Record<string, ParamValue>,
   limits: QueryLimits & { previewRows: number },
 ): Promise<RunQueryResult> {
+  assertReadOnly(queryWhat('preview'), sql);
   return withReadOnly(pool, sourceName, limits.timeoutMs, async (tx) => {
     const what = queryWhat('preview');
     const r = await readQuery(tx.client, what, sql, params, limits.previewRows);
@@ -307,13 +322,14 @@ export function rowsToOptions(columns: string[], rows: Row[]): SelectOptionValue
  * Варианты параметров типа query — все в одной read-only транзакции, по порядку items.
  * stop(i, options) → true: остальные items не выполняются, результат короче items.
  */
-export function loadParamOptions(
+export async function loadParamOptions(
   pool: pg.Pool,
   sourceName: string,
   items: { def: TemplateParam; params: Record<string, ParamValue> }[],
   limits: QueryLimits,
   stop?: (index: number, options: SelectOptionValue[]) => boolean,
 ): Promise<SelectOptionValue[][]> {
+  for (const { def } of items) assertReadOnly(text('sql.param', { label: def.label }), def.sql!);
   return withReadOnly(pool, sourceName, limits.timeoutMs, async (tx) => {
     const out: SelectOptionValue[][] = [];
     for (const { def, params } of items) {

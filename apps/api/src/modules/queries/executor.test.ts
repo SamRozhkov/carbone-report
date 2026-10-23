@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { rowsToOptions } from './executor';
+import type pg from 'pg';
+import { describe, expect, it, vi } from 'vitest';
+import { AppError } from '../../lib/errors';
+import { loadParamOptions, previewQuery, rowsToOptions, runQueries } from './executor';
 
 describe('rowsToOptions', () => {
   it('колонки value/label в любом порядке', () => {
@@ -72,5 +74,70 @@ describe('rowsToOptions', () => {
       { value: 1, label: 'Первый' },
       { value: 2, label: 'Второй' },
     ]);
+  });
+});
+
+describe('только чтение: отказ до соединения (§47.2)', () => {
+  const limits = { timeoutMs: 1000, maxRows: 5 };
+  const fakePool = () => {
+    const connect = vi.fn(() => Promise.reject(new Error('не должно подключаться')));
+    return { pool: { connect } as unknown as pg.Pool, connect };
+  };
+
+  it('runQueries: второй запрос нарушает правило — ни одного соединения', async () => {
+    const { pool, connect } = fakePool();
+    const e = await runQueries(
+      pool,
+      'src',
+      [
+        { key: 'ok', mode: 'list', sql: 'select 1' },
+        { key: 'w', mode: 'list', sql: 'drop table t' },
+      ],
+      {},
+      limits,
+    ).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(AppError);
+    expect([(e as AppError).code, (e as AppError).status, (e as AppError).message]).toEqual([
+      'SQL_ERROR',
+      400,
+      'запрос "w": разрешены только запросы на чтение (SELECT); найдено: DROP',
+    ]);
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it('previewQuery', async () => {
+    const { pool, connect } = fakePool();
+    const e = await previewQuery(
+      pool,
+      'src',
+      'select pg_sleep(1)',
+      {},
+      { ...limits, previewRows: 3 },
+    ).catch((x: unknown) => x);
+    expect((e as AppError).message).toBe(
+      'запрос "preview": разрешены только запросы на чтение (SELECT); найдено: pg_sleep',
+    );
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it('loadParamOptions', async () => {
+    const { pool, connect } = fakePool();
+    const def = {
+      name: 'p',
+      label: 'Счёт',
+      type: 'query' as const,
+      required: false,
+      defaultValue: null,
+      options: null,
+      sql: "select nextval('s') as value",
+      multiple: false,
+    };
+    const e = await loadParamOptions(pool, 'src', [{ def, params: {} }], limits).catch(
+      (x: unknown) => x,
+    );
+    expect((e as AppError).message).toBe(
+      'параметр "Счёт": разрешены только запросы на чтение (SELECT); найдено: nextval',
+    );
+    expect(connect).not.toHaveBeenCalled();
   });
 });

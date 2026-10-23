@@ -192,6 +192,7 @@
     "query": "запрос \"{{key}}\"",
     "param": "параметр \"{{label}}\"",
     "readOnly": "{{what}}: запись запрещена — запросы выполняются только на чтение",
+    "notReadOnly": "{{what}}: разрешены только запросы на чтение (SELECT); найдено: {{found}}",
     "error": "{{what}}: {{message}}",
     "errorHint": "{{what}}: {{message}} ({{hint}})",
     "txForbidden": "{{what}}: управление транзакциями запрещено",

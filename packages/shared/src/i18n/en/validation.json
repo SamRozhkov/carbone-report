@@ -11,6 +11,9 @@
   "query": {
     "paramsReserved": "the key “params” is reserved"
   },
+  "sql": {
+    "readOnlyOnly": "Only read queries (SELECT) are allowed; found: {{found}}. If this is a column name, put it in double quotes"
+  },
   "param": {
     "selectNeedsOption": "select requires at least one option",
     "sqlRequired": "enter the SQL query for the options",

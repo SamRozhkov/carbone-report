@@ -188,6 +188,7 @@
     "query": "requête « {{key}} »",
     "param": "paramètre « {{label}} »",
     "readOnly": "{{what}} : écriture interdite — les requêtes sont en lecture seule",
+    "notReadOnly": "{{what}} : seules les requêtes en lecture (SELECT) sont autorisées ; trouvé : {{found}}",
     "error": "{{what}} : {{message}}",
     "errorHint": "{{what}} : {{message}} ({{hint}})",
     "txForbidden": "{{what}} : le contrôle des transactions est interdit",

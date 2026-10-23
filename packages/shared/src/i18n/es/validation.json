@@ -11,6 +11,9 @@
   "query": {
     "paramsReserved": "la clave «params» está reservada"
   },
+  "sql": {
+    "readOnlyOnly": "Solo se permiten consultas de lectura (SELECT); encontrado: {{found}}. Si es un nombre de columna, escríbalo entre comillas dobles"
+  },
   "param": {
     "selectNeedsOption": "select necesita al menos una opción",
     "sqlRequired": "indique la consulta SQL de las opciones",

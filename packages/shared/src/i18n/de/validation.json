@@ -11,6 +11,9 @@
   "query": {
     "paramsReserved": "der Schlüssel „params“ ist reserviert"
   },
+  "sql": {
+    "readOnlyOnly": "Nur lesende Abfragen (SELECT) sind erlaubt; gefunden: {{found}}. Wenn das ein Spaltenname ist, setzen Sie ihn in doppelte Anführungszeichen"
+  },
   "param": {
     "selectNeedsOption": "select benötigt mindestens eine Option",
     "sqlRequired": "geben Sie die SQL-Abfrage für die Optionen an",

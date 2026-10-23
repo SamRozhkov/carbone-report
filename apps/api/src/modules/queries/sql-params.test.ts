@@ -67,6 +67,17 @@ describe('parseSqlParams', () => {
   it('запрещает позиционные $1', () => {
     expect(() => p('select $1')).toThrow(SqlParamError);
   });
+  it('$ и не-ASCII буквы — часть идентификатора, как в PostgreSQL (isSqlIdentChar)', () => {
+    // ä$1 — идентификатор, не позиционный параметр.
+    expect(p('select ä$1 from t')).toEqual({ text: 'select ä$1 from t', names: [] });
+    // ä:n и x$:n — срез массива, не параметр.
+    expect(p('select a[ä:n], b[x$:n] from t')).toEqual({
+      text: 'select a[ä:n], b[x$:n] from t',
+      names: [],
+    });
+    // Имя параметра продолжается теми же символами, что идентификатор: $x$ не остаётся в тексте.
+    expect(p('select :a$x$, :bä')).toEqual({ text: 'select $1, $2', names: ['a$x$', 'bä'] });
+  });
   it('незакрытая строка не зацикливается', () => {
     expect(p("select ':x")).toEqual({ text: "select ':x", names: [] });
   });

@@ -143,6 +143,22 @@ describe('DataTab', () => {
     expect(screen.getByRole('button', { name: /company/ })).not.toHaveTextContent('ошибка');
   });
 
+  it('ошибка «только чтение» показывается под SQL выбранного запроса', async () => {
+    const message =
+      'Разрешены только запросы на чтение (SELECT); найдено: UPDATE. Если это имя колонки, возьмите его в двойные кавычки';
+    mockApi([
+      {
+        method: 'PUT',
+        path: '/api/templates/t1/queries',
+        handler: () => validation([{ path: '/0/sql', message }]),
+      },
+    ]);
+    renderWithProviders(<DataTab {...props} />);
+    await userEvent.type(await screen.findByLabelText('SQL'), ' ');
+    await userEvent.click(screen.getByRole('button', { name: 'Сохранить запросы' }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+  });
+
   it('результат выполнения сбрасывается при смене выбранного запроса', async () => {
     mockApi([
       {

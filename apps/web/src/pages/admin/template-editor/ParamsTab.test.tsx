@@ -157,6 +157,36 @@ describe('ParamsTab', () => {
     expect(screen.getByLabelText('Варианты параметра 2').closest('label')).toContainElement(msg);
   });
 
+  it('ошибка «только чтение» показывается у SQL параметра', async () => {
+    const message =
+      'Разрешены только запросы на чтение (SELECT); найдено: nextval. Если это имя колонки, возьмите его в двойные кавычки';
+    mockApi([
+      {
+        method: 'PUT',
+        path: '/api/templates/t1/params',
+        handler: () => validation([{ path: '/0/sql', message }]),
+      },
+    ]);
+    const withQuery = {
+      ...t,
+      params: [
+        {
+          name: 'cust',
+          label: 'Клиент',
+          type: 'query',
+          required: false,
+          defaultValue: null,
+          options: null,
+          sql: "select nextval('s') as value",
+          multiple: false,
+        },
+      ],
+    } as unknown as TemplateAdminDetails;
+    renderWithProviders(<ParamsTab template={withQuery} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Сохранить параметры' }));
+    expect(await screen.findByText(message)).toHaveAttribute('data-testid', 'field-error');
+  });
+
   it('ошибка, не относящаяся ни к одному полю, остаётся видимой в общем блоке', async () => {
     mockApi([
       {

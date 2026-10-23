@@ -180,6 +180,7 @@
     "query": "查询“{{key}}”",
     "param": "参数“{{label}}”",
     "readOnly": "{{what}}：禁止写入——查询只能以只读方式执行",
+    "notReadOnly": "{{what}}：仅允许只读查询（SELECT）；发现：{{found}}",
     "error": "{{what}}：{{message}}",
     "errorHint": "{{what}}：{{message}}（{{hint}}）",
     "txForbidden": "{{what}}：禁止控制事务",

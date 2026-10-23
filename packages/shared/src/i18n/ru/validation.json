@@ -11,6 +11,9 @@
   "query": {
     "paramsReserved": "ключ \"params\" зарезервирован"
   },
+  "sql": {
+    "readOnlyOnly": "Разрешены только запросы на чтение (SELECT); найдено: {{found}}. Если это имя колонки, возьмите его в двойные кавычки"
+  },
   "param": {
     "selectNeedsOption": "для select нужен хотя бы один вариант",
     "sqlRequired": "укажите SQL-запрос вариантов",

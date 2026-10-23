@@ -145,6 +145,16 @@ export const userMe = {
  * пункты пропадают из поиска по ролям. Поэтому пункт ищется внутри самого списка (aria-controls)
  * с учётом скрытых элементов.
  */
+/** Пункты открытого списка Select (см. pickOption): ищутся внутри самого списка с учётом скрытых. */
+export async function popupOptions(combo: HTMLElement): Promise<HTMLElement[]> {
+  if (combo.getAttribute('aria-expanded') !== 'true') await userEvent.click(combo);
+  return waitFor(() => {
+    const popup = document.getElementById(combo.getAttribute('aria-controls') ?? '');
+    if (!popup) throw new Error('список не открыт');
+    return within(popup).getAllByRole('option', { hidden: true });
+  });
+}
+
 export async function pickOption(combo: HTMLElement, name: string): Promise<void> {
   if (combo.getAttribute('aria-expanded') !== 'true') await userEvent.click(combo);
   const option = await waitFor(() => {

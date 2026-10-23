@@ -21,6 +21,7 @@ beforeAll(async () => {
     create function sleep_for(s float8) returns void language sql as 'select pg_sleep(s)';
     create function write_company() returns setof company language sql as $$insert into company values ('x') returning *$$;
     create function evil_path() returns text language sql as $$select set_config('search_path', 'evil', false)$$;
+    create function prep_zz() returns void language plpgsql as $$begin execute 'prepare zz as select 1'; end$$;
     create function lock42() returns void language sql as 'select pg_advisory_lock(42)';
     create function no_timeout() returns text language sql as $$select set_config('statement_timeout', '0', true)$$;
   `);
@@ -144,10 +145,12 @@ describe('runQueries', () => {
 
   it('синтаксическая ошибка → SQL_ERROR с ключом запроса', async () => {
     const e = await err(
-      runQueries(pool, 'src', [{ key: 'bad', mode: 'list', sql: 'selec 1' }], {}, limits),
+      runQueries(pool, 'src', [{ key: 'bad', mode: 'list', sql: 'select 1 from' }], {}, limits),
     );
     expect(e.code).toBe('SQL_ERROR');
     expect(e.message).toMatch(/^запрос "bad": /);
+    expect(e.message).toMatch(/syntax error/);
+    expect(e.message).not.toContain('разрешены только запросы на чтение');
   });
 
   it('имя из прототипа (:toString) не считается параметром → CONFIG', async () => {
@@ -192,7 +195,9 @@ describe('runQueries', () => {
   });
 
   it('после ошибки соединение возвращается в пул исправным', async () => {
-    await err(runQueries(pool, 'src', [{ key: 'bad', mode: 'list', sql: 'selec 1' }], {}, limits));
+    await err(
+      runQueries(pool, 'src', [{ key: 'bad', mode: 'list', sql: 'select 1 from' }], {}, limits),
+    );
     const [r] = await runQueries(
       pool,
       'src',
@@ -272,19 +277,45 @@ describe('целостность транзакции', () => {
     expect(r!.rows).toEqual([{ n: 0 }]);
   }, 10_000);
 
-  // С 2.16.0 PREPARE/EXECUTE отклоняются статически (§47.1).
-  it('prepared statement не переживает запрос', async () => {
+  it('prepared statement (в функции) не переживает запрос', async () => {
     await runQueries(
       onePool,
       'src',
-      [{ key: 'p', mode: 'single', sql: 'prepare zz as select 1' }],
+      [{ key: 'p', mode: 'single', sql: 'select prep_zz()' }],
       {},
       limits,
-    ).catch(() => {});
-    const e = await err(
-      runQueries(onePool, 'src', [{ key: 'x', mode: 'single', sql: 'execute zz' }], {}, limits),
     );
-    expect(e.code).toBe('SQL_ERROR');
+    const [r] = await runQueries(
+      onePool,
+      'src',
+      [
+        {
+          key: 'n',
+          mode: 'single',
+          sql: "select count(*)::int as n from pg_prepared_statements where name = 'zz'",
+        },
+      ],
+      {},
+      limits,
+    );
+    expect(r!.rows).toEqual([{ n: 0 }]);
+  }, 10_000);
+
+  // С 2.16.0 PREPARE/EXECUTE в тексте запроса отклоняются статически (§47.1).
+  it('PREPARE в тексте — отказ до выполнения', async () => {
+    const e = await err(
+      runQueries(
+        onePool,
+        'src',
+        [{ key: 'p', mode: 'single', sql: 'prepare zz as select 1' }],
+        {},
+        limits,
+      ),
+    );
+    expect([e.code, e.message]).toEqual([
+      'SQL_ERROR',
+      'запрос "p": разрешены только запросы на чтение (SELECT); найдено: PREPARE',
+    ]);
   }, 10_000);
 
   it('previewQuery: commit → SQL_ERROR', async () => {

@@ -147,7 +147,7 @@ beforeAll(async () => {
     dsId,
     [],
     [
-      param({ name: 'bad', label: 'Плохой', sql: 'selec id from regions' }),
+      param({ name: 'bad', label: 'Плохой', sql: 'select id fro regions' }),
       param({ name: 'many', label: 'Много', sql: 'select g from generate_series(1, 1001) g' }),
       param({ name: 'note', label: 'Заметка', type: 'string' }),
       param({

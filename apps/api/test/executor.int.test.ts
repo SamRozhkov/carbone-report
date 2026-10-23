@@ -18,6 +18,11 @@ beforeAll(async () => {
     create table company(name text);
     insert into company values ('ООО Ромашка');
     create table big as select generate_series(1, 20) as n;
+    create function sleep_for(s float8) returns void language sql as 'select pg_sleep(s)';
+    create function write_company() returns setof company language sql as $$insert into company values ('x') returning *$$;
+    create function evil_path() returns text language sql as $$select set_config('search_path', 'evil', false)$$;
+    create function lock42() returns void language sql as 'select pg_advisory_lock(42)';
+    create function no_timeout() returns text language sql as $$select set_config('statement_timeout', '0', true)$$;
   `);
   srcConn = src;
   pool = new pg.Pool(poolConfig({ ...src, sslMode: 'disable', sslCa: null }));
@@ -84,7 +89,7 @@ describe('runQueries', () => {
       runQueries(
         pool,
         'src',
-        [{ key: 'w', mode: 'list', sql: "insert into company values ('x') returning *" }],
+        [{ key: 'w', mode: 'list', sql: 'select * from write_company()' }],
         {},
         limits,
       ),
@@ -95,9 +100,25 @@ describe('runQueries', () => {
     expect(rows[0].n).toBe(1);
   });
 
+  it('INSERT в тексте — отказ до выполнения', async () => {
+    const e = await err(
+      runQueries(
+        pool,
+        'src',
+        [{ key: 'w', mode: 'list', sql: "insert into company values ('x') returning *" }],
+        {},
+        limits,
+      ),
+    );
+    expect([e.code, e.message]).toEqual([
+      'SQL_ERROR',
+      'запрос "w": разрешены только запросы на чтение (SELECT); найдено: INSERT',
+    ]);
+  });
+
   it('statement_timeout → TIMEOUT 504', async () => {
     const e = await err(
-      runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select pg_sleep(3)' }], {}, limits),
+      runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select sleep_for(3)' }], {}, limits),
     );
     expect([e.code, e.status]).toEqual(['TIMEOUT', 504]);
   });
@@ -193,7 +214,7 @@ describe('целостность транзакции', () => {
     (await pool.query('select count(*)::int as n from company')).rows[0].n as number;
 
   it.each(['commit', 'rollback', 'end', 'abort', 'commit and chain', 'rollback and chain'])(
-    '%s как первый запрос → SQL_ERROR, запись не проходит',
+    '%s как первый запрос → отказ до соединения, запись не проходит',
     async (sql) => {
       const before = await companyCount();
       const e = await err(
@@ -202,27 +223,21 @@ describe('целостность транзакции', () => {
       expect([e.code, e.status, e.message]).toEqual([
         'SQL_ERROR',
         400,
-        'запрос "c": управление транзакциями запрещено',
+        `запрос "c": разрешены только запросы на чтение (SELECT); найдено: ${sql.split(' ')[0]!.toUpperCase()}`,
       ]);
       expect(await companyCount()).toBe(before);
     },
     10_000,
   );
 
-  it('commit + set_config не протекает в пул', async () => {
-    const e = await err(
-      runQueries(
-        onePool,
-        'src',
-        [
-          { key: 'c', mode: 'list', sql: 'commit' },
-          { key: 's', mode: 'single', sql: "select set_config('search_path','evil',false)" },
-        ],
-        {},
-        limits,
-      ),
+  it('set_config(search_path) в функции не протекает в пул', async () => {
+    await runQueries(
+      onePool,
+      'src',
+      [{ key: 's', mode: 'single', sql: 'select evil_path()' }],
+      {},
+      limits,
     );
-    expect(e.code).toBe('SQL_ERROR');
     const [r] = await runQueries(
       onePool,
       'src',
@@ -237,7 +252,7 @@ describe('целостность транзакции', () => {
     await runQueries(
       onePool,
       'src',
-      [{ key: 'l', mode: 'single', sql: 'select pg_advisory_lock(42)' }],
+      [{ key: 'l', mode: 'single', sql: 'select lock42()' }],
       {},
       limits,
     );
@@ -257,6 +272,7 @@ describe('целостность транзакции', () => {
     expect(r!.rows).toEqual([{ n: 0 }]);
   }, 10_000);
 
+  // С 2.16.0 PREPARE/EXECUTE отклоняются статически (§47.1).
   it('prepared statement не переживает запрос', async () => {
     await runQueries(
       onePool,
@@ -275,7 +291,7 @@ describe('целостность транзакции', () => {
     const e = await err(previewQuery(pool, 'src', 'commit', {}, { ...limits, previewRows: 3 }));
     expect([e.code, e.message]).toEqual([
       'SQL_ERROR',
-      'запрос "preview": управление транзакциями запрещено',
+      'запрос "preview": разрешены только запросы на чтение (SELECT); найдено: COMMIT',
     ]);
   }, 10_000);
 });
@@ -286,7 +302,7 @@ describe('устойчивость', () => {
 
   it('после TIMEOUT следующий запрос проходит', async () => {
     await err(
-      runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select pg_sleep(3)' }], {}, limits),
+      runQueries(pool, 'src', [{ key: 's', mode: 'list', sql: 'select sleep_for(3)' }], {}, limits),
     );
     expect((await ok())[0]!.rows).toEqual([{ x: 1 }]);
   }, 10_000);
@@ -302,7 +318,7 @@ describe('устойчивость', () => {
     const running = runQueries(
       pool,
       'src',
-      [{ key: 's', mode: 'list', sql: 'select pg_sleep(5)' }],
+      [{ key: 's', mode: 'list', sql: 'select sleep_for(5)' }],
       {},
       { timeoutMs: 10_000, maxRows: 5 },
     );
@@ -320,7 +336,7 @@ describe('устойчивость', () => {
     });
     await admin.connect();
     await admin.query(
-      "select pg_terminate_backend(pid) from pg_stat_activity where query like '%pg_sleep(5)%' and pid <> pg_backend_pid()",
+      "select pg_terminate_backend(pid) from pg_stat_activity where query like '%sleep_for(5)%' and pid <> pg_backend_pid()",
     );
     await admin.end();
     const e = (await settled) as AppError;
@@ -376,7 +392,7 @@ describe('общий срок (deadline)', () => {
     p.on('error', () => {});
     // statement_timeout у pg-cursor действует до Sync, то есть на всё чтение курсора, и урезан до
     // остатка срока; поэтому срок «истекает» флагом через 300 мс, пока statement_timeout — 30 с.
-    // Порция в 1000 строк идёт ~0,4 с (10 × pg_sleep(0.04)), запрос целиком — ~2 с: флаг
+    // Порция в 1000 строк идёт ~0,4 с (10 × sleep_for(0.04)), запрос целиком — ~2 с: флаг
     // поднимается посреди чтения, и проверка перед следующим FETCH застаёт приостановленный портал.
     const deadline = new FlipDeadline(60_000);
     const flip = setTimeout(() => (deadline.expired = true), 300);
@@ -389,7 +405,7 @@ describe('общий срок (deadline)', () => {
             {
               key: 'slow',
               mode: 'list',
-              sql: 'select g, pg_sleep(case when g % 100 = 0 then 0.04 else 0 end) from generate_series(1, 5000) g',
+              sql: 'select g, sleep_for(case when g % 100 = 0 then 0.04 else 0 end) from generate_series(1, 5000) g',
             },
           ],
           {},
@@ -433,7 +449,7 @@ describe('общий срок (deadline)', () => {
           {
             key: 'esc',
             mode: 'single',
-            sql: "select set_config('statement_timeout','0',true)",
+            sql: 'select no_timeout()',
           },
         ],
         {},

@@ -188,6 +188,7 @@
     "query": "consulta «{{key}}»",
     "param": "parámetro «{{label}}»",
     "readOnly": "{{what}}: no se permite escribir; las consultas son de solo lectura",
+    "notReadOnly": "{{what}}: solo se permiten consultas de lectura (SELECT); encontrado: {{found}}",
     "error": "{{what}}: {{message}}",
     "errorHint": "{{what}}: {{message}} ({{hint}})",
     "txForbidden": "{{what}}: no se permite controlar transacciones",

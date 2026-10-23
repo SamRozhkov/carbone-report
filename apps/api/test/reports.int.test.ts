@@ -625,7 +625,10 @@ describe('общий срок формирования отчёта', () => {
     );
     sAdmin = (await loginAs(s, 'admin')).cookie;
     sUser = (await loginAs(s, 'user')).cookie;
-    const src = await createSourceDatabase('create table t(id int); insert into t values (1);');
+    const src = await createSourceDatabase(`
+    create table t(id int); insert into t values (1);
+    create function sleep_for(s float8) returns void language sql as 'select pg_sleep(s)';
+  `);
     sDbName = src.database;
     const ds = await s.app.inject({
       method: 'POST',
@@ -672,10 +675,10 @@ describe('общий срок формирования отчёта', () => {
     expect(run).toMatchObject({ status: 'error', error: MSG });
   });
 
-  it('медленный SQL (pg_sleep(2), QUERY_TIMEOUT_MS=30000) → 504 до 1,5 с и запуск со status=error', async () => {
+  it('медленный SQL (sleep_for(2), QUERY_TIMEOUT_MS=30000) → 504 до 1,5 с и запуск со status=error', async () => {
     const id = await createTemplate(s, sAdmin, sDs, {
       public: true,
-      queries: [{ key: 'slow', mode: 'list', sql: 'select pg_sleep(2)' }],
+      queries: [{ key: 'slow', mode: 'list', sql: 'select sleep_for(2)' }],
     });
     const started = Date.now();
     const r = await renderIn(id);
@@ -697,7 +700,7 @@ describe('общий срок формирования отчёта', () => {
           required: true,
           defaultValue: null,
           options: null,
-          sql: 'select 1 as value, pg_sleep(2)::text as label',
+          sql: 'select 1 as value, sleep_for(2)::text as label',
           multiple: false,
         },
       ],
@@ -720,14 +723,14 @@ describe('общий срок формирования отчёта', () => {
     const id = await createTemplate(s, sAdmin, sDs, {
       public: true,
       queries: [
-        { key: 'a', mode: 'list', sql: 'select pg_sleep(0.6)' },
-        { key: 'b', mode: 'list', sql: 'select pg_sleep(0.6)' },
+        { key: 'a', mode: 'list', sql: 'select sleep_for(0.6)' },
+        { key: 'b', mode: 'list', sql: 'select sleep_for(0.6)' },
       ],
     });
     const r = await renderIn(id);
     expect(r.statusCode).toBe(504);
     expect(r.json().error.message).toBe(MSG);
-    // Без остановки по сроку второй pg_sleep(0.6) идёт ещё ~0,4 с после ответа.
+    // Без остановки по сроку второй sleep_for(0.6) идёт ещё ~0,4 с после ответа.
     const admin = new pg.Client({ connectionString: inject('pgUri') });
     await admin.connect();
     try {
@@ -737,7 +740,7 @@ describe('общий срок формирования отчёта', () => {
             (
               await admin.query<{ n: number }>(
                 `select count(*)::int as n from pg_stat_activity
-                 where datname = $1 and state = 'active' and query like '%pg_sleep%'
+                 where datname = $1 and state = 'active' and query like '%sleep_for%'
                    and pid <> pg_backend_pid()`,
                 [sDbName],
               )
@@ -752,7 +755,7 @@ describe('общий срок формирования отчёта', () => {
 
   it('preview: медленный SQL → 504 до 1,5 с', async () => {
     const id = await createTemplate(s, sAdmin, sDs, {
-      queries: [{ key: 'slow', mode: 'list', sql: 'select pg_sleep(2)' }],
+      queries: [{ key: 'slow', mode: 'list', sql: 'select sleep_for(2)' }],
     });
     const started = Date.now();
     const r = await s.app.inject({

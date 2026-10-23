@@ -63,6 +63,7 @@ export const FORBIDDEN_SQL_FUNCTIONS: readonly string[] = [
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const FORBIDDEN_RE = new RegExp(
   `^(?:${FORBIDDEN_SQL_FUNCTIONS.map((p) => p.split('*').map(escapeRe).join('.*')).join('|')})$`,
+  's',
 );
 
 const FIRST_WORDS = new Set(['SELECT', 'WITH', 'VALUES', 'TABLE']);
@@ -74,10 +75,22 @@ const WORD_PART = /[A-Za-z0-9_$\u0080-￿]/;
 
 type Tok =
   | { t: 'word'; v: string } // слово без кавычек, v — как в тексте
-  | { t: 'name'; v: string } // идентификатор в двойных кавычках, v — без кавычек
+  | { t: 'name'; v: string; u?: boolean } // идентификатор в двойных кавычках, v — без кавычек
   | { t: 'punct'; v: string }
   | { t: 'lit'; v: string } // строка, долларовая строка, число
   | { t: 'param'; v: string };
+
+/** U&"…": `\XXXX`, `\+XXXXXX`, `\\` (символ экранирования по умолчанию). */
+function decodeUnicodeEscapes(s: string): string {
+  return s.replace(
+    /\\(?:([0-9a-fA-F]{4})|\+([0-9a-fA-F]{6})|(\\))/g,
+    (m, h4?: string, h6?: string, bs?: string) => {
+      if (bs) return '\\';
+      const cp = parseInt((h4 ?? h6)!, 16);
+      return cp <= 0x10ffff ? String.fromCodePoint(cp) : m;
+    },
+  );
+}
 
 function tokenize(sql: string): Tok[] {
   const toks: Tok[] = [];
@@ -90,7 +103,21 @@ function tokenize(sql: string): Tok[] {
     }
     if (seg.kind === 'quotedIdent') {
       const closed = raw.length >= 2 && raw.endsWith('"');
-      toks.push({ t: 'name', v: raw.slice(1, closed ? -1 : undefined).replaceAll('""', '"') });
+      const body = raw.slice(1, closed ? -1 : undefined).replaceAll('""', '"');
+      const a = toks[toks.length - 2];
+      const b = toks[toks.length - 1];
+      const isU =
+        seg.start >= 2 &&
+        sql[seg.start - 1] === '&' &&
+        b?.t === 'punct' &&
+        b.v === '&' &&
+        a?.t === 'word' &&
+        a.v.toUpperCase() === 'U' &&
+        (seg.start < 3 || !WORD_PART.test(sql[seg.start - 3]!));
+      if (isU) {
+        toks.length -= 2;
+        toks.push({ t: 'name', v: decodeUnicodeEscapes(body), u: true });
+      } else toks.push({ t: 'name', v: body });
       continue;
     }
     let i = seg.start;
@@ -180,12 +207,13 @@ export function checkReadOnlySql(sql: string): ReadOnlySqlCheck {
       }
       if (FORBIDDEN_WORDS.has(w)) return fail(w);
     }
+    if (x.t === 'name' && x.u && isWord(body[k + 1], 'UESCAPE')) return fail('UESCAPE');
     if (
-      (x.t === 'word' || x.t === 'name') &&
+      (x.t === 'word' || x.t === 'name' || x.t === 'param') &&
       body[k + 1]?.t === 'punct' &&
       body[k + 1]!.v === '('
     ) {
-      const name = x.v.toLowerCase();
+      const name = (x.t === 'param' ? x.v.slice(1) : x.v).toLowerCase();
       if (FORBIDDEN_RE.test(name)) return fail(name);
     }
   }

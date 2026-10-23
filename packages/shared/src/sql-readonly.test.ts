@@ -27,6 +27,7 @@ describe('checkReadOnlySql: разрешено', () => {
     'select x::text from t',
     'select substring(s for 3) from t',
     'select * from "pg_sleep"',
+    'select U&"d\\0061ta" from t',
   ])('%s', (sql) => {
     expect(checkReadOnlySql(sql)).toEqual({ ok: true });
   });
@@ -74,6 +75,11 @@ describe('checkReadOnlySql: запрещено', () => {
     ["select nextval('s')", 'nextval'],
     ["select query_to_xml('delete from t', true, true, '')", 'query_to_xml'],
     [';', ';'],
+    ["select (a)[1 :nextval('s')]", 'nextval'],
+    ['select (a)[:pg_sleep(1)]', 'pg_sleep'],
+    ['select U&"pg_\\0073leep"(1)', 'pg_sleep'],
+    ['select u&"pg_sl\\+000065ep"(1)', 'pg_sleep'],
+    ['select U&"x!0061" UESCAPE \'!\' from t', 'UESCAPE'],
     ['', ''],
     ['   ', ''],
     ['-- только комментарий', ''],

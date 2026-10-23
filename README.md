@@ -659,9 +659,30 @@ docker compose --profile demo rm -sf demo-db && docker volume rm carbone-reports
 
 ## Безопасность источников данных
 
-Подключайте источники под отдельным пользователем PostgreSQL с правами только на чтение
-(`GRANT SELECT`). Приложение дополнительно выполняет запросы в `READ ONLY`-транзакции с
-`statement_timeout`, но права на уровне БД — основная защита.
+Запросы шаблона и запросы списков значений параметров могут только читать данные. При сохранении,
+загрузке шаблонов из архива и перед выполнением запрос проверяется:
+
+- одна команда (`;` — только в конце), начинается с `SELECT`, `WITH`, `VALUES`, `TABLE` или `(`;
+- нет `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `INTO` и блокировок `FOR UPDATE`, `FOR NO KEY UPDATE`,
+  `FOR SHARE`, `FOR KEY SHARE` — вне строк, комментариев и имён в двойных кавычках;
+- нет вызовов опасных функций: `dblink*`, `pg_sleep*`, `pg_advisory_*`, `set_config`, `nextval`,
+  `setval`, `lo_*`, `pg_read_file`, `pg_ls_*`, `query_to_xml*`, `pg_terminate_backend` и других
+  (полный список — `FORBIDDEN_SQL_FUNCTIONS` в `packages/shared/src/sql-readonly.ts`).
+
+Колонку с именем вроде `update` или `into` возьмите в двойные кавычки: `select "update" from t`.
+
+Проверка не заменяет права в БД. Подключайте источники под отдельным пользователем PostgreSQL только
+с правом `SELECT`:
+
+```sql
+create role reports_reader login password '…';
+grant connect on database shop to reports_reader;
+grant usage on schema public to reports_reader;
+grant select on all tables in schema public to reports_reader;
+alter default privileges in schema public grant select on tables to reports_reader;
+```
+
+Запросы, кроме того, выполняются в `READ ONLY`-транзакции с `statement_timeout`.
 
 SSL источника задаётся одним из трёх режимов:
 

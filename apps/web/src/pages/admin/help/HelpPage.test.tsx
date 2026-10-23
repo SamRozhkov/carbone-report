@@ -1,8 +1,10 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { changeLocale } from '../../../i18n';
 import { adminMe, mockApi, renderRoute, renderWithProviders, userMe } from '../../../test/utils';
-import { HELP_SECTIONS } from './content';
+import { HELP_MODULES, HELP_RU, loadHelpContent, type HelpContent } from './content';
+import { HELP_SECTIONS } from './content/ru';
 import { HelpPage } from './HelpPage';
 
 describe('HelpPage', () => {
@@ -105,5 +107,227 @@ describe('HelpPage', () => {
     const { router } = renderRoute('/admin/help');
     await waitFor(() => expect(router.state.location.pathname).toBe('/reports'));
     expect(screen.queryByText('Справка по шаблонам')).not.toBeInTheDocument();
+  });
+
+  it('пояснение: результаты — для языка отчёта «Русский»', async () => {
+    renderWithProviders(<HelpPage />);
+    expect(
+      await screen.findByText(
+        'Результаты примеров показаны для языка отчёта «Русский». Язык отчёта задаётся во вкладке «Настройки» шаблона.',
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('HelpPage: язык справки (§46)', () => {
+  const saved = { ...HELP_MODULES };
+  // Тип таблицы — полный Record (§46.4); тесту нужно «языка без модуля» — через Partial.
+  const modules: Partial<typeof HELP_MODULES> = HELP_MODULES;
+  afterEach(() => {
+    for (const k of Object.keys(modules) as (keyof typeof HELP_MODULES)[]) delete modules[k];
+    Object.assign(HELP_MODULES, saved);
+  });
+
+  /** Фиктивный модуль: те же id, другие заголовки. */
+  const fake: HelpContent = {
+    HELP_INTRO: ['Intro'],
+    HELP_SECTIONS: HELP_RU.HELP_SECTIONS.map((s) => ({ ...s, title: `EN ${s.id}` })),
+  };
+
+  it('языка без модуля нет — справка на ru без сообщения об ошибке', async () => {
+    delete modules.de;
+    expect(await loadHelpContent('de')).toEqual({ content: HELP_RU, failed: false });
+    expect(await loadHelpContent('ru')).toEqual({ content: HELP_RU, failed: false });
+  });
+
+  it('модуль языка не загрузился — сообщение и русская справка', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    HELP_MODULES.en = () => Promise.reject(new Error('chunk'));
+    await changeLocale('en', { persist: 'none' });
+    renderWithProviders(<HelpPage />);
+    expect(
+      await screen.findByText('Could not load help in this language. Showing help in Russian.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Template help' })).toBeInTheDocument();
+    const first = HELP_SECTIONS[0]!;
+    expect(screen.getByRole('region', { name: first.title })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(
+      screen.getByText(
+        'Example results are shown for the report language “Русский”. The report language is set on the template’s “Settings” tab.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('en: заголовки и результаты из en.ts, «Copy» копирует английский шаблон', async () => {
+    const en = await import('./content/en');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    await changeLocale('en', { persist: 'none' });
+    renderWithProviders(<HelpPage />);
+    const first = en.HELP_SECTIONS[0]!;
+    expect(await screen.findByRole('region', { name: first.title })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(first.title).toBe('Basics');
+    const all = en.HELP_SECTIONS.flatMap((s) => s.examples);
+    const date = all.find((e) => e.id === 'fmt-date-long')!;
+    expect(date.result).toBe('March 8, 2026');
+    const dateCard = screen.getByRole('article', { name: date.title });
+    expect(within(dateCard).getByText(date.result)).toBeInTheDocument();
+    // Пример с постоянным текстом в шаблоне: копируется английский шаблон, а не русский.
+    const e = all.find((x) => x.id === 'basics-params')!;
+    expect(e.template).toBe("Period from {d.params.from:formatD('MM/DD/YYYY')}");
+    const card = screen.getByRole('article', { name: e.title });
+    await userEvent.click(within(card).getByRole('button', { name: `Copy tag: ${e.title}` }));
+    expect(writeText).toHaveBeenCalledWith(e.template);
+  });
+
+  it('de: результаты из de.ts, «fmt-money» в евро, «Kopieren» копирует немецкий шаблон', async () => {
+    const de = await import('./content/de');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    await changeLocale('de', { persist: 'none' });
+    renderWithProviders(<HelpPage />);
+    const first = de.HELP_SECTIONS[0]!;
+    expect(await screen.findByRole('region', { name: first.title })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(first.title).toBe('Grundlagen');
+    const all = de.HELP_SECTIONS.flatMap((s) => s.examples);
+    // Review Focus 4: formatC() на de — валюта языка отчёта (EUR), не рубли.
+    const money = all.find((e) => e.id === 'fmt-money')!;
+    expect(money.result).toContain('€');
+    const moneyCard = screen.getByRole('article', { name: money.title });
+    expect(within(moneyCard).getByText(money.result)).toBeInTheDocument();
+    const e = all.find((x) => x.id === 'basics-params')!;
+    expect(e.template).toBe("Zeitraum ab {d.params.from:formatD('DD.MM.YYYY')}");
+    const card = screen.getByRole('article', { name: e.title });
+    await userEvent.click(within(card).getByRole('button', { name: `Tag kopieren: ${e.title}` }));
+    expect(writeText).toHaveBeenCalledWith(e.template);
+  });
+
+  it('fr: результаты из fr.ts, «fmt-money» в евро, «Copier» копирует французский шаблон', async () => {
+    const fr = await import('./content/fr');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    await changeLocale('fr', { persist: 'none' });
+    renderWithProviders(<HelpPage />);
+    const first = fr.HELP_SECTIONS[0]!;
+    expect(await screen.findByRole('region', { name: first.title })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(first.title).toBe('Notions de base');
+    const all = fr.HELP_SECTIONS.flatMap((s) => s.examples);
+    // Review Focus 4: formatC() на fr — валюта языка отчёта (EUR), не рубли.
+    const money = all.find((e) => e.id === 'fmt-money')!;
+    expect(money.result).toContain('€');
+    const moneyCard = screen.getByRole('article', { name: money.title });
+    expect(within(moneyCard).getByText(money.result)).toBeInTheDocument();
+    const e = all.find((x) => x.id === 'basics-params')!;
+    expect(e.template).toBe("Période à partir du {d.params.from:formatD('DD/MM/YYYY')}");
+    const card = screen.getByRole('article', { name: e.title });
+    // В подписи кнопки — неразрывный пробел перед «:» (fr/help.json copyAria).
+    await userEvent.click(
+      within(card).getByRole('button', { name: `Copier la balise\u00a0: ${e.title}` }),
+    );
+    expect(writeText).toHaveBeenCalledWith(e.template);
+  });
+
+  it('es: результаты из es.ts, «fmt-money» в евро, «Copiar» копирует испанский шаблон', async () => {
+    const es = await import('./content/es');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    await changeLocale('es', { persist: 'none' });
+    renderWithProviders(<HelpPage />);
+    const first = es.HELP_SECTIONS[0]!;
+    expect(await screen.findByRole('region', { name: first.title })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(first.title).toBe('Conceptos básicos');
+    const all = es.HELP_SECTIONS.flatMap((s) => s.examples);
+    // Review Focus 4: formatC() на es — валюта языка отчёта (EUR), не рубли.
+    const money = all.find((e) => e.id === 'fmt-money')!;
+    expect(money.result).toContain('€');
+    const moneyCard = screen.getByRole('article', { name: money.title });
+    expect(within(moneyCard).getByText(money.result)).toBeInTheDocument();
+    const e = all.find((x) => x.id === 'basics-params')!;
+    expect(e.template).toBe("Período desde el {d.params.from:formatD('DD/MM/YYYY')}");
+    const card = screen.getByRole('article', { name: e.title });
+    await userEvent.click(
+      within(card).getByRole('button', { name: `Copiar etiqueta: ${e.title}` }),
+    );
+    expect(writeText).toHaveBeenCalledWith(e.template);
+  });
+
+  it('pt-BR: результаты из pt-BR.ts, «fmt-money» в реалах, «Copiar» копирует португальский шаблон', async () => {
+    const pt = await import('./content/pt-BR');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    await changeLocale('pt-BR', { persist: 'none' });
+    renderWithProviders(<HelpPage />);
+    const first = pt.HELP_SECTIONS[0]!;
+    expect(await screen.findByRole('region', { name: first.title })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(first.title).toBe('Conceitos básicos');
+    const all = pt.HELP_SECTIONS.flatMap((s) => s.examples);
+    // Review Focus 4: formatC() на pt-BR — валюта языка отчёта (BRL), не рубли.
+    const money = all.find((e) => e.id === 'fmt-money')!;
+    expect(money.result).toContain('R$');
+    const moneyCard = screen.getByRole('article', { name: money.title });
+    expect(within(moneyCard).getByText(money.result)).toBeInTheDocument();
+    const e = all.find((x) => x.id === 'basics-params')!;
+    expect(e.template).toBe("Período a partir de {d.params.from:formatD('DD/MM/YYYY')}");
+    const card = screen.getByRole('article', { name: e.title });
+    await userEvent.click(within(card).getByRole('button', { name: `Copiar tag: ${e.title}` }));
+    expect(writeText).toHaveBeenCalledWith(e.template);
+  });
+
+  it('zh-CN: результаты из zh-CN.ts, «fmt-money» в юанях, «复制» копирует китайский шаблон', async () => {
+    const zh = await import('./content/zh-CN');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    await changeLocale('zh-CN', { persist: 'none' });
+    renderWithProviders(<HelpPage />);
+    const first = zh.HELP_SECTIONS[0]!;
+    expect(await screen.findByRole('region', { name: first.title })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(first.title).toBe('基础知识');
+    const all = zh.HELP_SECTIONS.flatMap((s) => s.examples);
+    // Review Focus 4: formatC() на zh-CN — валюта языка отчёта (CNY «¥»), не рубли.
+    const money = all.find((e) => e.id === 'fmt-money')!;
+    expect(money.result).toContain('¥');
+    const moneyCard = screen.getByRole('article', { name: money.title });
+    expect(within(moneyCard).getByText(money.result)).toBeInTheDocument();
+    const e = all.find((x) => x.id === 'basics-params')!;
+    expect(e.template).toBe("期间自 {d.params.from:formatD('YYYY-MM-DD')}");
+    const card = screen.getByRole('article', { name: e.title });
+    await userEvent.click(within(card).getByRole('button', { name: `复制标签：${e.title}` }));
+    expect(writeText).toHaveBeenCalledWith(e.template);
+  });
+
+  it('смена языка на открытой справке — содержимое переключается, якоря на месте', async () => {
+    HELP_MODULES.en = () => Promise.resolve(fake);
+    renderWithProviders(<HelpPage />);
+    const first = HELP_SECTIONS[0]!;
+    expect(await screen.findByRole('region', { name: first.title })).toBeInTheDocument();
+    await act(() => changeLocale('en', { persist: 'none' }));
+    expect(await screen.findByRole('region', { name: `EN ${first.id}` })).toBe(
+      document.getElementById(first.id),
+    );
+    expect(screen.queryByRole('region', { name: first.title })).not.toBeInTheDocument();
+    expect(document.getElementById('fmt-money')).not.toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'Template help' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Example results are shown for the report language “English”. The report language is set on the template’s “Settings” tab.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Could not load help in this language. Showing help in Russian.'),
+    ).not.toBeInTheDocument();
   });
 });

@@ -1,9 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { HELP_INTRO, HELP_SECTIONS } from './content';
+import { HELP_MODULES, HELP_RU, type HelpContent } from '.';
 
-const examples = HELP_SECTIONS.flatMap((s) => s.examples);
-const COMMUNITY =
-  /^в шаблоне используется [A-Za-z_][A-Za-z0-9_]* — недоступно в бесплатной версии Carbone, см\. «Справка по шаблонам»$/;
+/** Модули всех доступных языков: ru и таблица HELP_MODULES (§46.4). */
+const MODULES: [string, HelpContent][] = [
+  ['ru', HELP_RU],
+  ...(await Promise.all(
+    Object.entries(HELP_MODULES).map(
+      async ([l, load]) => [l, await load()] as [string, HelpContent],
+    ),
+  )),
+];
+
+/** Сообщение API об отключённом форматтере на языке модуля — из каталога errors. */
+const ERRORS = import.meta.glob<{ carbone: { communityFormatter: string } }>(
+  '../../../../../../../packages/shared/src/i18n/*/errors.json',
+  { eager: true, import: 'default' },
+);
+function communityRe(locale: string): RegExp {
+  const entry = Object.entries(ERRORS).find(([path]) => path.endsWith(`/${locale}/errors.json`));
+  const text = entry![1].carbone.communityFormatter.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${text.replace('{{name}}', '[A-Za-z_][A-Za-z0-9_]*')}$`);
+}
 /** Каноничная строка таблицы: «| a | b |», пустая ячейка — «| |» (так её выводит help-check). */
 const canonicalRow = (line: string) => {
   const cells = line
@@ -13,23 +30,43 @@ const canonicalRow = (line: string) => {
   return `| ${cells.join(' | ')} |`.replace(/\| {2}(?=\|)/g, '| ');
 };
 
-describe('содержание справки', () => {
+describe.each(MODULES)('содержание справки: %s', (locale, { HELP_INTRO, HELP_SECTIONS }) => {
+  const examples = HELP_SECTIONS.flatMap((s) => s.examples);
+  const COMMUNITY = communityRe(locale);
+
   it('двенадцать разделов в порядке §23.2 (+ §32, §34, §35, §39)', () => {
-    expect(HELP_SECTIONS.map((s) => [s.id, s.title])).toEqual([
-      ['basics', 'Основы'],
-      ['tables', 'Таблицы'],
-      ['formatting', 'Форматирование'],
-      ['conditions', 'Условия'],
-      ['aggregates', 'Итоги и нумерация'],
-      ['totals', 'Итоги и группировка'],
-      ['media', 'Изображения, штрихкоды, цвета, ссылки'],
-      ['charts', 'Диаграммы'],
-      ['echarts', 'Графики ECharts'],
-      ['html', 'HTML'],
-      ['pdf', 'PDF: PDF/A, водяной знак, нумерация, приложения, пароль'],
-      ['signature', 'Электронная подпись'],
-      ['unavailable', 'Недоступно в бесплатной версии'],
+    expect(HELP_SECTIONS.map((s) => s.id)).toEqual([
+      'basics',
+      'tables',
+      'formatting',
+      'conditions',
+      'aggregates',
+      'totals',
+      'media',
+      'charts',
+      'echarts',
+      'html',
+      'pdf',
+      'signature',
+      'unavailable',
     ]);
+    // Заголовки — по-русски только в ru; переводы сверяет тест структуры по id.
+    if (locale === 'ru')
+      expect(HELP_SECTIONS.map((s) => [s.id, s.title])).toEqual([
+        ['basics', 'Основы'],
+        ['tables', 'Таблицы'],
+        ['formatting', 'Форматирование'],
+        ['conditions', 'Условия'],
+        ['aggregates', 'Итоги и нумерация'],
+        ['totals', 'Итоги и группировка'],
+        ['media', 'Изображения, штрихкоды, цвета, ссылки'],
+        ['charts', 'Диаграммы'],
+        ['echarts', 'Графики ECharts'],
+        ['html', 'HTML'],
+        ['pdf', 'PDF: PDF/A, водяной знак, нумерация, приложения, пароль'],
+        ['signature', 'Электронная подпись'],
+        ['unavailable', 'Недоступно в бесплатной версии'],
+      ]);
     // Раздел «Электронная подпись» — только текст: подпись не тег, примеров Carbone у неё нет.
     for (const s of HELP_SECTIONS.filter((x) => x.id !== 'signature'))
       expect(s.examples.length, s.id).toBeGreaterThan(0);
@@ -39,9 +76,12 @@ describe('содержание справки', () => {
     const ids = HELP_SECTIONS.map((s) => s.id);
     expect(ids.indexOf('signature')).toBe(ids.indexOf('pdf') + 1);
     const text = HELP_SECTIONS.find((s) => s.id === 'signature')!.intro.join('\n');
-    expect(text).toContain('110 пт');
-    expect(text).toContain('Моя подпись');
+    expect(text).toContain('110');
     expect(text).toContain('SIGN_TSA_URL');
+    if (locale === 'ru') {
+      expect(text).toContain('110 пт');
+      expect(text).toContain('Моя подпись');
+    }
   });
 
   it('data каждого примера — корректный JSON-объект', () => {

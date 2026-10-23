@@ -1,0 +1,21 @@
+{
+  "title": "Aide sur les modèles",
+  "toc": "Sommaire",
+  "resultsFor": "Les résultats des exemples sont affichés pour la langue du rapport « {{language}} ». La langue du rapport se définit dans l’onglet « Réglages » du modèle.",
+  "loadFailed": "Impossible de charger l’aide dans cette langue. L’aide est affichée en russe.",
+  "label": {
+    "template": "Balise dans le modèle",
+    "picture": "Balise dans le texte de remplacement de l’image",
+    "data": "Données",
+    "result": "Résultat",
+    "sql": "Requête SQL « {{key}} » ({{mode}})"
+  },
+  "mode": {
+    "list": "Liste de lignes",
+    "single": "Une ligne"
+  },
+  "tableHint": "dans Word, insérez les balises dans les cellules du tableau ; | ne fait que délimiter les cellules",
+  "copy": "Copier",
+  "copyAria": "Copier la balise : {{title}}",
+  "note": "Attention"
+}

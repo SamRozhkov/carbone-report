@@ -29,6 +29,7 @@ export const NAMESPACES = [
   'admin',
   'templates',
   'editor',
+  'help',
   'errors',
   'validation',
   'report',

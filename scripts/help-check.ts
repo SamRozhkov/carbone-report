@@ -1,18 +1,25 @@
 // Сверка примеров «Справки по шаблонам» со встроенной сборкой Carbone (§23.3).
 // Запуск: pnpm help:check               — рендер каждого примера встроенной сборкой Carbone
 //                                         (`packages/carbone`) так же, как API; стек не нужен;
-//         pnpm help:check -- --self-test — только сборка DOCX и разбор текста обратимы.
+//         pnpm help:check -- --self-test — только сборка DOCX и разбор текста обратимы;
+//         pnpm help:check -- --locale de — только справка одного языка (§46.4).
+// Языки — ru и модули из HELP_MODULES; пример рендерится с языком отчёта своего модуля.
 import carbone from '@carbone-reports/carbone';
-import { CARBONE_LANGS } from '@carbone-reports/shared/i18n';
+import { CARBONE_LANGS, isLocale, type Locale } from '@carbone-reports/shared/i18n';
 import JSZip from 'jszip';
 import { createTranslator } from '@carbone-reports/shared/i18n/server';
 import { communityError } from '../apps/api/src/modules/carbone/community';
-import { HELP_SECTIONS, type HelpExample } from '../apps/web/src/pages/admin/help/content';
+import {
+  HELP_MODULES,
+  HELP_RU,
+  type HelpContent,
+  type HelpExample,
+} from '../apps/web/src/pages/admin/help/content';
 
-/** Сообщение API о форматтере, недоступном в Community Edition, — по-русски, как в справке. */
-function communityErrorMessage(carboneError: string): string | null {
+/** Сообщение API о форматтере, недоступном в Community Edition, — на языке справки. */
+function communityErrorMessage(carboneError: string, locale: Locale): string | null {
   const m = communityError(carboneError);
-  return m && createTranslator('ru')(`errors:${m.key}`, m.params);
+  return m && createTranslator(locale)(`errors:${m.key}`, m.params);
 }
 
 const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
@@ -227,7 +234,7 @@ async function selfTest(examples: HelpExample[]): Promise<number> {
   return bad;
 }
 
-async function liveCheck(examples: HelpExample[]): Promise<number> {
+async function liveCheck(examples: HelpExample[], locale: Locale): Promise<number> {
   const timezone = process.env.TZ || 'Europe/Moscow';
   let bad = 0;
   for (const e of examples) {
@@ -237,7 +244,7 @@ async function liveCheck(examples: HelpExample[]): Promise<number> {
         await buildDocx(e.template, e.picture === true),
         'docx',
         JSON.parse(e.data) as unknown,
-        { lang: CARBONE_LANGS.ru, timezone },
+        { lang: CARBONE_LANGS[locale], timezone },
       );
       if (e.unavailable) {
         got = 'отчёт сформирован, а ожидалась ошибка «disabled in the Community Edition»';
@@ -252,7 +259,7 @@ async function liveCheck(examples: HelpExample[]): Promise<number> {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       got = e.unavailable
-        ? (communityErrorMessage(message) ?? `другая ошибка: ${message}`)
+        ? (communityErrorMessage(message, locale) ?? `другая ошибка: ${message}`)
         : `ошибка: ${message}`;
     }
     if (got === e.result) console.log(`✓ ${e.id}`);
@@ -264,15 +271,34 @@ async function liveCheck(examples: HelpExample[]): Promise<number> {
   return bad;
 }
 
+/** Справка языка: ru — из чанка справки, остальные — модули HELP_MODULES. */
+async function contentOf(locale: Locale): Promise<HelpContent> {
+  if (locale === 'ru') return HELP_RU;
+  const load = HELP_MODULES[locale];
+  if (!load) throw new Error(`справки на языке ${locale} нет (нет строки в HELP_MODULES)`);
+  return load();
+}
+
 async function main(): Promise<void> {
-  const examples = HELP_SECTIONS.flatMap((s) => s.examples);
-  if (examples.length === 0) throw new Error('нет примеров для проверки (справка пуста)');
-  const self = process.argv.includes('--self-test');
-  const bad = self ? await selfTest(examples) : await liveCheck(examples);
-  console.log(
-    `${self ? 'самопроверка' : 'Carbone'}: примеров ${examples.length}, расхождений ${bad}`,
-  );
-  if (bad > 0) process.exit(1);
+  const args = process.argv.slice(2);
+  const self = args.includes('--self-test');
+  const at = args.indexOf('--locale');
+  const only = at >= 0 ? args[at + 1] : undefined;
+  if (at >= 0 && !isLocale(only)) throw new Error(`--locale: неизвестный язык ${only ?? ''}`);
+  const locales: Locale[] = only
+    ? [only as Locale]
+    : ['ru', ...(Object.keys(HELP_MODULES) as Locale[])];
+  let failed = false;
+  for (const locale of locales) {
+    const examples = (await contentOf(locale)).HELP_SECTIONS.flatMap((s) => s.examples);
+    if (examples.length === 0)
+      throw new Error(`${locale}: нет примеров для проверки (справка пуста)`);
+    console.log(`== ${locale} (${self ? 'самопроверка' : 'Carbone'})`);
+    const bad = self ? await selfTest(examples) : await liveCheck(examples, locale);
+    console.log(`${locale}: примеров ${examples.length}, расхождений ${bad}`);
+    if (bad > 0) failed = true;
+  }
+  if (failed) process.exit(1);
 }
 
 main().catch((e: unknown) => {

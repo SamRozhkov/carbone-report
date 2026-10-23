@@ -483,15 +483,20 @@ describe('UsersPage', () => {
     const dialog = await screen.findByRole('dialog');
     await userEvent.type(within(dialog).getByLabelText('Логин'), 'petrov');
     await userEvent.type(within(dialog).getByLabelText('Пароль'), 'password123');
-    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Роль' }));
-    const options = await screen.findAllByRole('option');
+    const combo = within(dialog).getByRole('combobox', { name: 'Роль' });
+    await userEvent.click(combo);
+    const options = await waitFor(() => {
+      const popup = document.getElementById(combo.getAttribute('aria-controls') ?? '');
+      if (!popup) throw new Error('список не открыт');
+      return within(popup).getAllByRole('option', { hidden: true });
+    });
     expect(options.map((o) => o.textContent)).toEqual([
       'Пользователь',
       'Редактор',
       'Менеджер безопасности',
       'Администратор',
     ]);
-    await userEvent.click(screen.getByRole('option', { name: 'Редактор' }));
+    await pickOption(combo, 'Редактор');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Создать' }));
     await waitFor(() =>
       expect(calls.find((c) => c.method === 'POST')?.body).toMatchObject({ role: 'editor' }),

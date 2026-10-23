@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { adminMe, mockApi, renderRoute } from '../../test/utils';
+import { adminMe, mockApi, pickOption, popupOptions, renderRoute } from '../../test/utils';
 
 const DS1 = '11111111-1111-4111-8111-111111111111';
 const DS2 = '22222222-2222-4222-8222-222222222222';
@@ -127,8 +127,10 @@ describe('ImportDialog', () => {
     await within(dialog).findByText('Счёт');
     const apply = within(dialog).getByRole('button', { name: 'Загрузить' });
     expect(apply).toBeDisabled();
-    await userEvent.click(within(dialog).getByRole('combobox', { name: /Источник данных: Счёт/ }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Продажи' }));
+    await pickOption(
+      within(dialog).getByRole('combobox', { name: /Источник данных: Счёт/ }),
+      'Продажи',
+    );
     await waitFor(() => expect(apply).toBeEnabled());
   });
 
@@ -156,8 +158,7 @@ describe('ImportDialog', () => {
     await within(dialog).findByText('Счёт');
     const warn = 'Шаблон редактирует petrov: обновление будет отклонено, пока редактор открыт';
     expect(within(dialog).getByText(warn)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('combobox', { name: /Действие: Счёт/ }));
-    await userEvent.click(await screen.findByRole('option', { name: 'копия' }));
+    await pickOption(within(dialog).getByRole('combobox', { name: /Действие: Счёт/ }), 'копия');
     await waitFor(() => expect(within(dialog).queryByText(warn)).toBeNull());
   });
 
@@ -187,8 +188,9 @@ describe('ImportDialog', () => {
     expect(within(dialog).getByRole('combobox', { name: /Действие: Счёт/ })).toHaveTextContent(
       'обновить',
     );
-    await userEvent.click(within(dialog).getByRole('combobox', { name: /Какой шаблон обновить/ }));
-    const options = await screen.findAllByRole('option');
+    const options = await popupOptions(
+      within(dialog).getByRole('combobox', { name: /Какой шаблон обновить/ }),
+    );
     await userEvent.click(options[1]!);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Загрузить' }));
     await within(dialog).findByText('обновлён');
@@ -317,16 +319,15 @@ describe('ImportDialog', () => {
     const dialog = await openDialog();
     await within(dialog).findByText('Акт');
     // «Акт»: обновить старый T2; «Счёт»: копия; «Накладная»: выбран источник «Продажи».
-    await userEvent.click(
+    const actOptions = await popupOptions(
       within(dialog).getByRole('combobox', { name: /Какой шаблон обновить: Акт/ }),
     );
-    await userEvent.click((await screen.findAllByRole('option'))[1]!);
-    await userEvent.click(within(dialog).getByRole('combobox', { name: /Действие: Счёт/ }));
-    await userEvent.click(await screen.findByRole('option', { name: 'копия' }));
-    await userEvent.click(
+    await userEvent.click(actOptions[1]!);
+    await pickOption(within(dialog).getByRole('combobox', { name: /Действие: Счёт/ }), 'копия');
+    await pickOption(
       within(dialog).getByRole('combobox', { name: /Источник данных: Накладная/ }),
+      'Продажи',
     );
-    await userEvent.click(await screen.findByRole('option', { name: 'Продажи' }));
     const apply = within(dialog).getByRole('button', { name: 'Загрузить' });
     await waitFor(() => expect(apply).toBeEnabled());
     await userEvent.click(apply);

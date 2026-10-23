@@ -107,6 +107,8 @@ async function withReadOnly<T>(
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await client.query(`SET LOCAL statement_timeout = ${Math.floor(timeoutMs)}`);
+    // Строки '…' разбираются как в scanSql (§47.1): \' не экранирует кавычку, даже если у источника off.
+    await client.query('SET LOCAL standard_conforming_strings = on');
     const base = (
       await client.query<TxState>(
         "select pg_catalog.transaction_timestamp()::text as ts, pg_catalog.current_setting('statement_timeout') as st",

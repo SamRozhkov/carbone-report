@@ -235,6 +235,33 @@ describe('целостность транзакции', () => {
     10_000,
   );
 
+  it('standard_conforming_strings = on внутри запроса, даже если у источника off', async () => {
+    // У источника настройка off: \' в '…' было бы экранированием для PostgreSQL, но не для scanSql.
+    const offPool = new pg.Pool({
+      ...poolConfig({ ...srcConn, sslMode: 'disable', sslCa: null }),
+      max: 1,
+      options: '-c standard_conforming_strings=off',
+    });
+    try {
+      const [r] = await runQueries(
+        offPool,
+        'src',
+        [
+          {
+            key: 's',
+            mode: 'single',
+            sql: "select current_setting('standard_conforming_strings') as v, 'a\\' as b",
+          },
+        ],
+        {},
+        limits,
+      );
+      expect(r!.rows[0]).toEqual({ v: 'on', b: 'a\\' });
+    } finally {
+      await offPool.end();
+    }
+  });
+
   it('set_config(search_path) в функции не протекает в пул', async () => {
     await runQueries(
       onePool,

@@ -11,6 +11,9 @@
   "query": {
     "paramsReserved": "键“params”为保留键"
   },
+  "sql": {
+    "readOnlyOnly": "仅允许只读查询（SELECT）；发现：{{found}}。如果这是列名，请用双引号括起来"
+  },
   "param": {
     "selectNeedsOption": "select 至少需要一个选项",
     "sqlRequired": "请填写选项的 SQL 查询",

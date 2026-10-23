@@ -4,6 +4,7 @@ import { PdfOptions, TemplateAttachment } from './pdf-options';
 import { TemplateEditingBy } from './edit-lock';
 import { RunSignature, SignMethod } from './signature';
 import { Locale, zodReportLocale } from './i18n';
+import { checkReadOnlySql } from './sql-readonly';
 
 export * from './charts';
 export * from './pdf-options';
@@ -56,6 +57,15 @@ export type ParamValue = z.infer<typeof ParamValue>;
 
 export const MAX_PARAM_OPTIONS = 1000;
 
+/** Issue «только чтение» (§47.1) у поля SQL; пустой SQL отклоняют свои правила (min(1), sqlRequired). */
+function readOnlyIssue(
+  sql: string | null | undefined,
+): { message: string; params: { found: string } } | null {
+  if (!sql || !sql.trim()) return null;
+  const r = checkReadOnlySql(sql);
+  return r.ok ? null : { message: 'v:sql.readOnlyOnly', params: { found: r.found } };
+}
+
 export const TemplateParamFields = z.object({
   name: z.string().regex(IDENT_RE, 'v:identName').refine(notReserved, 'v:reservedName'),
   label: z.string().min(1),
@@ -72,12 +82,14 @@ export const refineTemplateParam = (
   p: z.infer<typeof TemplateParamFields>,
   ctx: z.RefinementCtx,
 ): void => {
-  const issue = (path: string, message: string) =>
-    ctx.addIssue({ code: 'custom', path: [path], message });
+  const issue = (path: string, message: string, params?: Record<string, string>) =>
+    ctx.addIssue({ code: 'custom', path: [path], message, params });
   if (p.type === 'select' && !(p.options && p.options.length > 0))
     issue('options', 'v:param.selectNeedsOption');
   if (p.type === 'query') {
     if (!p.sql || !p.sql.trim()) issue('sql', 'v:param.sqlRequired');
+    const ro = readOnlyIssue(p.sql);
+    if (ro) issue('sql', ro.message, ro.params);
     if (p.options !== null) issue('options', 'v:param.sqlNoOptions');
     if (Array.isArray(p.defaultValue) && !p.multiple)
       issue('defaultValue', 'v:param.multipleDefaults');
@@ -103,7 +115,14 @@ export const TemplateQuery = z.object({
     .regex(IDENT_RE, 'v:identKey')
     .refine((k) => k !== 'params', 'v:query.paramsReserved')
     .refine(notReserved, 'v:reservedName'),
-  sql: z.string().trim().min(1),
+  sql: z
+    .string()
+    .trim()
+    .min(1)
+    .superRefine((sql, ctx) => {
+      const ro = readOnlyIssue(sql);
+      if (ro) ctx.addIssue({ code: 'custom', message: ro.message, params: ro.params });
+    }),
   mode: QueryMode,
 });
 export type TemplateQuery = z.infer<typeof TemplateQuery>;

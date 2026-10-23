@@ -11,6 +11,7 @@ import {
   RecoveryBody,
 } from './index';
 import { createTranslator } from './i18n/server';
+import { TransferParam, TransferQuery } from './template-transfer';
 
 /** Сообщение zod по-русски: ключ `v:…` — из каталога validation. */
 const ruMessage = (i: { message: string; params?: Record<string, unknown> }) =>
@@ -218,5 +219,75 @@ describe('бэкапы', () => {
     });
     expect(RecoveryBody.safeParse({ code: '', target: 'same' }).success).toBe(false);
     expect(RecoveryBody.safeParse({ code: 'X', target: 'other' }).success).toBe(false);
+  });
+});
+
+describe('только чтение в схемах (§47.2)', () => {
+  const issueOf = (r: {
+    success: boolean;
+    error?: { issues: { path: PropertyKey[]; message: string; params?: unknown }[] };
+  }) => r.error?.issues.map((i) => ({ path: i.path, message: i.message, params: i.params }));
+
+  it('TemplateQuery: изменяющий SQL — issue у sql с found', () => {
+    const r = TemplateQuery.safeParse({ key: 'q', sql: 'update t set a = 1', mode: 'list' });
+    expect(issueOf(r)).toEqual([
+      { path: ['sql'], message: 'v:sql.readOnlyOnly', params: { found: 'UPDATE' } },
+    ]);
+  });
+
+  it('TemplateQuery: пустой SQL — только прежняя ошибка min(1), без второй', () => {
+    const r = TemplateQuery.safeParse({ key: 'q', sql: '   ', mode: 'list' });
+    expect(r.success).toBe(false);
+    expect(r.error!.issues.every((i) => i.message !== 'v:sql.readOnlyOnly')).toBe(true);
+  });
+
+  it('TemplateParam query: запрещённая функция — issue у sql', () => {
+    const r = TemplateParam.safeParse({
+      name: 'p',
+      label: 'P',
+      type: 'query',
+      required: false,
+      defaultValue: null,
+      options: null,
+      sql: "select nextval('s') as value",
+      multiple: false,
+    });
+    expect(issueOf(r)).toEqual([
+      { path: ['sql'], message: 'v:sql.readOnlyOnly', params: { found: 'nextval' } },
+    ]);
+  });
+
+  it('TemplateParam query: пустой SQL — только sqlRequired', () => {
+    const r = TemplateParam.safeParse({
+      name: 'p',
+      label: 'P',
+      type: 'query',
+      required: false,
+      defaultValue: null,
+      options: null,
+      sql: ' ',
+      multiple: false,
+    });
+    expect(r.error!.issues.map((i) => i.message)).toEqual(['v:param.sqlRequired']);
+  });
+
+  it('TransferQuery и TransferParam наследуют правило', () => {
+    expect(
+      TransferQuery.safeParse({ key: 'q', sql: 'delete from t', mode: 'list', sortOrder: 0 })
+        .success,
+    ).toBe(false);
+    expect(
+      TransferParam.safeParse({
+        name: 'p',
+        label: 'P',
+        type: 'query',
+        required: false,
+        defaultValue: null,
+        options: null,
+        sql: 'select pg_sleep(1)',
+        multiple: false,
+        sortOrder: 0,
+      }).success,
+    ).toBe(false);
   });
 });

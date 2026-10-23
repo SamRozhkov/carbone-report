@@ -418,8 +418,8 @@ describe('перенос шаблонов между средами', () => {
   it('update архивом без charts: графики шаблона удалены, запрос charts допустим', async () => {
     const z = await JSZip.loadAsync(zip);
     const m = JSON.parse(await z.file('manifest.json')!.async('string'));
-    delete m.templates[0].charts;
-    m.templates[0].queries[1].key = 'charts';
+    delete m.templates[0]!.charts;
+    m.templates[0]!.queries[1].key = 'charts';
     z.file('manifest.json', JSON.stringify(m));
     const noCharts = await z.generateAsync({ type: 'nodebuffer' });
     const before = await b.deps.db
@@ -536,6 +536,56 @@ describe('перенос шаблонов между средами', () => {
     expect(await dbTemplateIds(b)).toEqual(beforeIds);
     expect(await storedTemplateIds(b)).toEqual(beforeIds);
   });
+
+  type Manifest = { templates: { queries: object[]; params: object[] }[] };
+  it.each([
+    [
+      'запрос',
+      (m: Manifest) =>
+        m.templates[0]!.queries.push({
+          key: 'ro_bad',
+          sql: 'delete from t',
+          mode: 'list',
+          sortOrder: 99,
+        }),
+      'DELETE',
+    ],
+    [
+      'параметр',
+      (m: Manifest) =>
+        m.templates[0]!.params.push({
+          name: 'ro_bad',
+          label: 'R',
+          type: 'query',
+          required: false,
+          defaultValue: null,
+          options: null,
+          sql: 'select pg_sleep(1) as value',
+          multiple: false,
+          sortOrder: 99,
+        }),
+      'pg_sleep',
+    ],
+  ])(
+    '%s, нарушающий «только чтение», — 400 IMPORT_INVALID, без записи (§47.2)',
+    async (_w, mutate, found) => {
+      const z = await JSZip.loadAsync(zip);
+      const m = JSON.parse(await z.file('manifest.json')!.async('string'));
+      mutate(m);
+      z.file('manifest.json', JSON.stringify(m));
+      const bad = await z.generateAsync({ type: 'nodebuffer' });
+      const beforeIds = await dbTemplateIds(b);
+      for (const r of [
+        await preview(b, adminB, bad),
+        await apply(b, adminB, bad, [{ index: 0, action: 'copy', datasourceId: dsB }]),
+      ]) {
+        expect(r.statusCode).toBe(400);
+        expect(r.json().error.code).toBe('IMPORT_INVALID');
+        expect(JSON.stringify(r.json())).toContain(found);
+      }
+      expect(await dbTemplateIds(b)).toEqual(beforeIds);
+    },
+  );
 
   it('несколько шаблонов с тем же именем: все кандидаты, обновляется выбранный', async () => {
     const n = `Двойник ${randomUUID().slice(0, 4)}`;
@@ -819,7 +869,7 @@ describe('перенос шаблонов между средами', () => {
     bad.file('templates/1/attachments/1.pdf', fake);
     const bm = JSON.parse(await bad.file('manifest.json')!.async('string'));
     const { createHash } = await import('node:crypto');
-    bm.templates[0].attachments[0].sha256 = createHash('sha256').update(fake).digest('hex');
+    bm.templates[0]!.attachments[0].sha256 = createHash('sha256').update(fake).digest('hex');
     bad.file('manifest.json', JSON.stringify(bm));
     const badZip = await bad.generateAsync({ type: 'nodebuffer' });
     const beforeIds = await dbTemplateIds(b);
@@ -937,7 +987,7 @@ describe('перенос шаблонов между средами', () => {
 
     const bad = await JSZip.loadAsync(z);
     const bm = JSON.parse(await bad.file('manifest.json')!.async('string'));
-    bm.templates[0].pdfPasswordSet = true;
+    bm.templates[0]!.pdfPasswordSet = true;
     bad.file('manifest.json', JSON.stringify(bm));
     const badZip = await bad.generateAsync({ type: 'nodebuffer' });
     const r = await apply(b, adminB, badZip, [{ index: 0, action: 'copy', datasourceId: dsB }]);
@@ -978,7 +1028,7 @@ describe('перенос шаблонов между средами', () => {
 
     const bad = await JSZip.loadAsync(z);
     const bm = JSON.parse(await bad.file('manifest.json')!.async('string'));
-    bm.templates[0].pdfOptions.signature.method = 'x';
+    bm.templates[0]!.pdfOptions.signature.method = 'x';
     bad.file('manifest.json', JSON.stringify(bm));
     const badZip = await bad.generateAsync({ type: 'nodebuffer' });
     const r = await apply(b, adminB, badZip, [{ index: 0, action: 'copy', datasourceId: dsB }]);
@@ -1010,7 +1060,7 @@ describe('перенос шаблонов между средами', () => {
     // Выгрузка до 2.14.0: поля нет — создание и обновление дают ru.
     const old = await JSZip.loadAsync(z);
     const om = JSON.parse(await old.file('manifest.json')!.async('string'));
-    delete om.templates[0].reportLocale;
+    delete om.templates[0]!.reportLocale;
     old.file('manifest.json', JSON.stringify(om));
     const oldZip = await old.generateAsync({ type: 'nodebuffer' });
     const copy = await apply(b, adminB, oldZip, [{ index: 0, action: 'copy', datasourceId: dsB }]);
@@ -1030,7 +1080,7 @@ describe('перенос шаблонов между средами', () => {
 
     const bad = await JSZip.loadAsync(z);
     const bm = JSON.parse(await bad.file('manifest.json')!.async('string'));
-    bm.templates[0].reportLocale = 'xx';
+    bm.templates[0]!.reportLocale = 'xx';
     bad.file('manifest.json', JSON.stringify(bm));
     const badZip = await bad.generateAsync({ type: 'nodebuffer' });
     const r = await apply(b, adminB, badZip, [{ index: 0, action: 'copy', datasourceId: dsB }]);
@@ -1044,8 +1094,8 @@ describe('перенос шаблонов между средами', () => {
     const withPages = async (pageNumbers: Record<string, unknown>, legacy: boolean) => {
       const zip = await JSZip.loadAsync(z);
       const m = JSON.parse(await zip.file('manifest.json')!.async('string'));
-      m.templates[0].pdfOptions = { pdfa: false, pageNumbers };
-      if (legacy) delete m.templates[0].reportLocale;
+      m.templates[0]!.pdfOptions = { pdfa: false, pageNumbers };
+      if (legacy) delete m.templates[0]!.reportLocale;
       zip.file('manifest.json', JSON.stringify(m));
       const r = await apply(b, adminB, await zip.generateAsync({ type: 'nodebuffer' }), [
         { index: 0, action: 'copy', datasourceId: dsB },

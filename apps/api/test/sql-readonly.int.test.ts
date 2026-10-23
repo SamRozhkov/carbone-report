@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { templateParams, templateQueries } from '../src/db/schema';
 import {
   createSourceDatabase,
@@ -7,6 +8,7 @@ import {
   openTemplate,
   type TestApp,
 } from './helpers';
+import { DEMO_PARAMS, DEMO_QUERIES } from '../../../demo/template';
 
 let t: TestApp;
 let admin: string;
@@ -152,5 +154,88 @@ describe('выполнение запроса, сохранённого до 2.1
       payload: { params: {}, mode: 'data' },
     });
     expect(r.statusCode, r.body).toBe(200);
+  });
+});
+
+const put = (id: string, what: 'queries' | 'params', payload: object, locale?: string) =>
+  t.app.inject({
+    method: 'PUT',
+    url: `/api/templates/${id}/${what}`,
+    headers: { cookie: admin, ...(locale ? { 'x-locale': locale } : {}) },
+    payload,
+  });
+
+describe('сохранение (§47.2)', () => {
+  it('запрос шаблона: 400 VALIDATION у поля sql, ru и en', async () => {
+    const id = await createTpl(liveDs);
+    const body = [
+      { key: 'ok', sql: 'select 1', mode: 'list' },
+      { key: 'bad', sql: 'update orders set total = 0', mode: 'list' },
+    ];
+    const ru = await put(id, 'queries', body);
+    expect(ru.statusCode).toBe(400);
+    expect(ru.json().error.code).toBe('VALIDATION');
+    expect(ru.json().error.details).toEqual([
+      {
+        path: '/1/sql',
+        message:
+          'Разрешены только запросы на чтение (SELECT); найдено: UPDATE. Если это имя колонки, возьмите его в двойные кавычки',
+      },
+    ]);
+    const en = await put(id, 'queries', body, 'en');
+    expect(en.json().error.details[0].message).toBe(
+      'Only read queries (SELECT) are allowed; found: UPDATE. If this is a column name, put it in double quotes',
+    );
+    const [stored] = await t.deps.db
+      .select()
+      .from(templateQueries)
+      .where(eq(templateQueries.templateId, id));
+    expect(stored).toBeUndefined();
+  });
+
+  it('запрос списка значений параметра: 400 VALIDATION у /0/sql', async () => {
+    const id = await createTpl(liveDs);
+    const r = await put(id, 'params', [
+      {
+        name: 'p',
+        label: 'P',
+        type: 'query',
+        required: false,
+        defaultValue: null,
+        options: null,
+        sql: 'select id as value from orders for share',
+        multiple: false,
+      },
+    ]);
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error.details).toEqual([
+      {
+        path: '/0/sql',
+        message:
+          'Разрешены только запросы на чтение (SELECT); найдено: FOR SHARE. Если это имя колонки, возьмите его в двойные кавычки',
+      },
+    ]);
+  });
+
+  it('демо-шаблон «Счёт (демо)» сохраняется', async () => {
+    const id = await createTpl(liveDs);
+    expect((await put(id, 'queries', DEMO_QUERIES)).statusCode).toBe(200);
+    expect((await put(id, 'params', DEMO_PARAMS)).statusCode).toBe(200);
+  });
+});
+
+describe('выгрузка шаблона с запросом, сохранённым до 2.16.0', () => {
+  it('400 с путём queries.0.sql, а не 500', async () => {
+    const id = await createTpl(liveDs);
+    await storeQuery(id, 'bad', 'delete from orders');
+    const r = await t.app.inject({
+      method: 'POST',
+      url: '/api/templates/export',
+      headers: { cookie: admin },
+      payload: { ids: [id] },
+    });
+    expect(r.statusCode, r.body).toBe(400);
+    expect(r.json().error.message).toContain('queries.0.sql');
+    expect(r.json().error.message).toContain('DELETE');
   });
 });

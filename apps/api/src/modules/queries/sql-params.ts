@@ -1,4 +1,4 @@
-import { scanSql } from '@carbone-reports/shared';
+import { isSqlIdentChar, scanSql } from '@carbone-reports/shared';
 import { ruText } from '../../lib/errors';
 
 export interface ParsedSql {
@@ -14,16 +14,16 @@ export class SqlParamError extends Error {
 }
 
 const IDENT_START = /[A-Za-z_]/;
-const IDENT_PART = /[A-Za-z0-9_]/;
 
 /**
  * Заменяет :name на $n, пропуская строки, идентификаторы в кавычках, комментарии (scanSql) и ::cast.
  * `:name` — параметр, только если перед `:` не идентификатор/цифра (иначе это срез массива a[1:n]).
+ * Символы идентификатора — isSqlIdentChar, как у scanSql и checkReadOnlySql.
  */
 export function parseSqlParams(sql: string): ParsedSql {
   const names: string[] = [];
   let out = '';
-  const prevIsIdent = (pos: number) => pos > 0 && IDENT_PART.test(sql[pos - 1]!);
+  const prevIsIdent = (pos: number) => pos > 0 && isSqlIdentChar(sql[pos - 1]);
 
   for (const seg of scanSql(sql)) {
     if (seg.kind !== 'code') {
@@ -47,7 +47,7 @@ export function parseSqlParams(sql: string): ParsedSql {
         }
         if (next !== undefined && IDENT_START.test(next) && !prevIsIdent(i)) {
           let j = i + 1;
-          while (j < seg.end && IDENT_PART.test(sql[j]!)) j++;
+          while (j < seg.end && isSqlIdentChar(sql[j])) j++;
           const name = sql.slice(i + 1, j);
           let idx = names.indexOf(name);
           if (idx === -1) idx = names.push(name) - 1;

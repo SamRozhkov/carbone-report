@@ -1,4 +1,4 @@
-import { scanSql } from './sql-scan';
+import { isSqlIdentChar, scanSql } from './sql-scan';
 
 export type ReadOnlySqlCheck = { ok: true } | { ok: false; found: string };
 
@@ -46,6 +46,9 @@ export const FORBIDDEN_SQL_FUNCTIONS: readonly string[] = [
   'table_to_xml*',
   'database_to_xml*',
   'schema_to_xml*',
+  'ts_stat',
+  'ts_rewrite',
+  'crosstab*', // tablefunc
   // Резервное копирование и WAL.
   'pg_create_restore_point',
   'pg_switch_wal',
@@ -70,8 +73,14 @@ const FIRST_WORDS = new Set(['SELECT', 'WITH', 'VALUES', 'TABLE']);
 const FORBIDDEN_WORDS = new Set(['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'INTO']);
 const LOCK_CLAUSES = [['UPDATE'], ['NO', 'KEY', 'UPDATE'], ['SHARE'], ['KEY', 'SHARE']];
 
-const WORD_START = /[A-Za-z_\u0080-￿]/;
-const WORD_PART = /[A-Za-z0-9_$\u0080-￿]/;
+/** ident_start PostgreSQL: буква, `_` или не-ASCII символ. */
+const isWordStart = (ch: string | undefined) =>
+  ch !== undefined && (/[A-Za-z_]/.test(ch) || ch.charCodeAt(0) >= 0x80);
+/** Пробельные символы лексера PostgreSQL; прочие (например, U+00A0) — часть идентификатора. */
+const PG_SPACE = /[ \t\n\r\f\v]/;
+/** Число: цифры с `_`, дробная часть, порядок. Слово сразу за числом — отдельный токен. */
+const NUMBER = /[0-9][0-9_]*(?:\.[0-9_]*)?(?:[eE][+-]?[0-9][0-9_]*)?/y;
+const MAX_FOUND = 40;
 
 type Tok =
   | { t: 'word'; v: string } // слово без кавычек, v — как в тексте
@@ -113,7 +122,7 @@ function tokenize(sql: string): Tok[] {
         b.v === '&' &&
         a?.t === 'word' &&
         a.v.toUpperCase() === 'U' &&
-        (seg.start < 3 || !WORD_PART.test(sql[seg.start - 3]!));
+        (seg.start < 3 || !isSqlIdentChar(sql[seg.start - 3]));
       if (isU) {
         toks.length -= 2;
         toks.push({ t: 'name', v: decodeUnicodeEscapes(body), u: true });
@@ -123,20 +132,20 @@ function tokenize(sql: string): Tok[] {
     let i = seg.start;
     while (i < seg.end) {
       const c = sql[i]!;
-      if (/\s/.test(c)) {
+      if (PG_SPACE.test(c)) {
         i++;
         continue;
       }
-      if (WORD_START.test(c)) {
+      if (isWordStart(c)) {
         let j = i + 1;
-        while (j < seg.end && WORD_PART.test(sql[j]!)) j++;
+        while (j < seg.end && isSqlIdentChar(sql[j])) j++;
         toks.push({ t: 'word', v: sql.slice(i, j) });
         i = j;
         continue;
       }
       if (/[0-9]/.test(c)) {
-        let j = i + 1;
-        while (j < seg.end && (WORD_PART.test(sql[j]!) || sql[j] === '.')) j++;
+        NUMBER.lastIndex = i;
+        const j = Math.min(seg.end, i + NUMBER.exec(sql)![0].length);
         toks.push({ t: 'lit', v: sql.slice(i, j) });
         i = j;
         continue;
@@ -149,14 +158,9 @@ function tokenize(sql: string): Tok[] {
           continue;
         }
         const prev = i > 0 ? sql[i - 1]! : '';
-        if (
-          next !== undefined &&
-          i + 1 < seg.end &&
-          WORD_START.test(next) &&
-          !WORD_PART.test(prev)
-        ) {
+        if (next !== undefined && i + 1 < seg.end && isWordStart(next) && !isSqlIdentChar(prev)) {
           let j = i + 2;
-          while (j < seg.end && WORD_PART.test(sql[j]!)) j++;
+          while (j < seg.end && isSqlIdentChar(sql[j])) j++;
           toks.push({ t: 'param', v: sql.slice(i, j) });
           i = j;
           continue;
@@ -170,7 +174,14 @@ function tokenize(sql: string): Tok[] {
 }
 
 const isWord = (x: Tok | undefined, w: string) => x?.t === 'word' && x.v.toUpperCase() === w;
-const fail = (found: string): ReadOnlySqlCheck => ({ ok: false, found });
+/** found попадает в текст ошибки: длиннее MAX_FOUND символов — обрезается с «…». */
+const fail = (found: string): ReadOnlySqlCheck => {
+  const chars = [...found];
+  return {
+    ok: false,
+    found: chars.length > MAX_FOUND ? chars.slice(0, MAX_FOUND).join('') + '…' : found,
+  };
+};
 
 /**
  * Запрос только читает данные (§47.1): одна команда, начинается с SELECT/WITH/VALUES/TABLE/`(`,

@@ -9,20 +9,32 @@ export interface SqlSegment {
   end: number;
 }
 
-const IDENT_PART = /[A-Za-z0-9_]/;
-const DOLLAR_TAG = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/;
+/**
+ * Символ, который продолжает идентификатор PostgreSQL (ident_cont: `[A-Za-z0-9_$]` и байты
+ * 0x80–0xFF, то есть любой не-ASCII символ). Одна проверка для сканера, проверки «только чтение»
+ * и разбора параметров — чтобы они не расходились с лексером PostgreSQL.
+ */
+export function isSqlIdentChar(ch: string | undefined): boolean {
+  if (ch === undefined || ch === '') return false;
+  return /[A-Za-z0-9_$]/.test(ch) || ch.charCodeAt(0) >= 0x80;
+}
+
+/** Тег `$tag$`: как ident_start/ident_cont PostgreSQL, но без `$` внутри. */
+const DOLLAR_TAG = /^\$([A-Za-z_\u0080-\uffff][A-Za-z0-9_\u0080-\uffff]*)?\$/;
 
 /**
- * Делит SQL на код и пропускаемые участки: комментарии `--` и `/* *\/` (с вложенностью), строки
- * `'…'` и `E'…'`, идентификаторы в двойных кавычках, долларовые строки `$tag$…$tag$`. Незакрытый
- * участок тянется до конца текста. Участки идут подряд и покрывают весь текст.
+ * Делит SQL на код и пропускаемые участки так же, как лексер PostgreSQL: комментарии `--`
+ * и `/* *\/` (с вложенностью), строки `'…'` и `E'…'`, идентификаторы в двойных кавычках,
+ * долларовые строки `$tag$…$tag$`. Незакрытый участок тянется до конца текста. Участки идут
+ * подряд и покрывают весь текст.
  */
 export function scanSql(sql: string): SqlSegment[] {
   const n = sql.length;
   const out: SqlSegment[] = [];
   let codeStart = 0;
   let i = 0;
-  const prevIsIdent = (pos: number) => pos > 0 && IDENT_PART.test(sql[pos - 1]!);
+  // Символ перед pos — часть слова кода; конец предыдущего участка ($tag$ и т. п.) словом не считается.
+  const prevIsIdent = (pos: number) => pos > codeStart && isSqlIdentChar(sql[pos - 1]);
   const skip = (kind: SqlSegmentKind, start: number, end: number) => {
     if (codeStart < start) out.push({ kind: 'code', start: codeStart, end: start });
     out.push({ kind, start, end });
@@ -35,8 +47,10 @@ export function scanSql(sql: string): SqlSegment[] {
     const next = sql[i + 1];
 
     if (c === '-' && next === '-') {
-      const e = sql.indexOf('\n', i);
-      skip('lineComment', i, e === -1 ? n : e + 1);
+      // Как в PostgreSQL: комментарий кончается на \n или \r.
+      let e = i + 2;
+      while (e < n && sql[e] !== '\n' && sql[e] !== '\r') e++;
+      skip('lineComment', i, e === n ? n : e + 1);
       continue;
     }
 

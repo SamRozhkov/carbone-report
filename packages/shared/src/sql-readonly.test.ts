@@ -28,6 +28,10 @@ describe('checkReadOnlySql: разрешено', () => {
     'select substring(s for 3) from t',
     'select * from "pg_sleep"',
     'select U&"d\\0061ta" from t',
+    'select a$b$c, $x$ pg_sleep(1) $x$ as s',
+    "select 'a'--pg_sleep(1)\n, 'b'/* delete */",
+    'select 1e5, 1.5e-3, 1_000 from t',
+    "select ts_lexize('english_stem', 'stars')",
   ])('%s', (sql) => {
     expect(checkReadOnlySql(sql)).toEqual({ ok: true });
   });
@@ -80,6 +84,18 @@ describe('checkReadOnlySql: запрещено', () => {
     ['select U&"pg_\\0073leep"(1)', 'pg_sleep'],
     ['select u&"pg_sl\\+000065ep"(1)', 'pg_sleep'],
     ['select U&"x!0061" UESCAPE \'!\' from t', 'UESCAPE'],
+    ['SELECT 1 AS a$$x$, pg_sleep(0) AS y, $x$abc$x$ AS z', 'pg_sleep'],
+    ['SELECT 1 AS ä$x$, pg_sleep(1) AS y, $x$abc$x$', 'pg_sleep'],
+    ["SELECT $ä$'$ä$ AS a, pg_sleep(0) AS b, 'x' AS c", 'pg_sleep'],
+    ["select äe'\\', pg_sleep(0) as s, 'x'", 'pg_sleep'],
+    ['select 1 -- c\r, pg_sleep(0) as s', 'pg_sleep'],
+    ['select 1into t', 'INTO'],
+    ['select x\u00a0from t where 1=1or pg_sleep(1)', 'pg_sleep'],
+    ['SELECT ts_stat($q$select to_tsvector(pg_sleep(0)::text)$q$)', 'ts_stat'],
+    ["select ts_rewrite('a'::tsquery, 'select 1')", 'ts_rewrite'],
+    ["select * from crosstab('select 1') as ct(a int)", 'crosstab'],
+    ["select * from crosstab3('select 1')", 'crosstab3'],
+    [`'${'x'.repeat(100)}'`, `'${'x'.repeat(39)}…`],
     ['', ''],
     ['   ', ''],
     ['-- только комментарий', ''],
@@ -147,6 +163,11 @@ describe('FORBIDDEN_SQL_FUNCTIONS', () => {
       'pg_drop_replication_slot',
       'pg_replication_origin_create',
       'pg_import_system_collations',
+      'ts_stat',
+      'ts_rewrite',
+      'crosstab',
+      'crosstab2',
+      'crosstab_hash',
     ]) {
       expect(checkReadOnlySql(`select ${name}(1)`), name).toEqual({ ok: false, found: name });
     }

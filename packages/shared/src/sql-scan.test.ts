@@ -50,6 +50,77 @@ describe('scanSql', () => {
     expect(parts('select a$b$c')).toEqual([['code', 'select a$b$c']]);
   });
 
+  it('$ внутри идентификатора (в т. ч. после не-ASCII буквы) — не начало долларовой строки', () => {
+    expect(parts('select 1 as a$$x$, pg_sleep(0) as y, $x$abc$x$ as z')).toEqual([
+      ['code', 'select 1 as a$$x$, pg_sleep(0) as y, '],
+      ['dollarString', '$x$abc$x$'],
+      ['code', ' as z'],
+    ]);
+    expect(parts('select 1 as ä$x$, pg_sleep(1) as y, $x$abc$x$')).toEqual([
+      ['code', 'select 1 as ä$x$, pg_sleep(1) as y, '],
+      ['dollarString', '$x$abc$x$'],
+    ]);
+    // Закрывающий $a$ — конец участка, а не идентификатор: следующий $b$ — новая строка.
+    expect(parts('select $a$x$a$$b$y$b$')).toEqual([
+      ['code', 'select '],
+      ['dollarString', '$a$x$a$'],
+      ['dollarString', '$b$y$b$'],
+    ]);
+    expect(parts('select a$b$c, $x$y$x$')).toEqual([
+      ['code', 'select a$b$c, '],
+      ['dollarString', '$x$y$x$'],
+    ]);
+  });
+
+  it('тег долларовой строки с не-ASCII буквами', () => {
+    expect(parts("select $ä$'$ä$ as a, pg_sleep(0) as b, 'x' as c")).toEqual([
+      ['code', 'select '],
+      ['dollarString', "$ä$'$ä$"],
+      ['code', ' as a, pg_sleep(0) as b, '],
+      ['string', "'x'"],
+      ['code', ' as c'],
+    ]);
+  });
+
+  it('префикс E\'…\' — только отдельным словом; после "x" — да, после äe — нет', () => {
+    expect(parts(`select "x"e'\\'' as v`)).toEqual([
+      ['code', 'select '],
+      ['quotedIdent', '"x"'],
+      ['code', 'e'],
+      ['string', "'\\''"],
+      ['code', ' as v'],
+    ]);
+    expect(parts("select äe'\\', pg_sleep(0) as s, 'x'")).toEqual([
+      ['code', 'select äe'],
+      ['string', "'\\'"],
+      ['code', ', pg_sleep(0) as s, '],
+      ['string', "'x'"],
+    ]);
+  });
+
+  it('-- и /* сразу после строки — комментарии; внутри строки — нет', () => {
+    expect(parts("select 'a'--c\n, '--', '/*', 'b'/*c*/")).toEqual([
+      ['code', 'select '],
+      ['string', "'a'"],
+      ['lineComment', '--c\n'],
+      ['code', ', '],
+      ['string', "'--'"],
+      ['code', ', '],
+      ['string', "'/*'"],
+      ['code', ', '],
+      ['string', "'b'"],
+      ['blockComment', '/*c*/'],
+    ]);
+  });
+
+  it('-- заканчивается и на \\r (как в PostgreSQL)', () => {
+    expect(parts('select 1 -- c\r, pg_sleep(0)')).toEqual([
+      ['code', 'select 1 '],
+      ['lineComment', '-- c\r'],
+      ['code', ', pg_sleep(0)'],
+    ]);
+  });
+
   it('незакрытые строка, комментарий, кавычки, $$ — до конца текста', () => {
     expect(parts("select 'abc")).toEqual([
       ['code', 'select '],

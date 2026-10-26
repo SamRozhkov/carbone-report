@@ -1,3 +1,5 @@
+**Русский** · [English](localization.en.md)
+
 # Локализация интерфейса и отчётов
 
 Языки интерфейса и отчётов: `ru` (основной и исходный), `en`, `es`, `pt-BR`, `fr`, `de`, `zh-CN` (спецификация, §44 и §45). Языков с письмом справа налево нет.
@@ -7,7 +9,7 @@
 1. Интерфейс, ошибки API, форматы дат в интерфейсе и этот документ — 2.13.0.
 2. Отчёты: язык форматов Carbone, штампа подписи и нумерации страниц PDF — 2.14.0 (раздел «Язык отчёта»).
 3. Справка по шаблонам — 2.15.0 (раздел «Справка по шаблонам»).
-4. Документация (README, `docs/`).
+4. Документация на английском — 2.17.0 (раздел «Документация»).
 
 ## Каталоги и пространства имён
 
@@ -271,7 +273,7 @@
 | Справка по шаблонам | Template help | Ayuda sobre plantillas | Ajuda sobre modelos | Aide sur les modèles | Hilfe zu Vorlagen | 模板帮助 |
 | Список строк (режим запроса) | List of rows | Lista de filas | Lista de linhas | Liste de lignes | Liste von Zeilen | 行列表 |
 | SQL-список (тип параметра) | SQL list | Lista SQL | Lista SQL | Liste SQL | SQL-Liste | SQL 列表 |
-| SSL с проверкой | SSL with verification | SSL con verificación | SSL com verificação | SSL avec vérification | SSL mit Prüfung | SSL（验证证书） |
+| SSL с проверкой сертификата | SSL with verification of the certificate | SSL con verificación del certificado | SSL com verificação do certificado | SSL avec vérification du certificat | SSL mit Prüfung des Zertifikats | SSL（验证证书） |
 | обновить / копия / пропустить (загрузка из архива) | update / copy / skip | actualizar / copia / omitir | atualizar / cópia / ignorar | mettre à jour / copie / ignorer | aktualisieren / Kopie / überspringen | 更新 / 副本 / 跳过 |
 
 ## Правила перевода
@@ -394,4 +396,27 @@
 - Дата в форме параметров отчёта вводится как ДД.ММ.ГГГГ во всех языках: календарь `@gravity-ui/date-components` знает только `ru` и `en`.
 - На ширине 375 px оболочка приложения не адаптируется к экрану; так было и до локализации, во всех языках.
 
-Следующий этап — **этап 4**: документация (README и `docs/`, кроме этого документа).
+Этап 4 (документация) — раздел [«Документация»](#документация).
+
+## Документация
+
+Документы для тех, кто ставит и сопровождает систему, есть на русском и английском (спецификация, §48). Русский — источник; английская версия лежит рядом с суффиксом `.en.md`:
+
+| Русский | Английский |
+| --- | --- |
+| `README.md` | `README.en.md` |
+| `docs/localization.md` | `docs/localization.en.md` |
+| `docs/operations/gost-signature.md` | `docs/operations/gost-signature.en.md` |
+| `docs/operations/keycloak.md` | `docs/operations/keycloak.en.md` |
+
+`CHANGELOG.md`, `docs/superpowers/` и README тестовых фикстур не переводятся. Новый документ для администраторов добавляется в `DOC_PAIRS` (`scripts/docs-check.mjs`) вместе с английской версией.
+
+Правила перевода:
+
+- первая строка — переключатель языка: `**Русский** · [English](<имя>.en.md)` в русском, `[Русский](<имя>.md) · **English**` в английском;
+- в блоках кода переводятся только комментарии и заполнители `<…>`; команды, имена файлов, переменных, ключей и значения не меняются;
+- подписи интерфейса берутся дословно из каталогов `en` (`packages/shared/src/i18n/en/*.json`);
+- ссылки из английского документа ведут на английские пары; ссылки на документы без пары помечаются «(in Russian)»;
+- разделы, уровни заголовков, таблицы и блоки кода идут в том же порядке, что в русском документе.
+
+Правка русского документа сопровождается правкой английского в том же PR. `pnpm docs:check` (задание CI «Проверки и модульные тесты») сверяет пары: переключатель, уровни заголовков, блоки кода с точностью до комментариев и заполнителей, а также существование файлов и якорей у относительных ссылок в обеих версиях.

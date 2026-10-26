@@ -1,3 +1,5 @@
+**Русский** · [English](keycloak.en.md)
+
 # Keycloak / OpenID Connect
 
 Интеграция выключена по умолчанию (`OIDC_ENABLED=false`). Страница входа и её кнопки не меняются.

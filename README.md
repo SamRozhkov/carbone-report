@@ -4,6 +4,8 @@
 
 Генерация отчётов на базе Carbone с редактированием шаблонов в браузере (OnlyOffice) и интерфейсом на GravityUI.
 
+Сайт со скриншотами интерфейса: <https://samrozhkov.github.io/carbone-report/>.
+
 Состав стека: web (nginx), API, агент бэкапа, OnlyOffice Document Server, PostgreSQL, Redis, S3 (SeaweedFS). Отдельного контейнера Carbone нет: отчёты собирает сам API встроенной сборкой Carbone Community Edition 3.8.2 (`packages/carbone`, воркеры `worker_threads`). Сборка выдаёт документ в формате шаблона; PDF и перевод в ODT/ODS делает OnlyOffice, поэтому **OnlyOffice обязателен для построения отчётов**: API сначала собирает PDF, и без Document Server отчёт не сформируется. Подробности про лицензию — в разделе [«Лицензия»](#лицензия), про переход с 1.x — в [«Обновление с 1.x»](#обновление-с-1x).
 
 [![CI](https://github.com/SamRozhkov/carbone-report/actions/workflows/ci.yml/badge.svg)](https://github.com/SamRozhkov/carbone-report/actions/workflows/ci.yml)
@@ -445,6 +447,7 @@ Vite проксирует `/api` и `/onlyoffice` (включая WebSocket) н�
 ```bash
 pnpm stack:demo     # прод-стек + демо-БД + шаблон «Счёт (демо)» в категории «Финансы» (нужен DEMO_DB_PASSWORD в .env)
 pnpm e2e            # E2E на Playwright (Chromium на хосте) против поднятого стека
+pnpm site:shots    # скриншоты для сайта (site/shots/) против поднятого демо-стека
 pnpm stack:down     # остановить
 ```
 
@@ -452,6 +455,8 @@ pnpm stack:down     # остановить
 Отчёт — `e2e/report/index.html`; при падении trace сохраняется в `e2e/test-results/`.
 E2E меняет демо-шаблон. Перед каждым прогоном он сам восстанавливает исходный файл, запросы, параметры и доступ (`e2e/global-setup.ts`); после прогона шаблон остаётся изменённым. Вручную: `pnpm demo:seed -- --reset-template`.
 Пароль `DEMO_DB_PASSWORD` задаётся ролям демо-БД только при первом создании тома. Если вы поменяли его позже, пересоздайте том демо-БД (другие тома не трогаются):
+
+Сайт продукта — каталог `site/` (HTML и CSS); публикуется на GitHub Pages при выпуске (`.github/workflows/pages.yml`). Скриншоты переснимаются `pnpm site:shots` перед выпуском, если менялся интерфейс; `pnpm site:check` проверяет ссылки, снимки и версию в подвале (она должна совпадать с последней версией в `CHANGELOG.md`).
 
 ```bash
 docker compose --profile demo rm -sf demo-db && docker volume rm carbone-reports_demo_pgdata && pnpm stack:demo

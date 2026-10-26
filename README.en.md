@@ -4,6 +4,8 @@
 
 Report generation based on Carbone, with template editing in the browser (OnlyOffice) and a GravityUI interface.
 
+Website with interface screenshots: <https://samrozhkov.github.io/carbone-report/>.
+
 The stack: web (nginx), API, backup agent, OnlyOffice Document Server, PostgreSQL, Redis, S3 (SeaweedFS). There is no separate Carbone container: the API itself builds reports with the built-in Carbone Community Edition 3.8.2 (`packages/carbone`, `worker_threads` workers). The build produces a document in the template format; PDF and conversion to ODT/ODS are done by OnlyOffice, so **OnlyOffice is required to build reports**: the API builds a PDF first, and without Document Server a report cannot be generated. Details about the license are in the section [“License”](#license), about the move from 1.x in [“Upgrading from 1.x”](#upgrading-from-1x).
 
 [![CI](https://github.com/SamRozhkov/carbone-report/actions/workflows/ci.yml/badge.svg)](https://github.com/SamRozhkov/carbone-report/actions/workflows/ci.yml)
@@ -445,6 +447,7 @@ The documentation exists in Russian and English (`README.en.md`, `docs/**/*.en.m
 ```bash
 pnpm stack:demo     # production stack + demo DB + the “Счёт (демо)” template in the “Финансы” category (needs DEMO_DB_PASSWORD in .env)
 pnpm e2e            # Playwright E2E (Chromium on the host) against a running stack
+pnpm site:shots    # screenshots for the website (site/shots/) against the running demo stack
 pnpm stack:down     # stop
 ```
 
@@ -452,6 +455,8 @@ First E2E run: `pnpm --filter @carbone-reports/e2e exec playwright install chrom
 The report is `e2e/report/index.html`; on a failure the trace is saved to `e2e/test-results/`.
 E2E changes the demo template. Before each run it restores the original file, queries, parameters and access by itself (`e2e/global-setup.ts`); after a run the template stays changed. Manually: `pnpm demo:seed -- --reset-template`.
 The `DEMO_DB_PASSWORD` password is given to the demo DB roles only when the volume is first created. If you changed it later, recreate the demo DB volume (other volumes are not touched):
+
+The product website is the `site/` directory (HTML and CSS); it is published to GitHub Pages on release (`.github/workflows/pages.yml`). Re-take screenshots with `pnpm site:shots` before a release if the interface changed; `pnpm site:check` checks links, screenshots and the footer version (it must match the latest version in `CHANGELOG.md`).
 
 ```bash
 docker compose --profile demo rm -sf demo-db && docker volume rm carbone-reports_demo_pgdata && pnpm stack:demo

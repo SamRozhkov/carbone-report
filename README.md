@@ -4,6 +4,8 @@
 
 Генерация отчётов на базе Carbone с редактированием шаблонов в браузере (OnlyOffice) и интерфейсом на GravityUI.
 
+Сайт со скриншотами интерфейса: <https://samrozhkov.github.io/carbone-report/>.
+
 Состав стека: web (nginx), API, агент бэкапа, OnlyOffice Document Server, PostgreSQL, Redis, S3 (SeaweedFS). Отдельного контейнера Carbone нет: отчёты собирает сам API встроенной сборкой Carbone Community Edition 3.8.2 (`packages/carbone`, воркеры `worker_threads`). Сборка выдаёт документ в формате шаблона; PDF и перевод в ODT/ODS делает OnlyOffice, поэтому **OnlyOffice обязателен для построения отчётов**: API сначала собирает PDF, и без Document Server отчёт не сформируется. Подробности про лицензию — в разделе [«Лицензия»](#лицензия), про переход с 1.x — в [«Обновление с 1.x»](#обновление-с-1x).
 
 [![CI](https://github.com/SamRozhkov/carbone-report/actions/workflows/ci.yml/badge.svg)](https://github.com/SamRozhkov/carbone-report/actions/workflows/ci.yml)
@@ -445,6 +447,7 @@ Vite проксирует `/api` и `/onlyoffice` (включая WebSocket) н�
 ```bash
 pnpm stack:demo     # прод-стек + демо-БД + шаблон «Счёт (демо)» в категории «Финансы» (нужен DEMO_DB_PASSWORD в .env)
 pnpm e2e            # E2E на Playwright (Chromium на хосте) против поднятого стека
+pnpm site:shots     # скриншоты для сайта (site/shots/) против поднятого демо-стека
 pnpm stack:down     # остановить
 ```
 
@@ -456,6 +459,8 @@ E2E меняет демо-шаблон. Перед каждым прогоном
 ```bash
 docker compose --profile demo rm -sf demo-db && docker volume rm carbone-reports_demo_pgdata && pnpm stack:demo
 ```
+
+Сайт продукта — каталог `site/` (HTML и CSS); публикуется на GitHub Pages при выпуске (`.github/workflows/pages.yml`). Скриншоты переснимаются `pnpm site:shots` перед выпуском, если менялся интерфейс; `pnpm site:check` проверяет ссылки, снимки и версию в подвале (она должна совпадать с последней версией в `CHANGELOG.md`). Владелец один раз разрешает публикацию по тегам `v*` в окружении `github-pages` (по умолчанию оно допускает только ветку по умолчанию): `gh api -X POST repos/SamRozhkov/carbone-report/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag` или Settings → Environments → github-pages → Deployment branches and tags.
 
 ## Параметр «SQL-список»
 

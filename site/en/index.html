@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Carbone Reports — reports from Word and Excel templates</title>
+    <meta
+      name="description"
+      content="Report server: DOCX and XLSX templates, data from PostgreSQL, in-browser editing, PDF and electronic signatures."
+    />
+    <link rel="stylesheet" href="../style.css" />
+  </head>
+  <body>
+    <nav class="lang">
+      <a href="../index.html" lang="ru" hreflang="ru">Русский</a> · <b>English</b>
+    </nav>
+    <header>
+      <h1>Carbone Reports</h1>
+      <p class="lead">
+        Reports from Word and Excel templates filled with data from your PostgreSQL databases.
+        Templates are edited right in the browser; the finished document comes out as PDF, DOCX or
+        XLSX, with an electronic signature, including GOST.
+      </p>
+      <p>
+        <a href="https://github.com/SamRozhkov/carbone-report"
+          >Source code and installation on GitHub</a
+        >
+      </p>
+    </header>
+    <main>
+      <section class="feature">
+        <div>
+          <h2>Sign-in</h2>
+          <p>
+            Local accounts, LDAP/Active Directory or Keycloak (OpenID Connect). The interface
+            language can be chosen before signing in.
+          </p>
+        </div>
+        <a href="../shots/en/login.png"
+          ><img
+            src="../shots/en/login.png"
+            alt="Sign-in page"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Report catalog</h2>
+          <p>Reports are grouped into categories; everyone sees only what they have access to.</p>
+        </div>
+        <a href="../shots/en/reports.png"
+          ><img
+            src="../shots/en/reports.png"
+            alt="Report catalog by category"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Running with parameters</h2>
+          <p>
+            The form is built from the template's parameters: dates, numbers and lists, including
+            dependent lists from SQL queries.
+          </p>
+        </div>
+        <a href="../shots/en/run.png"
+          ><img
+            src="../shots/en/run.png"
+            alt="Report parameter form"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>History</h2>
+          <p>
+            Every generated report is kept: open it, download it in another format or sign it later.
+          </p>
+        </div>
+        <a href="../shots/en/history.png"
+          ><img
+            src="../shots/en/history.png"
+            alt="History of generated reports"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Queries and parameters</h2>
+          <p>Template data comes from SQL queries to connected databases. Queries run read-only.</p>
+        </div>
+        <a href="../shots/en/editor-sql.png"
+          ><img
+            src="../shots/en/editor-sql.png"
+            alt="Template editor: SQL queries"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Templates in the browser</h2>
+          <p>
+            The template document opens in the built-in OnlyOffice editor — no Word or Excel needed.
+          </p>
+        </div>
+        <a href="../shots/en/editor-document.png"
+          ><img
+            src="../shots/en/editor-document.png"
+            alt="Template document in the OnlyOffice editor"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>PDF and electronic signatures</h2>
+          <p>
+            PDF password protection, page numbering and signing: with the user's certificate (.p12)
+            or with a GOST key via CryptoPro — the GOST key never leaves the user's computer.
+          </p>
+        </div>
+        <a href="../shots/en/signature.png"
+          ><img
+            src="../shots/en/signature.png"
+            alt="PDF and electronic signature settings"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Access and roles</h2>
+          <p>
+            Access to reports is granted by groups and categories; roles separate users, template
+            authors and access managers.
+          </p>
+        </div>
+        <a href="../shots/en/access.png"
+          ><img
+            src="../shots/en/access.png"
+            alt="Template access settings"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Users</h2>
+          <p>Accounts, roles and blocking in one list.</p>
+        </div>
+        <a href="../shots/en/users.png"
+          ><img
+            src="../shots/en/users.png"
+            alt="User list"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Data sources</h2>
+          <p>
+            Connections to PostgreSQL databases with a connection test; passwords are stored
+            encrypted.
+          </p>
+        </div>
+        <a href="../shots/en/datasources.png"
+          ><img
+            src="../shots/en/datasources.png"
+            alt="Data sources"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+    </main>
+    <footer>
+      <div class="inner">
+        <a href="https://github.com/SamRozhkov/carbone-report">GitHub</a>
+        <a href="https://github.com/SamRozhkov/carbone-report/blob/main/README.en.md"
+          >Documentation</a
+        >
+        <a
+          href="https://github.com/SamRozhkov/carbone-report/blob/main/README.en.md#kubernetes-helm"
+          >Install on Kubernetes (Helm)</a
+        >
+        <a href="https://github.com/SamRozhkov/carbone-report/blob/main/LICENSE.md">License</a>
+        <span class="ver">Version <span data-version="2.18.0">2.18.0</span></span>
+      </div>
+    </footer>
+  </body>
+</html>

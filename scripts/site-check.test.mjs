@@ -106,6 +106,26 @@ test('чужой язык: en-страница показывает русски
   has(checkSite(repo({ 'site/en/index.html': page('en', { imgFor }) })), /снимок другого языка/);
 });
 
+test('корневая ссылка /x', () => {
+  const extra = '<a href="/x">x</a><img src="/shots/ru/run.png" alt="a" width="1" height="1">';
+  const errors = checkSite(repo({ 'site/index.html': page('ru', { extra }) }));
+  has(errors, /ссылка \/x ведёт в корень домена/);
+  has(errors, /ссылка \/shots\/ru\/run\.png ведёт в корень домена/);
+});
+
+test('чужой язык: <a href> на снимок другого языка', () => {
+  const extra = '<a href="../shots/ru/run.png">x</a>';
+  has(checkSite(repo({ 'site/en/index.html': page('en', { extra }) })), /снимок другого языка/);
+});
+
+test('неверное процентное кодирование в ссылке', () => {
+  const extra = '<a href="a%E0%A4%A.html">x</a>';
+  has(
+    checkSite(repo({ 'site/index.html': page('ru', { extra }) })),
+    /неверная ссылка a%E0%A4%A\.html/,
+  );
+});
+
 test('выход за site/', () => {
   const extra = '<a href="../README.md">README</a>';
   has(checkSite(repo({ 'site/index.html': page('ru', { extra }) })), /за пределы site/);

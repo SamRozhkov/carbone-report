@@ -96,7 +96,20 @@ function checkPage(root, lang, version, errors) {
   for (const t of all) {
     const url = t.attrs.src ?? t.attrs.href;
     if (url === undefined || url === '' || url.startsWith('#') || isAbsolute(url)) continue;
-    const path = decodeURIComponent(url.split(/[?#]/)[0]);
+    if (url.startsWith('/')) {
+      err(
+        t.line,
+        `ссылка ${url} ведёт в корень домена (на Pages проекта — нужен относительный путь)`,
+      );
+      continue;
+    }
+    let path;
+    try {
+      path = decodeURIComponent(url.split(/[?#]/)[0]);
+    } catch {
+      err(t.line, `неверная ссылка ${url}`);
+      continue;
+    }
     const target = join(dirname(file), path);
     const inside = relative(siteDir, target);
     if (inside.startsWith('..')) {
@@ -106,9 +119,9 @@ function checkPage(root, lang, version, errors) {
     if (!existsSync(target))
       err(t.line, `ссылка ${url}: нет файла site/${inside.split('\\').join('/')}`);
     const shot = /^shots\/([^/]+)\/([^/]+)\.png$/.exec(inside.split('\\').join('/'));
-    if (shot && t.name === 'img') {
+    if (shot && (t.name === 'img' || t.name === 'a')) {
       if (shot[1] !== lang) err(t.line, `снимок другого языка: ${url}`);
-      else shown.add(shot[2]);
+      else if (t.name === 'img') shown.add(shot[2]);
     }
   }
 

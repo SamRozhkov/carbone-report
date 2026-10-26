@@ -3,7 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { MockRoute } from '../../../test/utils';
-import { mockApi, renderWithProviders } from '../../../test/utils';
+import { mockApi, pickOption, popupOptions, renderWithProviders } from '../../../test/utils';
 import { adminTemplate } from '../../../test/fixtures';
 import { EditorsBlock } from './EditorsBlock';
 import { templateKey } from './editorState';
@@ -61,10 +61,10 @@ describe('EditorsBlock', () => {
     expect(b.queryByRole('button', { name: 'Сменить владельца' })).not.toBeInTheDocument();
     expect(calls.some((c) => c.path === '/api/users/directory?role=editor')).toBe(true);
 
-    await userEvent.click(b.getByRole('combobox', { name: 'Добавить редактора' }));
-    const options = (await screen.findAllByRole('option')).map((o) => o.textContent);
+    const combo = b.getByRole('combobox', { name: 'Добавить редактора' });
+    const options = (await popupOptions(combo)).map((o) => o.textContent);
     expect(options).toEqual(['popov', 'volkov']);
-    await userEvent.click(screen.getByRole('option', { name: 'volkov' }));
+    await pickOption(combo, 'volkov');
     expect(b.getByText('volkov')).toBeInTheDocument();
     await userEvent.click(b.getByRole('button', { name: 'Убрать kuznetsov' }));
     expect(b.queryByText('kuznetsov')).not.toBeInTheDocument();
@@ -115,8 +115,7 @@ describe('EditorsBlock', () => {
     renderWithProviders(<EditorsBlock template={t} />);
     const b = await block();
     await b.findByText('sidorov');
-    await userEvent.click(b.getByRole('combobox', { name: 'Добавить редактора' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'popov' }));
+    await pickOption(b.getByRole('combobox', { name: 'Добавить редактора' }), 'popov');
     await userEvent.click(b.getByRole('button', { name: 'Сохранить редакторов' }));
     expect(
       await b.findByText('можно выдать только пользователю с ролью «Редактор»'),
@@ -142,10 +141,10 @@ describe('EditorsBlock', () => {
     await b.findByText('kuznetsov');
     const change = b.getByRole('button', { name: 'Сменить владельца' });
     expect(change).toBeDisabled();
-    await userEvent.click(b.getByRole('combobox', { name: 'Новый владелец' }));
-    const options = (await screen.findAllByRole('option')).map((o) => o.textContent);
+    const combo = b.getByRole('combobox', { name: 'Новый владелец' });
+    const options = (await popupOptions(combo)).map((o) => o.textContent);
     expect(options).toEqual(['kuznetsov', 'popov', 'volkov']);
-    await userEvent.click(screen.getByRole('option', { name: 'kuznetsov' }));
+    await pickOption(combo, 'kuznetsov');
     await userEvent.click(change);
     await waitFor(() =>
       expect(calls.find((c) => c.method === 'PUT')).toEqual({

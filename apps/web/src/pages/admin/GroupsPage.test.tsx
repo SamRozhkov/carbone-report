@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { changeLocale } from '../../i18n';
-import { adminMe, mockApi, renderRoute } from '../../test/utils';
+import { adminMe, mockApi, pickOption, renderRoute } from '../../test/utils';
 
 const groups = [
   {
@@ -137,8 +137,7 @@ describe('GroupsPage', () => {
     await userEvent.click(within(row('Склад')).getByRole('button', { name: 'Участники' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByRole('group', { name: 'Участники' })).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Участники' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'ivanov' }));
+    await pickOption(within(dialog).getByRole('combobox', { name: 'Участники' }), 'ivanov');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
     await waitFor(() =>
       expect(calls.find((c) => c.method === 'PUT')).toEqual({
@@ -186,8 +185,7 @@ describe('GroupsPage', () => {
     await screen.findByText('Склад');
     await userEvent.click(within(row('Склад')).getByRole('button', { name: 'Участники' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Участники' }));
-    await userEvent.click(await screen.findByRole('option', { name: '(заблокирован)' }));
+    await pickOption(within(dialog).getByRole('combobox', { name: 'Участники' }), '(заблокирован)');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
     await waitFor(() =>
       expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ userIds: ['u2'] }),

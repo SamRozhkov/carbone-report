@@ -1,9 +1,17 @@
 import type { ParamsInput, TemplateParamDto } from '@carbone-reports/shared';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mockApi, renderWithProviders, type MockResponse, type MockRoute } from '../test/utils';
+import {
+  findOption,
+  mockApi,
+  pickOption,
+  popupOf,
+  renderWithProviders,
+  type MockResponse,
+  type MockRoute,
+} from '../test/utils';
 import { ParamField, ParamForm } from './ParamForm';
 
 const params: TemplateParamDto[] = [
@@ -197,8 +205,7 @@ function QHarness({
 }
 
 async function pick(controlName: string, optionText: string) {
-  await userEvent.click(screen.getByRole('combobox', { name: controlName }));
-  await userEvent.click(await screen.findByRole('option', { name: optionText }));
+  await pickOption(screen.getByRole('combobox', { name: controlName }), optionText);
 }
 
 describe('ParamForm: SQL-список', () => {
@@ -253,9 +260,9 @@ describe('ParamForm: SQL-список', () => {
       <QHarness params={ps} initial={{ region: 1, cities: null }} onChange={onChange} />,
     );
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Города' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('combobox', { name: 'Города' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Мурманск' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Архангельск' }));
+    const combo = screen.getByRole('combobox', { name: 'Города' });
+    await pickOption(combo, 'Мурманск');
+    await pickOption(combo, 'Архангельск');
     expect(onChange).toHaveBeenLastCalledWith({ region: 1, cities: [10, 11] });
   });
 
@@ -267,8 +274,7 @@ describe('ParamForm: SQL-список', () => {
       <QHarness params={ps} initial={{ region: 1, cities: null }} onChange={onChange} />,
     );
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Города' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('combobox', { name: 'Города' }));
-    await screen.findByRole('option', { name: 'Мурманск' });
+    await findOption(screen.getByRole('combobox', { name: 'Города' }), 'Мурманск');
     await userEvent.click(screen.getByRole('checkbox', { name: 'Выбрать все' }));
     expect(onChange).toHaveBeenLastCalledWith({ region: 1, cities: [10, 11] });
     const all = screen.getByRole('checkbox', { name: 'Снять все' });
@@ -285,10 +291,14 @@ describe('ParamForm: SQL-список', () => {
       <QHarness params={ps} initial={{ region: 1, cities: null }} onChange={onChange} />,
     );
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Города' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('combobox', { name: 'Города' }));
-    await screen.findByRole('option', { name: 'Мурманск' });
+    const combo = screen.getByRole('combobox', { name: 'Города' });
+    await findOption(combo, 'Мурманск');
     await userEvent.keyboard('Мур');
-    await waitFor(() => expect(screen.queryByRole('option', { name: 'Архангельск' })).toBeNull());
+    await waitFor(() =>
+      expect(
+        within(popupOf(combo)!).queryByRole('option', { name: 'Архангельск', hidden: true }),
+      ).toBeNull(),
+    );
     await userEvent.click(screen.getByRole('checkbox', { name: 'Выбрать все' }));
     expect(onChange).toHaveBeenLastCalledWith({ region: 1, cities: [10, 11] });
   });
@@ -312,8 +322,7 @@ describe('ParamForm: SQL-список', () => {
       <QHarness params={ps} initial={{ region: 1, cities: [10] }} onChange={onChange} />,
     );
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Города' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('combobox', { name: 'Города' }));
-    await screen.findByRole('option', { name: 'Мурманск' });
+    await findOption(screen.getByRole('combobox', { name: 'Города' }), 'Мурманск');
     const all = screen.getByRole('checkbox', { name: 'Выбрать все' });
     expect(all).toHaveProperty('indeterminate', true);
     await userEvent.click(all);
@@ -326,8 +335,7 @@ describe('ParamForm: SQL-список', () => {
       <QHarness params={qParams} initial={{ region: 1, city: null }} onChange={vi.fn()} />,
     );
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Город' })).toBeEnabled());
-    await userEvent.click(screen.getByRole('combobox', { name: 'Город' }));
-    await screen.findByRole('option', { name: 'Мурманск' });
+    await findOption(screen.getByRole('combobox', { name: 'Город' }), 'Мурманск');
     expect(screen.queryByRole('checkbox', { name: /Выбрать все|Снять все/ })).toBeNull();
   });
 

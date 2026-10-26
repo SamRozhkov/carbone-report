@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { PAGE_FORMATS } from '@carbone-reports/shared/i18n';
 import { adminTemplate } from '../../../test/fixtures';
 import { changeLocale } from '../../../i18n';
-import { mockApi, renderWithProviders } from '../../../test/utils';
+import { mockApi, pickOption, renderWithProviders } from '../../../test/utils';
 import { PdfTab } from './PdfTab';
 
 const att = (
@@ -249,8 +249,7 @@ describe('PdfTab — электронная подпись (§39.2)', () => {
   const base = { ...adminTemplate, pdfOptions: { pdfa: false } } as TemplateAdminDetails;
   const SAVE = { method: 'PUT', path: '/api/templates/t1/pdf-options', body: base } as const;
   const pick = async (name: string) => {
-    await userEvent.click(screen.getByRole('combobox', { name: 'Положение штампа' }));
-    await userEvent.click(await screen.findByRole('option', { name }));
+    await pickOption(screen.getByRole('combobox', { name: 'Положение штампа' }), name);
   };
 
   it('флажок включает положение (по умолчанию справа); сохранение и выключение', async () => {
@@ -305,10 +304,7 @@ describe('PdfTab — электронная подпись (§39.2)', () => {
     const method = screen.getByRole('combobox', { name: 'Способ подписи' });
     expect(method).toHaveTextContent('Сертификат .p12 (подпись в PDF)');
     expect(screen.queryByText(GOST_HINT)).not.toBeInTheDocument();
-    await userEvent.click(method);
-    await userEvent.click(
-      await screen.findByRole('option', { name: 'ГОСТ, КриптоПро (файл .sig)' }),
-    );
+    await pickOption(method, 'ГОСТ, КриптоПро (файл .sig)');
     expect(screen.getByText(GOST_HINT)).toBeInTheDocument();
     // Положение после выбора способа не сбрасывает способ.
     await pick('Внизу слева');

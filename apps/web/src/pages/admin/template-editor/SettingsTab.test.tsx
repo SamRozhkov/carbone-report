@@ -228,8 +228,7 @@ describe('SettingsTab', () => {
       const s = await section();
       expect(await s.findByText(WARNING)).toBeInTheDocument();
       expect(s.getByRole('group', { name: 'Группы' })).toBeInTheDocument();
-      await userEvent.click(s.getByRole('combobox', { name: 'Группы' }));
-      await userEvent.click(await screen.findByRole('option', { name: 'Логистика' }));
+      await pickOption(s.getByRole('combobox', { name: 'Группы' }), 'Логистика');
       expect(s.queryByText(WARNING)).not.toBeInTheDocument();
       await userEvent.click(s.getByRole('button', { name: 'Сохранить доступ' }));
       await waitFor(() =>
@@ -259,17 +258,14 @@ describe('SettingsTab', () => {
       await waitFor(() => expect(combo).toHaveTextContent('Финансы'));
       expect(s.queryByText(WARNING)).not.toBeInTheDocument();
 
-      await userEvent.click(combo);
-      await userEvent.click(await screen.findByRole('option', { name: 'Черновики' }));
+      await pickOption(combo, 'Черновики');
       expect(await s.findByText(DIRTY_WARNING)).toBeInTheDocument();
       expect(s.queryByText(WARNING)).not.toBeInTheDocument();
 
-      await userEvent.click(combo);
-      await userEvent.click(await screen.findByRole('option', { name: 'Общие' }));
+      await pickOption(combo, 'Общие');
       expect(s.queryByText(WARNING)).not.toBeInTheDocument();
 
-      await userEvent.click(combo);
-      await userEvent.click(await screen.findByRole('option', { name: 'Без категории' }));
+      await pickOption(combo, 'Без категории');
       expect(await s.findByText(DIRTY_WARNING)).toBeInTheDocument();
 
       await userEvent.click(s.getByRole('button', { name: 'Сохранить доступ' }));

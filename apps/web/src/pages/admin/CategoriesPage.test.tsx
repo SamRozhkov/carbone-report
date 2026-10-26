@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { adminMe, mockApi, renderRoute } from '../../test/utils';
+import { adminMe, mockApi, pickOption, renderRoute } from '../../test/utils';
 
 const groups = [
   { id: 'g1', name: 'Бухгалтерия', description: '', memberIds: [], createdAt: '' },
@@ -72,8 +72,7 @@ describe('CategoriesPage', () => {
     expect(within(dialog).getByRole('group', { name: 'Видимость' })).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Доступно всем' }));
     expect(within(dialog).getByRole('group', { name: 'Группы' })).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Группы' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Логистика' }));
+    await pickOption(within(dialog).getByRole('combobox', { name: 'Группы' }), 'Логистика');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Создать' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({
@@ -143,8 +142,7 @@ describe('CategoriesPage', () => {
     await screen.findByText('Финансы');
     await userEvent.click(within(row('Финансы')).getByRole('button', { name: 'Изменить' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Группы' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Логистика' }));
+    await pickOption(within(dialog).getByRole('combobox', { name: 'Группы' }), 'Логистика');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(calls.some((c) => c.method === 'PATCH')).toBe(false);

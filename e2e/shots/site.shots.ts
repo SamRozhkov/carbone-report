@@ -10,6 +10,11 @@ const OUT = fileURLToPath(new URL('../../site/shots/', import.meta.url));
 const GENERATE = { ru: 'Сформировать', en: 'Generate' } as const;
 const SEARCH = { ru: 'Поиск', en: 'Search' } as const;
 const SEARCH_BY_NAME = { ru: 'Поиск по названию', en: 'Search by name' } as const;
+// Необязательные карточки вкладки PDF, которые на снимке «подпись» свёрнуты.
+const COLLAPSED_CARDS = {
+  ru: ['Водяной знак', 'Нумерация страниц', 'Метаданные'],
+  en: ['Watermark', 'Page numbers', 'Metadata'],
+} as const;
 const SIGNATURE_HEADING = { ru: 'Электронная подпись', en: 'Electronic signature' } as const;
 
 type Lang = keyof typeof GENERATE;
@@ -122,7 +127,26 @@ for (const lang of ['ru', 'en'] as const) {
       await page.goto(`/admin/templates/${templateId}?tab=pdf`);
       const heading = page.getByText(SIGNATURE_HEADING[lang], { exact: true });
       await expect(heading).toBeVisible();
-      await heading.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+      // Необязательные карточки (водяной знак, нумерация, метаданные) на снимке свёрнуты, чтобы в
+      // кадре поместились и вкладки редактора (видно, что это вкладка PDF), и настройки подписи.
+      for (const label of COLLAPSED_CARDS[lang]) {
+        await page
+          .getByText(label, { exact: true })
+          .first()
+          .evaluate((el, sigText) => {
+            const sig = [...document.querySelectorAll('*')].find(
+              (e) => e.children.length === 0 && e.textContent === sigText,
+            );
+            let card: Element = el;
+            while (card.parentElement && !card.parentElement.contains(sig as Node))
+              card = card.parentElement;
+            (card as HTMLElement).style.display = 'none';
+          }, SIGNATURE_HEADING[lang]);
+      }
+      await page
+        .getByRole('tablist')
+        .first()
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
       await page.waitForLoadState('networkidle');
       await shot(page, lang, 'signature');
 

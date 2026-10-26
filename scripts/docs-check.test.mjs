@@ -1,17 +1,23 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { anchorsOf, checkAll, checkPair, normalizeCode, parseDoc, slugify } from './docs-check.mjs';
 
 const script = fileURLToPath(new URL('./docs-check.mjs', import.meta.url));
 
-/** Временный корень с файлами { путь: содержимое }. */
+const roots = [];
+after(() => {
+  for (const dir of roots) rmSync(dir, { recursive: true, force: true });
+});
+
+/** Временный корень с файлами { путь: содержимое }; удаляется после всех тестов. */
 function tree(files) {
   const root = mkdtempSync(join(tmpdir(), 'docs-check-'));
+  roots.push(root);
   for (const [p, text] of Object.entries(files)) {
     mkdirSync(dirname(join(root, p)), { recursive: true });
     writeFileSync(join(root, p), text);
@@ -202,4 +208,46 @@ test('запуск: код выхода и --only', () => {
     encoding: 'utf8',
   });
   assert.equal(good.status, 0, good.stderr);
+});
+
+test('незакрытый блок кода в конце файла считается блоком', () => {
+  const { blocks } = parseDoc('# A\n\n```sh\nls\n');
+  assert.equal(blocks.length, 1);
+  assert.deepEqual(
+    blocks[0].lines.map((l) => l.text),
+    ['ls', ''],
+  );
+  const root = ok({ 'guide.en.md': EN + '\n```sh\nls\n' });
+  assert.match(checkPair(root, 'guide.md').join('\n'), /блоков кода: 1 и 2/);
+});
+
+test('неверная %-последовательность в ссылке — ошибка, а не исключение', () => {
+  const root = ok({ 'guide.en.md': EN.replace('other.en.md#keys', 'other.en.md#100%') });
+  assert.match(
+    checkPair(root, 'guide.md').join('\n'),
+    /guide\.en\.md:\d+: неверная ссылка other\.en\.md#100%/,
+  );
+});
+
+test('запуск: --root/--only без значения и неизвестный флаг — код 2', () => {
+  for (const args of [['--root'], ['--only'], ['--bogus']]) {
+    const r = spawnSync('node', [script, ...args], { encoding: 'utf8' });
+    assert.equal(r.status, 2, args.join(' '));
+    assert.match(r.stderr, /^docs:check: /);
+    assert.doesNotMatch(r.stderr, /\bat .*\.mjs/);
+  }
+});
+
+test('английский документ не ссылается на русскую пару', () => {
+  const pairs = ['guide.md', 'other.md'];
+  const root = ok({ 'guide.en.md': EN.replace('other.en.md#keys', 'other.md#ключи') });
+  assert.match(
+    checkPair(root, 'guide.md', pairs).join('\n'),
+    /guide\.en\.md:\d+: ссылка на русский документ other\.md; нужен other\.en\.md/,
+  );
+  // Русский документ ссылается на русские, а на документ без пары английский можно ссылаться.
+  assert.deepEqual(checkPair(ok({}), 'guide.md', pairs), []);
+  const root2 = ok({ 'guide.en.md': EN + '\n[log](CHANGELOG.md)\n', 'CHANGELOG.md': '# Log\n' });
+  assert.deepEqual(checkPair(root2, 'guide.md', pairs), []);
+  assert.match(checkAll(root, pairs).join('\n'), /ссылка на русский документ/);
 });

@@ -3,7 +3,10 @@
 // Использование: node scripts/docs-check.mjs [--root <каталог>] [--only <файл.md>]
 // Для каждой пары X.md ↔ X.en.md: переключатель языка в первой строке, одинаковые уровни
 // заголовков, одинаковые блоки кода (с точностью до комментариев и заполнителей <…>),
-// существующие файлы и якоря у относительных ссылок. Ошибки — «файл:строка: …», код выхода 1.
+// существующие файлы и якоря у относительных ссылок; английский документ (кроме переключателя
+// языка) не ссылается на русский, если у того есть английская пара. Незакрытый блок кода в конце
+// файла считается блоком.
+// Ошибки — «файл:строка: …», код выхода 1; неверные аргументы — сообщение в stderr, код 2.
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { basename, dirname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -61,6 +64,7 @@ export function parseDoc(text) {
       links.push({ target, line: n });
     }
   });
+  if (fence) blocks.push({ line: fence.line, lines: fence.lines });
   return { lines, headings, blocks, links };
 }
 
@@ -104,17 +108,32 @@ function readDoc(root, rel) {
   return existsSync(file) ? parseDoc(readFileSync(file, 'utf8')) : null;
 }
 
-/** Ссылки документа rel: файл существует, якорь есть среди заголовков файла. */
-export function checkLinks(root, rel, doc) {
+/**
+ * Ссылки документа rel: файл существует, якорь есть среди заголовков файла;
+ * из английского документа нельзя ссылаться на русский из списка pairs.
+ */
+export function checkLinks(root, rel, doc, pairs = DOC_PAIRS) {
   const errors = [];
   const cache = new Map();
+  const ruTwin = rel.replace(/\.en\.md$/, '.md'); // переключатель языка ссылается на него
   for (const { target, line } of doc.links) {
     const [rawPath, rawAnchor] = target.split('#');
-    const path = decodeURIComponent(rawPath);
-    const anchor = rawAnchor === undefined ? null : decodeURIComponent(rawAnchor);
+    let path;
+    let anchor;
+    try {
+      path = decodeURIComponent(rawPath);
+      anchor = rawAnchor === undefined ? null : decodeURIComponent(rawAnchor);
+    } catch {
+      errors.push(`${rel}:${line}: неверная ссылка ${target}`);
+      continue;
+    }
     const targetRel = path ? normalize(join(dirname(rel), path)) : rel;
     if (!existsSync(join(root, targetRel))) {
       errors.push(`${rel}:${line}: нет файла ${path}`);
+      continue;
+    }
+    if (rel.endsWith('.en.md') && targetRel !== ruTwin && pairs.includes(targetRel)) {
+      errors.push(`${rel}:${line}: ссылка на русский документ ${path}; нужен ${enPath(path)}`);
       continue;
     }
     if (anchor === null || !targetRel.endsWith('.md')) continue;
@@ -129,7 +148,7 @@ export function checkLinks(root, rel, doc) {
 }
 
 /** Ошибки одной пары: русский файл ruRel и его английская версия. */
-export function checkPair(root, ruRel) {
+export function checkPair(root, ruRel, pairs = DOC_PAIRS) {
   const enRel = enPath(ruRel);
   const ru = readDoc(root, ruRel);
   const en = readDoc(root, enRel);
@@ -138,8 +157,8 @@ export function checkPair(root, ruRel) {
   if (!en) errors.push(`${enRel}: нет файла`);
   if (!ru || !en) {
     // Ссылки существующего документа проверяются и без пары.
-    if (ru) errors.push(...checkLinks(root, ruRel, ru));
-    if (en) errors.push(...checkLinks(root, enRel, en));
+    if (ru) errors.push(...checkLinks(root, ruRel, ru, pairs));
+    if (en) errors.push(...checkLinks(root, enRel, en, pairs));
     return errors;
   }
 
@@ -181,20 +200,32 @@ export function checkPair(root, ruRel) {
     });
   }
 
-  errors.push(...checkLinks(root, ruRel, ru), ...checkLinks(root, enRel, en));
+  errors.push(...checkLinks(root, ruRel, ru, pairs), ...checkLinks(root, enRel, en, pairs));
   return errors;
 }
 
 export function checkAll(root, pairs = DOC_PAIRS) {
-  return pairs.flatMap((rel) => checkPair(root, rel));
+  return pairs.flatMap((rel) => checkPair(root, rel, pairs));
 }
 
 function main(argv) {
   let root = fileURLToPath(new URL('..', import.meta.url));
   let pairs = DOC_PAIRS;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--root') root = argv[++i];
-    else if (argv[i] === '--only') pairs = [argv[++i]];
+    const flag = argv[i];
+    if (flag !== '--root' && flag !== '--only') {
+      console.error(`docs:check: неизвестный аргумент ${flag}`);
+      process.exitCode = 2;
+      return;
+    }
+    const value = argv[++i];
+    if (value === undefined) {
+      console.error(`docs:check: у ${flag} нет значения`);
+      process.exitCode = 2;
+      return;
+    }
+    if (flag === '--root') root = value;
+    else pairs = [value];
   }
   const errors = checkAll(root, pairs);
   if (errors.length) {

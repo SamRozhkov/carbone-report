@@ -155,6 +155,12 @@ test('внешние ресурсы', () => {
   has(errors, /внешний ресурс https:\/\/x\.example/);
 });
 
+test('версия в команде установки устарела, а в подвале верная', () => {
+  const extra =
+    '<p data-version="2.18.0">2.18.0</p><pre>helm install … --version <span data-version="2.17.0">2.17.0</span></pre>';
+  has(checkSite(repo({ 'site/index.html': page('ru', { extra }) })), /версия 2\.17\.0.*2\.18\.0/);
+});
+
 test('версия не совпадает с CHANGELOG', () => {
   has(
     checkSite(repo({ 'site/index.html': page('ru', { version: '2.17.0' }) })),

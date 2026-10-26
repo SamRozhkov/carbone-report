@@ -3,200 +3,338 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="yandex-verification" content="c48b9432da99645e" />
     <title>Carbone Reports — reports from Word and Excel templates</title>
     <meta
       name="description"
       content="Report server: DOCX and XLSX templates, data from PostgreSQL, in-browser editing, PDF and electronic signatures."
     />
+    <link rel="preload" href="../fonts/golos-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="../style.css" />
   </head>
   <body>
     <nav class="lang">
       <a href="../index.html" lang="ru" hreflang="ru">Русский</a> · <b>English</b>
     </nav>
-    <header>
-      <h1>Carbone Reports</h1>
-      <p class="lead">
-        Reports from Word and Excel templates filled with data from your PostgreSQL databases.
-        Templates are edited right in the browser; the finished document comes out as PDF, DOCX or
-        XLSX, with an electronic signature, including GOST.
-      </p>
-      <p>
-        <a href="https://github.com/SamRozhkov/carbone-report"
-          >Source code and installation on GitHub</a
-        >
-      </p>
+    <header class="wrap">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">C</span>Carbone Reports</div>
+      <div class="hero">
+        <div>
+          <h1>Reports from Word and Excel templates, filled with data from your databases</h1>
+          <p class="lead">
+            Templates are edited right in the browser, data comes from PostgreSQL, and the finished
+            document comes out as PDF, DOCX or XLSX, with an electronic signature, including GOST.
+          </p>
+          <p class="actions">
+            <a class="button" href="#install">Install</a>
+            <a class="button button-quiet" href="https://github.com/SamRozhkov/carbone-report"
+              >Source code on GitHub</a
+            >
+          </p>
+        </div>
+        <figure class="doc">
+          <div class="sheet">
+            <p class="sheet-title">
+              Invoice No.
+              <span class="fill"
+                ><code class="tag" aria-hidden="true">{d.invoice.number}</code
+                ><span class="val">СЧ-001</span></span
+              >
+            </p>
+            <p class="sheet-meta">
+              dated
+              <span class="fill" style="--d: 0.15s"
+                ><code class="tag" aria-hidden="true">{d.invoice.issued_on}</code
+                ><span class="val">30 Sep 2026</span></span
+              >
+            </p>
+            <p class="sheet-party">
+              Customer:
+              <span class="fill" style="--d: 0.3s"
+                ><code class="tag" aria-hidden="true">{d.company.name}</code
+                ><span class="val">ООО «Ромашка»</span></span
+              >, TIN
+              <span class="fill" style="--d: 0.45s"
+                ><code class="tag" aria-hidden="true">{d.company.inn}</code
+                ><span class="val">7701234567</span></span
+              >
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th class="num">Qty</th>
+                  <th class="num price">Price</th>
+                  <th class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <span class="fill" style="--d: 0.6s"
+                      ><code class="tag" aria-hidden="true">{d.items[i].name}</code
+                      ><span class="val">Бумага А4</span></span
+                    >
+                  </td>
+                  <td class="num">
+                    <span class="fill" style="--d: 0.6s"
+                      ><code class="tag" aria-hidden="true">{d.items[i].qty}</code
+                      ><span class="val">10</span></span
+                    >
+                  </td>
+                  <td class="num price">
+                    <span class="fill" style="--d: 0.6s"
+                      ><code class="tag" aria-hidden="true">{d.items[i].price}</code
+                      ><span class="val">350.00</span></span
+                    >
+                  </td>
+                  <td class="num"><span class="later" style="--d: 0.6s">3,500.00</span></td>
+                </tr>
+                <tr class="later" style="--d: 0.75s">
+                  <td>Картридж</td>
+                  <td class="num">2</td>
+                  <td class="num price">4,500.00</td>
+                  <td class="num">9,000.00</td>
+                </tr>
+                <tr class="later" style="--d: 0.9s">
+                  <td>Ручки шариковые</td>
+                  <td class="num">50</td>
+                  <td class="num price">25.50</td>
+                  <td class="num">1,275.00</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="later" style="--d: 1.05s">
+                  <td colspan="2">Total</td>
+                  <td class="price"></td>
+                  <td class="num">13,775.00</td>
+                </tr>
+              </tfoot>
+            </table>
+            <div class="stamp">
+              <strong>Signed with an electronic signature</strong>
+              GOST · CryptoPro
+            </div>
+          </div>
+          <figcaption>
+            The demo “Invoice” template: Carbone tags are filled with data from the demo database.
+          </figcaption>
+        </figure>
+      </div>
     </header>
+
     <main>
-      <section class="feature">
-        <div>
-          <h2>Sign-in</h2>
+      <section class="chapter" aria-labelledby="ch1">
+        <div class="wrap">
+          <div class="chapter-text">
+            <div class="step" aria-hidden="true">1</div>
+            <h2 id="ch1">An author prepares the template</h2>
+            <p>
+              A template is an ordinary Word or Excel document with tags like
+              <code>{d.company.name}</code>. It opens in the built-in OnlyOffice editor — no Word or
+              Excel needed.
+            </p>
+            <p>
+              Data comes from SQL queries to connected databases. Queries run read-only, and report
+              parameters are passed into them by name.
+            </p>
+          </div>
+          <div class="shots">
+            <figure class="shot shot-main">
+              <a href="../shots/en/editor-document.png"
+                ><img
+                  src="../shots/en/editor-document.png"
+                  alt="Template document in the OnlyOffice editor"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption>
+                <b>Templates in the browser.</b> The document opens in the built-in OnlyOffice.
+              </figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="../shots/en/editor-sql.png"
+                ><img
+                  src="../shots/en/editor-sql.png"
+                  alt="Template editor: SQL queries"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption>
+                <b>Queries and parameters.</b> SQL to your databases, read-only.
+              </figcaption>
+            </figure>
+            <pre class="snippet" aria-label="A query from the demo template">
+select c.name, c.inn, c.address
+from company c
+join invoices i on i.company_id = c.id
+where i.id = <span class="p">:invoiceId</span></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="chapter" aria-labelledby="ch2">
+        <div class="wrap">
+          <div class="chapter-text">
+            <div class="step" aria-hidden="true">2</div>
+            <h2 id="ch2">A user generates the report</h2>
+            <p>Reports are grouped into categories; everyone sees only what they have access to.</p>
+            <p>
+              The run form is built from the template's parameters: dates, numbers and lists,
+              including dependent lists from SQL queries. Generated reports stay in the history:
+              open them again, download them in another format or sign them later.
+            </p>
+          </div>
+          <div class="shots">
+            <figure class="shot shot-main">
+              <a href="../shots/en/run.png"
+                ><img
+                  src="../shots/en/run.png"
+                  alt="Report parameter form"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption>
+                <b>Running with parameters.</b> Default values and dependent lists.
+              </figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="../shots/en/reports.png"
+                ><img
+                  src="../shots/en/reports.png"
+                  alt="Report catalog by category"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption><b>Report catalog</b> by category.</figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="../shots/en/history.png"
+                ><img
+                  src="../shots/en/history.png"
+                  alt="History of generated reports"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption><b>History</b> of generated reports.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="chapter" aria-labelledby="ch3">
+        <div class="wrap">
+          <div class="chapter-text">
+            <div class="step" aria-hidden="true">3</div>
+            <h2 id="ch3">Signing and control</h2>
+            <p>
+              A PDF is signed with the user's certificate (.p12) or with a GOST key via CryptoPro —
+              the GOST key never leaves the user's computer. PDFs can get a watermark, page
+              numbering and standing attachments; PDF/A and password protection are available too.
+            </p>
+            <p>
+              Access is granted by groups and categories; roles separate users, template authors and
+              access managers. Sign-in uses local accounts, LDAP/Active Directory or Keycloak
+              (OpenID Connect).
+            </p>
+          </div>
+          <div class="shots">
+            <figure class="shot shot-main">
+              <a href="../shots/en/signature.png"
+                ><img
+                  src="../shots/en/signature.png"
+                  alt="PDF and electronic signature settings"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption><b>PDF and signature settings</b> of a template.</figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="../shots/en/access.png"
+                ><img
+                  src="../shots/en/access.png"
+                  alt="Template access settings"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption><b>Report access</b> by groups and categories.</figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="../shots/en/users.png"
+                ><img
+                  src="../shots/en/users.png"
+                  alt="User list"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption><b>Users:</b> roles and blocking.</figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="../shots/en/datasources.png"
+                ><img
+                  src="../shots/en/datasources.png"
+                  alt="Data sources"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption>
+                <b>Data sources</b> with a connection test; passwords are stored encrypted.
+              </figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="../shots/en/login.png"
+                ><img
+                  src="../shots/en/login.png"
+                  alt="Sign-in page"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption>
+                <b>Sign-in.</b> The interface language can be chosen before signing in.
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="install" id="install" aria-labelledby="install-h">
+        <div class="wrap">
+          <h2 id="install-h">Installation</h2>
           <p>
-            Local accounts, LDAP/Active Directory or Keycloak (OpenID Connect). The interface
-            language can be chosen before signing in.
+            The stack: web interface, API, OnlyOffice Document Server, PostgreSQL, Redis and S3
+            storage. On Kubernetes it is installed from the Helm chart:
+          </p>
+          <pre>helm install cr oci://ghcr.io/samrozhkov/charts/carbone-reports --version <span data-version="2.18.0">2.18.0</span> -n reports -f my-values.yaml</pre>
+          <p>
+            <a
+              href="https://github.com/SamRozhkov/carbone-report/blob/main/README.en.md#kubernetes-helm"
+              >Install on Kubernetes (Helm)</a
+            >
+            ·
+            <a
+              href="https://github.com/SamRozhkov/carbone-report/blob/main/README.en.md#running-in-docker"
+              >Running in Docker</a
+            >
           </p>
         </div>
-        <a href="../shots/en/login.png"
-          ><img
-            src="../shots/en/login.png"
-            alt="Sign-in page"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Report catalog</h2>
-          <p>Reports are grouped into categories; everyone sees only what they have access to.</p>
-        </div>
-        <a href="../shots/en/reports.png"
-          ><img
-            src="../shots/en/reports.png"
-            alt="Report catalog by category"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Running with parameters</h2>
-          <p>
-            The form is built from the template's parameters: dates, numbers and lists, including
-            dependent lists from SQL queries.
-          </p>
-        </div>
-        <a href="../shots/en/run.png"
-          ><img
-            src="../shots/en/run.png"
-            alt="Report parameter form"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>History</h2>
-          <p>
-            Every generated report is kept: open it, download it in another format or sign it later.
-          </p>
-        </div>
-        <a href="../shots/en/history.png"
-          ><img
-            src="../shots/en/history.png"
-            alt="History of generated reports"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Queries and parameters</h2>
-          <p>Template data comes from SQL queries to connected databases. Queries run read-only.</p>
-        </div>
-        <a href="../shots/en/editor-sql.png"
-          ><img
-            src="../shots/en/editor-sql.png"
-            alt="Template editor: SQL queries"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Templates in the browser</h2>
-          <p>
-            The template document opens in the built-in OnlyOffice editor — no Word or Excel needed.
-          </p>
-        </div>
-        <a href="../shots/en/editor-document.png"
-          ><img
-            src="../shots/en/editor-document.png"
-            alt="Template document in the OnlyOffice editor"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>PDF and electronic signatures</h2>
-          <p>
-            PDF password protection, page numbering and signing: with the user's certificate (.p12)
-            or with a GOST key via CryptoPro — the GOST key never leaves the user's computer.
-          </p>
-        </div>
-        <a href="../shots/en/signature.png"
-          ><img
-            src="../shots/en/signature.png"
-            alt="PDF and electronic signature settings"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Access and roles</h2>
-          <p>
-            Access to reports is granted by groups and categories; roles separate users, template
-            authors and access managers.
-          </p>
-        </div>
-        <a href="../shots/en/access.png"
-          ><img
-            src="../shots/en/access.png"
-            alt="Template access settings"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Users</h2>
-          <p>Accounts, roles and blocking in one list.</p>
-        </div>
-        <a href="../shots/en/users.png"
-          ><img
-            src="../shots/en/users.png"
-            alt="User list"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Data sources</h2>
-          <p>
-            Connections to PostgreSQL databases with a connection test; passwords are stored
-            encrypted.
-          </p>
-        </div>
-        <a href="../shots/en/datasources.png"
-          ><img
-            src="../shots/en/datasources.png"
-            alt="Data sources"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
       </section>
     </main>
+
     <footer>
-      <div class="inner">
+      <div class="wrap">
         <a href="https://github.com/SamRozhkov/carbone-report">GitHub</a>
         <a href="https://github.com/SamRozhkov/carbone-report/blob/main/README.en.md"
           >Documentation</a
-        >
-        <a
-          href="https://github.com/SamRozhkov/carbone-report/blob/main/README.en.md#kubernetes-helm"
-          >Install on Kubernetes (Helm)</a
         >
         <a href="https://github.com/SamRozhkov/carbone-report/blob/main/LICENSE.md">License</a>
         <span class="ver">Version <span data-version="2.18.0">2.18.0</span></span>

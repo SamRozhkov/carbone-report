@@ -4,7 +4,7 @@
 
 Report generation based on Carbone, with template editing in the browser (OnlyOffice) and a GravityUI interface.
 
-Website with interface screenshots: <https://samrozhkov.github.io/carbone-report/>.
+Website with interface screenshots: <https://report.rozhkov.pro/>.
 
 The stack: web (nginx), API, backup agent, OnlyOffice Document Server, PostgreSQL, Redis, S3 (SeaweedFS). There is no separate Carbone container: the API itself builds reports with the built-in Carbone Community Edition 3.8.2 (`packages/carbone`, `worker_threads` workers). The build produces a document in the template format; PDF and conversion to ODT/ODS are done by OnlyOffice, so **OnlyOffice is required to build reports**: the API builds a PDF first, and without Document Server a report cannot be generated. Details about the license are in the section [“License”](#license), about the move from 1.x in [“Upgrading from 1.x”](#upgrading-from-1x).
 

@@ -26,6 +26,7 @@
     "help:check": "tsx scripts/help-check.ts",
     "i18n:check": "tsx scripts/i18n-check.ts",
     "docs:check": "node scripts/docs-check.mjs",
+    "site:check": "node scripts/site-check.mjs",
     "e2e": "pnpm --filter @carbone-reports/e2e e2e"
   },
   "devDependencies": {

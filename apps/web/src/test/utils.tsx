@@ -140,27 +140,38 @@ export const userMe = {
 };
 
 /**
- * Выбор пункта в Select Gravity UI внутри диалога. Список рисуется в портале вне окна, а окно
- * помечает всё вне себя aria-hidden (floating-ui inert) — иногда уже после открытия списка, и тогда
- * пункты пропадают из поиска по ролям. Поэтому пункт ищется внутри самого списка (aria-controls)
- * с учётом скрытых элементов.
+ * Помощники для Select Gravity UI. Список рисуется в портале вне формы, а открытый диалог помечает
+ * всё вне себя aria-hidden (floating-ui inert) — иногда уже после открытия списка, и тогда пункты
+ * пропадают из поиска по ролям на всей странице. Поэтому пункты ищутся внутри самого списка
+ * (aria-controls у поля) с учётом скрытых элементов.
  */
-/** Пункты открытого списка Select (см. pickOption): ищутся внутри самого списка с учётом скрытых. */
-export async function popupOptions(combo: HTMLElement): Promise<HTMLElement[]> {
+
+/** Открытый список поля или null. */
+export function popupOf(combo: HTMLElement): HTMLElement | null {
+  return document.getElementById(combo.getAttribute('aria-controls') ?? '');
+}
+
+/** Открывает список поля, если он закрыт, и ждёт, пока query найдёт в нём результат. */
+async function inPopup<T>(combo: HTMLElement, query: (popup: HTMLElement) => T): Promise<T> {
   if (combo.getAttribute('aria-expanded') !== 'true') await userEvent.click(combo);
   return waitFor(() => {
-    const popup = document.getElementById(combo.getAttribute('aria-controls') ?? '');
+    const popup = popupOf(combo);
     if (!popup) throw new Error('список не открыт');
-    return within(popup).getAllByRole('option', { hidden: true });
+    return query(popup);
   });
 }
 
-export async function pickOption(combo: HTMLElement, name: string): Promise<void> {
-  if (combo.getAttribute('aria-expanded') !== 'true') await userEvent.click(combo);
-  const option = await waitFor(() => {
-    const popup = document.getElementById(combo.getAttribute('aria-controls') ?? '');
-    if (!popup) throw new Error('список не открыт');
-    return within(popup).getByRole('option', { name, hidden: true });
-  });
-  await userEvent.click(option);
+/** Все пункты списка поля; открывает список, если он закрыт. */
+export function popupOptions(combo: HTMLElement): Promise<HTMLElement[]> {
+  return inPopup(combo, (popup) => within(popup).getAllByRole('option', { hidden: true }));
+}
+
+/** Пункт списка поля по имени; открывает список, если он закрыт. */
+export function findOption(combo: HTMLElement, name: string | RegExp): Promise<HTMLElement> {
+  return inPopup(combo, (popup) => within(popup).getByRole('option', { name, hidden: true }));
+}
+
+/** Выбирает пункт списка поля. */
+export async function pickOption(combo: HTMLElement, name: string | RegExp): Promise<void> {
+  await userEvent.click(await findOption(combo, name));
 }

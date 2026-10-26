@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { adminTemplate } from '../../../test/fixtures';
-import { mockApi, renderWithProviders } from '../../../test/utils';
+import { mockApi, pickOption, renderWithProviders } from '../../../test/utils';
 import { ChartsTab, newChart } from './ChartsTab';
 
 vi.mock('./ChartPreview', () => ({
@@ -63,8 +63,7 @@ describe('ChartsTab', () => {
     const preview = await screen.findByTestId('chart-option');
     expect(preview.textContent).toContain('"data":["Янв","Фев"]');
     expect(preview.textContent).toContain('"data":[100.5,25]');
-    await userEvent.click(screen.getByRole('combobox', { name: 'Колонка ряда 1' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'qty' }));
+    await pickOption(screen.getByRole('combobox', { name: 'Колонка ряда 1' }), 'qty');
     await waitFor(() =>
       expect(screen.getByTestId('chart-option').textContent).toContain('"data":[1,2]'),
     );

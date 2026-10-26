@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { loadCades } from '../lib/cades';
 import * as download from '../lib/download';
-import { mockApi, renderRoute, userMe } from '../test/utils';
+import { mockApi, pickOption, renderRoute, userMe } from '../test/utils';
 
 vi.mock('../lib/cades', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/cades')>()),
@@ -377,8 +377,7 @@ describe('ReportRunPage', () => {
     ]);
     renderRoute('/reports/t1');
     const control = await screen.findByRole('combobox', { name: 'Регион *' });
-    await userEvent.click(control);
-    await userEvent.click(await screen.findByRole('option', { name: 'Север' }));
+    await pickOption(control, 'Север');
     await userEvent.click(screen.getByRole('button', { name: 'Сформировать' }));
     await waitFor(() =>
       expect(calls.find((c) => c.path === '/api/reports/t1/render')?.body).toEqual({

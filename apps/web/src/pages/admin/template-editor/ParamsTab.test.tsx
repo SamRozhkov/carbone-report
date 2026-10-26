@@ -4,7 +4,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { changeLocale } from '../../../i18n';
-import { mockApi, renderWithProviders } from '../../../test/utils';
+import { mockApi, pickOption, renderWithProviders } from '../../../test/utils';
 import { anyHints, ParamsTab } from './ParamsTab';
 import { adminTemplate } from '../../../test/fixtures';
 
@@ -238,8 +238,7 @@ describe('ParamsTab', () => {
     ]);
     renderWithProviders(<ParamsTab template={t} />);
     await userEvent.click(await screen.findByRole('button', { name: 'Добавить параметр' }));
-    await userEvent.click(screen.getByRole('combobox', { name: 'Тип параметра 3' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'SQL-список' }));
+    await pickOption(screen.getByRole('combobox', { name: 'Тип параметра 3' }), 'SQL-список');
     const sql = screen.getByLabelText('SQL параметра 3');
     await userEvent.type(sql, 'select id from c where r = :from and x::int = 1');
     expect(screen.getByText('зависит от: from')).toBeInTheDocument();

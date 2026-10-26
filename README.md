@@ -1,3 +1,5 @@
+**Русский** · [English](README.en.md)
+
 # Carbone Reports
 
 Генерация отчётов на базе Carbone с редактированием шаблонов в браузере (OnlyOffice) и интерфейсом на GravityUI.
@@ -435,6 +437,7 @@ pnpm --filter @carbone-reports/web dev       # интерфейс с hot reload 
 
 Vite проксирует `/api` и `/onlyoffice` (включая WebSocket) на `http://localhost:8080`; другой адрес стека — переменная `STACK_URL`.
 Тесты интерфейса: `pnpm --filter @carbone-reports/web test`. В прод-образе (`pnpm stack:prod`) интерфейс собирается в `docker/web.Dockerfile`.
+Документация есть на русском и английском (`README.en.md`, `docs/**/*.en.md`); правка русского документа сопровождается правкой английского, пары сверяет `pnpm docs:check` (подробно — [`docs/localization.md`](docs/localization.md#документация)).
 
 ## Демо и E2E
 

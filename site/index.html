@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Carbone Reports — отчёты по шаблонам Word и Excel</title>
+    <meta
+      name="description"
+      content="Сервер отчётов: шаблоны DOCX и XLSX, данные из PostgreSQL, редактирование в браузере, PDF и электронная подпись."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav class="lang">
+      <b>Русский</b> · <a href="en/index.html" lang="en" hreflang="en">English</a>
+    </nav>
+    <header>
+      <h1>Carbone Reports</h1>
+      <p class="lead">
+        Отчёты по шаблонам Word и Excel с данными из ваших баз PostgreSQL. Шаблоны правятся прямо в
+        браузере, готовый документ — в PDF, DOCX или XLSX, с электронной подписью, в том числе по
+        ГОСТ.
+      </p>
+      <p>
+        <a href="https://github.com/SamRozhkov/carbone-report"
+          >Исходный код и установка на GitHub</a
+        >
+      </p>
+    </header>
+    <main>
+      <section class="feature">
+        <div>
+          <h2>Вход</h2>
+          <p>
+            Локальные учётные записи, LDAP/Active Directory или Keycloak (OpenID Connect). Язык
+            интерфейса можно выбрать до входа.
+          </p>
+        </div>
+        <a href="shots/ru/login.png"
+          ><img
+            src="shots/ru/login.png"
+            alt="Страница входа"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Каталог отчётов</h2>
+          <p>Отчёты разложены по категориям; каждый видит только то, к чему ему открыт доступ.</p>
+        </div>
+        <a href="shots/ru/reports.png"
+          ><img
+            src="shots/ru/reports.png"
+            alt="Каталог отчётов по категориям"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Запуск с параметрами</h2>
+          <p>
+            Форма строится из параметров шаблона: даты, числа, списки, в том числе зависимые списки
+            из SQL-запросов.
+          </p>
+        </div>
+        <a href="shots/ru/run.png"
+          ><img
+            src="shots/ru/run.png"
+            alt="Форма параметров отчёта"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>История</h2>
+          <p>
+            Все сформированные отчёты сохраняются: их можно открыть, скачать в другом формате или
+            подписать позже.
+          </p>
+        </div>
+        <a href="shots/ru/history.png"
+          ><img
+            src="shots/ru/history.png"
+            alt="История сформированных отчётов"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Запросы и параметры</h2>
+          <p>
+            Данные для шаблона — SQL-запросы к подключённым базам. Запросы выполняются только на
+            чтение.
+          </p>
+        </div>
+        <a href="shots/ru/editor-sql.png"
+          ><img
+            src="shots/ru/editor-sql.png"
+            alt="Редактор шаблона: SQL-запросы"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Шаблон в браузере</h2>
+          <p>
+            Документ шаблона открывается во встроенном редакторе OnlyOffice — Word и Excel не нужны.
+          </p>
+        </div>
+        <a href="shots/ru/editor-document.png"
+          ><img
+            src="shots/ru/editor-document.png"
+            alt="Шаблон документа в редакторе OnlyOffice"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>PDF и электронная подпись</h2>
+          <p>
+            Защита PDF паролем, нумерация страниц и подпись: сертификатом пользователя (.p12) или
+            ключом по ГОСТ через КриптоПро — ключ ГОСТ не покидает компьютер пользователя.
+          </p>
+        </div>
+        <a href="shots/ru/signature.png"
+          ><img
+            src="shots/ru/signature.png"
+            alt="Настройки PDF и электронной подписи"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Доступ и роли</h2>
+          <p>
+            Доступ к отчётам — по группам и категориям; роли разделяют пользователей, авторов
+            шаблонов и тех, кто управляет доступом.
+          </p>
+        </div>
+        <a href="shots/ru/access.png"
+          ><img
+            src="shots/ru/access.png"
+            alt="Настройка доступа к шаблонам"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Пользователи</h2>
+          <p>Учётные записи, роли и блокировка в одном списке.</p>
+        </div>
+        <a href="shots/ru/users.png"
+          ><img
+            src="shots/ru/users.png"
+            alt="Список пользователей"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+      <section class="feature">
+        <div>
+          <h2>Источники данных</h2>
+          <p>
+            Подключения к базам PostgreSQL с проверкой соединения; пароли хранятся зашифрованными.
+          </p>
+        </div>
+        <a href="shots/ru/datasources.png"
+          ><img
+            src="shots/ru/datasources.png"
+            alt="Источники данных"
+            width="1440"
+            height="900"
+            loading="lazy"
+        /></a>
+      </section>
+    </main>
+    <footer>
+      <div class="inner">
+        <a href="https://github.com/SamRozhkov/carbone-report">GitHub</a>
+        <a href="https://github.com/SamRozhkov/carbone-report/blob/main/README.md">Документация</a>
+        <a href="https://github.com/SamRozhkov/carbone-report/blob/main/README.md#kubernetes-helm"
+          >Установка в Kubernetes (Helm)</a
+        >
+        <a href="https://github.com/SamRozhkov/carbone-report/blob/main/LICENSE.md">Лицензия</a>
+        <span class="ver">Версия <span data-version="2.18.0">2.18.0</span></span>
+      </div>
+    </footer>
+  </body>
+</html>

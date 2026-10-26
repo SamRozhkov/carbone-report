@@ -2301,6 +2301,7 @@ scripts/smoke.ts            сквозная проверка работающе
 ### 49.5 Публикация
 - Workflow `.github/workflows/pages.yml`: запуск при пуше тега `v[0-9]+.[0-9]+.[0-9]+` и вручную (`workflow_dispatch`); шаги — checkout, `pnpm site:check`, `actions/configure-pages`, `actions/upload-pages-artifact` (каталог `site/`), `actions/deploy-pages`; действия закреплены по SHA с комментарием версии, как в `ci.yml`. Права: `pages: write`, `id-token: write`, `contents: read`; `concurrency: pages`.
 - Pages включается владельцем один раз с источником «GitHub Actions» (`gh api -X POST repos/SamRozhkov/carbone-report/pages -f build_type=workflow`). Адрес сайта владелец указывает в поле Website репозитория.
+- GitHub создаёт окружение `github-pages`, допускающее развёртывание только из ветки по умолчанию; владелец один раз разрешает теги `v*`: `gh api -X POST repos/SamRozhkov/carbone-report/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag` (или Settings → Environments → github-pages → Deployment branches and tags).
 - Сайт обновляется только при выпуске: слияние в main его не меняет.
 
 ### 49.6 Документы и выпуск

@@ -447,7 +447,7 @@ Vite проксирует `/api` и `/onlyoffice` (включая WebSocket) н�
 ```bash
 pnpm stack:demo     # прод-стек + демо-БД + шаблон «Счёт (демо)» в категории «Финансы» (нужен DEMO_DB_PASSWORD в .env)
 pnpm e2e            # E2E на Playwright (Chromium на хосте) против поднятого стека
-pnpm site:shots    # скриншоты для сайта (site/shots/) против поднятого демо-стека
+pnpm site:shots     # скриншоты для сайта (site/shots/) против поднятого демо-стека
 pnpm stack:down     # остановить
 ```
 
@@ -456,11 +456,11 @@ pnpm stack:down     # остановить
 E2E меняет демо-шаблон. Перед каждым прогоном он сам восстанавливает исходный файл, запросы, параметры и доступ (`e2e/global-setup.ts`); после прогона шаблон остаётся изменённым. Вручную: `pnpm demo:seed -- --reset-template`.
 Пароль `DEMO_DB_PASSWORD` задаётся ролям демо-БД только при первом создании тома. Если вы поменяли его позже, пересоздайте том демо-БД (другие тома не трогаются):
 
-Сайт продукта — каталог `site/` (HTML и CSS); публикуется на GitHub Pages при выпуске (`.github/workflows/pages.yml`). Скриншоты переснимаются `pnpm site:shots` перед выпуском, если менялся интерфейс; `pnpm site:check` проверяет ссылки, снимки и версию в подвале (она должна совпадать с последней версией в `CHANGELOG.md`).
-
 ```bash
 docker compose --profile demo rm -sf demo-db && docker volume rm carbone-reports_demo_pgdata && pnpm stack:demo
 ```
+
+Сайт продукта — каталог `site/` (HTML и CSS); публикуется на GitHub Pages при выпуске (`.github/workflows/pages.yml`). Скриншоты переснимаются `pnpm site:shots` перед выпуском, если менялся интерфейс; `pnpm site:check` проверяет ссылки, снимки и версию в подвале (она должна совпадать с последней версией в `CHANGELOG.md`). Владелец один раз разрешает публикацию по тегам `v*` в окружении `github-pages` (по умолчанию оно допускает только ветку по умолчанию): `gh api -X POST repos/SamRozhkov/carbone-report/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag` или Settings → Environments → github-pages → Deployment branches and tags.
 
 ## Параметр «SQL-список»
 

@@ -38,6 +38,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm i18n:check
+      - run: pnpm docs:check
       - run: pnpm exec prettier --check .
       - run: pnpm test
         env:

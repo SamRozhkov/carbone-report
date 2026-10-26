@@ -273,7 +273,7 @@
 | Справка по шаблонам | Template help | Ayuda sobre plantillas | Ajuda sobre modelos | Aide sur les modèles | Hilfe zu Vorlagen | 模板帮助 |
 | Список строк (режим запроса) | List of rows | Lista de filas | Lista de linhas | Liste de lignes | Liste von Zeilen | 行列表 |
 | SQL-список (тип параметра) | SQL list | Lista SQL | Lista SQL | Liste SQL | SQL-Liste | SQL 列表 |
-| SSL с проверкой | SSL with verification | SSL con verificación | SSL com verificação | SSL avec vérification | SSL mit Prüfung | SSL（验证证书） |
+| SSL с проверкой сертификата | SSL with verification of the certificate | SSL con verificación del certificado | SSL com verificação do certificado | SSL avec vérification du certificat | SSL mit Prüfung des Zertifikats | SSL（验证证书） |
 | обновить / копия / пропустить (загрузка из архива) | update / copy / skip | actualizar / copia / omitir | atualizar / cópia / ignorar | mettre à jour / copie / ignorer | aktualisieren / Kopie / überspringen | 更新 / 副本 / 跳过 |
 
 ## Правила перевода
@@ -419,4 +419,4 @@
 - ссылки из английского документа ведут на английские пары; ссылки на документы без пары помечаются «(in Russian)»;
 - разделы, уровни заголовков, таблицы и блоки кода идут в том же порядке, что в русском документе.
 
-Правка русского документа сопровождается правкой английского в том же PR. `pnpm docs:check` (шаг CI «Проверки») сверяет пары: переключатель, уровни заголовков, блоки кода с точностью до комментариев и заполнителей, а также существование файлов и якорей у относительных ссылок в обеих версиях.
+Правка русского документа сопровождается правкой английского в том же PR. `pnpm docs:check` (задание CI «Проверки и модульные тесты») сверяет пары: переключатель, уровни заголовков, блоки кода с точностью до комментариев и заполнителей, а также существование файлов и якорей у относительных ссылок в обеих версиях.

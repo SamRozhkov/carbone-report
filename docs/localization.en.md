@@ -273,7 +273,7 @@ Interface labels that API errors refer to (`errors`, `validation`): the web app 
 | Справка по шаблонам | Template help | Ayuda sobre plantillas | Ajuda sobre modelos | Aide sur les modèles | Hilfe zu Vorlagen | 模板帮助 |
 | Список строк (режим запроса) | List of rows | Lista de filas | Lista de linhas | Liste de lignes | Liste von Zeilen | 行列表 |
 | SQL-список (тип параметра) | SQL list | Lista SQL | Lista SQL | Liste SQL | SQL-Liste | SQL 列表 |
-| SSL с проверкой | SSL with verification | SSL con verificación | SSL com verificação | SSL avec vérification | SSL mit Prüfung | SSL（验证证书） |
+| SSL с проверкой сертификата | SSL with verification of the certificate | SSL con verificación del certificado | SSL com verificação do certificado | SSL avec vérification du certificat | SSL mit Prüfung des Zertifikats | SSL（验证证书） |
 | обновить / копия / пропустить (загрузка из архива) | update / copy / skip | actualizar / copia / omitir | atualizar / cópia / ignorar | mettre à jour / copie / ignorer | aktualisieren / Kopie / überspringen | 更新 / 副本 / 跳过 |
 
 ## Translation rules
@@ -419,4 +419,4 @@ Translation rules:
 - links from an English document lead to the English pairs; links to documents without a pair are marked “(in Russian)”;
 - sections, heading levels, tables and code blocks follow the same order as in the Russian document.
 
-A change to the Russian document is accompanied by a change to the English one in the same PR. `pnpm docs:check` (the “Checks” CI step) compares the pairs: the switcher, heading levels, code blocks up to comments and placeholders, and the existence of files and anchors of relative links in both versions.
+A change to the Russian document is accompanied by a change to the English one in the same PR. `pnpm docs:check` (the “Проверки и модульные тесты” (checks and unit tests) CI job) compares the pairs: the switcher, heading levels, code blocks up to comments and placeholders, and the existence of files and anchors of relative links in both versions.

@@ -5,16 +5,16 @@
 Since 2.11.0, a report can be signed with a qualified or non-qualified signature under GOST R 34.10-2012.
 The user's key never leaves their computer: the signature is created by the CryptoPro CAdES Browser plug-in in the browser,
 and only the PDF hash and the finished signature are sent to the server. The result is two files: a stamped PDF and a detached
-CAdES signature (`.sig`). A signature from a `.p12` file (PAdES, §39) works as before.
+CAdES signature (`.sig`). A signature from a `.p12` file (PAdES, specification, §39, in Russian) works as before.
 
-Enable it in the template: the "PDF" tab → "Electronic signature" → "Signing method" → "GOST, CryptoPro (.sig file)".
+Enable it in the template: the “PDF” tab → “Electronic signature” → “Signing method” → “GOST, CryptoPro (.sig file)”.
 Everything works without server configuration (apart from the `cadesplugin_api.js` file).
 
 ## What the user's computer needs
 
 - CryptoPro CSP 5.0 (the license is the organization's responsibility);
 - the CryptoPro CAdES Browser plug-in and the browser extension;
-- a GOST R 34.10-2012 certificate (256 or 512 bit) with the private key in the current user's "Personal" store.
+- a GOST R 34.10-2012 certificate (256 or 512 bit) with the private key in the current user's “Personal” store.
 
 Browsers: Chrome, Yandex Browser, Edge, Firefox (with the plug-in extension). Safari is not supported.
 On the first signing, the plug-in asks for permission for the site; it also asks for the PIN or the container password.
@@ -23,7 +23,7 @@ On the first signing, the plug-in asks for permission for the site; it also asks
 
 The `cadesplugin_api.js` script is not included in the image: download it from the CryptoPro website after accepting the terms
 (the distribution terms have not been confirmed, so we do not ship it). Without the file, the signing window
-shows "CryptoPro CAdES Browser plug-in or CryptoPro CSP not found", while the server works as usual.
+shows “CryptoPro CAdES Browser plug-in or CryptoPro CSP not found”, while the server works as usual.
 
 - **Docker Compose.** Put the file at `./cades/cadesplugin_api.js` next to `docker-compose.yml`. The directory is mounted into
   `web` as `/usr/share/nginx/cades` (read-only); no restart is needed. The file is not committed to git.
@@ -59,7 +59,7 @@ Timestamp restrictions the server enforces:
 
 ## What the server verifies and what it does not
 
-The server verifies the signature with its own GOST implementation (§42.4), in this order:
+The server verifies the signature with its own GOST implementation (specification, §42.4, in Russian), in this order:
 
 1. format: a detached signature, one signer;
 2. the signer's certificate is the same as at preparation;
@@ -80,9 +80,9 @@ check the certificate in CryptoPro (`CheckCertificate`).
 
 ## Verifying the signature on Gosuslugi
 
-Download "PDF with stamp" and "Signature (.sig)" from the report and upload the pair to
+Download “PDF with stamp” and “Signature (.sig)” from the report and upload the pair to
 [gosuslugi.ru/pgu/eds](https://www.gosuslugi.ru/pgu/eds) (detached signature: the file and the signature separately).
-The test certification authority's certificate will be shown as "not trusted" — this is expected.
+The test certification authority's certificate will be shown as “not trusted” — this is expected.
 
 ## Hash byte order
 

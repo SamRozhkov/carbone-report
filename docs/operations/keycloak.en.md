@@ -36,8 +36,8 @@ Direct URL for testing: `/api/auth/oidc/login?next=/reports`. This URL alone doe
 ## Users, roles, and sessions
 
 - Identity is stored by `issuer + sub`, not by email or display login.
-- A new user gets the local role `user` and a random, unknown local password. An administrator then changes the role (`editor`, `access_manager`, `admin`) in the "Users" section; roles are not taken from the OIDC token.
-- Existing roles, groups, history, and local blocks remain in the application.
+- A new user gets the local role `user` and a random, unknown local password. An administrator then changes the role (`editor`, `access_manager`, `admin`) in the “Users” section; roles are not taken from the OIDC token.
+- Existing roles, groups, history, and local user blocking remain in the application.
 - If the login matches an existing account, sign-in returns `403 OIDC_LOGIN_UNAVAILABLE`
   (the same for `ADMIN_LOGIN`; the reason differs only in the API log);
   there is no automatic merge and no duplicate is created.
@@ -79,7 +79,7 @@ Direct URL for testing: `/api/auth/oidc/login?next=/reports`. This URL alone doe
 Migration `0013_oidc` adds the tables `oidc_identities` and `oidc_sessions` and makes user logins
 unique regardless of case (the `lower(login)` index). If the database contains logins
 that differ only in case (`Ivan` and `ivan`), the migration fails with the error
-"логины, отличающиеся только регистром: …" (logins that differ only in case) — rename them beforehand. To find such logins before upgrading:
+“логины, отличающиеся только регистром: …” (logins that differ only in case) — rename them beforehand. To find such logins before upgrading:
 
 ```sql
 SELECT lower(login) AS key, string_agg(login, ', ' ORDER BY login) AS logins

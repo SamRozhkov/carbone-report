@@ -228,6 +228,39 @@ describe('createAuthorTools', () => {
     expect('result' in long).toBe(true);
   });
 
+  it('propose_tags: не Carbone (Handlebars, {{ }}, теги без d.) — ошибка модели с подсказкой', async () => {
+    const { tools } = setup();
+    const handlebars = [
+      '{#each d.company_orders_sum as item}',
+      '| Название компании | Сумма заказов |',
+      '| {item.name} | {item.total_sum:formatC(2)} |',
+      '{/each}',
+    ].join('\n');
+    for (const text of [handlebars, '{{d.company.name}}', '{#if d.x}да{/if}', '{else}']) {
+      const r = await tools.run('propose_tags', { text, explanation: '' });
+      expect('card' in r, text).toBe(false);
+      expect(JSON.stringify(r)).toContain('not Carbone syntax');
+      expect(JSON.stringify(r)).toContain('[i+1]');
+    }
+  });
+
+  it('propose_tags: таблица с [i]/[i+1], условия, форматтеры, псевдонимы — карточка', async () => {
+    const { tools } = setup();
+    for (const text of [
+      [
+        '| Название компании | Сумма заказов |',
+        '| {d.orders[i].name} | {d.orders[i].total_sum:formatC(2)} |',
+        '| {d.orders[i+1].name} | |',
+      ].join('\n'),
+      "{d.x:ifEQ(1):show('да'):elseShow('нет')} {d.items[].total:aggSum}",
+      "{d.date:formatD('DD.MM.YYYY')} {d.params.from} {c.now} {t(Итого)}",
+      '{#total = d.items[].total:aggSum} {$total}',
+    ]) {
+      const r = await tools.run('propose_tags', { text, explanation: '' });
+      expect('card' in r, text).toBe(true);
+    }
+  });
+
   it('ошибка эндпоинта схемы — безопасный текст (errorOf)', async () => {
     const { tools } = setup({
       [`/api/templates/${TID}/schema/tables`]: {

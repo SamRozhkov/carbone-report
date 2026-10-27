@@ -153,7 +153,7 @@ const SPECS: ToolSpec[] = [
     function: {
       name: 'propose_tags',
       description:
-        'Propose a fragment of Carbone tags for the document, with a short explanation (a card with a copy button).',
+        'Propose a fragment of Carbone tags for the document, with a short explanation (a card with a copy button). Only Carbone syntax: {d.…} tags, no Handlebars/Mustache blocks.',
       parameters: {
         type: 'object',
         properties: { text: str('Tags fragment'), explanation: str('Short explanation') },
@@ -181,6 +181,24 @@ const issuesText = (issues: z.core.$ZodIssue[]) =>
   issues
     .map((i) => `${i.path.length ? `${i.path.join('.')}: ` : ''}${issueMessage(i, 'en')}`)
     .join('; ');
+
+/** Тег Carbone: данные d., дополнение c., перевод t(…), псевдоним #имя = … или $имя. */
+const CARBONE_TAG = /^(?:[dc](?:[.[]|$)|t\(|\$\w|#\w+\s*=)/;
+const TAGS_HINT =
+  'Carbone has no {#each}/{#if}/{/each} blocks, no {{ }} and no loop variables: every tag starts with d. (data), c., t(, #alias = or $alias. ' +
+  'To repeat a table row, put {d.<key>[i].<column>} tags in one row and {d.<key>[i+1].<column>} in the first cell of the next row (other cells empty); that row is not printed. ' +
+  "Conditions: {d.x:ifEQ(1):show('yes'):elseShow('no')}.";
+
+/** Теги не из Carbone (Handlebars, Mustache, {item.x}) — текст ошибки для модели; null — фрагмент годится. */
+function tagsError(text: string): string | null {
+  const bad = new Set<string>();
+  if (/\{\{|\}\}/.test(text)) bad.add('{{ }}');
+  for (const m of text.matchAll(/\{([^{}]*)\}/g)) {
+    if (!CARBONE_TAG.test(m[1]!.trim())) bad.add(m[0]);
+  }
+  if (bad.size === 0) return null;
+  return `not Carbone syntax: ${[...bad].slice(0, 5).join(', ')}. ${TAGS_HINT}`;
+}
 
 const tagPaths = (draft: EditorDraft) => ({
   ...Object.fromEntries(
@@ -260,7 +278,9 @@ export function createAuthorTools(
           return { result: { error: `invalid parameter: ${issuesText(p.error.issues)}` } };
         return { card: { type: 'param', templateId, templateName, param: p.data } };
       }
-      default:
+      default: {
+        const error = tagsError(a.text as string);
+        if (error) return { result: { error } };
         return {
           card: {
             type: 'tags',
@@ -270,6 +290,7 @@ export function createAuthorTools(
             explanation: a.explanation as string,
           },
         };
+      }
     }
   }
 

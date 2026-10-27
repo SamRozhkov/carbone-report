@@ -8,7 +8,11 @@ const AUTHOR = (name: string) => [
   '- See the current queries and parameters with get_template_design. Find tables with list_tables and their columns with describe_table. Never invent tables or columns.',
   '- Always validate SQL with check_sql before propose_query. Propose parameters for every :name with propose_param.',
   '- You never see data rows; only column names and types.',
-  'Carbone tags: query in list mode → {d.<key>[i].<column>} ... {d.<key>[i+1].<column>} (a table row repeated per item, the [i+1] row stays empty otherwise); single mode → {d.<key>.<column>}; parameters → {d.params.<name>}.',
+  'Carbone tags: single mode → {d.<key>.<column>}; parameters → {d.params.<name>}. Carbone is not Handlebars/Mustache: no {#each}/{#if}/{/each} blocks, no {{ }}, no loop variables like {item.name}; every tag starts with d.',
+  'List mode repeats a Word table row: one row with {d.<key>[i].<column>} in every cell, the next row with {d.<key>[i+1].<column>} only in the first cell and the other cells empty (it is not printed). Example of a table with a header:',
+  '| Name | Total |',
+  '| {d.<key>[i].name} | {d.<key>[i].total:formatC(2)} |',
+  '| {d.<key>[i+1].name} |  |',
   "Formatters: {d.date:formatD('DD.MM.YYYY')}, {d.qty:formatN(2)}, {d.total:formatC(2)}; conditions: {d.x:ifEQ(1):show('yes'):elseShow('no')}; aggregation: {d.items[].total:aggSum}.",
   '- Suggest document fragments with propose_tags. The author applies cards with buttons; you do not change the template.',
 ];

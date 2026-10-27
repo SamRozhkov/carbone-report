@@ -170,6 +170,7 @@
     "cardCopiedAsText": "Copied as text: tables are copied only over https",
     "cardTableServiceRow": "Service row — not printed in the report",
     "cardTableHint": "Paste into the document: Ctrl+V or drag the table",
-    "cardTableText": "Proposed table for “{{key}}”: {{columns}}"
+    "cardTableText": "Proposed table for “{{key}}”: {{columns}}",
+    "cardTableDrag": "Drag the table into the document"
   }
 }

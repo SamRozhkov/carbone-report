@@ -253,6 +253,11 @@ const formatError = (f: string) =>
     ? `invalid format "${f}": Carbone formatters without braces, e.g. formatC(2) or formatN(2):ifEmpty('-')`
     : null;
 
+/** Символы, с которыми имя не войдёт в путь тега Carbone; кириллица допустима. */
+const BAD_PATH = /[\s{}[\].:,'"|]/;
+const pathError = (name: string) =>
+  `"${name}" cannot be used in a Carbone tag path; alias the column in the query SQL with a simple name (e.g. select x as total_sum) and propose the query again`;
+
 type TableColumn = { header: string; column: string; format?: string | null };
 
 /** Строки таблицы (§51.8): заголовки, строка [i], служебная [i+1] — первая ячейка, прочие пустые. */
@@ -295,7 +300,13 @@ export function createAuthorTools(
   };
 
   /** Таблица для запроса-списка: столбцы — из проверки SQL черновика; модели — только { ok }. */
-  async function proposeTable(a: z.infer<typeof ARGS.propose_table>): Promise<ToolOutcome> {
+  async function proposeTable(args: z.infer<typeof ARGS.propose_table>): Promise<ToolOutcome> {
+    // Модели часто шлют формат с ведущим «:» (":formatC(2)") — одно двоеточие отбрасываем.
+    const a = {
+      ...args,
+      columns: args.columns.map((c) => ({ ...c, format: c.format?.replace(/^:/, '') })),
+    };
+    if (BAD_PATH.test(a.key)) return { result: { error: pathError(a.key) } };
     const query = draft.queries.find((q) => q.key === a.key && q.mode === 'list');
     if (!query) {
       const keys = draft.queries.filter((q) => q.mode === 'list').map((q) => q.key);
@@ -324,6 +335,8 @@ export function createAuthorTools(
           error: `unknown columns ${unknown.join(', ')}; columns of "${a.key}": ${names.join(', ')}`,
         },
       };
+    const bad = a.columns.find((c) => BAD_PATH.test(c.column));
+    if (bad) return { result: { error: pathError(bad.column) } };
     const rows = tableRows(a.key, a.columns);
     // Итоговые теги — та же проверка синтаксиса Carbone, что у propose_tags.
     const error = tagsError(rows[1]!.join(' '));

@@ -94,7 +94,11 @@ function setup(
   );
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  // Заглушки ClipboardItem снимаются и при упавшей проверке.
+  vi.unstubAllGlobals();
+});
 
 describe('карточки ассистента', () => {
   it('запрос: ключ занят — «Заменить», результат проверки виден', async () => {
@@ -249,7 +253,6 @@ describe('карточки ассистента', () => {
       expect(html).toContain('&lt;b&gt;');
       expect(html).not.toContain('<b>');
       expect(await blobText(item.items['text/plain']!)).toBe(pipe);
-      vi.unstubAllGlobals();
     });
 
     it('без clipboard.write или ClipboardItem — текстом и предупреждение про https', async () => {
@@ -262,7 +265,6 @@ describe('карточки ассистента', () => {
       expect(
         await screen.findByText('Скопировано текстом: таблицей копируется только по https'),
       ).toBeInTheDocument();
-      vi.unstubAllGlobals();
     });
 
     it('clipboard.write отклонён — ошибка копирования', async () => {
@@ -277,16 +279,18 @@ describe('карточки ассистента', () => {
       expect(
         await screen.findByText('Не удалось скопировать — выделите текст и скопируйте вручную'),
       ).toBeInTheDocument();
-      vi.unstubAllGlobals();
     });
 
-    it('перетаскивание: HTML и текст, копирование', async () => {
+    it('перетаскивание за ручку: HTML и текст, копирование; таблица выделяется', async () => {
       setup([tableCard('<b>')]);
       const table = await screen.findByRole('table');
-      expect(table).toHaveAttribute('draggable', 'true');
+      // Сама таблица не перетаскивается: текст можно выделить и скопировать вручную.
+      expect(table).not.toHaveAttribute('draggable');
+      const handle = screen.getByLabelText('Перетащить таблицу в документ');
+      expect(handle).toHaveAttribute('draggable', 'true');
       const setData = vi.fn();
       const dataTransfer = { setData, effectAllowed: 'none' };
-      fireEvent.dragStart(table, { dataTransfer });
+      fireEvent.dragStart(handle, { dataTransfer });
       expect(setData).toHaveBeenCalledWith('text/plain', pipe);
       const html = setData.mock.calls.find(([f]) => f === 'text/html')?.[1] as string;
       expect(html).toContain('<table');

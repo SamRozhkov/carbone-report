@@ -171,6 +171,7 @@
     "cardCopiedAsText": "Copiado como texto: la tabla solo se copia por https",
     "cardTableServiceRow": "Fila auxiliar: no aparece en el informe",
     "cardTableHint": "Pegue en el documento: Ctrl+V o arrastre la tabla",
-    "cardTableText": "Tabla propuesta para «{{key}}»: {{columns}}"
+    "cardTableText": "Tabla propuesta para «{{key}}»: {{columns}}",
+    "cardTableDrag": "Arrastrar la tabla al documento"
   }
 }

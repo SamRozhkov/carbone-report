@@ -135,7 +135,21 @@ body:has(.cr-doc-full) .cr-assistant {
 }
 
 /* Таблица для документа (§51.8): моноширинные ячейки, служебная строка [i+1] приглушена. */
+.cr-assistant__table-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.cr-assistant__table-drag {
+  flex: none;
+  padding: 2px;
+  color: var(--g-color-text-secondary);
+  cursor: grab;
+}
+
 .cr-assistant__table-wrap {
+  min-width: 0;
   max-height: 240px;
   overflow: auto;
 }
@@ -144,7 +158,6 @@ body:has(.cr-doc-full) .cr-assistant {
   border-collapse: collapse;
   font-family: var(--g-font-family-monospace);
   font-size: var(--g-text-caption-2-font-size);
-  cursor: grab;
 }
 
 .cr-assistant__table td {

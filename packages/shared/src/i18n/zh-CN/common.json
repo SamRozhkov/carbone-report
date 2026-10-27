@@ -169,6 +169,7 @@
     "cardCopiedAsText": "已按文本复制：仅在 https 下才能按表格复制",
     "cardTableServiceRow": "辅助行——不会出现在报表中",
     "cardTableHint": "粘贴到文档中：Ctrl+V 或拖动表格",
-    "cardTableText": "为“{{key}}”建议的表格：{{columns}}"
+    "cardTableText": "为“{{key}}”建议的表格：{{columns}}",
+    "cardTableDrag": "将表格拖入文档"
   }
 }

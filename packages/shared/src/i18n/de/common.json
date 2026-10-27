@@ -170,6 +170,7 @@
     "cardCopiedAsText": "Als Text kopiert: Tabellen werden nur über https kopiert",
     "cardTableServiceRow": "Hilfszeile – erscheint nicht im Bericht",
     "cardTableHint": "Ins Dokument einfügen: Strg+V oder Tabelle hineinziehen",
-    "cardTableText": "Vorgeschlagene Tabelle für „{{key}}“: {{columns}}"
+    "cardTableText": "Vorgeschlagene Tabelle für „{{key}}“: {{columns}}",
+    "cardTableDrag": "Tabelle ins Dokument ziehen"
   }
 }

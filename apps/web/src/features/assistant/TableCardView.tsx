@@ -1,5 +1,6 @@
 import type { Card } from '@carbone-reports/shared';
-import { Button, Text } from '@gravity-ui/uikit';
+import { Grip } from '@gravity-ui/icons';
+import { Button, Icon, Text } from '@gravity-ui/uikit';
 import { useTranslation } from 'react-i18next';
 import { useCopy } from './useCopy';
 
@@ -29,9 +30,13 @@ export function TableCardView({ card }: { card: TableCard }) {
   const last = card.rows.length - 1;
   return (
     <div className="cr-assistant__card">
-      <div className="cr-assistant__table-wrap">
-        <table
-          className="cr-assistant__table"
+      <div className="cr-assistant__table-row">
+        {/* Перетаскивается ручка, а не таблица: текст ячеек остаётся выделяемым. */}
+        <span
+          className="cr-assistant__table-drag"
+          role="img"
+          aria-label={t('common:assistant.cardTableDrag')}
+          title={t('common:assistant.cardTableDrag')}
           draggable
           onDragStart={(e) => {
             const c = content();
@@ -40,16 +45,21 @@ export function TableCardView({ card }: { card: TableCard }) {
             e.dataTransfer.effectAllowed = 'copy';
           }}
         >
-          <tbody>
-            {card.rows.map((r, i) => (
-              <tr key={i} className={i === last ? 'cr-assistant__table-service' : undefined}>
-                {r.map((c, j) => (
-                  <td key={j}>{c}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          <Icon data={Grip} size={14} />
+        </span>
+        <div className="cr-assistant__table-wrap">
+          <table className="cr-assistant__table">
+            <tbody>
+              {card.rows.map((r, i) => (
+                <tr key={i} className={i === last ? 'cr-assistant__table-service' : undefined}>
+                  {r.map((c, j) => (
+                    <td key={j}>{c}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
       <Text variant="caption-2" color="secondary">
         {t('common:assistant.cardTableServiceRow')}

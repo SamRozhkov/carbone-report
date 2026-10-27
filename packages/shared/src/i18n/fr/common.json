@@ -171,6 +171,7 @@
     "cardCopiedAsText": "Copié en texte : le tableau n’est copié qu’en https",
     "cardTableServiceRow": "Ligne technique — n’apparaît pas dans le rapport",
     "cardTableHint": "Collez dans le document : Ctrl+V ou faites glisser le tableau",
-    "cardTableText": "Tableau proposé pour « {{key}} » : {{columns}}"
+    "cardTableText": "Tableau proposé pour « {{key}} » : {{columns}}",
+    "cardTableDrag": "Faire glisser le tableau dans le document"
   }
 }

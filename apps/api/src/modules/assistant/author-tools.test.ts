@@ -396,6 +396,52 @@ describe('createAuthorTools', () => {
       }
     });
 
+    it('имя колонки не годится для пути Carbone — ошибка с советом про псевдоним', async () => {
+      for (const name of ['a}b', 'total sum']) {
+        const { tools } = setupTable({
+          status: 200,
+          body: { ok: true, columns: [{ name, type: 'text' }] },
+        });
+        const r = await tools.run('propose_table', {
+          key: 'items',
+          columns: [{ header: 'A', column: name }],
+          explanation: '',
+        });
+        expect(errorText(r), name).toContain('alias');
+      }
+      // Кириллица в имени допустима.
+      const { tools } = setupTable({
+        status: 200,
+        body: { ok: true, columns: [{ name: 'сумма', type: 'numeric' }] },
+      });
+      const ok = await tools.run('propose_table', {
+        key: 'items',
+        columns: [{ header: 'Сумма', column: 'сумма' }],
+        explanation: '',
+      });
+      expect(ok).toMatchObject({
+        card: { rows: [['Сумма'], ['{d.items[i].сумма}'], ['{d.items[i+1].сумма}']] },
+      });
+    });
+
+    it('формат с ведущим двоеточием — одно двоеточие отбрасывается', async () => {
+      const { tools } = setupTable();
+      const r = await tools.run('propose_table', {
+        key: 'items',
+        columns: [{ header: 'A', column: 'qty', format: ':formatC(2)' }],
+        explanation: '',
+      });
+      expect(r).toMatchObject({
+        card: { rows: [['A'], ['{d.items[i].qty:formatC(2)}'], ['{d.items[i+1].qty}']] },
+      });
+      const twice = await tools.run('propose_table', {
+        key: 'items',
+        columns: [{ header: 'A', column: 'qty', format: '::formatC(2)' }],
+        explanation: '',
+      });
+      expect(errorText(twice)).toContain('format');
+    });
+
     it('аргументы: 1..20 столбцов, заголовок ≤ 200', async () => {
       const { tools } = setupTable();
       const run = (columns: unknown) =>

@@ -172,6 +172,7 @@
     "cardCopiedAsText": "Скопировано текстом: таблицей копируется только по https",
     "cardTableServiceRow": "Служебная строка — в отчёт не попадает",
     "cardTableHint": "Вставьте в документ: Ctrl+V или перетащите таблицу",
-    "cardTableText": "Предложена таблица для «{{key}}»: {{columns}}"
+    "cardTableText": "Предложена таблица для «{{key}}»: {{columns}}",
+    "cardTableDrag": "Перетащить таблицу в документ"
   }
 }

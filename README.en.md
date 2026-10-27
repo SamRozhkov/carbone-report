@@ -442,6 +442,16 @@ Interface tests: `pnpm --filter @carbone-reports/web test`. In the production im
 
 The documentation exists in Russian and English (`README.en.md`, `docs/**/*.en.md`); a change to a Russian document is accompanied by a change to the English one, and the pairs are checked by `pnpm docs:check` (details — [`docs/localization.en.md`](docs/localization.en.md#documentation)).
 
+## AI assistant (experimental)
+
+Only on the `feat/ai-assistant` branch; not part of any release.
+
+The assistant in the web interface finds a report from a plain-language description, picks parameters, and proposes a run; the user confirms generating the report with a button. The assistant acts with the user's permissions and sees only the reports available to them.
+
+An administrator enables it under "Administration → Assistant". The model is connected over an OpenAI-compatible API: the address (for example, `https://api.openai.com/v1`, or `http://ollama:11434/v1` for local Ollama), a model that supports tool calling, and an API key (may be unnecessary for local models). The key is stored encrypted with `ENCRYPTION_KEY`.
+
+Report names and descriptions, parameters, and list values are sent to the model provider. Report contents, SQL, and query results are not sent. The conversation is kept only in the browser tab.
+
 ## Demo and E2E
 
 ```bash

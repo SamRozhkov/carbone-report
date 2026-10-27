@@ -452,6 +452,8 @@ An administrator enables it under "Administration → Assistant". The model is c
 
 Report names and descriptions, parameters, and list values are sent to the model provider. Report contents, SQL, and query results are not sent. The conversation is kept only in the browser tab.
 
+In the template editor the assistant helps the author: it writes and checks SQL queries against the data source schema and suggests parameters and Carbone tags for the document. Suggestions appear as cards; buttons such as “Add query” and “Create parameter” move them into the unsaved drafts of the editor tabs, and the author saves. For authors the model additionally receives the template's query SQL and the source database schema (tables and columns, everything visible to the source DB user), but not data.
+
 ## Demo and E2E
 
 ```bash

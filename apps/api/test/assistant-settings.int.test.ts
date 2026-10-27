@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { assistantSettings } from '../src/db/schema';
 import { decryptSecret } from '../src/lib/crypto';
+import { fakeLlm } from './fake-llm';
 import { createTestApp, loginAs, type TestApp } from './helpers';
 
 let t: TestApp;
@@ -80,5 +81,48 @@ describe('настройки ассистента', () => {
     const r = await put({ ...ON, baseUrl: '' });
     expect(r.statusCode).toBe(400);
     expect(r.body).toContain('baseUrl');
+  });
+});
+
+describe('проверка подключения', () => {
+  const ping = {
+    content: null,
+    tool_calls: [{ id: '1', type: 'function', function: { name: 'ping', arguments: '{}' } }],
+  };
+  const test = (payload: object, cookie = admin) =>
+    t.app.inject({
+      method: 'POST',
+      url: '/api/admin/assistant/test',
+      headers: { cookie },
+      payload,
+    });
+
+  it('ok и ключ из формы', async () => {
+    const llm = await fakeLlm(() => ({ message: ping }));
+    const r = await test({ baseUrl: llm.url, model: 'm', apiKey: 'form-key' });
+    expect(r.json()).toEqual({ ok: true });
+    expect(llm.auth).toEqual(['Bearer form-key']);
+    await llm.close();
+  });
+
+  it('без apiKey берётся сохранённый ключ', async () => {
+    await put({ ...ON, apiKey: 'saved-key' });
+    const llm = await fakeLlm(() => ({ message: ping }));
+    await test({ baseUrl: llm.url, model: 'm' });
+    expect(llm.auth).toEqual(['Bearer saved-key']);
+    await llm.close();
+  });
+
+  it('401 → auth с текстом; недоступный адрес → unavailable; только admin', async () => {
+    const llm = await fakeLlm(() => ({ status: 401 }));
+    expect((await test({ baseUrl: llm.url, model: 'm', apiKey: 'k' })).json()).toEqual({
+      ok: false,
+      code: 'auth',
+      message: 'Провайдер модели отклонил ключ. Обратитесь к администратору',
+    });
+    await llm.close();
+    const down = await test({ baseUrl: 'http://127.0.0.1:9/v1', model: 'm', apiKey: null });
+    expect(down.json()).toMatchObject({ ok: false, code: 'unavailable' });
+    expect((await test({ baseUrl: llm.url, model: 'm' }, user)).statusCode).toBe(403);
   });
 });

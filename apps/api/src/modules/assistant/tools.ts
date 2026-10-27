@@ -110,6 +110,11 @@ const PARAMS_SCHEMA = {
   properties: {},
 };
 
+const REPORT_ID_SCHEMA = {
+  type: 'string',
+  description: 'The "id" value of the report from list_reports (not its name).',
+};
+
 const SPECS: ToolSpec[] = [
   {
     type: 'function',
@@ -131,7 +136,7 @@ const SPECS: ToolSpec[] = [
         'Get the parameters of a report template: names, labels, types, required flags, defaults and select options.',
       parameters: {
         type: 'object',
-        properties: { reportId: { type: 'string' } },
+        properties: { reportId: REPORT_ID_SCHEMA },
         required: ['reportId'],
       },
     },
@@ -145,7 +150,7 @@ const SPECS: ToolSpec[] = [
       parameters: {
         type: 'object',
         properties: {
-          reportId: { type: 'string' },
+          reportId: REPORT_ID_SCHEMA,
           param: { type: 'string' },
           search: { type: 'string' },
           params: PARAMS_SCHEMA,
@@ -162,7 +167,7 @@ const SPECS: ToolSpec[] = [
         'Propose running the report with the given parameter values. The user confirms the run with a button. Returns an error if parameters are invalid.',
       parameters: {
         type: 'object',
-        properties: { reportId: { type: 'string' }, params: PARAMS_SCHEMA },
+        properties: { reportId: REPORT_ID_SCHEMA, params: PARAMS_SCHEMA },
         required: ['reportId', 'params'],
       },
     },
@@ -208,6 +213,8 @@ export const errorOf = (
 };
 
 const enc = encodeURIComponent;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NAME_NOT_ID = 'reportId must be the "id" value from list_reports, not the report name';
 
 export function createAssistantTools(ctx: ToolContext): AgentTools {
   const { inject, deps, locale } = ctx;
@@ -257,12 +264,33 @@ export function createAssistantTools(ctx: ToolContext): AgentTools {
     return items;
   }
 
+  /**
+   * Некоторые модели (GigaChat) передают название отчёта вместо id из list_reports. Название
+   * ищется только среди доступных пользователю отчётов (тот же список, что у list_reports).
+   */
+  async function reportIdOf(
+    tool: string,
+    raw: string,
+  ): Promise<{ id: string } | { error: { error: string; status?: number } }> {
+    if (UUID_RE.test(raw)) return { id: raw };
+    const r = await inject('GET', '/api/templates');
+    if (r.status !== 200) return { error: failed(tool, r) };
+    const q = raw.trim().toLocaleLowerCase();
+    const found = (r.body as TemplateSummary[]).filter((t) => t.name.toLocaleLowerCase() === q);
+    return found.length === 1 ? { id: found[0]!.id } : { error: { error: NAME_NOT_ID } };
+  }
+
   async function run(name: string, raw: unknown): Promise<ToolOutcome> {
     // Object.hasOwn: имена из прототипа (constructor, toString) — тоже неизвестные
     if (!Object.hasOwn(ARGS, name)) return { result: { error: `unknown tool: ${name}` } };
     const parsed = ARGS[name as keyof typeof ARGS].safeParse(raw ?? {});
     if (!parsed.success) return { result: { error: `invalid arguments: ${parsed.error.message}` } };
     const a = parsed.data as Record<string, unknown>;
+    if (typeof a.reportId === 'string') {
+      const id = await reportIdOf(name, a.reportId);
+      if ('error' in id) return { result: id.error };
+      a.reportId = id.id;
+    }
     switch (name) {
       case 'list_reports': {
         const r = await inject('GET', '/api/templates');

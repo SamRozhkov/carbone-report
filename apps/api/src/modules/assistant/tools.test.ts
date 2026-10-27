@@ -125,6 +125,8 @@ describe('shapeOptions', () => {
   });
 });
 
+const RID = '0b6a4c1e-5f2d-4e8a-9c3b-7d1e2f3a4b5c';
+
 describe('createAssistantTools: имя инструмента', () => {
   it('имена из прототипа объекта — неизвестный инструмент, а не исключение', async () => {
     const inject = vi.fn<Inject>();
@@ -144,7 +146,7 @@ describe('createAssistantTools: ошибки эндпоинтов', () => {
     const tools = createAssistantTools({ inject, deps: {} as AppDeps, locale: 'ru', onError });
     return { tools, onError, body };
   };
-  const args = { reportId: 't', param: 'company' };
+  const args = { reportId: RID, param: 'company' };
 
   it.each(['NOT_FOUND', 'FORBIDDEN', 'UNAUTHORIZED', 'VALIDATION', 'TOO_MANY_OPTIONS', 'TIMEOUT'])(
     '%s — текст ошибки уходит модели',
@@ -176,7 +178,7 @@ describe('createAssistantTools: ошибки эндпоинтов', () => {
   it('тело без кода — общий текст', async () => {
     const inject = vi.fn<Inject>(async () => ({ status: 500, body: null }));
     const tools = createAssistantTools({ inject, deps: {} as AppDeps, locale: 'ru' });
-    expect(await tools.run('get_report_form', { reportId: 't' })).toEqual({
+    expect(await tools.run('get_report_form', { reportId: RID })).toEqual({
       result: { error: 'request failed', status: 500 },
     });
   });
@@ -206,5 +208,43 @@ describe('схемы инструментов', () => {
       objectsWithoutProperties(t.function.parameters, t.function.name),
     );
     expect(bad).toEqual([]);
+  });
+});
+
+describe('reportId: название вместо id', () => {
+  // GigaChat передаёт название отчёта вместо id из list_reports.
+  const list = [
+    { id: RID, name: 'Счёт (демо)' },
+    { id: '1c2d3e4f-0000-4000-8000-000000000001', name: 'Акт' },
+  ];
+  const setup = () => {
+    const inject = vi.fn<Inject>(async (_m, url) =>
+      url === '/api/templates'
+        ? { status: 200, body: list }
+        : { status: 200, body: { id: RID, name: 'Счёт (демо)', description: '', params: [] } },
+    );
+    return { inject, tools: createAssistantTools({ inject, deps: {} as AppDeps, locale: 'ru' }) };
+  };
+
+  it('точное название без учёта регистра — id из доступного списка', async () => {
+    const { inject, tools } = setup();
+    const r = await tools.run('get_report_form', { reportId: ' счёт (ДЕМО) ' });
+    expect(r).toEqual({ result: { id: RID, name: 'Счёт (демо)', description: '', params: [] } });
+    expect(inject).toHaveBeenLastCalledWith('GET', `/api/templates/${RID}`);
+  });
+
+  it('id не ищется в списке', async () => {
+    const { inject, tools } = setup();
+    await tools.run('get_report_form', { reportId: RID });
+    expect(inject).toHaveBeenCalledTimes(1);
+  });
+
+  it('нет совпадения — подсказка модели, эндпоинт шаблона не вызывается', async () => {
+    const { inject, tools } = setup();
+    expect(await tools.run('find_param_values', { reportId: 'Счёт', param: 'company' })).toEqual({
+      result: { error: 'reportId must be the "id" value from list_reports, not the report name' },
+    });
+    expect(inject).toHaveBeenCalledTimes(1);
+    expect(inject).toHaveBeenCalledWith('GET', '/api/templates');
   });
 });

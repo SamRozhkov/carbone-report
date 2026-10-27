@@ -34,10 +34,10 @@ describe('propose_run: подписи значений', () => {
     const details = { id: 't', name: 'Счёт', outputFormats: ['pdf'], defaultOutput: 'pdf' };
     const inject = vi.fn<Inject>(async () => ({ status: 200, body: details }));
     const tools = createAssistantTools({ inject, deps: {} as AppDeps, locale: 'ru' });
-    const r = await tools.run('propose_run', { reportId: 't', params: { company: 2 } });
+    const r = await tools.run('propose_run', { reportId: '0b6a4c1e-5f2d-4e8a-9c3b-7d1e2f3a4b5c', params: { company: 2 } });
     expect(r).toEqual({
       card: {
-        reportId: 't',
+        reportId: '0b6a4c1e-5f2d-4e8a-9c3b-7d1e2f3a4b5c',
         reportName: 'Счёт',
         params: { company: 2 },
         display: [{ label: 'Компания', value: '2' }],

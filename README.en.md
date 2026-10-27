@@ -450,7 +450,7 @@ The assistant in the web interface finds a report from a plain-language descript
 
 An administrator enables it under "Administration → Assistant". The model is connected over an OpenAI-compatible API: the address (for example, `https://api.openai.com/v1`, or `http://ollama:11434/v1` for local Ollama), a model that supports tool calling, and an API key (may be unnecessary for local models). The key is stored encrypted with `ENCRYPTION_KEY`.
 
-Report names and descriptions, parameters, and list values are sent to the model provider. Report contents, SQL, and query results are not sent. The conversation is kept only in the browser tab.
+Report names and descriptions, parameters, and list values are sent to the model provider. For regular users, report contents, SQL, and query results are not sent. The conversation is kept only in the browser tab.
 
 In the template editor the assistant helps the author: it writes and checks SQL queries against the data source schema and suggests parameters and Carbone tags for the document. Suggestions appear as cards; buttons such as “Add query” and “Create parameter” move them into the unsaved drafts of the editor tabs, and the author saves. For authors the model additionally receives the template's query SQL and the source database schema (tables and columns, everything visible to the source DB user), but not data.
 

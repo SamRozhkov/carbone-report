@@ -75,5 +75,7 @@
     "targetUpdatedAtRequired": "请指定预览中的修改时间",
     "targetOnlyUpdate": "只有“更新”才需指定要更新的模板",
     "targetUpdatedAtOnlyUpdate": "只有“更新”才需指定修改时间"
-  }
+  },
+  "assistantUrl": "API 地址：http:// 或 https://",
+  "assistantModel": "请指定模型"
 }

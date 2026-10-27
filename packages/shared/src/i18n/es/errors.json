@@ -21,7 +21,8 @@
     "file": "archivo no encontrado",
     "param": "parámetro no encontrado",
     "attachment": "archivo adjunto no encontrado",
-    "oidc": "OIDC no encontrado"
+    "oidc": "OIDC no encontrado",
+    "assistant": "el asistente está desactivado"
   },
   "access": {
     "relatedDeleted": "se eliminó un registro relacionado, vuelva a intentarlo",
@@ -298,5 +299,14 @@
     "formatUnavailable": "el formato {{format}} no está disponible para .{{ext}}",
     "queryKeyDuplicate": "la clave de consulta «{{value}}» está repetida",
     "paramDuplicate": "el parámetro «{{value}}» está repetido"
+  },
+  "assistant": {
+    "auth": "El proveedor del modelo rechazó la clave. Póngase en contacto con su administrador",
+    "model": "El modelo no está disponible o no puede llamar a herramientas. Póngase en contacto con su administrador",
+    "unavailable": "El servicio del modelo no responde, inténtelo más tarde",
+    "limit": "No se pudo encontrar un informe adecuado. Precise su solicitud",
+    "yes": "sí",
+    "no": "no",
+    "empty": "—"
   }
 }

@@ -21,7 +21,8 @@
     "file": "fichier introuvable",
     "param": "paramètre introuvable",
     "attachment": "fichier joint introuvable",
-    "oidc": "OIDC introuvable"
+    "oidc": "OIDC introuvable",
+    "assistant": "l'assistant est désactivé"
   },
   "access": {
     "relatedDeleted": "un enregistrement lié a été supprimé, veuillez réessayer",
@@ -298,5 +299,14 @@
     "formatUnavailable": "le format {{format}} n’est pas disponible pour .{{ext}}",
     "queryKeyDuplicate": "la clé de requête « {{value}} » est en double",
     "paramDuplicate": "le paramètre « {{value}} » est en double"
+  },
+  "assistant": {
+    "auth": "Le fournisseur du modèle a rejeté la clé. Contactez votre administrateur",
+    "model": "Le modèle est indisponible ou ne peut pas appeler d'outils. Contactez votre administrateur",
+    "unavailable": "Le service du modèle ne répond pas, réessayez plus tard",
+    "limit": "Impossible de trouver un rapport adapté. Précisez votre demande",
+    "yes": "oui",
+    "no": "non",
+    "empty": "—"
   }
 }

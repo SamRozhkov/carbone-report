@@ -75,5 +75,7 @@
     "targetUpdatedAtRequired": "indiquez l’heure de modification issue de l’aperçu",
     "targetOnlyUpdate": "le modèle à mettre à jour n’est indiqué que pour « mettre à jour »",
     "targetUpdatedAtOnlyUpdate": "l’heure de modification n’est indiquée que pour « mettre à jour »"
-  }
+  },
+  "assistantUrl": "URL de l'API : http:// ou https://",
+  "assistantModel": "indiquez un modèle"
 }

@@ -75,5 +75,7 @@
     "targetUpdatedAtRequired": "укажите время изменения из предпросмотра",
     "targetOnlyUpdate": "обновляемый шаблон указывается только для «обновить»",
     "targetUpdatedAtOnlyUpdate": "время изменения указывается только для «обновить»"
-  }
+  },
+  "assistantUrl": "адрес API: http:// или https://",
+  "assistantModel": "укажите модель"
 }

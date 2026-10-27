@@ -21,7 +21,8 @@
     "file": "Datei nicht gefunden",
     "param": "Parameter nicht gefunden",
     "attachment": "angehängte Datei nicht gefunden",
-    "oidc": "OIDC nicht gefunden"
+    "oidc": "OIDC nicht gefunden",
+    "assistant": "Assistent ist deaktiviert"
   },
   "access": {
     "relatedDeleted": "ein verknüpfter Datensatz wurde gelöscht, versuchen Sie es erneut",
@@ -290,5 +291,14 @@
     "formatUnavailable": "das Format {{format}} ist für .{{ext}} nicht verfügbar",
     "queryKeyDuplicate": "der Abfrageschlüssel „{{value}}“ ist doppelt",
     "paramDuplicate": "der Parameter „{{value}}“ ist doppelt"
+  },
+  "assistant": {
+    "auth": "Der Modellanbieter hat den Schlüssel abgelehnt. Wenden Sie sich an Ihren Administrator",
+    "model": "Das Modell ist nicht verfügbar oder kann keine Tools aufrufen. Wenden Sie sich an Ihren Administrator",
+    "unavailable": "Der Modelldienst antwortet nicht, versuchen Sie es später erneut",
+    "limit": "Es konnte kein passender Bericht gefunden werden. Bitte präzisieren Sie Ihre Anfrage",
+    "yes": "ja",
+    "no": "nein",
+    "empty": "—"
   }
 }

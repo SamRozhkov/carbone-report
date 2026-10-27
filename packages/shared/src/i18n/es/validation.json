@@ -75,5 +75,7 @@
     "targetUpdatedAtRequired": "indique la hora de modificación de la vista previa",
     "targetOnlyUpdate": "la plantilla que se actualizará solo se indica para «actualizar»",
     "targetUpdatedAtOnlyUpdate": "la hora de modificación solo se indica para «actualizar»"
-  }
+  },
+  "assistantUrl": "URL de la API: http:// o https://",
+  "assistantModel": "indique un modelo"
 }

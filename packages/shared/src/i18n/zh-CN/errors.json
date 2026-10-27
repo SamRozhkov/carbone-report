@@ -21,7 +21,8 @@
     "file": "未找到文件",
     "param": "未找到参数",
     "attachment": "未找到附加文件",
-    "oidc": "未找到 OIDC"
+    "oidc": "未找到 OIDC",
+    "assistant": "助手已关闭"
   },
   "access": {
     "relatedDeleted": "相关记录已被删除，请重试",
@@ -282,5 +283,14 @@
     "formatUnavailable": "格式 {{format}} 不适用于 .{{ext}}",
     "queryKeyDuplicate": "查询键“{{value}}”重复",
     "paramDuplicate": "参数“{{value}}”重复"
+  },
+  "assistant": {
+    "auth": "模型提供方拒绝了密钥，请联系管理员",
+    "model": "模型不可用或无法调用工具，请联系管理员",
+    "unavailable": "模型服务无响应，请稍后重试",
+    "limit": "未能找到合适的报表，请细化您的请求",
+    "yes": "是",
+    "no": "否",
+    "empty": "—"
   }
 }

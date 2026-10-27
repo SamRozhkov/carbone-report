@@ -24,6 +24,7 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   unique,
@@ -431,3 +432,19 @@ export type RunRow = typeof reportRuns.$inferSelect;
 export type RunFileRow = typeof reportRunFiles.$inferSelect;
 export type GroupRow = typeof groups.$inferSelect;
 export type CategoryRow = typeof categories.$inferSelect;
+
+/** Настройки ИИ-ассистента (§50.2): одна строка с id = 1. */
+export const assistantSettings = pgTable(
+  'assistant_settings',
+  {
+    id: smallint('id').primaryKey().default(1),
+    enabled: boolean('enabled').notNull().default(false),
+    baseUrl: text('base_url').notNull().default(''),
+    model: text('model').notNull().default(''),
+    apiKeyEnc: text('api_key_enc'),
+    extraInstructions: text('extra_instructions').notNull().default(''),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('assistant_settings_singleton', sql`${t.id} = 1`)],
+);
+export type AssistantSettingsRow = typeof assistantSettings.$inferSelect;

@@ -75,5 +75,7 @@
     "targetUpdatedAtRequired": "geben Sie den Änderungszeitpunkt aus der Vorschau an",
     "targetOnlyUpdate": "die zu aktualisierende Vorlage wird nur bei „aktualisieren“ angegeben",
     "targetUpdatedAtOnlyUpdate": "der Änderungszeitpunkt wird nur bei „aktualisieren“ angegeben"
-  }
+  },
+  "assistantUrl": "API-Adresse: http:// oder https://",
+  "assistantModel": "Modell angeben"
 }

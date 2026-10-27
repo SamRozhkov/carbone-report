@@ -21,7 +21,8 @@
     "file": "file not found",
     "param": "parameter not found",
     "attachment": "attached file not found",
-    "oidc": "OIDC not found"
+    "oidc": "OIDC not found",
+    "assistant": "assistant is disabled"
   },
   "access": {
     "relatedDeleted": "a related record was deleted, please try again",
@@ -290,5 +291,14 @@
     "formatUnavailable": "format {{format}} is not available for .{{ext}}",
     "queryKeyDuplicate": "query key “{{value}}” is duplicated",
     "paramDuplicate": "parameter “{{value}}” is duplicated"
+  },
+  "assistant": {
+    "auth": "The model provider rejected the key. Contact your administrator",
+    "model": "The model is unavailable or cannot call tools. Contact your administrator",
+    "unavailable": "The model service is not responding, try again later",
+    "limit": "Could not find a suitable report. Please refine your request",
+    "yes": "yes",
+    "no": "no",
+    "empty": "—"
   }
 }

@@ -7,6 +7,7 @@ import type { App } from '../../app';
 import { oidcSessions, users, type UserRow } from '../../db/schema';
 import type { AppDeps } from '../../deps';
 import { AppError } from '../../lib/errors';
+import { isAssistantEnabled } from '../assistant/settings';
 import { currentUser, type Guards } from './guards';
 import { DUMMY_HASH_PROMISE, hashPassword, verifyPassword } from './password';
 import {
@@ -81,10 +82,10 @@ async function provisionLdapUser(deps: AppDeps, login: string): Promise<UserRow 
 
 export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): void {
   // Ответ входа и /api/auth/me: признак включённых функций для меню web (§26.3) и выбранный
-  // язык (§44.1; значение вне LOCALES — как не выбранный).
-  const toMe = (user: SessionUser, locale: string | null): MeDto => ({
+  // язык (§44.1; значение вне LOCALES — как не выбранный); ассистент (§50.2) — по настройке в БД.
+  const toMe = async (user: SessionUser, locale: string | null): Promise<MeDto> => ({
     ...user,
-    features: { backups: deps.backupAgent !== null },
+    features: { backups: deps.backupAgent !== null, assistant: await isAssistantEnabled(deps.db) },
     locale: isLocale(locale) ? locale : null,
   });
 
@@ -183,7 +184,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
           rejectLdap('аккаунт заведён через Keycloak', ldapUser.login);
         const user = { id: ldapUser.id, login: ldapUser.login, role: ldapUser.role };
         await setSessionCookie(reply, deps, user, ldapUser.sessionVersion);
-        return toMe(user, ldapUser.locale);
+        return await toMe(user, ldapUser.locale);
       }
 
       const ok = await verifyPassword(row?.passwordHash ?? (await DUMMY_HASH_PROMISE), password);
@@ -192,7 +193,7 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
       }
       const user = { id: row.id, login: row.login, role: row.role };
       await setSessionCookie(reply, deps, user, row.sessionVersion);
-      return toMe(user, row.locale);
+      return await toMe(user, row.locale);
     },
   );
 
@@ -223,6 +224,6 @@ export function registerAuthRoutes(app: App, deps: AppDeps, guards: Guards): voi
       .select({ locale: users.locale })
       .from(users)
       .where(eq(users.id, user.id));
-    return toMe(user, row?.locale ?? null);
+    return await toMe(user, row?.locale ?? null);
   });
 }

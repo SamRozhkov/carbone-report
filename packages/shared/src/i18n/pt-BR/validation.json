@@ -75,5 +75,7 @@
     "targetUpdatedAtRequired": "indique a hora de modificação da pré-visualização",
     "targetOnlyUpdate": "o modelo a ser atualizado só é indicado para “atualizar”",
     "targetUpdatedAtOnlyUpdate": "a hora de modificação só é indicada para “atualizar”"
-  }
+  },
+  "assistantUrl": "URL da API: http:// ou https://",
+  "assistantModel": "informe um modelo"
 }

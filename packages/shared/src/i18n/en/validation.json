@@ -75,5 +75,7 @@
     "targetUpdatedAtRequired": "specify the modification time from the preview",
     "targetOnlyUpdate": "the template to update is specified only for “update”",
     "targetUpdatedAtOnlyUpdate": "the modification time is specified only for “update”"
-  }
+  },
+  "assistantUrl": "API URL: http:// or https://",
+  "assistantModel": "enter a model"
 }

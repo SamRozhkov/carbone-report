@@ -12,6 +12,7 @@ export * from './signature';
 export * from './edit-lock';
 export * from './sql-scan';
 export * from './sql-readonly';
+export * from './assistant';
 
 export const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const RESERVED_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
@@ -587,6 +588,8 @@ export type RecoveryBody = z.infer<typeof RecoveryBody>;
 /** Включённые функции — в ответах /api/auth/me и /api/auth/login. */
 export interface Features {
   backups: boolean;
+  /** ИИ-ассистент включён администратором (§50.2). */
+  assistant: boolean;
 }
 
 /** Ответ /api/auth/me и /api/auth/login. */

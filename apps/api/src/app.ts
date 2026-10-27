@@ -12,6 +12,7 @@ import { registerTemplateEditorRoutes } from './modules/access/editors-routes';
 import { registerAccessRoutes } from './modules/access/routes';
 import { registerOidcRoutes } from './modules/auth/oidc-routes';
 import { registerAuthRoutes } from './modules/auth/routes';
+import { registerAssistantRoutes } from './modules/assistant/routes';
 import { registerDatasourceRoutes } from './modules/datasources/routes';
 import { registerBackupRoutes } from './modules/backups/routes';
 import { registerMaintenance } from './modules/maintenance/routes';
@@ -148,6 +149,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   registerAccessRoutes(app, deps, guards);
   registerTemplateEditorRoutes(app, deps, guards);
   registerDatasourceRoutes(app, deps, guards);
+  registerAssistantRoutes(app, deps, guards);
   registerTemplateRoutes(app, deps, guards);
   registerTemplatePdfRoutes(app, deps, guards);
   registerReportRoutes(app, deps, guards);

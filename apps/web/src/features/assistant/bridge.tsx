@@ -18,7 +18,12 @@ export interface TabRegistration {
   kind: 'query' | 'param';
   draft: () => EditorDraft['queries'] | EditorDraft['params'];
   apply: (card: ApplyCard) => void;
+  /** Есть несохранённые правки: тогда мост не переключает вкладку (переключение их потеряет). */
+  dirty: () => boolean;
 }
+
+/** applied — сразу в черновик; opened — в очередь, вкладка открыта; queued — в очередь без переключения. */
+export type ApplyResult = 'applied' | 'opened' | 'queued';
 
 export interface AssistantBridge {
   editor: EditorRegistration | null;
@@ -26,8 +31,9 @@ export interface AssistantBridge {
   registerTab(r: TabRegistration): () => void;
   /** Черновики смонтированных вкладок, иначе сохранённое; null — редактор не открыт. */
   draft(): EditorDraft | null;
-  /** Вкладка смонтирована — сразу в её черновик; иначе в очередь и открыть вкладку. */
-  apply(card: ApplyCard): void;
+  /** Вкладка смонтирована — сразу в её черновик; иначе в очередь и открыть вкладку,
+   *  если другая открытая вкладка не держит несохранённых правок. */
+  apply(card: ApplyCard): ApplyResult | null;
   takePending(kind: 'query' | 'param'): ApplyCard[];
 }
 
@@ -93,13 +99,17 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
       apply: (card) => {
         const ed = editorRef.current;
         // Карточка другого шаблона (редактор закрыт или открыт другой) не применяется.
-        if (!ed || ed.templateId !== card.templateId) return;
+        if (!ed || ed.templateId !== card.templateId) return null;
         const tab = tabs.current.get(card.type);
-        if (tab) tab.apply(card);
-        else {
-          pending.current.push(card);
-          ed.openTab(card.type === 'query' ? 'data' : 'params');
+        if (tab) {
+          tab.apply(card);
+          return 'applied';
         }
+        pending.current.push(card);
+        // Вкладки монтируются по одной: переключение потеряло бы несохранённые правки открытой.
+        if ([...tabs.current.values()].some((t) => t.dirty())) return 'queued';
+        ed.openTab(card.type === 'query' ? 'data' : 'params');
+        return 'opened';
       },
       takePending: (kind) => {
         const mine = pending.current.filter((c) => c.type === kind);

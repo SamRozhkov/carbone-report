@@ -117,12 +117,15 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
   };
   const applyRef = useRef(applyCard);
   applyRef.current = applyCard;
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
   useEffect(() => {
     if (!registerTab || !takePending) return;
     const off = registerTab({
       kind: 'query',
       draft: () => draftsRef.current.map(({ key, mode, sql }) => ({ key, mode, sql })),
       apply: (c) => applyRef.current(c),
+      dirty: () => dirtyRef.current,
     });
     takePending('query').forEach((c) => applyRef.current(c));
     return off;

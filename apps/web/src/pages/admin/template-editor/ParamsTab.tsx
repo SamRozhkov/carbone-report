@@ -226,12 +226,15 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
   };
   const applyRef = useRef(applyCard);
   applyRef.current = applyCard;
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
   useEffect(() => {
     if (!registerTab || !takePending) return;
     const off = registerTab({
       kind: 'param',
       draft: () => draftsRef.current.map(toParam),
       apply: (c) => applyRef.current(c),
+      dirty: () => dirtyRef.current,
     });
     takePending('param').forEach((c) => applyRef.current(c));
     return off;

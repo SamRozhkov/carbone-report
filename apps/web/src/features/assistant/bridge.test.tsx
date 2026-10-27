@@ -114,7 +114,11 @@ describe('мост', () => {
         openTab,
       });
     });
-    act(() => result.current.apply(qcard));
+    let res: unknown;
+    act(() => {
+      res = result.current.apply(qcard);
+    });
+    expect(res).toBe('opened');
     expect(openTab).toHaveBeenCalledWith('data');
     expect(result.current.takePending('query')).toEqual([qcard]);
     expect(result.current.takePending('query')).toEqual([]);
@@ -137,13 +141,62 @@ describe('мост', () => {
         kind: 'query',
         draft: () => [{ key: 'x', mode: 'single', sql: 'select 3' }],
         apply,
+        dirty: () => false,
       });
     });
-    result.current.apply(qcard);
+    expect(result.current.apply(qcard)).toBe('applied');
     expect(apply).toHaveBeenCalledWith(qcard);
     expect(result.current.draft()!.queries).toEqual([
       { key: 'x', mode: 'single', sql: 'select 3' },
     ]);
+  });
+
+  it('другая вкладка с несохранёнными правками — в очередь без переключения', () => {
+    const { result } = renderHook(() => useAssistantBridge(), { wrapper });
+    const openTab = vi.fn();
+    act(() => {
+      result.current.registerEditor({
+        templateId: 't',
+        templateName: 'T',
+        saved: () => saved,
+        openTab,
+      });
+    });
+    act(() => {
+      result.current.registerTab({
+        kind: 'param',
+        draft: () => [],
+        apply: vi.fn(),
+        dirty: () => true,
+      });
+    });
+    expect(result.current.apply(qcard)).toBe('queued');
+    expect(openTab).not.toHaveBeenCalled();
+    expect(result.current.takePending('query')).toEqual([qcard]);
+  });
+
+  it('другая вкладка без правок — в очередь и переключение', () => {
+    const { result } = renderHook(() => useAssistantBridge(), { wrapper });
+    const openTab = vi.fn();
+    act(() => {
+      result.current.registerEditor({
+        templateId: 't',
+        templateName: 'T',
+        saved: () => saved,
+        openTab,
+      });
+    });
+    act(() => {
+      result.current.registerTab({
+        kind: 'param',
+        draft: () => [],
+        apply: vi.fn(),
+        dirty: () => false,
+      });
+    });
+    expect(result.current.apply(qcard)).toBe('opened');
+    expect(openTab).toHaveBeenCalledWith('data');
+    expect(result.current.takePending('query')).toEqual([qcard]);
   });
 
   it('снятие регистрации редактора — draft() null', () => {

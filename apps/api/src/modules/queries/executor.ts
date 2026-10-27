@@ -399,7 +399,9 @@ export async function checkQuery(
         const r = await tx.client.query({
           text: `select * from (\n${parsed.text}\n) q limit 0`,
           values: parsed.names.map(() => null),
-        });
+          // Расширенный протокол и без параметров: сервер откажет в нескольких операторах в тексте.
+          queryMode: 'extended',
+        } as pg.QueryConfig);
         fields = r.fields;
       } catch (e) {
         throw mapPgError(what, e);

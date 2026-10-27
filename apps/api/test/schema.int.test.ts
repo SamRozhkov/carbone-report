@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { checkQuery } from '../src/modules/queries/executor';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   createSourceDatabase,
@@ -143,5 +144,28 @@ describe('схема источника и проверка SQL', () => {
         .statusCode,
     ).toBe(403);
     expect((await get(`/api/templates/${tpl}/schema/tables`, '')).statusCode).toBe(401);
+  });
+
+  it('проверка SQL без параметров идёт расширенным протоколом', async () => {
+    const real = await t.deps.sources.get(
+      (await t.deps.db.query.templates.findFirst({ where: (x, { eq }) => eq(x.id, tpl) }))!
+        .datasourceId,
+    );
+    const modes: unknown[] = [];
+    const pool = {
+      connect: async () => {
+        const client = await real.pool.connect();
+        const q = client.query.bind(client) as (...a: unknown[]) => unknown;
+        (client as unknown as { query: unknown }).query = (...a: unknown[]) => {
+          const c = a[0] as { text?: string; queryMode?: string };
+          if (c?.text?.includes('limit 0')) modes.push(c.queryMode);
+          return q(...a);
+        };
+        return client;
+      },
+    } as unknown as Parameters<typeof checkQuery>[0];
+    const r = await checkQuery(pool, 'x', 'select id from company', 5000, 'ru');
+    expect(r).toEqual({ ok: true, columns: [{ name: 'id', type: 'integer' }] });
+    expect(modes).toEqual(['extended']);
   });
 });

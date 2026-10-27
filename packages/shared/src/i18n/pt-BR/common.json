@@ -166,6 +166,11 @@
     "cardTagsText": "Trecho de documento proposto: {{text}}",
     "cardQueuedData": "A alteração será aplicada quando você abrir a aba “Dados”",
     "cardQueuedParams": "A alteração será aplicada quando você abrir a aba “Parâmetros”",
-    "cardCopyFailed": "Não foi possível copiar — selecione o texto e copie manualmente"
+    "cardCopyFailed": "Não foi possível copiar — selecione o texto e copie manualmente",
+    "cardCopyTable": "Copiar tabela",
+    "cardCopiedAsText": "Copiado como texto: a tabela só é copiada via https",
+    "cardTableServiceRow": "Linha auxiliar — não aparece no relatório",
+    "cardTableHint": "Cole no documento: Ctrl+V ou arraste a tabela",
+    "cardTableText": "Tabela proposta para “{{key}}”: {{columns}}"
   }
 }

@@ -164,6 +164,11 @@
     "cardTagsText": "建议的文档片段：{{text}}",
     "cardQueuedData": "打开“数据”选项卡时将应用此更改",
     "cardQueuedParams": "打开“参数”选项卡时将应用此更改",
-    "cardCopyFailed": "无法复制——请选中文本后手动复制"
+    "cardCopyFailed": "无法复制——请选中文本后手动复制",
+    "cardCopyTable": "复制表格",
+    "cardCopiedAsText": "已按文本复制：仅在 https 下才能按表格复制",
+    "cardTableServiceRow": "辅助行——不会出现在报表中",
+    "cardTableHint": "粘贴到文档中：Ctrl+V 或拖动表格",
+    "cardTableText": "为“{{key}}”建议的表格：{{columns}}"
   }
 }

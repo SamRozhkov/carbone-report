@@ -52,6 +52,11 @@ export function useCardText(): (c: Card) => string {
           return t('common:assistant.cardTagsText', {
             text: c.text,
           });
+        case 'table':
+          return t('common:assistant.cardTableText', {
+            key: c.key,
+            columns: c.rows[0]?.join(', ') ?? '',
+          });
       }
     },
     [t],

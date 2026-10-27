@@ -6,6 +6,7 @@ import { useAssistantBridge } from './bridge';
 import { ParamCardView } from './ParamCardView';
 import { QueryCardView } from './QueryCardView';
 import { RunCardView } from './RunCardView';
+import { TableCardView } from './TableCardView';
 import { TagsCardView } from './TagsCardView';
 import type { AssistantChat } from './useAssistantChat';
 import './assistant.css';
@@ -96,6 +97,8 @@ export function AssistantPanel({ chat }: { chat: AssistantChat }) {
                     return <ParamCardView key={j} card={c} />;
                   case 'tags':
                     return <TagsCardView key={j} card={c} />;
+                  case 'table':
+                    return <TableCardView key={j} card={c} />;
                 }
               })}
           </div>

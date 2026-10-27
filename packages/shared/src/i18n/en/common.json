@@ -165,6 +165,11 @@
     "cardTagsText": "Proposed document fragment: {{text}}",
     "cardQueuedData": "The change will be applied when you open the Data tab",
     "cardQueuedParams": "The change will be applied when you open the Parameters tab",
-    "cardCopyFailed": "Couldn’t copy — select the text and copy it manually"
+    "cardCopyFailed": "Couldn’t copy — select the text and copy it manually",
+    "cardCopyTable": "Copy table",
+    "cardCopiedAsText": "Copied as text: tables are copied only over https",
+    "cardTableServiceRow": "Service row — not printed in the report",
+    "cardTableHint": "Paste into the document: Ctrl+V or drag the table",
+    "cardTableText": "Proposed table for “{{key}}”: {{columns}}"
   }
 }

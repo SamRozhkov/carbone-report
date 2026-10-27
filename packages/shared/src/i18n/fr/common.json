@@ -166,6 +166,11 @@
     "cardTagsText": "Fragment de document proposé : {{text}}",
     "cardQueuedData": "La modification sera appliquée à l’ouverture de l’onglet « Données »",
     "cardQueuedParams": "La modification sera appliquée à l’ouverture de l’onglet « Paramètres »",
-    "cardCopyFailed": "Copie impossible — sélectionnez le texte et copiez-le manuellement"
+    "cardCopyFailed": "Copie impossible — sélectionnez le texte et copiez-le manuellement",
+    "cardCopyTable": "Copier le tableau",
+    "cardCopiedAsText": "Copié en texte : le tableau n’est copié qu’en https",
+    "cardTableServiceRow": "Ligne technique — n’apparaît pas dans le rapport",
+    "cardTableHint": "Collez dans le document : Ctrl+V ou faites glisser le tableau",
+    "cardTableText": "Tableau proposé pour « {{key}} » : {{columns}}"
   }
 }

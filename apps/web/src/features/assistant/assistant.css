@@ -133,3 +133,27 @@ body:has(.cr-doc-full) .cr-assistant {
   max-height: 240px;
   overflow: auto;
 }
+
+/* Таблица для документа (§51.8): моноширинные ячейки, служебная строка [i+1] приглушена. */
+.cr-assistant__table-wrap {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.cr-assistant__table {
+  border-collapse: collapse;
+  font-family: var(--g-font-family-monospace);
+  font-size: var(--g-text-caption-2-font-size);
+  cursor: grab;
+}
+
+.cr-assistant__table td {
+  border: 1px solid var(--g-color-line-generic);
+  padding: 2px 6px;
+  overflow-wrap: anywhere;
+}
+
+.cr-assistant__table-service td {
+  color: var(--g-color-text-secondary);
+  font-style: italic;
+}

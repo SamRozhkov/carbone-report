@@ -1,5 +1,5 @@
 import type { Card, EditorDraft } from '@carbone-reports/shared';
-import { renderHook, screen, waitFor } from '@testing-library/react';
+import { fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -186,6 +186,118 @@ describe('карточки ассистента', () => {
     expect(screen.getByText('Вставьте в документ: Ctrl+V')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Копировать' }));
     expect(writeText).toHaveBeenCalledWith('{d.items[i].name}');
+  });
+
+  describe('таблица', () => {
+    const tableCard = (header = 'Товар'): Card => ({
+      type: 'table',
+      templateId: 't1',
+      templateName: 'Счёт',
+      key: 'items',
+      rows: [
+        [header, 'Кол-во'],
+        ['{d.items[i].name}', '{d.items[i].qty:formatN(2)}'],
+        ['{d.items[i+1].name}', ''],
+      ],
+      explanation: 'Строки счёта',
+    });
+    const blobText = (b: Blob) =>
+      new Promise<string>((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.readAsText(b);
+      });
+    const pipe = [
+      '| <b> | Кол-во |',
+      '| {d.items[i].name} | {d.items[i].qty:formatN(2)} |',
+      '| {d.items[i+1].name} |  |',
+    ].join('\n');
+
+    it('превью: таблица со служебной строкой [i+1] и подписью, пояснение и подсказка', async () => {
+      setup([tableCard()]);
+      const table = await screen.findByRole('table');
+      expect(within(table).getByText('Товар')).toBeInTheDocument();
+      expect(within(table).getByText('{d.items[i].qty:formatN(2)}')).toBeInTheDocument();
+      const service = within(table).getByText('{d.items[i+1].name}').closest('tr');
+      expect(service).toHaveClass('cr-assistant__table-service');
+      expect(screen.getByText('Служебная строка — в отчёт не попадает')).toBeInTheDocument();
+      expect(screen.getByText('Строки счёта')).toBeInTheDocument();
+      expect(
+        screen.getByText('Вставьте в документ: Ctrl+V или перетащите таблицу'),
+      ).toBeInTheDocument();
+    });
+
+    it('«Копировать таблицу»: HTML-таблица с экранированием и текст с разделителями', async () => {
+      const write = vi.fn().mockResolvedValue(undefined);
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { write, writeText },
+        configurable: true,
+      });
+      class FakeItem {
+        constructor(public items: Record<string, Blob>) {}
+      }
+      vi.stubGlobal('ClipboardItem', FakeItem);
+      setup([tableCard('<b>')]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Копировать таблицу' }));
+      expect(await screen.findByText('Скопировано')).toBeInTheDocument();
+      expect(writeText).not.toHaveBeenCalled();
+      const item = write.mock.calls[0]![0][0] as FakeItem;
+      const html = await blobText(item.items['text/html']!);
+      expect(html).toContain('<table');
+      expect(html).toContain('[i+1]');
+      expect(html).toContain('&lt;b&gt;');
+      expect(html).not.toContain('<b>');
+      expect(await blobText(item.items['text/plain']!)).toBe(pipe);
+      vi.unstubAllGlobals();
+    });
+
+    it('без clipboard.write или ClipboardItem — текстом и предупреждение про https', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      vi.stubGlobal('ClipboardItem', undefined);
+      setup([tableCard('<b>')]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Копировать таблицу' }));
+      expect(writeText).toHaveBeenCalledWith(pipe);
+      expect(
+        await screen.findByText('Скопировано текстом: таблицей копируется только по https'),
+      ).toBeInTheDocument();
+      vi.unstubAllGlobals();
+    });
+
+    it('clipboard.write отклонён — ошибка копирования', async () => {
+      const write = vi.fn().mockRejectedValue(new Error('denied'));
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { write, writeText: vi.fn() },
+        configurable: true,
+      });
+      vi.stubGlobal('ClipboardItem', class {});
+      setup([tableCard()]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Копировать таблицу' }));
+      expect(
+        await screen.findByText('Не удалось скопировать — выделите текст и скопируйте вручную'),
+      ).toBeInTheDocument();
+      vi.unstubAllGlobals();
+    });
+
+    it('перетаскивание: HTML и текст, копирование', async () => {
+      setup([tableCard('<b>')]);
+      const table = await screen.findByRole('table');
+      expect(table).toHaveAttribute('draggable', 'true');
+      const setData = vi.fn();
+      const dataTransfer = { setData, effectAllowed: 'none' };
+      fireEvent.dragStart(table, { dataTransfer });
+      expect(setData).toHaveBeenCalledWith('text/plain', pipe);
+      const html = setData.mock.calls.find(([f]) => f === 'text/html')?.[1] as string;
+      expect(html).toContain('<table');
+      expect(html).toContain('&lt;b&gt;');
+      expect(dataTransfer.effectAllowed).toBe('copy');
+    });
+
+    it('в историю — ключ и заголовки столбцов', () => {
+      const { result } = renderHook(() => useCardText(), { wrapper });
+      expect(result.current(tableCard())).toBe('Предложена таблица для «items»: Товар, Кол-во');
+    });
   });
 
   it('пустое состояние в редакторе — подсказки автора', async () => {

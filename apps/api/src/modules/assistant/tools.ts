@@ -102,6 +102,14 @@ export const shapeOptions = (r: ParamOptionsResult, search?: string) => {
   };
 };
 
+// Значения параметров по имени. properties пустой, но обязателен: GigaChat отклоняет объект без него.
+const PARAMS_SCHEMA = {
+  type: 'object',
+  description:
+    'Parameter values by parameter name, for example {"company": 2, "from": "2026-09-01"}.',
+  properties: {},
+};
+
 const SPECS: ToolSpec[] = [
   {
     type: 'function',
@@ -140,7 +148,7 @@ const SPECS: ToolSpec[] = [
           reportId: { type: 'string' },
           param: { type: 'string' },
           search: { type: 'string' },
-          params: { type: 'object' },
+          params: PARAMS_SCHEMA,
         },
         required: ['reportId', 'param'],
       },
@@ -154,7 +162,7 @@ const SPECS: ToolSpec[] = [
         'Propose running the report with the given parameter values. The user confirms the run with a button. Returns an error if parameters are invalid.',
       parameters: {
         type: 'object',
-        properties: { reportId: { type: 'string' }, params: { type: 'object' } },
+        properties: { reportId: { type: 'string' }, params: PARAMS_SCHEMA },
         required: ['reportId', 'params'],
       },
     },

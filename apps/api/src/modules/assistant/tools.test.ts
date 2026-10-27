@@ -181,3 +181,30 @@ describe('createAssistantTools: ошибки эндпоинтов', () => {
     });
   });
 });
+
+describe('схемы инструментов', () => {
+  // GigaChat (через gpt2giga) отклоняет объект без properties: 422 «Field '…properties' is missing».
+  const objectsWithoutProperties = (schema: unknown, path: string): string[] => {
+    if (!schema || typeof schema !== 'object') return [];
+    const s = schema as Record<string, unknown>;
+    const own = s.type === 'object' && !('properties' in s) ? [path] : [];
+    const props = (s.properties ?? {}) as Record<string, unknown>;
+    return [
+      ...own,
+      ...Object.entries(props).flatMap(([k, v]) => objectsWithoutProperties(v, `${path}.${k}`)),
+      ...objectsWithoutProperties(s.items, `${path}[]`),
+    ];
+  };
+
+  it('у каждого объекта в параметрах есть properties', () => {
+    const tools = createAssistantTools({
+      inject: vi.fn(),
+      deps: {} as AppDeps,
+      locale: 'ru',
+    });
+    const bad = tools.specs.flatMap((t) =>
+      objectsWithoutProperties(t.function.parameters, t.function.name),
+    );
+    expect(bad).toEqual([]);
+  });
+});

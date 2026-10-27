@@ -127,5 +127,23 @@
     "waitingFor": "sélectionnez d’abord : {{names}}",
     "selectAll": "Tout sélectionner",
     "deselectAll": "Tout désélectionner"
+  },
+  "assistant": {
+    "open": "Assistant",
+    "title": "Assistant",
+    "close": "Fermer",
+    "newChat": "Nouvelle conversation",
+    "empty": "Décrivez le rapport souhaité, par exemple « facture pour Romashka pour septembre »",
+    "suggestThis": "Génère ce rapport",
+    "suggestList": "Quels rapports puis-je utiliser ?",
+    "placeholder": "Message à l’assistant",
+    "send": "Envoyer",
+    "stop": "Arrêter",
+    "thinking": "L’assistant réfléchit…",
+    "generate": "Générer",
+    "openForm": "Ouvrir le formulaire",
+    "ready": "Rapport généré",
+    "history": "Historique",
+    "cardText": "Exécution proposée de « {{name}} » : {{params}}"
   }
 }

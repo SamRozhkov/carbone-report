@@ -385,6 +385,45 @@ describe('ReportRunPage', () => {
       }),
     );
   });
+  it('параметры из карточки ассистента: подставлены в форму, необъявленные отброшены', async () => {
+    const withQuery = {
+      ...template,
+      params: [
+        {
+          name: 'company',
+          label: 'Компания',
+          type: 'query',
+          required: true,
+          defaultValue: null,
+          options: null,
+          sql: null,
+          multiple: false,
+          dependsOn: [],
+        },
+        template.params[1],
+      ],
+    };
+    const { calls } = mockApi([
+      userMe,
+      { path: '/api/templates/t1', body: withQuery },
+      {
+        method: 'POST',
+        path: '/api/templates/t1/params/company/options',
+        body: { options: [{ value: 2, label: 'АО Лютик' }] },
+      },
+      { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'r1' } },
+    ]);
+    renderRoute('/reports/t1', { assistantParams: { company: 2, unknown: 1 } });
+    const control = await screen.findByRole('combobox', { name: 'Компания *' });
+    await waitFor(() => expect(control).toHaveTextContent('АО Лютик'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Сформировать' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: 'Сформировать' }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.path === '/api/reports/t1/render')?.body).toEqual({
+        params: { company: 2, limit: 5 },
+      }),
+    );
+  });
   it('пока грузятся варианты SQL-параметров, «Сформировать» неактивна', async () => {
     const withQuery = {
       ...template,

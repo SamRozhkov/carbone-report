@@ -127,5 +127,23 @@
     "waitingFor": "seleccione primero: {{names}}",
     "selectAll": "Seleccionar todo",
     "deselectAll": "Quitar todo"
+  },
+  "assistant": {
+    "open": "Asistente",
+    "title": "Asistente",
+    "close": "Cerrar",
+    "newChat": "Nuevo chat",
+    "empty": "Describa el informe que necesita, por ejemplo, «factura para Romashka de septiembre»",
+    "suggestThis": "Genera este informe",
+    "suggestList": "¿Qué informes puedo usar?",
+    "placeholder": "Mensaje al asistente",
+    "send": "Enviar",
+    "stop": "Detener",
+    "thinking": "El asistente está pensando…",
+    "generate": "Generar",
+    "openForm": "Abrir formulario",
+    "ready": "Informe generado",
+    "history": "Historial",
+    "cardText": "Ejecución propuesta de «{{name}}»: {{params}}"
   }
 }

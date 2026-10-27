@@ -1,0 +1,121 @@
+.cr-assistant {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 420px;
+  max-width: 100vw;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: var(--g-color-base-background);
+  border-left: 1px solid var(--g-color-line-generic);
+  z-index: 100;
+}
+
+.cr-assistant__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--g-color-line-generic);
+}
+
+.cr-assistant__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cr-assistant__feed {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.cr-assistant__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cr-assistant__turn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Ответы — простой текст (§50.1), переносы строк сохраняются. */
+.cr-assistant__msg {
+  max-width: 90%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cr-assistant__msg_user {
+  align-self: flex-end;
+  background: var(--g-color-base-info-light);
+}
+
+.cr-assistant__msg_assistant {
+  align-self: flex-start;
+  background: var(--g-color-base-generic);
+}
+
+.cr-assistant__card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--g-color-line-generic);
+  border-radius: 8px;
+}
+
+.cr-assistant__params {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cr-assistant__params dt {
+  display: inline;
+  color: var(--g-color-text-secondary);
+}
+
+.cr-assistant__params dt::after {
+  content: ': ';
+}
+
+.cr-assistant__params dd {
+  display: inline;
+  margin: 0;
+}
+
+.cr-assistant__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cr-assistant__input {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--g-color-line-generic);
+}
+
+@media (max-width: 720px) {
+  .cr-assistant {
+    width: 100vw;
+  }
+}

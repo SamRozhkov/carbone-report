@@ -127,5 +127,23 @@
     "waitingFor": "selecione primeiro: {{names}}",
     "selectAll": "Selecionar tudo",
     "deselectAll": "Desmarcar tudo"
+  },
+  "assistant": {
+    "open": "Assistente",
+    "title": "Assistente",
+    "close": "Fechar",
+    "newChat": "Nova conversa",
+    "empty": "Descreva o relatório de que precisa, por exemplo, “fatura da Romashka de setembro”",
+    "suggestThis": "Gere este relatório",
+    "suggestList": "Quais relatórios posso usar?",
+    "placeholder": "Mensagem para o assistente",
+    "send": "Enviar",
+    "stop": "Parar",
+    "thinking": "O assistente está pensando…",
+    "generate": "Gerar",
+    "openForm": "Abrir formulário",
+    "ready": "Relatório gerado",
+    "history": "Histórico",
+    "cardText": "Execução proposta de “{{name}}”: {{params}}"
   }
 }

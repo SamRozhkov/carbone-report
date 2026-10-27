@@ -3,7 +3,7 @@ import { Alert, Button, Link, Loader, Text } from '@gravity-ui/uikit';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { api, runFileUrl } from '../api/endpoints';
 import { ApiRequestError } from '../api/client';
 import { fieldErrors } from '../api/errors';
@@ -25,6 +25,7 @@ export function ReportRunRoute() {
 export function ReportRunPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const { state } = useLocation();
   const queryClient = useQueryClient();
   // t — описание шаблона, поэтому функция перевода — tr.
   const { t: tr } = useTranslation();
@@ -46,16 +47,25 @@ export function ReportRunPage() {
   const download = useRunDownload();
   const resetDownload = download.reset;
 
-  // Форма строится заново, если шаблон сменился или админ изменил его описание.
+  // Форма строится заново, если шаблон сменился, админ изменил его описание или ассистент
+  // передал новые параметры («Открыть форму» на уже открытом отчёте).
   const version = t ? `${t.id}:${t.updatedAt}` : '';
   useEffect(() => {
     if (!t) return;
-    setValues(initialValues(t.params));
+    // Параметры из карточки ассистента (§50.5) — вместо значений по умолчанию, только объявленные.
+    const fromAssistant =
+      (state as { assistantParams?: ParamsInput } | null)?.assistantParams ?? {};
+    const declared = Object.fromEntries(
+      t.params
+        .filter((p) => Object.hasOwn(fromAssistant, p.name))
+        .map((p) => [p.name, fromAssistant[p.name]!]),
+    );
+    setValues({ ...initialValues(t.params), ...declared });
     setRunId(null);
     setSignature(null);
     setSignOpen(false);
     resetDownload();
-  }, [version]);
+  }, [version, state]);
 
   // Формата при формировании нет (§24.1): сервер сохраняет снимок и собирает PDF для просмотра.
   const render = useMutation({

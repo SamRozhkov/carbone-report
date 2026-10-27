@@ -4,7 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { render, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type ReactElement, type ReactNode } from 'react';
-import { createMemoryRouter } from 'react-router';
+import { createMemoryRouter, parsePath } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { vi } from 'vitest';
 import { createQueryClient } from '../app/queryClient';
@@ -118,10 +118,10 @@ export function renderWithProviders(
   return { ...result, queryClient: client, router };
 }
 
-/** Рендер всего приложения (настоящие маршруты и guard'ы) на пути `path`. */
-export function renderRoute(path: string) {
+/** Рендер всего приложения (настоящие маршруты и guard'ы) на пути `path`; `state` — состояние перехода. */
+export function renderRoute(path: string, state?: unknown) {
   const client = testClient();
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
+  const router = createMemoryRouter(routes, { initialEntries: [{ ...parsePath(path), state }] });
   const result = render(
     <Providers client={client}>
       <RouterProvider router={router} />

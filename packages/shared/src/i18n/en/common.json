@@ -126,5 +126,23 @@
     "waitingFor": "select first: {{names}}",
     "selectAll": "Select all",
     "deselectAll": "Clear all"
+  },
+  "assistant": {
+    "open": "Assistant",
+    "title": "Assistant",
+    "close": "Close",
+    "newChat": "New chat",
+    "empty": "Describe the report you need, for example “invoice for Romashka for September”",
+    "suggestThis": "Generate this report",
+    "suggestList": "Which reports can I use?",
+    "placeholder": "Message to the assistant",
+    "send": "Send",
+    "stop": "Stop",
+    "thinking": "The assistant is thinking…",
+    "generate": "Generate",
+    "openForm": "Open form",
+    "ready": "Report generated",
+    "history": "History",
+    "cardText": "Proposed run of “{{name}}”: {{params}}"
   }
 }

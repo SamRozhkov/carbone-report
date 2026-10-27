@@ -126,5 +126,23 @@
     "waitingFor": "zuerst auswählen: {{names}}",
     "selectAll": "Alle auswählen",
     "deselectAll": "Auswahl aufheben"
+  },
+  "assistant": {
+    "open": "Assistent",
+    "title": "Assistent",
+    "close": "Schließen",
+    "newChat": "Neuer Chat",
+    "empty": "Beschreiben Sie den benötigten Bericht, zum Beispiel „Rechnung für Romashka für September“",
+    "suggestThis": "Erstelle diesen Bericht",
+    "suggestList": "Welche Berichte kann ich verwenden?",
+    "placeholder": "Nachricht an den Assistenten",
+    "send": "Senden",
+    "stop": "Stoppen",
+    "thinking": "Der Assistent denkt nach…",
+    "generate": "Erstellen",
+    "openForm": "Formular öffnen",
+    "ready": "Bericht erstellt",
+    "history": "Verlauf",
+    "cardText": "Vorgeschlagene Ausführung von „{{name}}“: {{params}}"
   }
 }

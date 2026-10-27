@@ -28,14 +28,18 @@ import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { api } from '../api/endpoints';
 import { meKey, useMe } from '../api/session';
+import { AssistantPanel } from '../features/assistant/AssistantPanel';
+import { clearAssistant } from '../features/assistant/storage';
+import { useAssistantChat } from '../features/assistant/useAssistantChat';
 import { LocaleSwitcher } from '../i18n/LocaleSwitcher';
 import { AboutDialog } from './AboutDialog';
 import { webBuild } from './buildInfo';
 import { usePermissions } from './permissions';
 import { ThemeContext } from './theme';
 
-/** Черновики превью и параметры тестового прогона не должны достаться следующему пользователю. */
+/** Черновики превью, параметры тестового прогона и диалог ассистента не должны достаться следующему пользователю. */
 function purgeUserStorage() {
+  clearAssistant();
   try {
     const keys: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -58,6 +62,7 @@ export function Layout() {
   const [compact, setCompact] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const { t } = useTranslation();
+  const assistant = useAssistantChat();
 
   const item = (
     id: string,
@@ -145,6 +150,16 @@ export function Layout() {
         headerDecoration
         renderFooter={({ compact: isCompact }) => (
           <>
+            {me?.features?.assistant && (
+              <FooterItem
+                id="assistant"
+                title={t('common:assistant.open')}
+                icon={Sparkles}
+                compact={isCompact}
+                current={assistant.open}
+                onItemClick={() => assistant.setOpen(!assistant.open)}
+              />
+            )}
             <FooterItem
               id="about"
               title={t('common:shell.version', { version: webBuild.version })}
@@ -207,9 +222,12 @@ export function Layout() {
           </>
         )}
         renderContent={() => (
-          <main className="cr-content">
-            <Outlet />
-          </main>
+          <>
+            <main className="cr-content">
+              <Outlet />
+            </main>
+            {me?.features?.assistant && assistant.open && <AssistantPanel chat={assistant} />}
+          </>
         )}
       />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />

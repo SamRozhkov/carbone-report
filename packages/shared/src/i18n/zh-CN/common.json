@@ -125,5 +125,23 @@
     "waitingFor": "请先选择：{{names}}",
     "selectAll": "全选",
     "deselectAll": "全部取消"
+  },
+  "assistant": {
+    "open": "助手",
+    "title": "助手",
+    "close": "关闭",
+    "newChat": "新对话",
+    "empty": "描述您需要的报表，例如“Romashka 九月份的发票”",
+    "suggestThis": "生成此报表",
+    "suggestList": "我可以使用哪些报表？",
+    "placeholder": "发送给助手的消息",
+    "send": "发送",
+    "stop": "停止",
+    "thinking": "助手正在思考…",
+    "generate": "生成",
+    "openForm": "打开表单",
+    "ready": "报表已生成",
+    "history": "历史记录",
+    "cardText": "建议运行“{{name}}”：{{params}}"
   }
 }

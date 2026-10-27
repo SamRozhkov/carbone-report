@@ -161,6 +161,37 @@ const SPECS: ToolSpec[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'propose_table',
+      description:
+        'Propose a document table for a list-mode query (a card the author pastes into the document as a real table). The server builds the header row, the {d.<key>[i].<column>} row and the {d.<key>[i+1]…} row; columns must be result columns of the query.',
+      parameters: {
+        type: 'object',
+        properties: {
+          key: str('Key of a list-mode query of the template'),
+          columns: {
+            type: 'array',
+            description: 'Table columns, left to right (1 to 20)',
+            items: {
+              type: 'object',
+              properties: {
+                header: str('Column header text'),
+                column: str('Result column of the query'),
+                format: str(
+                  "Optional Carbone formatters without braces, e.g. formatC(2) or formatN(2):ifEmpty('-')",
+                ),
+              },
+              required: ['header', 'column'],
+            },
+          },
+          explanation: str('Short explanation'),
+        },
+        required: ['key', 'columns', 'explanation'],
+      },
+    },
+  },
 ];
 
 const ARGS = {
@@ -172,6 +203,20 @@ const ARGS = {
   propose_param: z.object({ param: z.unknown() }),
   propose_tags: z.object({
     text: z.string().min(1).max(MAX_TAGS_TEXT),
+    explanation: z.string().max(1000),
+  }),
+  propose_table: z.object({
+    key: z.string().min(1).max(200),
+    columns: z
+      .array(
+        z.object({
+          header: z.string().max(200),
+          column: z.string().min(1).max(200),
+          format: z.string().max(500).nullish(),
+        }),
+      )
+      .min(1)
+      .max(20),
     explanation: z.string().max(1000),
   }),
 };
@@ -198,6 +243,26 @@ function tagsError(text: string): string | null {
   }
   if (bad.size === 0) return null;
   return `not Carbone syntax: ${[...bad].slice(0, 5).join(', ')}. ${TAGS_HINT}`;
+}
+
+/** Цепочка форматтеров без скобок тега: formatC(2) или formatN(2):ifEmpty('-'). */
+const FORMATTER = String.raw`[A-Za-z]\w*(?:\((?:'[^']*'|"[^"]*"|[^()'"])*\))?`;
+const FORMAT = new RegExp(`^${FORMATTER}(?::${FORMATTER})*$`);
+const formatError = (f: string) =>
+  /[{}]/.test(f) || !FORMAT.test(f)
+    ? `invalid format "${f}": Carbone formatters without braces, e.g. formatC(2) or formatN(2):ifEmpty('-')`
+    : null;
+
+type TableColumn = { header: string; column: string; format?: string | null };
+
+/** Строки таблицы (§51.8): заголовки, строка [i], служебная [i+1] — первая ячейка, прочие пустые. */
+function tableRows(key: string, columns: TableColumn[]): string[][] {
+  const tag = (c: TableColumn) => `{d.${key}[i].${c.column}${c.format ? `:${c.format}` : ''}}`;
+  return [
+    columns.map((c) => c.header),
+    columns.map(tag),
+    columns.map((c, i) => (i === 0 ? `{d.${key}[i+1].${c.column}}` : '')),
+  ];
 }
 
 const tagPaths = (draft: EditorDraft) => ({
@@ -228,6 +293,53 @@ export function createAuthorTools(
     ctx.onError?.(tool, r.status, r.body);
     return { result: errorOf(r) };
   };
+
+  /** Таблица для запроса-списка: столбцы — из проверки SQL черновика; модели — только { ok }. */
+  async function proposeTable(a: z.infer<typeof ARGS.propose_table>): Promise<ToolOutcome> {
+    const query = draft.queries.find((q) => q.key === a.key && q.mode === 'list');
+    if (!query) {
+      const keys = draft.queries.filter((q) => q.mode === 'list').map((q) => q.key);
+      return {
+        result: {
+          error: `"${a.key}" is not a list-mode query of the template; list-mode queries: ${keys.join(', ') || 'none'}`,
+        },
+      };
+    }
+    for (const c of a.columns) {
+      const error = c.format ? formatError(c.format) : null;
+      if (error) return { result: { error } };
+    }
+    const r = await inject('POST', `${base}/queries/check`, { sql: query.sql });
+    if (r.status !== 200) {
+      ctx.onError?.('propose_table', r.status, r.body);
+      return { result: { error: `check failed: ${errorOf(r).error}` } };
+    }
+    const check = r.body as QueryCheck;
+    if (!check.ok) return { result: { error: `check failed: ${check.error}` } };
+    const names = check.columns.map((c) => c.name);
+    const unknown = a.columns.map((c) => c.column).filter((c) => !names.includes(c));
+    if (unknown.length)
+      return {
+        result: {
+          error: `unknown columns ${unknown.join(', ')}; columns of "${a.key}": ${names.join(', ')}`,
+        },
+      };
+    const rows = tableRows(a.key, a.columns);
+    // Итоговые теги — та же проверка синтаксиса Carbone, что у propose_tags.
+    const error = tagsError(rows[1]!.join(' '));
+    if (error) return { result: { error } };
+    return {
+      card: {
+        type: 'table',
+        templateId,
+        templateName,
+        key: a.key,
+        rows,
+        explanation: a.explanation,
+      },
+      result: { ok: true },
+    };
+  }
 
   async function run(name: string, raw: unknown): Promise<ToolOutcome> {
     // Object.hasOwn: имена из прототипа (constructor, toString) — тоже неизвестные
@@ -278,6 +390,8 @@ export function createAuthorTools(
           return { result: { error: `invalid parameter: ${issuesText(p.error.issues)}` } };
         return { card: { type: 'param', templateId, templateName, param: p.data } };
       }
+      case 'propose_table':
+        return proposeTable(a as z.infer<typeof ARGS.propose_table>);
       default: {
         const error = tagsError(a.text as string);
         if (error) return { result: { error } };

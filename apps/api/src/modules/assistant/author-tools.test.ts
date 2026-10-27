@@ -261,6 +261,155 @@ describe('createAuthorTools', () => {
     }
   });
 
+  describe('propose_table', () => {
+    const CHECK = `/api/templates/${TID}/queries/check`;
+    const cols = {
+      ok: true,
+      columns: [
+        { name: 'name', type: 'text' },
+        { name: 'qty', type: 'integer' },
+      ],
+    };
+    const tableDraft = {
+      queries: [
+        ...draft.queries,
+        { key: 'company', mode: 'single' as const, sql: 'select 1 as id' },
+      ],
+      params: draft.params,
+    };
+    const setupTable = (check: { status: number; body: unknown } = { status: 200, body: cols }) => {
+      const inject = vi.fn<Inject>(async (_m, url) =>
+        url === CHECK ? check : { status: 404, body: {} },
+      );
+      return {
+        inject,
+        tools: createAuthorTools({
+          inject,
+          deps: {} as AppDeps,
+          locale: 'ru',
+          templateId: TID,
+          templateName: 'Счёт',
+          draft: tableDraft,
+        }),
+      };
+    };
+    const errorText = (r: unknown) => {
+      expect(r).not.toHaveProperty('card');
+      return JSON.stringify((r as { result: unknown }).result);
+    };
+
+    it('строки таблицы строит сервер: заголовки, [i] с форматом, [i+1] в первой ячейке', async () => {
+      const { inject, tools } = setupTable();
+      const r = await tools.run('propose_table', {
+        key: 'items',
+        columns: [
+          { header: 'Товар', column: 'name' },
+          { header: 'Кол-во', column: 'qty', format: "formatN(2):ifEmpty('-')" },
+        ],
+        explanation: 'Строки счёта',
+      });
+      expect(inject).toHaveBeenCalledWith('POST', CHECK, { sql: draft.queries[0]!.sql });
+      expect(r).toEqual({
+        card: {
+          type: 'table',
+          templateId: TID,
+          templateName: 'Счёт',
+          key: 'items',
+          rows: [
+            ['Товар', 'Кол-во'],
+            ['{d.items[i].name}', "{d.items[i].qty:formatN(2):ifEmpty('-')}"],
+            ['{d.items[i+1].name}', ''],
+          ],
+          explanation: 'Строки счёта',
+        },
+        // Модели — только признак успеха: ни строк данных, ни столбцов проверки.
+        result: { ok: true },
+      });
+    });
+
+    it('неизвестный ключ или запрос single — ошибка со списком запросов-списков', async () => {
+      const { inject, tools } = setupTable();
+      for (const key of ['nope', 'company']) {
+        const r = await tools.run('propose_table', {
+          key,
+          columns: [{ header: 'A', column: 'name' }],
+          explanation: '',
+        });
+        const t = errorText(r);
+        expect(t).toContain('error');
+        expect(t).toContain('items');
+      }
+      expect(inject).not.toHaveBeenCalled();
+    });
+
+    it('неизвестный столбец — ошибка со списком столбцов проверки', async () => {
+      const { tools } = setupTable();
+      const r = await tools.run('propose_table', {
+        key: 'items',
+        columns: [{ header: 'A', column: 'price' }],
+        explanation: '',
+      });
+      const t = errorText(r);
+      expect(t).toContain('price');
+      expect(t).toContain('name, qty');
+    });
+
+    it('проверка не прошла или эндпоинт не ответил — ошибка, без карточки', async () => {
+      const fail = await setupTable({
+        status: 200,
+        body: { ok: false, error: 'столбец "x" не существует' },
+      }).tools.run('propose_table', {
+        key: 'items',
+        columns: [{ header: 'A', column: 'name' }],
+        explanation: '',
+      });
+      expect(errorText(fail)).toContain('столбец \\"x\\" не существует');
+      const down = await setupTable({
+        status: 502,
+        body: { error: { code: 'DATASOURCE_UNAVAILABLE', message: 'host db-secret:5432' } },
+      }).tools.run('propose_table', {
+        key: 'items',
+        columns: [{ header: 'A', column: 'name' }],
+        explanation: '',
+      });
+      const t = errorText(down);
+      expect(t).toContain('check failed');
+      expect(t).not.toContain('db-secret');
+    });
+
+    it('формат с фигурными скобками или не цепочка форматтеров — ошибка', async () => {
+      const { tools } = setupTable();
+      for (const format of [
+        '{x}',
+        'x}',
+        'formatN(2)}{d.secret',
+        '1abc',
+        'formatN(2) x',
+        'a(1) b(2)',
+      ]) {
+        const r = await tools.run('propose_table', {
+          key: 'items',
+          columns: [{ header: 'A', column: 'name', format }],
+          explanation: '',
+        });
+        expect(errorText(r), format).toContain('format');
+      }
+    });
+
+    it('аргументы: 1..20 столбцов, заголовок ≤ 200', async () => {
+      const { tools } = setupTable();
+      const run = (columns: unknown) =>
+        tools.run('propose_table', { key: 'items', columns, explanation: '' });
+      expect(errorText(await run([]))).toContain('invalid arguments');
+      expect(
+        errorText(await run(Array.from({ length: 21 }, () => ({ header: 'A', column: 'name' })))),
+      ).toContain('invalid arguments');
+      expect(errorText(await run([{ header: 'x'.repeat(201), column: 'name' }]))).toContain(
+        'invalid arguments',
+      );
+    });
+  });
+
   it('ошибка эндпоинта схемы — безопасный текст (errorOf)', async () => {
     const { tools } = setup({
       [`/api/templates/${TID}/schema/tables`]: {

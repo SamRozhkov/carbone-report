@@ -204,6 +204,7 @@ describe('systemPrompt', () => {
     expect(s).toContain('«Счёт»');
     expect(s).toContain('not Handlebars');
     expect(s).toContain('| {d.<key>[i+1].name} |  |');
+    expect(s).toContain('propose_table');
     // Инструкции администратора — по-прежнему в конце.
     expect(s.endsWith('Administrator instructions:\nadmin note')).toBe(true);
     expect(systemPrompt({ locale: 'ru', today: 'x', extra: '', page })).not.toContain('check_sql');

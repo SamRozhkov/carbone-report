@@ -14,6 +14,7 @@ const AUTHOR = (name: string) => [
   '| {d.<key>[i].name} | {d.<key>[i].total:formatC(2)} |',
   '| {d.<key>[i+1].name} |  |',
   "Formatters: {d.date:formatD('DD.MM.YYYY')}, {d.qty:formatN(2)}, {d.total:formatC(2)}; conditions: {d.x:ifEQ(1):show('yes'):elseShow('no')}; aggregation: {d.items[].total:aggSum}.",
+  '- For a table of a list-mode query use propose_table (the server builds the [i]/[i+1] rows); use propose_tags for single tags, conditions and totals.',
   '- Suggest document fragments with propose_tags. The author applies cards with buttons; you do not change the template.',
 ];
 

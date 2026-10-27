@@ -127,7 +127,16 @@ export type Card =
       check: QueryCheck;
     }
   | { type: 'param'; templateId: string; templateName: string; param: TemplateParam }
-  | { type: 'tags'; templateId: string; templateName: string; text: string; explanation: string };
+  | { type: 'tags'; templateId: string; templateName: string; text: string; explanation: string }
+  | {
+      /** Таблица для документа (§51.8): заголовки, строка [i], служебная строка [i+1]. */
+      type: 'table';
+      templateId: string;
+      templateName: string;
+      key: string;
+      rows: string[][];
+      explanation: string;
+    };
 
 export interface AssistantChatReply {
   reply: string;

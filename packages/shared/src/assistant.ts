@@ -82,6 +82,38 @@ export interface QueryCheckColumn {
 }
 export type QueryCheck = { ok: true; columns: QueryCheckColumn[] } | { ok: false; error: string };
 
+/** POST /api/templates/:id/queries/check — проверка SQL автора без строк (§51.2). */
+export const CheckQueryBody = z.object({ sql: z.string().trim().min(1).max(20_000) });
+export type CheckQueryBody = z.infer<typeof CheckQueryBody>;
+
+/** Схема источника для авторов (§51.2): только системный каталог. */
+export type RelationKind = 'table' | 'view' | 'matview' | 'foreign';
+export interface SchemaTable {
+  schema: string;
+  name: string;
+  kind: RelationKind;
+  comment: string | null;
+}
+export interface SchemaTableList {
+  total: number;
+  tables: SchemaTable[];
+}
+export interface SchemaColumn {
+  name: string;
+  type: string;
+  notNull: boolean;
+  comment: string | null;
+}
+export interface SchemaForeignKey {
+  columns: string[];
+  references: { schema: string; table: string; columns: string[] };
+}
+export interface SchemaTableDetails extends SchemaTable {
+  columns: SchemaColumn[];
+  primaryKey: string[];
+  foreignKeys: SchemaForeignKey[];
+}
+
 /** Карточка в ответе ассистента: запуск (§50.3) или предложение автору шаблона (§51). */
 export type Card =
   | ({ type: 'run' } & RunCard)

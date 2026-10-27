@@ -22,7 +22,8 @@
     "param": "未找到参数",
     "attachment": "未找到附加文件",
     "oidc": "未找到 OIDC",
-    "assistant": "助手已关闭"
+    "assistant": "助手已关闭",
+    "table": "未找到表"
   },
   "access": {
     "relatedDeleted": "相关记录已被删除，请重试",

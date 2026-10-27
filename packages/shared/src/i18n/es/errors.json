@@ -22,7 +22,8 @@
     "param": "parámetro no encontrado",
     "attachment": "archivo adjunto no encontrado",
     "oidc": "OIDC no encontrado",
-    "assistant": "el asistente está desactivado"
+    "assistant": "el asistente está desactivado",
+    "table": "tabla no encontrada"
   },
   "access": {
     "relatedDeleted": "se eliminó un registro relacionado, vuelva a intentarlo",

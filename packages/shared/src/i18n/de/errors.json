@@ -22,7 +22,8 @@
     "param": "Parameter nicht gefunden",
     "attachment": "angehängte Datei nicht gefunden",
     "oidc": "OIDC nicht gefunden",
-    "assistant": "Assistent ist deaktiviert"
+    "assistant": "Assistent ist deaktiviert",
+    "table": "Tabelle nicht gefunden"
   },
   "access": {
     "relatedDeleted": "ein verknüpfter Datensatz wurde gelöscht, versuchen Sie es erneut",

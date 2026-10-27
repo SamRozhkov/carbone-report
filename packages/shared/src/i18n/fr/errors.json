@@ -22,7 +22,8 @@
     "param": "paramètre introuvable",
     "attachment": "fichier joint introuvable",
     "oidc": "OIDC introuvable",
-    "assistant": "l'assistant est désactivé"
+    "assistant": "l'assistant est désactivé",
+    "table": "table introuvable"
   },
   "access": {
     "relatedDeleted": "un enregistrement lié a été supprimé, veuillez réessayer",

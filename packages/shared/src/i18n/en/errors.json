@@ -22,7 +22,8 @@
     "param": "parameter not found",
     "attachment": "attached file not found",
     "oidc": "OIDC not found",
-    "assistant": "assistant is disabled"
+    "assistant": "assistant is disabled",
+    "table": "table not found"
   },
   "access": {
     "relatedDeleted": "a related record was deleted, please try again",

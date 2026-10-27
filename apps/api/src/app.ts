@@ -20,6 +20,7 @@ import { registerEditLockRoutes } from './modules/edit-lock/routes';
 import { registerOnlyOfficeRoutes } from './modules/onlyoffice/routes';
 import { registerRenderRoutes } from './modules/render/routes';
 import { registerReportRoutes } from './modules/reports/routes';
+import { registerSchemaRoutes } from './modules/schema/routes';
 import { registerTemplatePdfRoutes } from './modules/templates/pdf-routes';
 import { registerTemplateRoutes } from './modules/templates/routes';
 import { registerSignatureRoutes } from './modules/signature/routes';
@@ -153,6 +154,7 @@ export async function buildApp(deps: AppDeps): Promise<App> {
   registerTemplateRoutes(app, deps, guards);
   registerTemplatePdfRoutes(app, deps, guards);
   registerReportRoutes(app, deps, guards);
+  registerSchemaRoutes(app, deps, guards);
   registerOnlyOfficeRoutes(app, deps, guards);
   registerEditLockRoutes(app, deps, guards);
   registerRenderRoutes(app, deps.renderFiles);

@@ -1,16 +1,19 @@
 import {
   checkReadOnlySql,
+  scanSql,
   MAX_PARAM_OPTIONS,
   type ParamValue,
+  type QueryCheck,
   type RunQueryResult,
   type SelectOptionValue,
   type TemplateParam,
   type TemplateQuery,
 } from '@carbone-reports/shared';
+import type { Locale } from '@carbone-reports/shared/i18n';
 import type pg from 'pg';
 import Cursor from 'pg-cursor';
 import type { Deadline } from '../../lib/deadline';
-import { AppError, text, type Msg } from '../../lib/errors';
+import { AppError, text, translateMsg, type Msg } from '../../lib/errors';
 import type { QueryResult } from './build-data';
 import { sqlParamHint } from './sql-hints';
 import { parseSqlParams, SqlParamError } from './sql-params';
@@ -80,7 +83,7 @@ interface Tx {
   beforeQuery(deadline: Deadline | undefined, timeoutMs: number): Promise<void>;
 }
 
-async function withReadOnly<T>(
+export async function withReadOnly<T>(
   pool: pg.Pool,
   sourceName: string,
   timeoutMs: number,
@@ -358,4 +361,66 @@ export async function loadParamOptions(
     }
     return out;
   });
+}
+
+/** Снимает ; в конце кода (после него допустимы пробелы и комментарии — они остаются). */
+function stripTrailingSemicolon(sql: string): string {
+  const code = scanSql(sql).filter((seg) => seg.kind === 'code');
+  for (let k = code.length - 1; k >= 0; k--) {
+    const seg = code[k]!;
+    const body = sql.slice(seg.start, seg.end);
+    const trimmed = body.trimEnd();
+    if (trimmed === '') continue;
+    if (!trimmed.endsWith(';')) break;
+    return sql.slice(0, seg.start + trimmed.length - 1) + sql.slice(seg.start + trimmed.length);
+  }
+  return sql;
+}
+
+/**
+ * Проверка SQL автора (§51.2): колонки и типы без строк. Все :параметры — null; запрос
+ * оборачивается в select * from (…) q limit 0, ; в конце снимается, перенос строки перед )
+ * закрывает комментарий -- в последней строке. Текст ошибки — на языке locale.
+ */
+export async function checkQuery(
+  pool: pg.Pool,
+  sourceName: string,
+  sql: string,
+  timeoutMs: number,
+  locale: Locale,
+): Promise<QueryCheck> {
+  const what = queryWhat('check');
+  try {
+    assertReadOnly(what, sql);
+    const parsed = parseSqlParams(stripTrailingSemicolon(sql));
+    return await withReadOnly(pool, sourceName, timeoutMs, async (tx) => {
+      let fields: { name: string; dataTypeID: number }[];
+      try {
+        const r = await tx.client.query({
+          text: `select * from (\n${parsed.text}\n) q limit 0`,
+          values: parsed.names.map(() => null),
+        });
+        fields = r.fields;
+      } catch (e) {
+        throw mapPgError(what, e);
+      }
+      const oids = [...new Set(fields.map((f) => f.dataTypeID))];
+      const { rows } = await tx.client.query<{ oid: number; name: string }>(
+        'select oid::int as oid, pg_catalog.format_type(oid, null) as name from pg_catalog.pg_type where oid = any($1::oid[])',
+        [oids],
+      );
+      const names = new Map(rows.map((r) => [r.oid, r.name]));
+      await tx.guard(what);
+      return {
+        ok: true as const,
+        columns: fields.map((f) => ({ name: f.name, type: names.get(f.dataTypeID) ?? 'unknown' })),
+      };
+    });
+  } catch (e) {
+    if (e instanceof SqlParamError)
+      return { ok: false, error: translateMsg(locale, { key: e.key }) };
+    if (e instanceof AppError && (e.code === 'SQL_ERROR' || e.code === 'TIMEOUT'))
+      return { ok: false, error: e.textIn(locale) };
+    throw e;
+  }
 }

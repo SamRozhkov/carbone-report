@@ -144,6 +144,7 @@
     "openForm": "Ouvrir le formulaire",
     "ready": "Rapport généré",
     "history": "Historique",
-    "cardText": "Exécution proposée de « {{name}} » : {{params}}"
+    "cardText": "Exécution proposée de « {{name}} » : {{params}}",
+    "applied": "Appliqué, non enregistré"
   }
 }

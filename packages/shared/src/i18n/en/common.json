@@ -143,6 +143,7 @@
     "openForm": "Open form",
     "ready": "Report generated",
     "history": "History",
-    "cardText": "Proposed run of “{{name}}”: {{params}}"
+    "cardText": "Proposed run of “{{name}}”: {{params}}",
+    "applied": "Applied, not saved"
   }
 }

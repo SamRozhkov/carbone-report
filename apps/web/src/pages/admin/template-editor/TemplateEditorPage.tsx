@@ -11,12 +11,13 @@ import {
   Text,
 } from '@gravity-ui/uikit';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { ApiRequestError } from '../../../api/client';
 import { api, templateDownloadUrl } from '../../../api/endpoints';
 import { ErrorAlert } from '../../../components/ErrorAlert';
+import { useOptionalAssistantBridge } from '../../../features/assistant/bridge';
 import { ExportTemplatesButton } from '../ExportTemplatesButton';
 import { ChartsTab } from './ChartsTab';
 import { PdfTab } from './PdfTab';
@@ -73,6 +74,23 @@ export function TemplateEditorPage() {
   });
   const warned = tagWarnings.data;
 
+  // Мост ассистента (§51.5): открытый редактор виден панели; переключение вкладки — через ref,
+  // чтобы регистрация не менялась при каждой смене параметров адреса.
+  const registerEditor = useOptionalAssistantBridge()?.registerEditor;
+  const openTabRef = useRef<(tab: 'data' | 'params') => void>(() => {});
+  useEffect(() => {
+    if (!registerEditor || !tpl) return;
+    return registerEditor({
+      templateId: tpl.id,
+      templateName: tpl.name,
+      saved: () => ({
+        queries: tpl.queries.map(({ key, mode, sql }) => ({ key, mode, sql })),
+        params: tpl.params,
+      }),
+      openTab: (t) => openTabRef.current(t),
+    });
+  }, [registerEditor, tpl]);
+
   if (template.isPending) return <Loader />;
   if (forbidden) {
     return (
@@ -96,6 +114,7 @@ export function TemplateEditorPage() {
     next.delete('full');
     setSp(next, { replace: true });
   };
+  openTabRef.current = selectTab;
   const setFull = (v: boolean) => {
     const next = new URLSearchParams(sp);
     if (v) next.set('full', '1');

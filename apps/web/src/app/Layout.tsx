@@ -29,6 +29,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router';
 import { api } from '../api/endpoints';
 import { meKey, useMe } from '../api/session';
 import { AssistantPanel } from '../features/assistant/AssistantPanel';
+import { AssistantBridgeProvider } from '../features/assistant/bridge';
 import { clearAssistant } from '../features/assistant/storage';
 import { useAssistantChat } from '../features/assistant/useAssistantChat';
 import { LocaleSwitcher } from '../i18n/LocaleSwitcher';
@@ -52,7 +53,16 @@ function purgeUserStorage() {
   }
 }
 
+/** Мост ассистента и редактора (§51.5) — над оболочкой: его читают и панель, и страницы. */
 export function Layout() {
+  return (
+    <AssistantBridgeProvider>
+      <LayoutShell />
+    </AssistantBridgeProvider>
+  );
+}
+
+function LayoutShell() {
   const me = useMe().data;
   const navigate = useNavigate();
   const { pathname } = useLocation();

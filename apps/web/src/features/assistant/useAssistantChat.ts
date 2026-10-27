@@ -6,6 +6,7 @@ import { matchPath, useLocation } from 'react-router';
 import { ApiRequestError } from '../../api/client';
 import { api } from '../../api/endpoints';
 import { meKey } from '../../api/session';
+import { useAssistantBridge } from './bridge';
 import { loadAssistant, saveAssistant, toHistory, type AssistantState } from './storage';
 
 export interface AssistantChat {
@@ -31,6 +32,7 @@ export function useAssistantChat(): AssistantChat {
   const [error, setError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const reportId = matchPath('/reports/:id', pathname)?.params.id ?? null;
+  const bridge = useAssistantBridge();
 
   useEffect(() => saveAssistant(state), [state]);
 
@@ -73,7 +75,14 @@ export function useAssistantChat(): AssistantChat {
       .chat(
         {
           messages: toHistory(messages, cardText),
-          page: { path: pathname, ...(reportId ? { reportId } : {}) },
+          page: {
+            path: pathname,
+            ...(reportId ? { reportId } : {}),
+            // Открыт редактор шаблона: несохранённые черновики «Данных» и «Параметров» (§51.3).
+            ...(bridge.editor
+              ? { templateId: bridge.editor.templateId, editor: bridge.draft() ?? undefined }
+              : {}),
+          },
         },
         c.signal,
       )

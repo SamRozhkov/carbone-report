@@ -1,11 +1,12 @@
 import type { TemplateAdminDetails } from '@carbone-reports/shared';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { changeLocale } from '../../../i18n';
 import { mockApi, pickOption, renderWithProviders } from '../../../test/utils';
 import { anyHints, ParamsTab } from './ParamsTab';
+import { AssistantBridgeProvider, useAssistantBridge } from '../../../features/assistant/bridge';
 import { adminTemplate } from '../../../test/fixtures';
 
 const t = {
@@ -475,6 +476,48 @@ describe('ParamsTab', () => {
     await userEvent.type(screen.getByLabelText('SQL параметра 2'), ' and 1=1');
     expect(screen.getByRole('button', { name: 'Проверить: параметр 2' })).toBeDisabled();
     expect(screen.getByText('сохраните параметры')).toBeInTheDocument();
+  });
+
+  it('карточка параметра из очереди моста: замена по имени и добавление', async () => {
+    mockApi([]);
+    const param = (name: string, label: string) => ({
+      name,
+      label,
+      type: 'string' as const,
+      required: false,
+      defaultValue: null,
+      options: null,
+      sql: null,
+      multiple: false,
+    });
+    function Seed() {
+      const bridge = useAssistantBridge();
+      const [ready, setReady] = useState(false);
+      useEffect(() => {
+        const off = bridge.registerEditor({
+          templateId: 't1',
+          templateName: 'T',
+          saved: () => ({ queries: [], params: [] }),
+          openTab: () => {},
+        });
+        return off;
+      }, [bridge.registerEditor]);
+      useEffect(() => {
+        if (!bridge.editor || ready) return;
+        bridge.apply({ type: 'param', templateId: 't1', param: param('from', 'Начало') });
+        bridge.apply({ type: 'param', templateId: 't1', param: param('to', 'Конец') });
+        setReady(true);
+      }, [bridge, ready]);
+      return ready ? <ParamsTab template={t} /> : null;
+    }
+    renderWithProviders(
+      <AssistantBridgeProvider>
+        <Seed />
+      </AssistantBridgeProvider>,
+    );
+    expect(await screen.findByLabelText('Подпись параметра 1')).toHaveValue('Начало');
+    expect(screen.getByLabelText('Имя параметра 3')).toHaveValue('to');
+    expect(screen.getByText('Есть несохранённые изменения')).toBeInTheDocument();
   });
 });
 

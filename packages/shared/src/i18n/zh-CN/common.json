@@ -142,6 +142,7 @@
     "openForm": "打开表单",
     "ready": "报表已生成",
     "history": "历史记录",
-    "cardText": "建议运行“{{name}}”：{{params}}"
+    "cardText": "建议运行“{{name}}”：{{params}}",
+    "applied": "已应用，未保存"
   }
 }

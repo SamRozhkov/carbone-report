@@ -143,6 +143,7 @@
     "openForm": "Formular öffnen",
     "ready": "Bericht erstellt",
     "history": "Verlauf",
-    "cardText": "Vorgeschlagene Ausführung von „{{name}}“: {{params}}"
+    "cardText": "Vorgeschlagene Ausführung von „{{name}}“: {{params}}",
+    "applied": "Übernommen, nicht gespeichert"
   }
 }

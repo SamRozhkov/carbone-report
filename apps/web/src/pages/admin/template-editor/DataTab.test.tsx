@@ -1,11 +1,12 @@
 import type { TemplateAdminDetails } from '@carbone-reports/shared';
 import { screen, waitFor } from '@testing-library/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { changeLocale } from '../../../i18n';
 import { mockApi, renderWithProviders } from '../../../test/utils';
 import { DataTab } from './DataTab';
+import { AssistantBridgeProvider, useAssistantBridge } from '../../../features/assistant/bridge';
 import { adminTemplate } from '../../../test/fixtures';
 
 const t = {
@@ -226,6 +227,44 @@ describe('DataTab', () => {
       expect(screen.getByLabelText('Ключ запроса')).toHaveValue('other');
       expect(screen.queryByText(/Шаблон изменился на сервере/)).not.toBeInTheDocument();
     });
+  });
+
+  it('карточка ассистента из очереди моста применяется при монтировании вкладки', async () => {
+    mockApi([]);
+    function Seed() {
+      const bridge = useAssistantBridge();
+      const [ready, setReady] = useState(false);
+      useEffect(() => {
+        const off = bridge.registerEditor({
+          templateId: 't1',
+          templateName: 'T',
+          saved: () => ({ queries: [], params: [] }),
+          openTab: () => {},
+        });
+        return off;
+      }, [bridge.registerEditor]);
+      useEffect(() => {
+        if (!bridge.editor || ready) return;
+        bridge.apply({
+          type: 'query',
+          templateId: 't1',
+          key: 'items',
+          mode: 'list',
+          sql: 'select 7',
+          check: { ok: true, columns: [] },
+        });
+        setReady(true);
+      }, [bridge, ready]);
+      return ready ? <DataTab {...props} /> : null;
+    }
+    renderWithProviders(
+      <AssistantBridgeProvider>
+        <Seed />
+      </AssistantBridgeProvider>,
+    );
+    expect(await screen.findByRole('button', { name: /items/ })).toBeInTheDocument();
+    expect(screen.getByText('Есть несохранённые изменения')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Ключ запроса' })).toHaveValue('items');
   });
 });
 

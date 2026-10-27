@@ -19,7 +19,7 @@ import {
   useToaster,
 } from '@gravity-ui/uikit';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/endpoints';
 import { fieldErrors } from '../../../api/errors';
@@ -28,6 +28,11 @@ import { ErrorAlert } from '../../../components/ErrorAlert';
 import { Field } from '../../../components/Field';
 import { GeneralError } from '../../../components/GeneralError';
 import { ParamForm } from '../../../components/ParamForm';
+import {
+  applyQuery,
+  useOptionalAssistantBridge,
+  type ApplyCard,
+} from '../../../features/assistant/bridge';
 import { pickParams } from '../../../lib/params';
 import type { TabProps } from './editorState';
 import { applyTemplate } from './editorState';
@@ -93,6 +98,35 @@ export function DataTab({ template, testParams, onTestParams }: TabProps) {
       add({ name: `tpl-queries-${Date.now()}`, title: t('editor:data.saved'), theme: 'success' });
     },
   });
+
+  // Мост ассистента (§51.5): черновик уходит в запрос чата, карточки запросов применяются в черновик.
+  const bridge = useOptionalAssistantBridge();
+  const registerTab = bridge?.registerTab;
+  const takePending = bridge?.takePending;
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
+  const applyCard = (c: ApplyCard) => {
+    if (c.type !== 'query' || c.templateId !== template.id) return;
+    save.reset();
+    run.reset();
+    const next = applyQuery(draftsRef.current, c, (q) => ({ id: nextId.current++, ...q }));
+    draftsRef.current = next;
+    setDrafts(next);
+    setSelectedId(next.find((q) => q.key === c.key)?.id);
+    add({ name: 'assistant-applied', theme: 'info', title: t('common:assistant.applied') });
+  };
+  const applyRef = useRef(applyCard);
+  applyRef.current = applyCard;
+  useEffect(() => {
+    if (!registerTab || !takePending) return;
+    const off = registerTab({
+      kind: 'query',
+      draft: () => draftsRef.current.map(({ key, mode, sql }) => ({ key, mode, sql })),
+      apply: (c) => applyRef.current(c),
+    });
+    takePending('query').forEach((c) => applyRef.current(c));
+    return off;
+  }, [registerTab, takePending]);
 
   const select = (id: number) => {
     if (id === current?.id) return;

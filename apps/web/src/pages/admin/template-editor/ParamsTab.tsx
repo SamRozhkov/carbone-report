@@ -19,7 +19,7 @@ import {
   useToaster,
 } from '@gravity-ui/uikit';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/endpoints';
 import { errorMessage, fieldErrors } from '../../../api/errors';
@@ -27,6 +27,11 @@ import { CodeEditor } from '../../../components/CodeEditor';
 import { Field } from '../../../components/Field';
 import { GeneralError } from '../../../components/GeneralError';
 import { ParamField } from '../../../components/ParamForm';
+import {
+  applyParam,
+  useOptionalAssistantBridge,
+  type ApplyCard,
+} from '../../../features/assistant/bridge';
 import { i18n } from '../../../i18n';
 import { formatOptions, parseOptions, pickParams } from '../../../lib/params';
 import { applyTemplate, useTestParams } from './editorState';
@@ -203,6 +208,34 @@ export function ParamsTab({ template }: { template: TemplateAdminDetails }) {
   // Шаблон обновился на сервере: без несохранённых правок подхватываем, иначе сохраняем черновик.
   const stale = template.updatedAt !== baseline.updatedAt;
   if (stale && !dirty) reseed(template);
+
+  // Мост ассистента (§51.5): черновик уходит в запрос чата (невалидные параметры отсеивает мост),
+  // карточки параметров применяются в черновик.
+  const bridge = useOptionalAssistantBridge();
+  const registerTab = bridge?.registerTab;
+  const takePending = bridge?.takePending;
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
+  const applyCard = (c: ApplyCard) => {
+    if (c.type !== 'param' || c.templateId !== template.id) return;
+    save.reset();
+    const next = applyParam(draftsRef.current, c, (p) => toDraft(p, nextId.current++));
+    draftsRef.current = next;
+    setDrafts(next);
+    add({ name: 'assistant-applied', theme: 'info', title: t('common:assistant.applied') });
+  };
+  const applyRef = useRef(applyCard);
+  applyRef.current = applyCard;
+  useEffect(() => {
+    if (!registerTab || !takePending) return;
+    const off = registerTab({
+      kind: 'param',
+      draft: () => draftsRef.current.map(toParam),
+      apply: (c) => applyRef.current(c),
+    });
+    takePending('param').forEach((c) => applyRef.current(c));
+    return off;
+  }, [registerTab, takePending]);
 
   const save = useMutation({
     mutationFn: () => api.templates.saveParams(template.id, drafts.map(toParam)),

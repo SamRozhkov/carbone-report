@@ -47,7 +47,11 @@ export function ParamCardView({ card }: { card: ParamCard }) {
           {t('common:assistant.cardCopy')}
         </Button>
       </div>
-      {!sameTemplate && <Text color="secondary">{t('common:assistant.cardOpenTemplate')}</Text>}
+      {!sameTemplate && (
+        <Text color="secondary">
+          {t('common:assistant.cardOpenTemplate', { name: card.templateName })}
+        </Text>
+      )}
     </div>
   );
 }

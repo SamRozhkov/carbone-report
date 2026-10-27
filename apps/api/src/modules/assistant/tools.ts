@@ -19,7 +19,8 @@ import { resolveParams } from '../queries/params';
 import { loadTemplateFull } from '../templates/service';
 import type { ToolSpec } from './llm';
 
-export type ToolOutcome = { result: unknown } | { card: Card };
+/** card — предложение автору; result при карточке — что увидит модель (иначе {ok:true}). */
+export type ToolOutcome = { result: unknown } | { card: Card; result?: unknown };
 export interface AgentTools {
   specs: ToolSpec[];
   run(name: string, args: unknown): Promise<ToolOutcome>;

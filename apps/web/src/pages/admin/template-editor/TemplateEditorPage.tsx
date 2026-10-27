@@ -76,7 +76,11 @@ export function TemplateEditorPage() {
 
   // Мост ассистента (§51.5): открытый редактор виден панели; переключение вкладки — через ref,
   // чтобы регистрация не менялась при каждой смене параметров адреса.
-  const registerEditor = useOptionalAssistantBridge()?.registerEditor;
+  const bridge = useOptionalAssistantBridge();
+  const registerEditor = bridge?.registerEditor;
+  // Уход из редактора сбрасывает очередь карточек: иначе она применится при следующем заходе.
+  const clearPending = bridge?.clearPending;
+  useEffect(() => () => clearPending?.(), [clearPending]);
   const openTabRef = useRef<(tab: 'data' | 'params') => void>(() => {});
   useEffect(() => {
     if (!registerEditor || !tpl) return;

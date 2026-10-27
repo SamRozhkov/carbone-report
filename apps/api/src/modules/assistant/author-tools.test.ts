@@ -30,7 +30,14 @@ const setup = (responses: Record<string, { status: number; body: unknown }> = {}
   const inject = vi.fn<Inject>(async (_m, url) => responses[url] ?? { status: 200, body: okCheck });
   return {
     inject,
-    tools: createAuthorTools({ inject, deps: {} as AppDeps, locale: 'ru', templateId: TID, draft }),
+    tools: createAuthorTools({
+      inject,
+      deps: {} as AppDeps,
+      locale: 'ru',
+      templateId: TID,
+      templateName: 'Счёт',
+      draft,
+    }),
   };
 };
 
@@ -80,11 +87,14 @@ describe('createAuthorTools', () => {
       card: {
         type: 'query',
         templateId: TID,
+        templateName: 'Счёт',
         key: 'company',
         mode: 'single',
         sql: 'select 1 as id',
         check: okCheck,
       },
+      // Итог проверки виден модели.
+      result: { ok: true, check: okCheck },
     });
     const bad = await tools.run('propose_query', { key: 'params', mode: 'list', sql: 'select 1' });
     expect('result' in bad && JSON.stringify(bad.result)).toContain('error');
@@ -106,7 +116,10 @@ describe('createAuthorTools', () => {
       },
     });
     const r = await tools.run('propose_query', { key: 'a', mode: 'list', sql: 'select 1' });
-    expect(r).toMatchObject({ card: { type: 'query', check: { ok: false } } });
+    expect(r).toMatchObject({
+      card: { type: 'query', check: { ok: false } },
+      result: { ok: true, check: { ok: false } },
+    });
     expect(JSON.stringify(r)).not.toContain('db-secret');
   });
 
@@ -123,11 +136,55 @@ describe('createAuthorTools', () => {
       multiple: false,
     };
     expect(await tools.run('propose_param', { param: p })).toEqual({
-      card: { type: 'param', templateId: TID, param: p },
+      card: { type: 'param', templateId: TID, templateName: 'Счёт', param: p },
     });
     const bad = await tools.run('propose_param', { param: { ...p, name: '1x' } });
     expect('result' in bad && JSON.stringify(bad.result)).toContain('error');
     expect(JSON.stringify(bad)).not.toContain('v:');
+  });
+
+  it('propose_param: строгая модель — пропуски и пустые значения приводятся к null/false', async () => {
+    const { tools } = setup();
+    const r1 = await tools.run('propose_param', {
+      param: { name: 'from', label: 'С даты', type: 'date', required: true },
+    });
+    expect(r1).toEqual({
+      card: {
+        type: 'param',
+        templateId: TID,
+        templateName: 'Счёт',
+        param: {
+          name: 'from',
+          label: 'С даты',
+          type: 'date',
+          required: true,
+          defaultValue: null,
+          options: null,
+          sql: null,
+          multiple: false,
+        },
+      },
+    });
+    const r2 = await tools.run('propose_param', {
+      param: { name: 'n', label: 'N', type: 'number', sql: '', options: [], defaultValue: '' },
+    });
+    expect(r2).toMatchObject({
+      card: {
+        param: { defaultValue: null, options: null, sql: null, multiple: false, required: false },
+      },
+    });
+    // SQL у не-query отбрасывается.
+    const r3 = await tools.run('propose_param', {
+      param: { name: 's', label: 'S', type: 'string', sql: 'select 1' },
+    });
+    expect(r3).toMatchObject({ card: { param: { sql: null } } });
+  });
+
+  it('неверные аргументы — читаемый текст, без ключей каталога', async () => {
+    const r = await setup().tools.run('describe_table', { name: '' });
+    expect(JSON.stringify(r)).toContain('invalid arguments: name: ');
+    expect(JSON.stringify(r)).not.toContain('v:');
+    expect(JSON.stringify(r)).not.toContain('"code"');
   });
 
   it('propose_tags: текст ≤ 2000', async () => {
@@ -138,6 +195,7 @@ describe('createAuthorTools', () => {
       card: {
         type: 'tags',
         templateId: TID,
+        templateName: 'Счёт',
         text: '{d.company.name}',
         explanation: 'Название',
       },

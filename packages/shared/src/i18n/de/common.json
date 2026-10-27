@@ -154,7 +154,7 @@
     "cardReplaceParam": "„{{name}}“ aktualisieren",
     "cardCopy": "Kopieren",
     "cardCopied": "Kopiert",
-    "cardOpenTemplate": "Öffnen Sie die Vorlage, um es anzuwenden",
+    "cardOpenTemplate": "Öffnen Sie die Vorlage „{{name}}“, um die Änderung anzuwenden",
     "cardModeList": "Liste von Zeilen",
     "cardModeSingle": "einzelne Zeile",
     "cardCheckOk": "Geprüft: {{columns}}",

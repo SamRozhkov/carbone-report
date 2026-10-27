@@ -504,8 +504,18 @@ describe('ParamsTab', () => {
       }, [bridge.registerEditor]);
       useEffect(() => {
         if (!bridge.editor || ready) return;
-        bridge.apply({ type: 'param', templateId: 't1', param: param('from', 'Начало') });
-        bridge.apply({ type: 'param', templateId: 't1', param: param('to', 'Конец') });
+        bridge.apply({
+          type: 'param',
+          templateId: 't1',
+          templateName: 'Счёт',
+          param: param('from', 'Начало'),
+        });
+        bridge.apply({
+          type: 'param',
+          templateId: 't1',
+          templateName: 'Счёт',
+          param: param('to', 'Конец'),
+        });
         setReady(true);
       }, [bridge, ready]);
       return ready ? <ParamsTab template={t} /> : null;

@@ -115,6 +115,44 @@ describe('runAgent', () => {
     expect(llm).toHaveBeenCalledTimes(4);
   });
 
+  it('лимит шагов после карточек — карточки без текста, причина в журнал', async () => {
+    const llm = vi
+      .fn<LlmClient>(async () => call('list_reports', '{}'))
+      .mockResolvedValueOnce(call('propose_run', '{}'));
+    const onLimit = vi.fn();
+    const r = await runAgent({ llm, tools: tools(), ...base, maxToolCalls: 3, onLimit });
+    expect(r).toEqual({ reply: '', cards: [expect.objectContaining({ type: 'run' })] });
+    expect(onLimit).toHaveBeenCalledWith('шаги');
+  });
+
+  it('срок истёк после карточек — карточки без текста', async () => {
+    const llm = vi
+      .fn<LlmClient>(
+        (_r, signal) =>
+          new Promise((_res, rej) =>
+            signal!.addEventListener('abort', () => rej(new Error('aborted'))),
+          ),
+      )
+      .mockResolvedValueOnce(call('propose_run', '{}'));
+    const onLimit = vi.fn();
+    const r = await runAgent({ llm, tools: tools(), ...base, deadlineMs: 30, onLimit });
+    expect(r.cards).toHaveLength(1);
+    expect(r.reply).toBe('');
+    expect(onLimit).toHaveBeenCalledWith('срок');
+  });
+
+  it('карточка с result — модели уходит result', async () => {
+    const llm = script(call('propose_query', '{}'), text('ok'));
+    const t = tools(async () => ({
+      card: { type: 'run' as const, ...card },
+      result: { ok: true, check: { ok: false, error: 'e' } },
+    }));
+    await runAgent({ llm, tools: t, ...base });
+    expect(llm.mock.calls[1]![0].messages.at(-1)!.content).toBe(
+      JSON.stringify({ ok: true, check: { ok: false, error: 'e' } }),
+    );
+  });
+
   it('пустой финальный ответ — AgentLimitError', async () => {
     await expect(
       runAgent({ llm: script(text('  ')), tools: tools(), ...base }),

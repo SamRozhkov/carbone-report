@@ -10,8 +10,12 @@
   flex-direction: column;
   background: var(--g-color-base-background);
   border-left: 1px solid var(--g-color-line-generic);
-  /* Выше полноэкранного редактора документа (.cr-doc-full, z-index 1000). */
-  z-index: 1100;
+  /* Ниже диалогов и попапов Gravity (1000); над развёрнутым редактором — правило ниже. */
+  z-index: 100;
+}
+/* Развёрнутый редактор документа (.cr-doc-full, z-index 1000): панель над ним. */
+body:has(.cr-doc-full) .cr-assistant {
+  z-index: 1001;
 }
 
 .cr-assistant__header {

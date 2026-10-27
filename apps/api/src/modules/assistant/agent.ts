@@ -29,6 +29,8 @@ export async function runAgent(o: {
   signal?: AbortSignal;
   /** Исключение инструмента — в журнал; модели уходит только общая ошибка. */
   onToolError?: (name: string, e: unknown) => void;
+  /** Лимит (шаги, срок) после карточек: ответ — карточки, причина — в журнал. */
+  onLimit?: (reason: string) => void;
 }): Promise<AssistantChatReply> {
   const max = o.maxToolCalls ?? MAX_TOOL_CALLS;
   const deadline = AbortSignal.timeout(o.deadlineMs ?? AGENT_DEADLINE_MS);
@@ -36,12 +38,18 @@ export async function runAgent(o: {
   const messages: LlmMessage[] = [{ role: 'system', content: o.system }, ...o.history];
   let calls = 0;
   const cards: Card[] = [];
+  // Готовые карточки не теряются: при лимите отдаём их без текста.
+  const limit = (reason: string): AssistantChatReply => {
+    if (cards.length === 0) throw new AgentLimitError(reason);
+    o.onLimit?.(reason);
+    return { reply: '', cards };
+  };
   for (;;) {
     let res;
     try {
       res = await o.llm({ messages, tools: o.tools.specs }, signal);
     } catch (e) {
-      if (deadline.aborted) throw new AgentLimitError('срок');
+      if (deadline.aborted) return limit('срок');
       throw e;
     }
     const text = res.content?.trim() ?? '';
@@ -51,7 +59,7 @@ export async function runAgent(o: {
     }
     messages.push({ role: 'assistant', content: res.content, tool_calls: res.toolCalls });
     for (const c of res.toolCalls) {
-      if (++calls > max) throw new AgentLimitError('шаги');
+      if (++calls > max) return limit('шаги');
       let content: unknown;
       let args: unknown;
       try {
@@ -68,7 +76,7 @@ export async function runAgent(o: {
               content = { error: 'too many cards: at most 5 per answer' };
             else {
               cards.push(out.card);
-              content = { ok: true };
+              content = out.result ?? { ok: true };
             }
           } else content = out.result;
         } catch (e) {

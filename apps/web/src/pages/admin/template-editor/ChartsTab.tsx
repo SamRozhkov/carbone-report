@@ -33,6 +33,7 @@ import { ErrorAlert } from '../../../components/ErrorAlert';
 import { Field } from '../../../components/Field';
 import { GeneralError } from '../../../components/GeneralError';
 import { useCopy } from '../../../components/useCopy';
+import { useBridgeDirty } from '../../../features/assistant/bridge';
 import { pickParams } from '../../../lib/params';
 import type { TabProps } from './editorState';
 import { applyTemplate } from './editorState';
@@ -185,6 +186,7 @@ export function ChartsTab({ template, testParams }: TabProps) {
   // Шаблон обновился на сервере: без несохранённых правок подхватываем, иначе сохраняем черновик.
   const stale = template.updatedAt !== baseline.updatedAt;
   if (stale && !dirty) reseed(template);
+  useBridgeDirty(dirty);
 
   // Тот же запуск, что на вкладке «Данные»: SQL сохранённого запроса на тестовых параметрах (§35.5).
   const run = useMutation({

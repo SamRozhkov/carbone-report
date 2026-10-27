@@ -120,13 +120,14 @@ export type Card =
   | {
       type: 'query';
       templateId: string;
+      templateName: string;
       key: string;
       mode: QueryMode;
       sql: string;
       check: QueryCheck;
     }
-  | { type: 'param'; templateId: string; param: TemplateParam }
-  | { type: 'tags'; templateId: string; text: string; explanation: string };
+  | { type: 'param'; templateId: string; templateName: string; param: TemplateParam }
+  | { type: 'tags'; templateId: string; templateName: string; text: string; explanation: string };
 
 export interface AssistantChatReply {
   reply: string;

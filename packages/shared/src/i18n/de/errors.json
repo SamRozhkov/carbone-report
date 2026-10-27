@@ -184,6 +184,7 @@
   },
   "sql": {
     "query": "Abfrage „{{key}}“",
+    "check": "Abfrage",
     "param": "Parameter „{{label}}“",
     "readOnly": "{{what}}: Schreiben ist nicht erlaubt — Abfragen werden nur lesend ausgeführt",
     "notReadOnly": "{{what}}: nur lesende Abfragen (SELECT) sind erlaubt; gefunden: {{found}}",

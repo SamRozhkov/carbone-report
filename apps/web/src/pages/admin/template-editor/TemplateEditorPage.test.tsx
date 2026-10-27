@@ -1,8 +1,15 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import {
+  AssistantBridgeProvider,
+  useAssistantBridge,
+  type AssistantBridge,
+} from '../../../features/assistant/bridge';
 import { adminTemplate } from '../../../test/fixtures';
-import { adminMe, mockApi, renderRoute } from '../../../test/utils';
+import { adminMe, mockApi, renderRoute, renderWithProviders } from '../../../test/utils';
+import { TemplateEditorPage } from './TemplateEditorPage';
 
 vi.mock('@onlyoffice/document-editor-react', () => ({
   DocumentEditor: () => <div data-testid="oo" />,
@@ -235,5 +242,49 @@ describe('TemplateEditorPage', () => {
     renderRoute('/admin/templates/t1');
     expect(await screen.findByText('нет права на правку шаблона')).toBeInTheDocument();
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+  });
+
+  it('уход из редактора сбрасывает очередь карточек ассистента', async () => {
+    mockApi([adminMe, { path: '/api/templates/t1', body: adminTemplate }]);
+    let bridge: AssistantBridge | null = null;
+    function Probe() {
+      bridge = useAssistantBridge();
+      return null;
+    }
+    function Host() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          {open && <TemplateEditorPage />}
+          <button onClick={() => setOpen(false)}>close</button>
+          <Probe />
+        </>
+      );
+    }
+    renderWithProviders(
+      <AssistantBridgeProvider>
+        <Host />
+      </AssistantBridgeProvider>,
+      { route: '/admin/templates/t1?tab=charts', path: '/admin/templates/:id' },
+    );
+    await waitFor(() => expect(bridge!.editor?.templateId).toBe('t1'));
+    // Правки на другой вкладке: карточка остаётся в очереди без переключения.
+    act(() => {
+      bridge!.registerDirty(() => true);
+    });
+    const card = {
+      type: 'query' as const,
+      templateId: 't1',
+      templateName: 'Счёт',
+      key: 'items',
+      mode: 'list' as const,
+      sql: 'select 1',
+      check: { ok: true as const, columns: [] },
+    };
+    act(() => {
+      expect(bridge!.apply(card)).toBe('queued');
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'close' }));
+    expect(bridge!.takePending('query')).toEqual([]);
   });
 });

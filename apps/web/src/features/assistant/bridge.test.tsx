@@ -15,6 +15,7 @@ describe('applyQuery / applyParam', () => {
   const card = (key: string) => ({
     type: 'query' as const,
     templateId: 't',
+    templateName: 'T',
     key,
     mode: 'list' as const,
     sql: 'select 2',
@@ -47,6 +48,7 @@ describe('applyQuery / applyParam', () => {
     const pc = (param: ReturnType<typeof p>) => ({
       type: 'param' as const,
       templateId: 't',
+      templateName: 'T',
       param,
     });
     const makeP = (x: ReturnType<typeof p>) => ({ id: 9, ...x });
@@ -97,6 +99,7 @@ describe('мост', () => {
   const qcard = {
     type: 'query' as const,
     templateId: 't',
+    templateName: 'T',
     key: 'b',
     mode: 'list' as const,
     sql: 'select 2',
@@ -173,6 +176,46 @@ describe('мост', () => {
     expect(result.current.apply(qcard)).toBe('queued');
     expect(openTab).not.toHaveBeenCalled();
     expect(result.current.takePending('query')).toEqual([qcard]);
+  });
+
+  it('вкладка без карточек (диаграммы, PDF, настройки) с правками — в очередь без переключения', () => {
+    const { result } = renderHook(() => useAssistantBridge(), { wrapper });
+    const openTab = vi.fn();
+    act(() => {
+      result.current.registerEditor({
+        templateId: 't',
+        templateName: 'T',
+        saved: () => saved,
+        openTab,
+      });
+    });
+    let off = () => {};
+    act(() => {
+      off = result.current.registerDirty(() => true);
+    });
+    expect(result.current.apply(qcard)).toBe('queued');
+    expect(openTab).not.toHaveBeenCalled();
+    // Вкладка ушла — правок нет, переключение снова возможно.
+    off();
+    expect(result.current.apply(qcard)).toBe('opened');
+    expect(openTab).toHaveBeenCalledWith('data');
+  });
+
+  it('clearPending — очередь пуста', () => {
+    const { result } = renderHook(() => useAssistantBridge(), { wrapper });
+    act(() => {
+      result.current.registerEditor({
+        templateId: 't',
+        templateName: 'T',
+        saved: () => saved,
+        openTab: vi.fn(),
+      });
+    });
+    act(() => {
+      result.current.apply(qcard);
+    });
+    result.current.clearPending();
+    expect(result.current.takePending('query')).toEqual([]);
   });
 
   it('другая вкладка без правок — в очередь и переключение', () => {

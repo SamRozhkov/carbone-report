@@ -1,6 +1,14 @@
 import type { Card, EditorDraft, QueryMode } from '@carbone-reports/shared';
 import { TemplateParam } from '@carbone-reports/shared';
-import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 
 /** Мост панели ассистента и редактора шаблона (§51.5). */
 
@@ -29,12 +37,16 @@ export interface AssistantBridge {
   editor: EditorRegistration | null;
   registerEditor(r: EditorRegistration): () => void;
   registerTab(r: TabRegistration): () => void;
+  /** Прочие вкладки с черновиком (диаграммы, PDF, настройки): только признак несохранённых правок. */
+  registerDirty(probe: () => boolean): () => void;
   /** Черновики смонтированных вкладок, иначе сохранённое; null — редактор не открыт. */
   draft(): EditorDraft | null;
   /** Вкладка смонтирована — сразу в её черновик; иначе в очередь и открыть вкладку,
    *  если другая открытая вкладка не держит несохранённых правок. */
   apply(card: ApplyCard): ApplyResult | null;
   takePending(kind: 'query' | 'param'): ApplyCard[];
+  /** Редактор закрыт: очередь сбрасывается, чтобы карточка не применилась при следующем заходе. */
+  clearPending(): void;
 }
 
 // Пределы EditorDraft на сервере: лишнее не отправляем, иначе сервер отклонит весь запрос чата.
@@ -63,6 +75,7 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
   const editorRef = useRef<EditorRegistration | null>(null);
   const tabs = useRef(new Map<'query' | 'param', TabRegistration>());
   const pending = useRef<ApplyCard[]>([]);
+  const probes = useRef(new Set<() => boolean>());
   const methods = useMemo<Omit<AssistantBridge, 'editor'>>(
     () => ({
       registerEditor: (r) => {
@@ -81,6 +94,12 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
         tabs.current.set(r.kind, r);
         return () => {
           if (tabs.current.get(r.kind) === r) tabs.current.delete(r.kind);
+        };
+      },
+      registerDirty: (probe) => {
+        probes.current.add(probe);
+        return () => {
+          probes.current.delete(probe);
         };
       },
       draft: () => {
@@ -107,7 +126,11 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
         }
         pending.current.push(card);
         // Вкладки монтируются по одной: переключение потеряло бы несохранённые правки открытой.
-        if ([...tabs.current.values()].some((t) => t.dirty())) return 'queued';
+        if (
+          [...tabs.current.values()].some((t) => t.dirty()) ||
+          [...probes.current].some((p) => p())
+        )
+          return 'queued';
         ed.openTab(card.type === 'query' ? 'data' : 'params');
         return 'opened';
       },
@@ -115,6 +138,9 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
         const mine = pending.current.filter((c) => c.type === kind);
         pending.current = pending.current.filter((c) => c.type !== kind);
         return mine;
+      },
+      clearPending: () => {
+        pending.current = [];
       },
     }),
     [],
@@ -132,6 +158,14 @@ export function useAssistantBridge(): AssistantBridge {
 /** Мост, если он есть: редактор и вкладки рендерятся и вне Layout (в тестах). */
 export function useOptionalAssistantBridge(): AssistantBridge | null {
   return useContext(Ctx);
+}
+
+/** Вкладка без карточек сообщает мосту о несохранённых правках: применение не переключит вкладку. */
+export function useBridgeDirty(dirty: boolean): void {
+  const registerDirty = useOptionalAssistantBridge()?.registerDirty;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  useEffect(() => registerDirty?.(() => dirtyRef.current), [registerDirty]);
 }
 
 type QueryFields = { key: string; mode: QueryMode; sql: string };

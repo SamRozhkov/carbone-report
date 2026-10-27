@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/endpoints';
+import { useBridgeDirty } from '../../../features/assistant/bridge';
 import { errorMessage, fieldErrors } from '../../../api/errors';
 import { ErrorAlert } from '../../../components/ErrorAlert';
 import { Field } from '../../../components/Field';
@@ -57,6 +58,8 @@ export function SettingsTab({
   // Шаблон обновился на сервере: без несохранённых правок подхватываем, иначе сохраняем черновик.
   const stale = template.updatedAt !== baseline.updatedAt;
   if (stale && !dirty) reseed(template);
+  // Правки настроек не теряются при применении карточки ассистента (§51.5).
+  useBridgeDirty(dirty);
 
   const save = useMutation({
     mutationFn: () =>
@@ -215,6 +218,7 @@ function AccessSection({ templateId }: { templateId: string }) {
     setBaseline(access.data);
     setForm(access.data);
   }
+  useBridgeDirty(dirty);
 
   const save = useSaveTemplateAccess(templateId, (saved) => {
     setBaseline(saved);

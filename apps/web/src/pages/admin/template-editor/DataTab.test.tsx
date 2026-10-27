@@ -248,6 +248,7 @@ describe('DataTab', () => {
         bridge.apply({
           type: 'query',
           templateId: 't1',
+          templateName: 'T',
           key: 'items',
           mode: 'list',
           sql: 'select 7',

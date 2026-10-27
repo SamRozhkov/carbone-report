@@ -155,7 +155,7 @@
     "cardReplaceParam": "Actualizar «{{name}}»",
     "cardCopy": "Copiar",
     "cardCopied": "Copiado",
-    "cardOpenTemplate": "Abra la plantilla para aplicar",
+    "cardOpenTemplate": "Abra la plantilla «{{name}}» para aplicar",
     "cardModeList": "lista de filas",
     "cardModeSingle": "una sola fila",
     "cardCheckOk": "Comprobado: {{columns}}",

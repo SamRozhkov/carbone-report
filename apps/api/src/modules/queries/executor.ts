@@ -389,7 +389,8 @@ export async function checkQuery(
   timeoutMs: number,
   locale: Locale,
 ): Promise<QueryCheck> {
-  const what = queryWhat('check');
+  // Проверка черновика: SQL ещё не запрос шаблона — без ключа в тексте ошибки.
+  const what = text('sql.check');
   try {
     assertReadOnly(what, sql);
     const parsed = parseSqlParams(stripTrailingSemicolon(sql));

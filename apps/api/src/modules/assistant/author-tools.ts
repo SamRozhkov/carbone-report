@@ -2,6 +2,7 @@
 // от имени пользователя; предложения — карточки, шаблон не меняется.
 import {
   type EditorDraft,
+  ParamType,
   type QueryCheck,
   TemplateParam,
   TemplateQuery,
@@ -19,24 +20,45 @@ const str = (description: string) => ({ type: 'string', description });
 const PARAM_SCHEMA = {
   type: 'object',
   description:
-    'Template parameter: name (identifier), label, type (string|number|date|boolean|select|query), required, defaultValue, options ([{value,label}] for select), sql (for query: returns value,label), multiple.',
+    'Template parameter. Only name, label and type are required; fields that do not apply may be omitted or null.',
   properties: {
-    name: { type: 'string' },
-    label: { type: 'string' },
-    type: { type: 'string' },
-    required: { type: 'boolean' },
-    multiple: { type: 'boolean' },
-    sql: { type: 'string' },
-    defaultValue: { type: 'string' },
+    name: str('Identifier (letters, digits, _), not "params"'),
+    label: str('Label shown to the user'),
+    type: { type: 'string', enum: ParamType.options, description: 'Parameter type' },
+    required: { type: 'boolean', description: 'Whether a value is required (default false)' },
+    multiple: {
+      type: 'boolean',
+      description: 'Only for type query: several values may be chosen (default false)',
+    },
+    sql: str('Only for type query: read-only SQL returning value,label; null otherwise'),
+    defaultValue: str('Default value; null for none'),
     options: {
       type: 'array',
+      description: 'Only for type select: the choices; null otherwise',
       items: {
         type: 'object',
         properties: { value: { type: 'string' }, label: { type: 'string' } },
+        required: ['value', 'label'],
       },
     },
   },
+  required: ['name', 'label', 'type'],
 };
+
+/** Строгие модели (GigaChat) шлют пустые строки и массивы вместо null — приводим к схеме. */
+function normalizeParam(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const p = raw as Record<string, unknown>;
+  const empty = (v: unknown) => v === undefined || v === '' || (Array.isArray(v) && !v.length);
+  return {
+    ...p,
+    required: p.required ?? false,
+    multiple: p.multiple ?? false,
+    defaultValue: empty(p.defaultValue) ? null : p.defaultValue,
+    options: empty(p.options) ? null : p.options,
+    sql: p.type !== 'query' || empty(p.sql) ? null : p.sql,
+  };
+}
 
 const SPECS: ToolSpec[] = [
   {
@@ -152,9 +174,9 @@ const tagPaths = (draft: EditorDraft) => ({
 });
 
 export function createAuthorTools(
-  ctx: ToolContext & { templateId: string; draft: EditorDraft },
+  ctx: ToolContext & { templateId: string; templateName: string; draft: EditorDraft },
 ): AgentTools {
-  const { inject, templateId, draft } = ctx;
+  const { inject, templateId, templateName, draft } = ctx;
   const base = `/api/templates/${enc(templateId)}`;
 
   /** Ответ эндпоинта: 200 — как есть (метаданные схемы, итог проверки); иначе — безопасная часть. */
@@ -174,7 +196,8 @@ export function createAuthorTools(
     // Object.hasOwn: имена из прототипа (constructor, toString) — тоже неизвестные
     if (!Object.hasOwn(ARGS, name)) return { result: { error: `unknown tool: ${name}` } };
     const parsed = ARGS[name as keyof typeof ARGS].safeParse(raw ?? {});
-    if (!parsed.success) return { result: { error: `invalid arguments: ${parsed.error.message}` } };
+    if (!parsed.success)
+      return { result: { error: `invalid arguments: ${issuesText(parsed.error.issues)}` } };
     const a = parsed.data as Record<string, unknown>;
     switch (name) {
       case 'get_template_design':
@@ -202,24 +225,28 @@ export function createAuthorTools(
           card: {
             type: 'query',
             templateId,
+            templateName,
             key: q.data.key,
             mode: q.data.mode,
             sql: q.data.sql,
             check,
           },
+          // Итог проверки (столбцы или ошибка) — модели, чтобы исправить SQL.
+          result: { ok: true, check },
         };
       }
       case 'propose_param': {
-        const p = TemplateParam.safeParse(a.param);
+        const p = TemplateParam.safeParse(normalizeParam(a.param));
         if (!p.success)
           return { result: { error: `invalid parameter: ${issuesText(p.error.issues)}` } };
-        return { card: { type: 'param', templateId, param: p.data } };
+        return { card: { type: 'param', templateId, templateName, param: p.data } };
       }
       default:
         return {
           card: {
             type: 'tags',
             templateId,
+            templateName,
             text: a.text as string,
             explanation: a.explanation as string,
           },

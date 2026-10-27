@@ -184,6 +184,7 @@
   },
   "sql": {
     "query": "query “{{key}}”",
+    "check": "query",
     "param": "parameter “{{label}}”",
     "readOnly": "{{what}}: writing is not allowed — queries are read-only",
     "notReadOnly": "{{what}}: only read queries (SELECT) are allowed; found: {{found}}",

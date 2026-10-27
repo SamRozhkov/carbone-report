@@ -188,6 +188,7 @@
   },
   "sql": {
     "query": "consulta «{{key}}»",
+    "check": "consulta",
     "param": "parámetro «{{label}}»",
     "readOnly": "{{what}}: no se permite escribir; las consultas son de solo lectura",
     "notReadOnly": "{{what}}: solo se permiten consultas de lectura (SELECT); encontrado: {{found}}",

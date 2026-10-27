@@ -154,7 +154,7 @@
     "cardReplaceParam": "Update “{{name}}”",
     "cardCopy": "Copy",
     "cardCopied": "Copied",
-    "cardOpenTemplate": "Open the template to apply",
+    "cardOpenTemplate": "Open the template “{{name}}” to apply",
     "cardModeList": "list of rows",
     "cardModeSingle": "single row",
     "cardCheckOk": "Checked: {{columns}}",

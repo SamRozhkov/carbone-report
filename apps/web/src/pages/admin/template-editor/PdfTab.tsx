@@ -31,6 +31,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../api/endpoints';
+import { useBridgeDirty } from '../../../features/assistant/bridge';
 import { fieldErrors } from '../../../api/errors';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { ErrorAlert } from '../../../components/ErrorAlert';
@@ -153,6 +154,7 @@ export function PdfTab({ template }: Pick<TabProps, 'template'>) {
     setDraft(toDraft(tpl.pdfOptions));
   };
   if (stale && !dirty) reseed(template);
+  useBridgeDirty(dirty);
 
   const setPwState = (next: PwState) => {
     save.reset();

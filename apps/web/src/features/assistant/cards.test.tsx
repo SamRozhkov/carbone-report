@@ -31,6 +31,7 @@ const queryCard = (
   ({
     type: 'query',
     templateId,
+    templateName: templateId === 't1' ? 'Счёт' : 'Акт',
     key,
     mode: 'list',
     sql: 'select 1',
@@ -128,7 +129,7 @@ describe('карточки ассистента', () => {
     setup([queryCard('items', 'other')]);
     const btn = await screen.findByRole('button', { name: 'Заменить запрос «items»' });
     expect(btn).toBeDisabled();
-    expect(screen.getByText('Откройте шаблон, чтобы применить')).toBeInTheDocument();
+    expect(screen.getByText('Откройте шаблон «Акт», чтобы применить')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Копировать' }));
     expect(writeText).toHaveBeenCalledWith('select 1');
     expect(await screen.findByText('Скопировано')).toBeInTheDocument();
@@ -136,7 +137,9 @@ describe('карточки ассистента', () => {
 
   it('буфер недоступен или writeText отклонён — ошибка, а не «Скопировано»', async () => {
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
-    const view = setup([{ type: 'tags', templateId: 't1', text: 'x', explanation: '' }]);
+    const view = setup([
+      { type: 'tags', templateId: 't1', templateName: 'Счёт', text: 'x', explanation: '' },
+    ]);
     await userEvent.click(await screen.findByRole('button', { name: 'Копировать' }));
     const msg = 'Не удалось скопировать — выделите текст и скопируйте вручную';
     expect(await screen.findByText(msg)).toBeInTheDocument();
@@ -144,7 +147,7 @@ describe('карточки ассистента', () => {
     view.unmount();
     const writeText = vi.fn().mockRejectedValue(new Error('denied'));
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    setup([{ type: 'tags', templateId: 't1', text: 'x', explanation: '' }]);
+    setup([{ type: 'tags', templateId: 't1', templateName: 'Счёт', text: 'x', explanation: '' }]);
     await userEvent.click(await screen.findByRole('button', { name: 'Копировать' }));
     expect(await screen.findByText(msg)).toBeInTheDocument();
     expect(screen.queryByText('Скопировано')).toBeNull();
@@ -152,8 +155,13 @@ describe('карточки ассистента', () => {
 
   it('параметр: «Создать параметр» / «Обновить «from»»', async () => {
     setup([
-      { type: 'param', templateId: 't1', param: { ...param, name: 'to', label: 'По' } },
-      { type: 'param', templateId: 't1', param },
+      {
+        type: 'param',
+        templateId: 't1',
+        templateName: 'Счёт',
+        param: { ...param, name: 'to', label: 'По' },
+      },
+      { type: 'param', templateId: 't1', templateName: 'Счёт', param },
     ]);
     expect(await screen.findByRole('button', { name: 'Создать параметр' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Обновить «from»' })).toBeEnabled();
@@ -164,7 +172,13 @@ describe('карточки ассистента', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     setup([
-      { type: 'tags', templateId: 't1', text: '{d.items[i].name}', explanation: 'Строка таблицы' },
+      {
+        type: 'tags',
+        templateId: 't1',
+        templateName: 'Счёт',
+        text: '{d.items[i].name}',
+        explanation: 'Строка таблицы',
+      },
     ]);
     const code = await screen.findByText('{d.items[i].name}');
     expect(code.tagName).toBe('PRE');
@@ -196,12 +210,18 @@ describe('карточки ассистента', () => {
       result.current,
     );
     expect(history[0]?.content).toBe('Предложен запрос «items» (список строк): select 1');
-    expect(result.current({ type: 'param', templateId: 't1', param })).toBe(
+    expect(result.current({ type: 'param', templateId: 't1', templateName: 'Счёт', param })).toBe(
       'Предложен параметр «from» (date)',
     );
-    expect(result.current({ type: 'tags', templateId: 't1', text: '{d.x}', explanation: '' })).toBe(
-      'Предложен фрагмент документа: {d.x}',
-    );
+    expect(
+      result.current({
+        type: 'tags',
+        templateId: 't1',
+        templateName: 'Счёт',
+        text: '{d.x}',
+        explanation: '',
+      }),
+    ).toBe('Предложен фрагмент документа: {d.x}');
   });
 });
 

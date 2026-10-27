@@ -188,6 +188,7 @@
   },
   "sql": {
     "query": "requête « {{key}} »",
+    "check": "requête",
     "param": "paramètre « {{label}} »",
     "readOnly": "{{what}} : écriture interdite — les requêtes sont en lecture seule",
     "notReadOnly": "{{what}} : seules les requêtes en lecture (SELECT) sont autorisées ; trouvé : {{found}}",

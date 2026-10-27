@@ -1,4 +1,5 @@
-// Схема источника для авторов (§51.2): только системный каталог, только отношения с SELECT.
+// Схема источника для авторов (§51.2): только системный каталог, только отношения с SELECT
+// (и ключи только на них); секции не показываются — их видно через секционированную таблицу.
 import type {
   RelationKind,
   SchemaColumn,
@@ -24,6 +25,7 @@ const RELATIONS = `
   where c.relkind in ('r','p','v','m','f')
     and n.nspname not in ('pg_catalog', 'information_schema')
     and n.nspname not like 'pg\\_toast%' and n.nspname not like 'pg\\_temp%'
+    and not c.relispartition
     and pg_catalog.has_table_privilege(c.oid, 'SELECT')`;
 
 /**
@@ -31,7 +33,7 @@ const RELATIONS = `
  * у источника с локалью C регистр кириллицы не сворачивается, а % и _ должны быть буквами.
  */
 export async function listTables(client: pg.ClientBase, search?: string): Promise<SchemaTableList> {
-  const q = search?.trim().toLocaleLowerCase() || null;
+  const q = search?.trim().toLowerCase() || null;
   const { rows } = await client.query<{
     schema: string;
     name: string;
@@ -48,8 +50,7 @@ export async function listTables(client: pg.ClientBase, search?: string): Promis
       ? rows
       : rows.filter(
           (r) =>
-            r.name.toLocaleLowerCase().includes(q) ||
-            (r.comment?.toLocaleLowerCase().includes(q) ?? false),
+            r.name.toLowerCase().includes(q) || (r.comment?.toLowerCase().includes(q) ?? false),
         );
   return {
     total: found.length,
@@ -119,6 +120,7 @@ export async function describeTable(
      join pg_catalog.pg_class rc on rc.oid = k.confrelid
      join pg_catalog.pg_namespace rn on rn.oid = rc.relnamespace
      where k.conrelid = $1 and k.contype = 'f'
+       and pg_catalog.has_table_privilege(rc.oid, 'SELECT')
      order by k.conname`,
     [t.oid],
   );

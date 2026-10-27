@@ -331,16 +331,8 @@ describe('авторский режим (§51.3)', () => {
               function: {
                 name: 'propose_param',
                 arguments: JSON.stringify({
-                  param: {
-                    name: 'companyId',
-                    label: 'Компания',
-                    type: 'number',
-                    required: true,
-                    defaultValue: null,
-                    options: null,
-                    sql: null,
-                    multiple: false,
-                  },
+                  // Как у строгих моделей: только обязательные поля и пустая строка.
+                  param: { name: 'companyId', label: 'Компания', type: 'number', sql: '' },
                 }),
               },
             },
@@ -357,7 +349,16 @@ describe('авторский режим (§51.3)', () => {
     });
     expect(r.statusCode, r.body).toBe(200);
     expect(r.json().cards.map((c: { type: string }) => c.type)).toEqual(['query', 'param']);
-    expect(r.json().cards[0]).toMatchObject({ templateId: tplA, key: 'company', mode: 'single' });
+    expect(r.json().cards[0]).toMatchObject({
+      templateId: tplA,
+      templateName: 'Счёт',
+      key: 'company',
+      mode: 'single',
+    });
+    expect(r.json().cards[1]).toMatchObject({
+      templateName: 'Счёт',
+      param: { name: 'companyId', required: false, sql: null, defaultValue: null },
+    });
     expect(r.json().cards[0].check).toEqual({
       ok: true,
       columns: [

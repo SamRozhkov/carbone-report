@@ -32,14 +32,18 @@ beforeAll(async () => {
     create table company (id int primary key, name text not null);
     comment on table company is 'Покупатели';
     comment on column company.name is 'Название';
-    create table invoices (id int primary key, company_id int references company(id), total numeric(12,2));
-    create view v_totals as select company_id, sum(total) as total from invoices group by company_id;
     create schema hidden;
+    create table hidden.regions (id int primary key);
+    create table invoices (id int primary key, company_id int references company(id), total numeric(12,2),
+                           region_id int references hidden.regions(id));
+    create table events (id int, d date) partition by range (d);
+    create table events_2026 partition of events for values from ('2026-01-01') to ('2027-01-01');
+    create view v_totals as select company_id, sum(total) as total from invoices group by company_id;
     create table hidden.salaries (id int, amount int);
     insert into company values (1, 'ООО Ромашка');
     create role ${role} login password 'pw';
     grant usage on schema public to ${role};
-    grant select on company, invoices, v_totals to ${role};
+    grant select on company, invoices, v_totals, events, events_2026 to ${role};
   `);
   const ds = await post(
     '/api/datasources',
@@ -65,13 +69,15 @@ afterAll(async () => {
 });
 
 describe('схема источника и проверка SQL', () => {
-  it('список: доступные отношения, виды, комментарии; без системных и недоступных', async () => {
+  it('список: доступные отношения, виды, комментарии; без системных, недоступных и секций', async () => {
     const r = await get(`/api/templates/${tpl}/schema/tables`, editor);
     expect(r.statusCode).toBe(200);
     expect(r.json()).toEqual({
-      total: 3,
+      total: 4,
       tables: [
         { schema: 'public', name: 'company', kind: 'table', comment: 'Покупатели' },
+        // Секция events_2026 не показывается — только секционированная таблица.
+        { schema: 'public', name: 'events', kind: 'table', comment: null },
         { schema: 'public', name: 'invoices', kind: 'table', comment: null },
         { schema: 'public', name: 'v_totals', kind: 'view', comment: null },
       ],
@@ -93,8 +99,10 @@ describe('схема источника и проверка SQL', () => {
       { name: 'id', type: 'integer', notNull: true, comment: null },
       { name: 'company_id', type: 'integer', notNull: false, comment: null },
       { name: 'total', type: 'numeric(12,2)', notNull: false, comment: null },
+      { name: 'region_id', type: 'integer', notNull: false, comment: null },
     ]);
     expect(inv.primaryKey).toEqual(['id']);
+    // Ключ на недоступную hidden.regions не раскрывается.
     expect(inv.foreignKeys).toEqual([
       {
         columns: ['company_id'],
@@ -131,6 +139,8 @@ describe('схема источника и проверка SQL', () => {
     ).json();
     expect(bad.ok).toBe(false);
     expect(bad.error).toContain('nope');
+    // Черновик — не запрос шаблона: без ключа «check» в тексте.
+    expect(bad.error).not.toContain('check');
     const write = (
       await post(`/api/templates/${tpl}/queries/check`, { sql: 'delete from company' }, editor)
     ).json();

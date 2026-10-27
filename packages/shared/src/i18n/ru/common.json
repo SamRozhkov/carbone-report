@@ -156,7 +156,7 @@
     "cardReplaceParam": "Обновить «{{name}}»",
     "cardCopy": "Копировать",
     "cardCopied": "Скопировано",
-    "cardOpenTemplate": "Откройте шаблон, чтобы применить",
+    "cardOpenTemplate": "Откройте шаблон «{{name}}», чтобы применить",
     "cardModeList": "список строк",
     "cardModeSingle": "одна строка",
     "cardCheckOk": "Проверено: {{columns}}",

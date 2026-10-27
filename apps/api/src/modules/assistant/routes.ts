@@ -162,7 +162,12 @@ export function registerAssistantRoutes(app: App, deps: AppDeps, guards: Guards)
       const tools = author
         ? mergeTools(
             createAssistantTools(toolCtx),
-            createAuthorTools({ ...toolCtx, templateId: author.templateId, draft: author.draft }),
+            createAuthorTools({
+              ...toolCtx,
+              templateId: author.templateId,
+              templateName: author.templateName,
+              draft: author.draft,
+            }),
           )
         : createAssistantTools(toolCtx);
       try {
@@ -181,6 +186,7 @@ export function registerAssistantRoutes(app: App, deps: AppDeps, guards: Guards)
           history: req.body.messages,
           onToolError: (name, e) =>
             req.log.warn({ err: e, tool: name }, 'ошибка инструмента ассистента'),
+          onLimit: (reason) => req.log.warn({ reason }, 'лимит ассистента: ответ — карточки'),
         });
       } catch (e) {
         // detail ошибки модели и причина лимита — в журнал через internal (registerErrorHandler).

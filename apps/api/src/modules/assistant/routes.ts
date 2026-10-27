@@ -112,7 +112,13 @@ export function registerAssistantRoutes(app: App, deps: AppDeps, guards: Guards)
       try {
         return await runAgent({
           llm: createLlmClient({ baseUrl: s.baseUrl, model: s.model, apiKey: s.apiKey }),
-          tools: createAssistantTools({ inject, deps, locale: req.locale }),
+          tools: createAssistantTools({
+            inject,
+            deps,
+            locale: req.locale,
+            onError: (tool, status, body) =>
+              req.log.warn({ tool, status, body }, 'ошибка эндпоинта в инструменте ассистента'),
+          }),
           system: systemPrompt({
             locale: req.locale,
             today,

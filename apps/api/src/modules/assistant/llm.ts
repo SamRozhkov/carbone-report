@@ -51,6 +51,9 @@ const codeFor = (status: number): LlmErrorCode =>
       ? 'model'
       : 'unavailable';
 
+/** arguments — строка JSON; некоторые шлюзы присылают объект — приводим к строке. */
+const argsText = (a: unknown): string => (typeof a === 'string' ? a : JSON.stringify(a ?? {}));
+
 export function createLlmClient(
   cfg: LlmConfig,
   opts: { fetch?: typeof fetch; timeoutMs?: number } = {},
@@ -101,7 +104,7 @@ export function createLlmClient(
       toolCalls: toolCalls.map((c, i) => ({
         id: c.id || `call_${i}`,
         type: 'function',
-        function: { name: c.function.name, arguments: c.function.arguments ?? '{}' },
+        function: { name: c.function.name, arguments: argsText(c.function.arguments) },
       })),
     };
   };

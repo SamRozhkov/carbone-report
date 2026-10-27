@@ -33,6 +33,8 @@ export interface ToolContext {
   inject: Inject;
   deps: AppDeps;
   locale: Locale;
+  /** Ошибка эндпоинта целиком (для журнала): модели уходит только безопасная часть. */
+  onError?: (tool: string, status: number, body: unknown) => void;
 }
 
 const MAX_REPORTS = 50;
@@ -173,19 +175,44 @@ const ARGS = {
   propose_run: z.object({ reportId: Id, params: Params }),
 };
 
-/** Ответ эндпоинта с ошибкой → текст ошибки для модели. */
-const errorOf = (r: { status: number; body: unknown }) => ({
-  error: (r.body as { error?: { message?: string } } | null)?.error?.message ?? `HTTP ${r.status}`,
-});
+/**
+ * Коды, тексты которых безопасны для модели (§50.1): в них нет SQL, имён столбцов и данных.
+ * Прочие (SQL_ERROR, CONFIG, INTERNAL…) могут нести текст Postgres и фрагменты запроса.
+ */
+const SAFE_ERROR_CODES = new Set([
+  'UNAUTHORIZED',
+  'FORBIDDEN',
+  'NOT_FOUND',
+  'VALIDATION',
+  'TOO_MANY_OPTIONS',
+  'TIMEOUT',
+]);
+
+/** Ответ эндпоинта с ошибкой → ошибка для модели: текст — только для безопасных кодов. */
+export const errorOf = (
+  r: { status: number; body: unknown },
+  fallback = 'request failed',
+): { error: string; status: number } => {
+  const e = (r.body as { error?: { code?: unknown; message?: unknown } } | null)?.error;
+  const safe =
+    typeof e?.code === 'string' && SAFE_ERROR_CODES.has(e.code) && typeof e.message === 'string';
+  return { error: safe ? (e.message as string) : fallback, status: r.status };
+};
 
 const enc = encodeURIComponent;
 
 export function createAssistantTools(ctx: ToolContext): AgentTools {
   const { inject, deps, locale } = ctx;
 
-  async function form(reportId: string) {
+  /** Ошибка эндпоинта: целиком — в журнал, модели — безопасная часть. */
+  const failed = (tool: string, r: { status: number; body: unknown }, fallback?: string) => {
+    ctx.onError?.(tool, r.status, r.body);
+    return errorOf(r, fallback);
+  };
+
+  async function form(tool: string, reportId: string) {
     const r = await inject('GET', `/api/templates/${enc(reportId)}`);
-    return r.status === 200 ? { details: r.body as TemplateDetails } : { error: errorOf(r) };
+    return r.status === 200 ? { details: r.body as TemplateDetails } : { error: failed(tool, r) };
   }
 
   async function display(
@@ -207,7 +234,12 @@ export function createAssistantTools(ctx: ToolContext): AgentTools {
           (x) => p.options?.find((o) => o.value === String(x))?.label ?? String(x),
         );
       else if (p.type === 'query' && values.length > 0) {
-        const opts = await optionsForParam(deps, full, p.name, resolved);
+        // Значения уже проверены; сбой поиска подписей (сеть, таймаут) — показываем сами значения.
+        const opts = await optionsForParam(deps, full, p.name, resolved).catch((e: unknown) => {
+          // status 0 — не ответ эндпоинта, а исключение при поиске подписей
+          ctx.onError?.('propose_run', 0, e instanceof Error ? { message: e.message } : e);
+          return { options: [] };
+        });
         labels = values.map(
           (x) => opts.options.find((o) => String(o.value) === String(x))?.label ?? String(x),
         );
@@ -226,13 +258,13 @@ export function createAssistantTools(ctx: ToolContext): AgentTools {
     switch (name) {
       case 'list_reports': {
         const r = await inject('GET', '/api/templates');
-        if (r.status !== 200) return { result: errorOf(r) };
+        if (r.status !== 200) return { result: failed(name, r) };
         return {
           result: shapeReports(r.body as TemplateSummary[], a.search as string | undefined),
         };
       }
       case 'get_report_form': {
-        const f = await form(a.reportId as string);
+        const f = await form(name, a.reportId as string);
         return { result: 'error' in f ? f.error : shapeForm(f.details) };
       }
       case 'find_param_values': {
@@ -241,7 +273,7 @@ export function createAssistantTools(ctx: ToolContext): AgentTools {
           `/api/templates/${enc(a.reportId as string)}/params/${enc(a.param as string)}/options`,
           { params: a.params },
         );
-        if (r.status !== 200) return { result: errorOf(r) };
+        if (r.status !== 200) return { result: failed(name, r, 'parameter values unavailable') };
         return {
           result: shapeOptions(r.body as ParamOptionsResult, a.search as string | undefined),
         };
@@ -249,7 +281,7 @@ export function createAssistantTools(ctx: ToolContext): AgentTools {
       default: {
         // propose_run: доступ — через эндпоинт; проверка параметров — та же, что при формировании.
         const reportId = a.reportId as string;
-        const f = await form(reportId);
+        const f = await form(name, reportId);
         if ('error' in f) return { result: f.error };
         // значения от модели — unknown: объект вместо скаляра отсекаем до resolveParams
         const input = ParamsInput.safeParse(a.params);

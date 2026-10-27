@@ -135,3 +135,49 @@ describe('createAssistantTools: имя инструмента', () => {
     expect(inject).not.toHaveBeenCalled();
   });
 });
+
+describe('createAssistantTools: ошибки эндпоинтов', () => {
+  const failing = (status: number, code: string, message: string) => {
+    const body = { error: { code, message } };
+    const inject = vi.fn<Inject>(async () => ({ status, body }));
+    const onError = vi.fn();
+    const tools = createAssistantTools({ inject, deps: {} as AppDeps, locale: 'ru', onError });
+    return { tools, onError, body };
+  };
+  const args = { reportId: 't', param: 'company' };
+
+  it.each(['NOT_FOUND', 'FORBIDDEN', 'UNAUTHORIZED', 'VALIDATION', 'TOO_MANY_OPTIONS', 'TIMEOUT'])(
+    '%s — текст ошибки уходит модели',
+    async (code) => {
+      const { tools } = failing(400, code, 'понятный текст');
+      expect(await tools.run('find_param_values', args)).toEqual({
+        result: { error: 'понятный текст', status: 400 },
+      });
+    },
+  );
+
+  it('SQL_ERROR и прочие коды — общий текст; настоящая ошибка — в onError', async () => {
+    const { tools, onError, body } = failing(
+      400,
+      'SQL_ERROR',
+      'Ошибка SQL: column "secret_col_xyz" does not exist',
+    );
+    const r = await tools.run('find_param_values', args);
+    expect(JSON.stringify(r)).not.toContain('secret_col_xyz');
+    expect(r).toEqual({ result: { error: 'parameter values unavailable', status: 400 } });
+    expect(onError).toHaveBeenCalledWith('find_param_values', 400, body);
+
+    const other = failing(400, 'CONFIG', 'unknown param :secret_param');
+    const l = await other.tools.run('list_reports', {});
+    expect(JSON.stringify(l)).not.toContain('secret_param');
+    expect(l).toEqual({ result: { error: 'request failed', status: 400 } });
+  });
+
+  it('тело без кода — общий текст', async () => {
+    const inject = vi.fn<Inject>(async () => ({ status: 500, body: null }));
+    const tools = createAssistantTools({ inject, deps: {} as AppDeps, locale: 'ru' });
+    expect(await tools.run('get_report_form', { reportId: 't' })).toEqual({
+      result: { error: 'request failed', status: 500 },
+    });
+  });
+});

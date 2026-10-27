@@ -2,12 +2,28 @@ import { adminApi, expect, loginAdminUi, test, waitForStack } from '../fixtures'
 
 test.beforeAll(waitForStack);
 
-const OFF = { enabled: false, baseUrl: '', model: '', extraInstructions: '', apiKey: null };
+interface Saved {
+  enabled: boolean;
+  baseUrl: string;
+  model: string;
+  extraInstructions: string;
+}
+let saved: Saved | undefined;
+
+// Стек общий с другими сценариями и с демо: после теста — настройки, какие были до него.
+test.beforeAll(async () => {
+  const s = await (await adminApi()).get<Saved>('/api/admin/assistant');
+  saved = {
+    enabled: s.enabled,
+    baseUrl: s.baseUrl,
+    model: s.model,
+    extraInstructions: s.extraInstructions,
+  };
+});
 
 test.afterAll(async () => {
-  // Стек общий с другими сценариями и с демо: ассистент остаётся выключенным.
-  const api = await adminApi();
-  await api.put('/api/admin/assistant', OFF);
+  // Без поля apiKey — сохранённый ключ не меняется.
+  if (saved) await (await adminApi()).put('/api/admin/assistant', saved);
 });
 
 test('админ: настройки ассистента, проверка недоступного адреса, кнопка в меню', async ({
@@ -19,7 +35,12 @@ test('админ: настройки ассистента, проверка не
   await page.getByLabel('Модель').fill('test-model');
   await page.getByRole('button', { name: 'Проверить подключение' }).click();
   await expect(page.getByText('Сервис модели не отвечает, попробуйте позже')).toBeVisible();
-  await page.getByRole('switch', { name: 'Ассистент включён' }).click();
+  // Ползунок перекрывает input переключателя — щёлкаем по подписи (label Gravity Switch);
+  // если ассистент уже был включён до теста, не выключаем его.
+  const enabled = page.getByRole('switch', { name: 'Ассистент включён' });
+  if (!(await enabled.isChecked()))
+    await page.getByText('Ассистент включён', { exact: true }).click();
+  await expect(enabled).toBeChecked();
   await page.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByText('Настройки сохранены')).toBeVisible();
   await page.goto('/reports');

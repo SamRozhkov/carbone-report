@@ -18,6 +18,7 @@ let admin: string;
 let user: string;
 let tplA: string;
 let tplB: string;
+let dsId: string;
 
 const carbone: CarboneRenderer = {
   async render(_tpl, data) {
@@ -105,7 +106,7 @@ beforeAll(async () => {
     payload: { name: 'firms', ...src, sslMode: 'disable' },
   });
   expect(ds.statusCode, ds.body).toBe(201);
-  const dsId = ds.json().id as string;
+  dsId = ds.json().id as string;
   tplA = await createTpl(
     'Счёт',
     dsId,
@@ -188,6 +189,34 @@ describe('POST /api/assistant/chat', () => {
     expect(toolResults[1]).toContain('error');
     expect(toolResults[2]).toContain('error');
     expect(toolResults.join('\n')).not.toContain('Зарплаты');
+    await llm.close();
+  });
+
+  it('ошибка SQL списка значений: модель получает общий текст без имён столбцов', async () => {
+    const tplC = await createTpl(
+      'Сломанный',
+      dsId,
+      [
+        param({
+          name: 'company',
+          sql: 'select secret_col_xyz as value, name as label from company',
+        }),
+      ],
+      true,
+    );
+    let step = 0;
+    const toolResults: string[] = [];
+    const llm = await fakeLlm((body) => {
+      toolResults.push(lastMessage(body));
+      const steps = [toolCall('find_param_values', { reportId: tplC, param: 'company' })];
+      return { message: steps[step++] ?? { content: 'не получилось' } };
+    });
+    await enable(llm.url);
+    const r = await chat(user);
+    expect(r.statusCode, r.body).toBe(200);
+    expect(toolResults[1]).toContain('error');
+    expect(toolResults[1]).toContain('parameter values unavailable');
+    expect(toolResults.join('\n')).not.toContain('secret_col_xyz');
     await llm.close();
   });
 

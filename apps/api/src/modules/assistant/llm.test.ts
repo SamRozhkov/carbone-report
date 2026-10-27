@@ -49,6 +49,19 @@ describe('createLlmClient', () => {
     expect(r).toEqual({ content: null, toolCalls: [call] });
   });
 
+  it('arguments объектом (некоторые шлюзы) — строка JSON; отсутствуют — {}', async () => {
+    const calls = [
+      { id: 'c1', type: 'function', function: { name: 'a', arguments: { search: 'x' } } },
+      { id: 'c2', type: 'function', function: { name: 'b' } },
+    ];
+    const fetch = vi.fn(async () => ok({ content: null, tool_calls: calls }));
+    const r = await createLlmClient(
+      { baseUrl: 'http://x', model: 'm', apiKey: null },
+      { fetch },
+    )(req);
+    expect(r.toolCalls.map((c) => c.function.arguments)).toEqual(['{"search":"x"}', '{}']);
+  });
+
   it.each([
     [401, 'auth'],
     [403, 'auth'],

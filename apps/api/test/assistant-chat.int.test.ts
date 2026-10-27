@@ -294,3 +294,136 @@ describe('POST /api/assistant/chat', () => {
     expect((await chat('')).statusCode).toBe(401);
   });
 });
+
+describe('авторский режим (§51.3)', () => {
+  const chatAt = (cookie: string, page: object) =>
+    t.app.inject({
+      method: 'POST',
+      url: '/api/assistant/chat',
+      headers: { cookie },
+      payload: { messages: [{ role: 'user', content: 'добавь компанию' }], page },
+    });
+  const COMPANY_Q = 'select id, name from company where id = :companyId';
+
+  it('автор: схема → проверка → две карточки; строки данных не уходят в модель', async () => {
+    const sent: string[] = [];
+    let step = 0;
+    const llm = await fakeLlm((body) => {
+      sent.push(JSON.stringify(body.messages));
+      const steps = [
+        toolCall('list_tables', {}),
+        toolCall('describe_table', { name: 'company' }),
+        toolCall('check_sql', { sql: COMPANY_Q }),
+        {
+          content: null,
+          tool_calls: [
+            {
+              id: 'q',
+              type: 'function',
+              function: {
+                name: 'propose_query',
+                arguments: JSON.stringify({ key: 'company', mode: 'single', sql: COMPANY_Q }),
+              },
+            },
+            {
+              id: 'p',
+              type: 'function',
+              function: {
+                name: 'propose_param',
+                arguments: JSON.stringify({
+                  param: {
+                    name: 'companyId',
+                    label: 'Компания',
+                    type: 'number',
+                    required: true,
+                    defaultValue: null,
+                    options: null,
+                    sql: null,
+                    multiple: false,
+                  },
+                }),
+              },
+            },
+          ],
+        },
+      ];
+      return { message: steps[step++] ?? { content: 'Готово' } };
+    });
+    await enable(llm.url);
+    const r = await chatAt(admin, {
+      path: `/admin/templates/${tplA}`,
+      templateId: tplA,
+      editor: { queries: [], params: [] },
+    });
+    expect(r.statusCode, r.body).toBe(200);
+    expect(r.json().cards.map((c: { type: string }) => c.type)).toEqual(['query', 'param']);
+    expect(r.json().cards[0]).toMatchObject({ templateId: tplA, key: 'company', mode: 'single' });
+    expect(r.json().cards[0].check).toEqual({
+      ok: true,
+      columns: [
+        { name: 'id', type: 'integer' },
+        { name: 'name', type: 'text' },
+      ],
+    });
+    const all = sent.join('\n');
+    expect(all).toContain('«Счёт»'); // авторский раздел промпта
+    expect(all).toContain('company'); // схема дошла до модели
+    expect(all).not.toContain('Ромашка'); // строки company не уходят
+    expect(all).not.toContain('Лютик');
+    await llm.close();
+  });
+
+  it('без editor: get_template_design — сохранённые параметры шаблона', async () => {
+    const results: string[] = [];
+    let step = 0;
+    const llm = await fakeLlm((body) => {
+      results.push(lastMessage(body));
+      const steps = [toolCall('get_template_design', {})];
+      return { message: steps[step++] ?? { content: 'ok' } };
+    });
+    await enable(llm.url);
+    const r = await chatAt(admin, { path: `/admin/templates/${tplA}`, templateId: tplA });
+    expect(r.statusCode, r.body).toBe(200);
+    expect(results[1]).toContain('paid');
+    expect(results[1]).toContain('d.params.<name>');
+    await llm.close();
+  });
+
+  it('без права правки: авторских инструментов нет, editor не в промпте', async () => {
+    let tools: string[] = [];
+    let system = '';
+    const llm = await fakeLlm((body) => {
+      tools = ((body.tools ?? []) as { function: { name: string } }[]).map((x) => x.function.name);
+      system = JSON.stringify(body.messages[0]);
+      return { message: { content: 'ok' } };
+    });
+    await enable(llm.url);
+    const r = await chatAt(user, {
+      path: `/admin/templates/${tplA}`,
+      templateId: tplA,
+      editor: { queries: [{ key: 'secret_q', mode: 'list', sql: 'select 1' }], params: [] },
+    });
+    expect(r.statusCode, r.body).toBe(200);
+    expect(tools).toContain('list_reports');
+    expect(tools).not.toContain('list_tables');
+    expect(tools).not.toContain('get_template_design');
+    expect(system).not.toContain('secret_q');
+    expect(system).not.toContain('check_sql');
+    await llm.close();
+  });
+
+  it('несуществующий или неверный templateId — обычный режим без сбоя', async () => {
+    let tools: string[] = [];
+    const llm = await fakeLlm((body) => {
+      tools = ((body.tools ?? []) as { function: { name: string } }[]).map((x) => x.function.name);
+      return { message: { content: 'ok' } };
+    });
+    await enable(llm.url);
+    for (const templateId of ['0b6a4c1e-5f2d-4e8a-9c3b-7d1e2f3a4b5c', 'not-a-uuid']) {
+      const r = await chatAt(admin, { path: '/admin/templates/x', templateId });
+      expect(r.statusCode, r.body).toBe(200);
+      expect(tools).not.toContain('list_tables');
+    }
+    await llm.close();
+  });
+});

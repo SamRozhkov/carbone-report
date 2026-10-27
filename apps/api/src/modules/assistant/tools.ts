@@ -212,8 +212,18 @@ export const errorOf = (
   return { error: safe ? (e.message as string) : fallback, status: r.status };
 };
 
+/** Наборы инструментов в один: имена не пересекаются; неизвестное имя — первому набору. */
+export function mergeTools(...sets: AgentTools[]): AgentTools {
+  const owner = new Map<string, AgentTools>();
+  for (const s of sets) for (const sp of s.specs) owner.set(sp.function.name, s);
+  return {
+    specs: sets.flatMap((s) => s.specs),
+    run: (name, args) => (owner.get(name) ?? sets[0]!).run(name, args),
+  };
+}
+
 const enc = encodeURIComponent;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NAME_NOT_ID = 'reportId must be the "id" value from list_reports, not the report name';
 
 export function createAssistantTools(ctx: ToolContext): AgentTools {

@@ -150,4 +150,22 @@ describe('systemPrompt', () => {
       systemPrompt({ locale: 'ru', today: 'x', extra: '', page: { path: '/' } }),
     ).not.toContain('Administrator');
   });
+
+  it('авторский раздел — только в авторском режиме', () => {
+    const page = { path: '/admin/templates/t1' };
+    const s = systemPrompt({
+      locale: 'ru',
+      today: 'x',
+      extra: 'admin note',
+      page,
+      author: { templateName: 'Счёт' },
+    });
+    expect(s).toContain('check_sql');
+    expect(s).toContain('d.<key>[i]');
+    expect(s).toContain('formatC');
+    expect(s).toContain('«Счёт»');
+    // Инструкции администратора — по-прежнему в конце.
+    expect(s.endsWith('Administrator instructions:\nadmin note')).toBe(true);
+    expect(systemPrompt({ locale: 'ru', today: 'x', extra: '', page })).not.toContain('check_sql');
+  });
 });

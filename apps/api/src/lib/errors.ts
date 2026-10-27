@@ -163,7 +163,8 @@ function issueParams(issue: $ZodIssue): Record<string, unknown> | undefined {
   return undefined;
 }
 
-function issueMessage(issue: $ZodIssue, locale: Locale): string {
+/** Текст issue zod на языке locale: ключи `v:…` — из каталога validation. */
+export function issueMessage(issue: $ZodIssue, locale: Locale): string {
   const t = createTranslator(locale);
   const key = validationKey(issue.message);
   if (key) return t(key, issueParams(issue));

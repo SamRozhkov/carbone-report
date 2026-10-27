@@ -145,6 +145,26 @@
     "ready": "Rapport généré",
     "history": "Historique",
     "cardText": "Exécution proposée de « {{name}} » : {{params}}",
-    "applied": "Appliqué, non enregistré"
+    "applied": "Appliqué, non enregistré",
+    "suggestQuery": "Écris une requête : factures de l’entreprise avec totaux",
+    "suggestTables": "Quelles tables y a-t-il dans la base ?",
+    "suggestTags": "Comment afficher dans le document un tableau de lignes ?",
+    "cardAddQuery": "Ajouter la requête",
+    "cardReplaceQuery": "Remplacer la requête « {{key}} »",
+    "cardAddParam": "Créer le paramètre",
+    "cardReplaceParam": "Mettre à jour « {{name}} »",
+    "cardCopy": "Copier",
+    "cardCopied": "Copié",
+    "cardOpenTemplate": "Ouvrez le modèle pour appliquer",
+    "cardModeList": "liste de lignes",
+    "cardModeSingle": "ligne unique",
+    "cardCheckOk": "Vérifié : {{columns}}",
+    "cardCheckFailed": "Échec de la vérification : {{error}}",
+    "cardPasteHint": "Collez dans le document : Ctrl+V",
+    "cardQueryText": "Requête proposée « {{key}} » ({{mode}}) : {{sql}}",
+    "cardParamText": "Paramètre proposé « {{name}} » ({{type}})",
+    "cardTagsText": "Fragment de document proposé : {{text}}",
+    "cardQueuedData": "La modification sera appliquée à l’ouverture de l’onglet « Données »",
+    "cardQueuedParams": "La modification sera appliquée à l’ouverture de l’onglet « Paramètres »"
   }
 }

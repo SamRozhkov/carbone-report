@@ -163,6 +163,7 @@
     "test": "Tester la connexion",
     "testOk": "Le modèle répond et prend en charge l’appel d’outils",
     "save": "Enregistrer",
-    "saved": "Paramètres enregistrés"
+    "saved": "Paramètres enregistrés",
+    "privacyAuthor": "Pour les auteurs de modèles, le SQL des requêtes du modèle et le schéma de la base de données source (tables et colonnes) sont également transmis, mais pas les données."
   }
 }

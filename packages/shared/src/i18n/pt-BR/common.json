@@ -145,6 +145,26 @@
     "ready": "Relatório gerado",
     "history": "Histórico",
     "cardText": "Execução proposta de “{{name}}”: {{params}}",
-    "applied": "Aplicado, não salvo"
+    "applied": "Aplicado, não salvo",
+    "suggestQuery": "Escreva uma consulta: faturas da empresa com totais",
+    "suggestTables": "Quais tabelas existem no banco de dados?",
+    "suggestTags": "Como exibir no documento uma tabela de itens?",
+    "cardAddQuery": "Adicionar consulta",
+    "cardReplaceQuery": "Substituir a consulta “{{key}}”",
+    "cardAddParam": "Criar parâmetro",
+    "cardReplaceParam": "Atualizar “{{name}}”",
+    "cardCopy": "Copiar",
+    "cardCopied": "Copiado",
+    "cardOpenTemplate": "Abra o modelo para aplicar",
+    "cardModeList": "lista de linhas",
+    "cardModeSingle": "linha única",
+    "cardCheckOk": "Verificado: {{columns}}",
+    "cardCheckFailed": "Falha na verificação: {{error}}",
+    "cardPasteHint": "Cole no documento: Ctrl+V",
+    "cardQueryText": "Consulta proposta “{{key}}” ({{mode}}): {{sql}}",
+    "cardParamText": "Parâmetro proposto “{{name}}” ({{type}})",
+    "cardTagsText": "Trecho de documento proposto: {{text}}",
+    "cardQueuedData": "A alteração será aplicada quando você abrir a aba “Dados”",
+    "cardQueuedParams": "A alteração será aplicada quando você abrir a aba “Parâmetros”"
   }
 }

@@ -182,7 +182,15 @@ function AssistantForm({ data }: { data: AssistantSettingsDto }) {
           controlProps={{ 'aria-label': t('admin:assistant.extra'), maxLength: 2000 }}
         />
       </Field>
-      <Alert theme="info" message={t('admin:assistant.privacy')} />
+      <Alert
+        theme="info"
+        message={
+          <>
+            <p style={{ margin: 0 }}>{t('admin:assistant.privacy')}</p>
+            <p style={{ margin: '8px 0 0' }}>{t('admin:assistant.privacyAuthor')}</p>
+          </>
+        }
+      />
       <div style={{ display: 'flex', gap: 8 }}>
         <Button onClick={() => test.mutate()} loading={test.isPending}>
           {t('admin:assistant.test')}

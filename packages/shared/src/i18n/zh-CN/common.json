@@ -143,6 +143,26 @@
     "ready": "报表已生成",
     "history": "历史记录",
     "cardText": "建议运行“{{name}}”：{{params}}",
-    "applied": "已应用，未保存"
+    "applied": "已应用，未保存",
+    "suggestQuery": "编写查询：公司发票及合计",
+    "suggestTables": "数据库中有哪些表？",
+    "suggestTags": "如何在文档中显示明细表？",
+    "cardAddQuery": "添加查询",
+    "cardReplaceQuery": "替换查询“{{key}}”",
+    "cardAddParam": "创建参数",
+    "cardReplaceParam": "更新“{{name}}”",
+    "cardCopy": "复制",
+    "cardCopied": "已复制",
+    "cardOpenTemplate": "请打开模板后再应用",
+    "cardModeList": "行列表",
+    "cardModeSingle": "单行",
+    "cardCheckOk": "已检查：{{columns}}",
+    "cardCheckFailed": "检查失败：{{error}}",
+    "cardPasteHint": "粘贴到文档中：Ctrl+V",
+    "cardQueryText": "建议的查询“{{key}}”（{{mode}}）：{{sql}}",
+    "cardParamText": "建议的参数“{{name}}”（{{type}}）",
+    "cardTagsText": "建议的文档片段：{{text}}",
+    "cardQueuedData": "打开“数据”选项卡时将应用此更改",
+    "cardQueuedParams": "打开“参数”选项卡时将应用此更改"
   }
 }

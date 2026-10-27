@@ -22,9 +22,44 @@ export interface AssistantChat {
   reset: () => void;
 }
 
+/** Текст карточки для истории модели: модель видит, что предлагала (§51.5). */
+export function useCardText(): (c: Card) => string {
+  const { t } = useTranslation();
+  return useCallback(
+    (c: Card) => {
+      switch (c.type) {
+        case 'run':
+          return t('common:assistant.cardText', {
+            name: c.reportName,
+            params: c.display.map((d) => `${d.label}: ${d.value}`).join(', '),
+          });
+        case 'query':
+          return t('common:assistant.cardQueryText', {
+            key: c.key,
+            mode: t(
+              c.mode === 'list'
+                ? 'common:assistant.cardModeList'
+                : 'common:assistant.cardModeSingle',
+            ),
+            sql: c.sql,
+          });
+        case 'param':
+          return t('common:assistant.cardParamText', {
+            name: c.param.name,
+            type: c.param.type,
+          });
+        case 'tags':
+          return t('common:assistant.cardTagsText', {
+            text: c.text,
+          });
+      }
+    },
+    [t],
+  );
+}
+
 /** Состояние панели ассистента (§50.5): диалог в sessionStorage, запросы к POST /api/assistant/chat. */
 export function useAssistantChat(): AssistantChat {
-  const { t } = useTranslation();
   const { pathname } = useLocation();
   const queryClient = useQueryClient();
   const [state, setState] = useState<AssistantState>(loadAssistant);
@@ -36,25 +71,7 @@ export function useAssistantChat(): AssistantChat {
 
   useEffect(() => saveAssistant(state), [state]);
 
-  // Текст карточки для истории модели. Для query/param/tags — временно без переводов (Task 5).
-  const cardText = useCallback(
-    (c: Card) => {
-      switch (c.type) {
-        case 'run':
-          return t('common:assistant.cardText', {
-            name: c.reportName,
-            params: c.display.map((d) => `${d.label}: ${d.value}`).join(', '),
-          });
-        case 'query':
-          return c.key;
-        case 'param':
-          return c.param.name;
-        case 'tags':
-          return c.text;
-      }
-    },
-    [t],
-  );
+  const cardText = useCardText();
 
   const stop = useCallback(() => {
     controller.current?.abort();

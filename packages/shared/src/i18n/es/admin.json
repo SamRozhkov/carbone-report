@@ -163,6 +163,7 @@
     "test": "Probar la conexión",
     "testOk": "El modelo responde y admite la llamada a herramientas",
     "save": "Guardar",
-    "saved": "Configuración guardada"
+    "saved": "Configuración guardada",
+    "privacyAuthor": "Para los autores de plantillas también se envían el SQL de las consultas de la plantilla y el esquema de la base de datos de origen (tablas y columnas), pero no los datos."
   }
 }

@@ -163,6 +163,7 @@
     "test": "Test connection",
     "testOk": "The model responds and supports tool calling",
     "save": "Save",
-    "saved": "Settings saved"
+    "saved": "Settings saved",
+    "privacyAuthor": "For template authors, template SQL and the data source schema (tables and columns) are also sent, but not data."
   }
 }

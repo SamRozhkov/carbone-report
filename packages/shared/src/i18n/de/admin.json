@@ -163,6 +163,7 @@
     "test": "Verbindung testen",
     "testOk": "Das Modell antwortet und unterstützt Tool-Aufrufe",
     "save": "Speichern",
-    "saved": "Einstellungen gespeichert"
+    "saved": "Einstellungen gespeichert",
+    "privacyAuthor": "Für Vorlagenautoren werden außerdem das SQL der Vorlagenabfragen und das Schema der Quelldatenbank (Tabellen und Spalten) übermittelt, aber keine Daten."
   }
 }

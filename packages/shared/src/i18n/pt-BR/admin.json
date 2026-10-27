@@ -163,6 +163,7 @@
     "test": "Testar a conexão",
     "testOk": "O modelo responde e oferece suporte à chamada de ferramentas",
     "save": "Salvar",
-    "saved": "Configurações salvas"
+    "saved": "Configurações salvas",
+    "privacyAuthor": "Para autores de modelos, também são enviados o SQL das consultas do modelo e o esquema do banco de dados de origem (tabelas e colunas), mas não os dados."
   }
 }

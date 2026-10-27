@@ -145,6 +145,26 @@
     "ready": "Informe generado",
     "history": "Historial",
     "cardText": "Ejecución propuesta de «{{name}}»: {{params}}",
-    "applied": "Aplicado, sin guardar"
+    "applied": "Aplicado, sin guardar",
+    "suggestQuery": "Escribe una consulta: facturas de la empresa con totales",
+    "suggestTables": "¿Qué tablas hay en la base de datos?",
+    "suggestTags": "¿Cómo muestro en el documento una tabla de artículos?",
+    "cardAddQuery": "Añadir consulta",
+    "cardReplaceQuery": "Reemplazar la consulta «{{key}}»",
+    "cardAddParam": "Crear parámetro",
+    "cardReplaceParam": "Actualizar «{{name}}»",
+    "cardCopy": "Copiar",
+    "cardCopied": "Copiado",
+    "cardOpenTemplate": "Abra la plantilla para aplicar",
+    "cardModeList": "lista de filas",
+    "cardModeSingle": "una sola fila",
+    "cardCheckOk": "Comprobado: {{columns}}",
+    "cardCheckFailed": "Error de comprobación: {{error}}",
+    "cardPasteHint": "Pegue en el documento: Ctrl+V",
+    "cardQueryText": "Consulta propuesta «{{key}}» ({{mode}}): {{sql}}",
+    "cardParamText": "Parámetro propuesto «{{name}}» ({{type}})",
+    "cardTagsText": "Fragmento de documento propuesto: {{text}}",
+    "cardQueuedData": "El cambio se aplicará cuando abra la pestaña «Datos»",
+    "cardQueuedParams": "El cambio se aplicará cuando abra la pestaña «Parámetros»"
   }
 }

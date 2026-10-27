@@ -146,6 +146,26 @@
     "ready": "Отчёт сформирован",
     "history": "История",
     "cardText": "Предложен запуск «{{name}}»: {{params}}",
-    "applied": "Применено, не сохранено"
+    "applied": "Применено, не сохранено",
+    "suggestQuery": "Напиши запрос: счета компании с суммами",
+    "suggestTables": "Какие таблицы есть в базе?",
+    "suggestTags": "Как вывести в документе таблицу позиций?",
+    "cardAddQuery": "Добавить запрос",
+    "cardReplaceQuery": "Заменить запрос «{{key}}»",
+    "cardAddParam": "Создать параметр",
+    "cardReplaceParam": "Обновить «{{name}}»",
+    "cardCopy": "Копировать",
+    "cardCopied": "Скопировано",
+    "cardOpenTemplate": "Откройте шаблон, чтобы применить",
+    "cardModeList": "список строк",
+    "cardModeSingle": "одна строка",
+    "cardCheckOk": "Проверено: {{columns}}",
+    "cardCheckFailed": "Ошибка проверки: {{error}}",
+    "cardPasteHint": "Вставьте в документ: Ctrl+V",
+    "cardQueryText": "Предложен запрос «{{key}}» ({{mode}}): {{sql}}",
+    "cardParamText": "Предложен параметр «{{name}}» ({{type}})",
+    "cardTagsText": "Предложен фрагмент документа: {{text}}",
+    "cardQueuedData": "Изменение применится, когда вы откроете вкладку «Данные»",
+    "cardQueuedParams": "Изменение применится, когда вы откроете вкладку «Параметры»"
   }
 }

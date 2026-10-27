@@ -2,7 +2,11 @@ import { Xmark } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Text, TextArea } from '@gravity-ui/uikit';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAssistantBridge } from './bridge';
+import { ParamCardView } from './ParamCardView';
+import { QueryCardView } from './QueryCardView';
 import { RunCardView } from './RunCardView';
+import { TagsCardView } from './TagsCardView';
 import type { AssistantChat } from './useAssistantChat';
 import './assistant.css';
 
@@ -10,6 +14,7 @@ import './assistant.css';
 export function AssistantPanel({ chat }: { chat: AssistantChat }) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
+  const inEditor = useAssistantBridge().editor !== null;
   const feed = useRef<HTMLDivElement>(null);
 
   // Новая реплика — лента прокручивается вниз.
@@ -47,14 +52,31 @@ export function AssistantPanel({ chat }: { chat: AssistantChat }) {
         {chat.messages.length === 0 && (
           <div className="cr-assistant__empty">
             <Text color="secondary">{t('common:assistant.empty')}</Text>
-            {chat.reportId && (
-              <Button view="outlined" onClick={() => submit(t('common:assistant.suggestThis'))}>
-                {t('common:assistant.suggestThis')}
-              </Button>
+            {inEditor ? (
+              // В редакторе шаблона — подсказки автору (§51.5).
+              <>
+                {(['suggestQuery', 'suggestTables', 'suggestTags'] as const).map((k) => (
+                  <Button
+                    key={k}
+                    view="outlined"
+                    onClick={() => submit(t(`common:assistant.${k}`))}
+                  >
+                    {t(`common:assistant.${k}`)}
+                  </Button>
+                ))}
+              </>
+            ) : (
+              <>
+                {chat.reportId && (
+                  <Button view="outlined" onClick={() => submit(t('common:assistant.suggestThis'))}>
+                    {t('common:assistant.suggestThis')}
+                  </Button>
+                )}
+                <Button view="outlined" onClick={() => submit(t('common:assistant.suggestList'))}>
+                  {t('common:assistant.suggestList')}
+                </Button>
+              </>
             )}
-            <Button view="outlined" onClick={() => submit(t('common:assistant.suggestList'))}>
-              {t('common:assistant.suggestList')}
-            </Button>
           </div>
         )}
         {chat.messages.map((m, i) => (
@@ -64,7 +86,18 @@ export function AssistantPanel({ chat }: { chat: AssistantChat }) {
               <div className={`cr-assistant__msg cr-assistant__msg_${m.role}`}>{m.content}</div>
             )}
             {m.role === 'assistant' &&
-              m.cards?.map((c, j) => c.type === 'run' && <RunCardView key={j} card={c} />)}
+              m.cards?.map((c, j) => {
+                switch (c.type) {
+                  case 'run':
+                    return <RunCardView key={j} card={c} />;
+                  case 'query':
+                    return <QueryCardView key={j} card={c} />;
+                  case 'param':
+                    return <ParamCardView key={j} card={c} />;
+                  case 'tags':
+                    return <TagsCardView key={j} card={c} />;
+                }
+              })}
           </div>
         ))}
         {chat.pending && <Text color="secondary">{t('common:assistant.thinking')}</Text>}

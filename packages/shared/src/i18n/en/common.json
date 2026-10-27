@@ -144,6 +144,26 @@
     "ready": "Report generated",
     "history": "History",
     "cardText": "Proposed run of “{{name}}”: {{params}}",
-    "applied": "Applied, not saved"
+    "applied": "Applied, not saved",
+    "suggestQuery": "Write a query: company invoices with totals",
+    "suggestTables": "Which tables are in the database?",
+    "suggestTags": "How do I show a table of items in the document?",
+    "cardAddQuery": "Add query",
+    "cardReplaceQuery": "Replace query “{{key}}”",
+    "cardAddParam": "Create parameter",
+    "cardReplaceParam": "Update “{{name}}”",
+    "cardCopy": "Copy",
+    "cardCopied": "Copied",
+    "cardOpenTemplate": "Open the template to apply",
+    "cardModeList": "list of rows",
+    "cardModeSingle": "single row",
+    "cardCheckOk": "Checked: {{columns}}",
+    "cardCheckFailed": "Check failed: {{error}}",
+    "cardPasteHint": "Paste into the document: Ctrl+V",
+    "cardQueryText": "Proposed query “{{key}}” ({{mode}}): {{sql}}",
+    "cardParamText": "Proposed parameter “{{name}}” ({{type}})",
+    "cardTagsText": "Proposed document fragment: {{text}}",
+    "cardQueuedData": "The change will be applied when you open the Data tab",
+    "cardQueuedParams": "The change will be applied when you open the Parameters tab"
   }
 }

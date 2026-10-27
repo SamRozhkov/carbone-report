@@ -10,7 +10,8 @@
   flex-direction: column;
   background: var(--g-color-base-background);
   border-left: 1px solid var(--g-color-line-generic);
-  z-index: 100;
+  /* Выше полноэкранного редактора документа (.cr-doc-full, z-index 1000). */
+  z-index: 1100;
 }
 
 .cr-assistant__header {
@@ -118,4 +119,13 @@
   .cr-assistant {
     width: 100vw;
   }
+}
+
+.cr-assistant__code {
+  margin: 0;
+  font-family: var(--g-font-family-monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow: auto;
 }

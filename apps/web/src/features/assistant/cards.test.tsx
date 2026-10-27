@@ -134,6 +134,22 @@ describe('карточки ассистента', () => {
     expect(await screen.findByText('Скопировано')).toBeInTheDocument();
   });
 
+  it('буфер недоступен или writeText отклонён — ошибка, а не «Скопировано»', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    const view = setup([{ type: 'tags', templateId: 't1', text: 'x', explanation: '' }]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Копировать' }));
+    const msg = 'Не удалось скопировать — выделите текст и скопируйте вручную';
+    expect(await screen.findByText(msg)).toBeInTheDocument();
+    expect(screen.queryByText('Скопировано')).toBeNull();
+    view.unmount();
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    setup([{ type: 'tags', templateId: 't1', text: 'x', explanation: '' }]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Копировать' }));
+    expect(await screen.findByText(msg)).toBeInTheDocument();
+    expect(screen.queryByText('Скопировано')).toBeNull();
+  });
+
   it('параметр: «Создать параметр» / «Обновить «from»»', async () => {
     setup([
       { type: 'param', templateId: 't1', param: { ...param, name: 'to', label: 'По' } },

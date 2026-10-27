@@ -163,6 +163,7 @@
     "cardParamText": "建议的参数“{{name}}”（{{type}}）",
     "cardTagsText": "建议的文档片段：{{text}}",
     "cardQueuedData": "打开“数据”选项卡时将应用此更改",
-    "cardQueuedParams": "打开“参数”选项卡时将应用此更改"
+    "cardQueuedParams": "打开“参数”选项卡时将应用此更改",
+    "cardCopyFailed": "无法复制——请选中文本后手动复制"
   }
 }

@@ -6,11 +6,20 @@ export function useCopy(): (text: string) => void {
   const { t } = useTranslation();
   const { add } = useToaster();
   return (text) => {
-    // Буфер может быть недоступен (небезопасный контекст) — тогда молча ничего не делаем.
-    void Promise.resolve(navigator.clipboard?.writeText(text))
-      .then(() =>
-        add({ name: 'assistant-copied', theme: 'info', title: t('common:assistant.cardCopied') }),
-      )
-      .catch(() => undefined);
+    const fail = () =>
+      add({
+        name: 'assistant-copy-failed',
+        theme: 'danger',
+        title: t('common:assistant.cardCopyFailed'),
+      });
+    // Буфер недоступен (небезопасный контекст, http) — «Скопировано» не показываем.
+    if (!navigator.clipboard) return fail();
+    navigator.clipboard
+      .writeText(text)
+      .then(
+        () =>
+          add({ name: 'assistant-copied', theme: 'info', title: t('common:assistant.cardCopied') }),
+        fail,
+      );
   };
 }

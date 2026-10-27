@@ -164,6 +164,7 @@
     "cardParamText": "Vorgeschlagener Parameter „{{name}}“ ({{type}})",
     "cardTagsText": "Vorgeschlagenes Dokumentfragment: {{text}}",
     "cardQueuedData": "Die Änderung wird übernommen, sobald Sie den Tab „Daten“ öffnen",
-    "cardQueuedParams": "Die Änderung wird übernommen, sobald Sie den Tab „Parameter“ öffnen"
+    "cardQueuedParams": "Die Änderung wird übernommen, sobald Sie den Tab „Parameter“ öffnen",
+    "cardCopyFailed": "Kopieren nicht möglich – Text markieren und manuell kopieren"
   }
 }

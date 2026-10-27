@@ -164,6 +164,7 @@
     "cardParamText": "Proposed parameter “{{name}}” ({{type}})",
     "cardTagsText": "Proposed document fragment: {{text}}",
     "cardQueuedData": "The change will be applied when you open the Data tab",
-    "cardQueuedParams": "The change will be applied when you open the Parameters tab"
+    "cardQueuedParams": "The change will be applied when you open the Parameters tab",
+    "cardCopyFailed": "Couldn’t copy — select the text and copy it manually"
   }
 }

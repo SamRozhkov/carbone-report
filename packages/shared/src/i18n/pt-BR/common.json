@@ -165,6 +165,7 @@
     "cardParamText": "Parâmetro proposto “{{name}}” ({{type}})",
     "cardTagsText": "Trecho de documento proposto: {{text}}",
     "cardQueuedData": "A alteração será aplicada quando você abrir a aba “Dados”",
-    "cardQueuedParams": "A alteração será aplicada quando você abrir a aba “Parâmetros”"
+    "cardQueuedParams": "A alteração será aplicada quando você abrir a aba “Parâmetros”",
+    "cardCopyFailed": "Não foi possível copiar — selecione o texto e copie manualmente"
   }
 }

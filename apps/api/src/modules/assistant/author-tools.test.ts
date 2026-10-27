@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AppDeps } from '../../deps';
+import { checkParamDefaults } from '../queries/params';
 import { createAuthorTools } from './author-tools';
 import { mergeTools, type AgentTools, type Inject } from './tools';
 
@@ -178,6 +179,29 @@ describe('createAuthorTools', () => {
       param: { name: 's', label: 'S', type: 'string', sql: 'select 1' },
     });
     expect(r3).toMatchObject({ card: { param: { sql: null } } });
+  });
+
+  it('propose_param: строковый defaultValue приводится по типу и проходит проверку сохранения', async () => {
+    const { tools } = setup();
+    const propose = async (type: string, defaultValue: string) => {
+      const r = await tools.run('propose_param', {
+        param: { name: 'p', label: 'P', type, defaultValue },
+      });
+      return 'card' in r && r.card.type === 'param' ? r.card.param : null;
+    };
+    const num = await propose('number', '5');
+    expect(num?.defaultValue).toBe(5);
+    expect(() => checkParamDefaults([num!])).not.toThrow();
+    const bool = await propose('boolean', 'TRUE');
+    expect(bool?.defaultValue).toBe(true);
+    expect(() => checkParamDefaults([bool!])).not.toThrow();
+    expect((await propose('boolean', 'false'))?.defaultValue).toBe(false);
+    // Неприводимое значение остаётся как есть: его отклонит проверка при сохранении.
+    const bad = await propose('number', 'abc');
+    expect(bad?.defaultValue).toBe('abc');
+    expect(() => checkParamDefaults([bad!])).toThrow();
+    // У строковых типов значение не меняется.
+    expect((await propose('string', '5'))?.defaultValue).toBe('5');
   });
 
   it('неверные аргументы — читаемый текст, без ключей каталога', async () => {

@@ -31,7 +31,9 @@ const PARAM_SCHEMA = {
       description: 'Only for type query: several values may be chosen (default false)',
     },
     sql: str('Only for type query: read-only SQL returning value,label; null otherwise'),
-    defaultValue: str('Default value; null for none'),
+    defaultValue: str(
+      'Default value; null for none. Numbers and booleans may be given as strings ("5", "true")',
+    ),
     options: {
       type: 'array',
       description: 'Only for type select: the choices; null otherwise',
@@ -45,6 +47,23 @@ const PARAM_SCHEMA = {
   required: ['name', 'label', 'type'],
 };
 
+/**
+ * Схема даёт defaultValue строкой: число и логическое значение приводим по типу параметра,
+ * иначе сохранение шаблона отклонит карточку (checkParamDefaults). Неприводимое — как есть.
+ */
+function typedDefault(type: unknown, v: unknown): unknown {
+  if (typeof v !== 'string') return v;
+  if (type === 'number') {
+    const n = Number(v);
+    return v.trim() !== '' && Number.isFinite(n) ? n : v;
+  }
+  if (type === 'boolean') {
+    const b = v.trim().toLowerCase();
+    return b === 'true' ? true : b === 'false' ? false : v;
+  }
+  return v;
+}
+
 /** Строгие модели (GigaChat) шлют пустые строки и массивы вместо null — приводим к схеме. */
 function normalizeParam(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
@@ -54,7 +73,7 @@ function normalizeParam(raw: unknown): unknown {
     ...p,
     required: p.required ?? false,
     multiple: p.multiple ?? false,
-    defaultValue: empty(p.defaultValue) ? null : p.defaultValue,
+    defaultValue: empty(p.defaultValue) ? null : typedDefault(p.type, p.defaultValue),
     options: empty(p.options) ? null : p.options,
     sql: p.type !== 'query' || empty(p.sql) ? null : p.sql,
   };

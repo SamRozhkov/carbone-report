@@ -59,11 +59,12 @@ export function AssistantPanel({ chat }: { chat: AssistantChat }) {
         )}
         {chat.messages.map((m, i) => (
           <div key={i} className="cr-assistant__turn">
-            {/* Ответ может быть пустым, если есть карточка: пустой пузырь не рисуется. */}
+            {/* Ответ может быть пустым, если есть карточки: пустой пузырь не рисуется. */}
             {m.content && (
               <div className={`cr-assistant__msg cr-assistant__msg_${m.role}`}>{m.content}</div>
             )}
-            {m.role === 'assistant' && m.card && <RunCardView card={m.card} />}
+            {m.role === 'assistant' &&
+              m.cards?.map((c, j) => c.type === 'run' && <RunCardView key={j} card={c} />)}
           </div>
         ))}
         {chat.pending && <Text color="secondary">{t('common:assistant.thinking')}</Text>}

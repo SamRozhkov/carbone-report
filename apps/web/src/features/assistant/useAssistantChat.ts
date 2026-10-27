@@ -1,4 +1,4 @@
-import type { RunCard } from '@carbone-reports/shared';
+import type { Card } from '@carbone-reports/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -34,12 +34,23 @@ export function useAssistantChat(): AssistantChat {
 
   useEffect(() => saveAssistant(state), [state]);
 
+  // Текст карточки для истории модели. Для query/param/tags — временно без переводов (Task 5).
   const cardText = useCallback(
-    (c: RunCard) =>
-      t('common:assistant.cardText', {
-        name: c.reportName,
-        params: c.display.map((d) => `${d.label}: ${d.value}`).join(', '),
-      }),
+    (c: Card) => {
+      switch (c.type) {
+        case 'run':
+          return t('common:assistant.cardText', {
+            name: c.reportName,
+            params: c.display.map((d) => `${d.label}: ${d.value}`).join(', '),
+          });
+        case 'query':
+          return c.key;
+        case 'param':
+          return c.param.name;
+        case 'tags':
+          return c.text;
+      }
+    },
     [t],
   );
 
@@ -75,7 +86,7 @@ export function useAssistantChat(): AssistantChat {
             {
               role: 'assistant',
               content: reply.reply,
-              ...(reply.card ? { card: reply.card } : {}),
+              ...(reply.cards.length > 0 ? { cards: reply.cards } : {}),
             },
           ],
         }));

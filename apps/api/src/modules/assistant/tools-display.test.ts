@@ -37,6 +37,7 @@ describe('propose_run: подписи значений', () => {
     const r = await tools.run('propose_run', { reportId: '0b6a4c1e-5f2d-4e8a-9c3b-7d1e2f3a4b5c', params: { company: 2 } });
     expect(r).toEqual({
       card: {
+        type: 'run',
         reportId: '0b6a4c1e-5f2d-4e8a-9c3b-7d1e2f3a4b5c',
         reportName: 'Счёт',
         params: { company: 2 },

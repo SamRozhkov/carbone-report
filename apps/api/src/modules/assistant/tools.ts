@@ -2,10 +2,10 @@
 // пользователя (app.inject с его cookie): права и проверки — те же, что в интерфейсе.
 // Результаты сокращаются до метаданных (§50.1): SQL, запросы и данные в модель не уходят.
 import {
+  type Card,
   type ParamOptionsResult,
   ParamsInput,
   type ParamValue,
-  type RunCard,
   type RunCardItem,
   type TemplateDetails,
   type TemplateSummary,
@@ -19,7 +19,7 @@ import { resolveParams } from '../queries/params';
 import { loadTemplateFull } from '../templates/service';
 import type { ToolSpec } from './llm';
 
-export type ToolOutcome = { result: unknown } | { card: RunCard };
+export type ToolOutcome = { result: unknown } | { card: Card };
 export interface AgentTools {
   specs: ToolSpec[];
   run(name: string, args: unknown): Promise<ToolOutcome>;
@@ -339,6 +339,7 @@ export function createAssistantTools(ctx: ToolContext): AgentTools {
         }
         return {
           card: {
+            type: 'run',
             reportId,
             reportName: f.details.name,
             params: resolved,

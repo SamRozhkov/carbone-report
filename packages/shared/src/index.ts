@@ -5,6 +5,7 @@ import { TemplateEditingBy } from './edit-lock';
 import { RunSignature, SignMethod } from './signature';
 import { Locale, zodReportLocale } from './i18n';
 import { checkReadOnlySql } from './sql-readonly';
+import { ChatTurn } from './assistant';
 
 export * from './charts';
 export * from './pdf-options';
@@ -109,6 +110,26 @@ export type TemplateParamDto = z.infer<typeof TemplateParamDto>;
 
 export const QueryMode = z.enum(['list', 'single']);
 export type QueryMode = z.infer<typeof QueryMode>;
+
+/** Черновик редактора шаблона, который панель ассистента передаёт в запросе (§51.3). */
+export const EditorDraft = z.object({
+  queries: z
+    .array(z.object({ key: z.string().max(100), mode: QueryMode, sql: z.string().max(20_000) }))
+    .max(30),
+  params: z.array(TemplateParam).max(50),
+});
+export type EditorDraft = z.infer<typeof EditorDraft>;
+
+export const AssistantChatBody = z.object({
+  messages: z.array(ChatTurn).min(1).max(20),
+  page: z.object({
+    path: z.string().max(500),
+    reportId: z.string().max(100).optional(),
+    templateId: z.string().max(100).optional(),
+    editor: EditorDraft.optional(),
+  }),
+});
+export type AssistantChatBody = z.infer<typeof AssistantChatBody>;
 
 export const TemplateQuery = z.object({
   key: z

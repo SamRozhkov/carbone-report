@@ -143,13 +143,15 @@ describe('POST /api/assistant/chat', () => {
         toolCall('get_report_form', { reportId: tplA }),
         toolCall('find_param_values', { reportId: tplA, param: 'company', search: 'лютик' }),
         toolCall('propose_run', { reportId: tplA, params: { company: 2, paid: true } }),
+        { content: 'Готово' },
       ];
       return { message: steps[step++] ?? { content: 'конец' } };
     });
     await enable(llm.url);
     const r = await chat(user);
     expect(r.statusCode, r.body).toBe(200);
-    expect(r.json().card).toMatchObject({
+    expect(r.json().cards[0]).toMatchObject({
+      type: 'run',
       reportId: tplA,
       reportName: 'Счёт',
       params: { company: 2, paid: true },
@@ -185,7 +187,7 @@ describe('POST /api/assistant/chat', () => {
     await enable(llm.url);
     const r = await chat(user);
     expect(r.statusCode, r.body).toBe(200);
-    expect(r.json()).toEqual({ reply: 'нет доступа', card: null });
+    expect(r.json()).toEqual({ reply: 'нет доступа', cards: [] });
     expect(toolResults[1]).toContain('error');
     expect(toolResults[2]).toContain('error');
     expect(toolResults.join('\n')).not.toContain('Зарплаты');
@@ -236,7 +238,7 @@ describe('POST /api/assistant/chat', () => {
     await enable(llm.url);
     const r = await chat(user);
     expect(r.statusCode, r.body).toBe(200);
-    expect(r.json()).toEqual({ reply: 'Какая компания?', card: null });
+    expect(r.json()).toEqual({ reply: 'Какая компания?', cards: [] });
     expect(toolResults).toHaveLength(5);
     for (const res of toolResults.slice(1)) expect(res).toContain('error');
     expect(toolResults[2]).toContain('invalid params');

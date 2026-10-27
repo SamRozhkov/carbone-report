@@ -1,5 +1,10 @@
-// Цикл ассистента (§50.3): модель → инструменты → … до текста или карточки запуска.
-import type { AssistantChatReply, ChatTurn } from '@carbone-reports/shared';
+// Цикл ассистента (§50.3): модель → инструменты → … до текстового ответа; карточки копятся.
+import {
+  type AssistantChatReply,
+  type Card,
+  type ChatTurn,
+  MAX_CARDS,
+} from '@carbone-reports/shared';
 import type { LlmClient, LlmMessage } from './llm';
 import type { AgentTools } from './tools';
 
@@ -30,6 +35,7 @@ export async function runAgent(o: {
   const signal = o.signal ? AbortSignal.any([o.signal, deadline]) : deadline;
   const messages: LlmMessage[] = [{ role: 'system', content: o.system }, ...o.history];
   let calls = 0;
+  const cards: Card[] = [];
   for (;;) {
     let res;
     try {
@@ -40,8 +46,8 @@ export async function runAgent(o: {
     }
     const text = res.content?.trim() ?? '';
     if (res.toolCalls.length === 0) {
-      if (!text) throw new AgentLimitError('пустой ответ');
-      return { reply: text, card: null };
+      if (!text && cards.length === 0) throw new AgentLimitError('пустой ответ');
+      return { reply: text, cards };
     }
     messages.push({ role: 'assistant', content: res.content, tool_calls: res.toolCalls });
     for (const c of res.toolCalls) {
@@ -56,8 +62,15 @@ export async function runAgent(o: {
       if (content === undefined) {
         try {
           const out = await o.tools.run(c.function.name, args);
-          if ('card' in out) return { reply: text, card: out.card };
-          content = out.result;
+          if ('card' in out) {
+            // Карточки не завершают ответ: модель видит подтверждение и пишет итоговый текст.
+            if (cards.length >= MAX_CARDS)
+              content = { error: 'too many cards: at most 5 per answer' };
+            else {
+              cards.push(out.card);
+              content = { ok: true };
+            }
+          } else content = out.result;
         } catch (e) {
           // Граница данных (§50.1): текст исключения (pg, источник) может называть таблицы,
           // столбцы и хосты — модели только общая ошибка, подробности — в журнал.

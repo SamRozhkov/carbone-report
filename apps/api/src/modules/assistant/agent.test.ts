@@ -24,7 +24,11 @@ const card = {
 const tools = (impl?: AgentTools['run']): AgentTools => ({
   specs: [],
   run: vi.fn(
-    impl ?? (async (name) => (name === 'propose_run' ? { card } : { result: { ok: name } })),
+    impl ??
+      (async (name) =>
+        name === 'propose_run'
+          ? { card: { type: 'run' as const, ...card } }
+          : { result: { ok: name } }),
   ),
 });
 const base = { system: 'sys', history: [{ role: 'user' as const, content: 'счёт' }] };
@@ -33,7 +37,7 @@ describe('runAgent', () => {
   it('инструменты по цепочке, результат уходит модели, текст — ответ', async () => {
     const llm = script(call('list_reports', '{}'), text('Нашёл'));
     const t = tools();
-    expect(await runAgent({ llm, tools: t, ...base })).toEqual({ reply: 'Нашёл', card: null });
+    expect(await runAgent({ llm, tools: t, ...base })).toEqual({ reply: 'Нашёл', cards: [] });
     const second = llm.mock.calls[1]![0].messages;
     expect(second[0]).toEqual({ role: 'system', content: 'sys' });
     expect(second.at(-1)).toEqual({
@@ -43,13 +47,42 @@ describe('runAgent', () => {
     });
   });
 
-  it('propose_run завершает ответ карточкой', async () => {
-    const llm = script({
-      ...call('propose_run', '{"reportId":"r","params":{}}'),
-      content: 'Готово',
+  it('propose_* не завершают ответ: карточки копятся, ответ — текстом', async () => {
+    const llm = script(
+      {
+        content: null,
+        toolCalls: [
+          { id: 'a', type: 'function', function: { name: 'propose_run', arguments: '{}' } },
+          { id: 'b', type: 'function', function: { name: 'propose_run', arguments: '{}' } },
+        ],
+      },
+      text('Вот два варианта'),
+    );
+    const r = await runAgent({ llm, tools: tools(), ...base });
+    expect(r.reply).toBe('Вот два варианта');
+    expect(r.cards).toHaveLength(2);
+    expect(llm.mock.calls[1]![0].messages.at(-1)).toEqual({
+      role: 'tool',
+      tool_call_id: 'b',
+      content: '{"ok":true}',
     });
-    expect(await runAgent({ llm, tools: tools(), ...base })).toEqual({ reply: 'Готово', card });
-    expect(llm).toHaveBeenCalledTimes(1);
+  });
+
+  it('шестая карточка — ошибка модели', async () => {
+    const six = Array.from({ length: 6 }, (_, i) => ({
+      id: `c${i}`,
+      type: 'function' as const,
+      function: { name: 'propose_run', arguments: '{}' },
+    }));
+    const llm = script({ content: null, toolCalls: six }, text('ok'));
+    const r = await runAgent({ llm, tools: tools(), ...base });
+    expect(r.cards).toHaveLength(5);
+    expect(String(llm.mock.calls[1]![0].messages.at(-1)!.content)).toContain('too many cards');
+  });
+
+  it('пустой текст при карточках — допустим', async () => {
+    const llm = script(call('propose_run', '{}'), text(''));
+    expect((await runAgent({ llm, tools: tools(), ...base })).cards).toHaveLength(1);
   });
 
   it('неверный JSON аргументов — ошибка модели, цикл продолжается', async () => {

@@ -1,5 +1,5 @@
 // Диалог ассистента живёт во вкладке (§50.1): sessionStorage, очищается при выходе.
-import type { ChatTurn, RunCard } from '@carbone-reports/shared';
+import type { Card, ChatTurn } from '@carbone-reports/shared';
 
 export const ASSISTANT_KEY = 'cr-assistant';
 const MAX_TURNS = 20;
@@ -8,7 +8,7 @@ const MAX_LEN = 4000;
 export interface PanelMessage {
   role: 'user' | 'assistant';
   content: string;
-  card?: RunCard;
+  cards?: Card[];
 }
 export interface AssistantState {
   open: boolean;
@@ -43,12 +43,12 @@ export function clearAssistant(): void {
   }
 }
 
-/** История для API: карточка — текстом после реплики; пустые реплики пропускаются; последние 20. */
-export function toHistory(messages: PanelMessage[], cardText: (c: RunCard) => string): ChatTurn[] {
+/** История для API: карточки — текстом после реплики; пустые реплики пропускаются; последние 20. */
+export function toHistory(messages: PanelMessage[], cardText: (c: Card) => string): ChatTurn[] {
   return messages
     .map((m) => ({
       role: m.role,
-      content: [m.content, m.card ? cardText(m.card) : '']
+      content: [m.content, ...(m.cards ?? []).map(cardText)]
         .filter(Boolean)
         .join('\n')
         .slice(0, MAX_LEN),

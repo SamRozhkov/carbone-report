@@ -1,6 +1,6 @@
 // ИИ-ассистент (§50): настройки подключения к модели, чат, карточка запуска.
 import { z } from 'zod';
-import type { OutputFormat, ParamValue } from './index';
+import type { OutputFormat, ParamValue, QueryMode, TemplateParam } from './index';
 
 const httpUrl = (v: string) => {
   try {
@@ -57,11 +57,9 @@ export const ChatTurn = z.object({
 });
 export type ChatTurn = z.infer<typeof ChatTurn>;
 
-export const AssistantChatBody = z.object({
-  messages: z.array(ChatTurn).min(1).max(20),
-  page: z.object({ path: z.string().max(500), reportId: z.string().max(100).optional() }),
-});
-export type AssistantChatBody = z.infer<typeof AssistantChatBody>;
+// AssistantChatBody и EditorDraft объявлены в index.ts рядом с TemplateParam: значение-импорт
+// из './index' здесь дал бы цикл загрузки (index реэкспортирует этот файл).
+export const MAX_CARDS = 5;
 
 export interface RunCardItem {
   label: string;
@@ -78,7 +76,27 @@ export interface RunCard {
   defaultOutput: OutputFormat;
 }
 
+export interface QueryCheckColumn {
+  name: string;
+  type: string;
+}
+export type QueryCheck = { ok: true; columns: QueryCheckColumn[] } | { ok: false; error: string };
+
+/** Карточка в ответе ассистента: запуск (§50.3) или предложение автору шаблона (§51). */
+export type Card =
+  | ({ type: 'run' } & RunCard)
+  | {
+      type: 'query';
+      templateId: string;
+      key: string;
+      mode: QueryMode;
+      sql: string;
+      check: QueryCheck;
+    }
+  | { type: 'param'; templateId: string; param: TemplateParam }
+  | { type: 'tags'; templateId: string; text: string; explanation: string };
+
 export interface AssistantChatReply {
   reply: string;
-  card: RunCard | null;
+  cards: Card[];
 }

@@ -36,7 +36,11 @@ describe('панель ассистента', () => {
     const { calls } = mockApi([
       me(true),
       { path: '/api/templates', body: [] },
-      { method: 'POST', path: '/api/assistant/chat', body: { reply: 'Вот запуск', card } },
+      {
+        method: 'POST',
+        path: '/api/assistant/chat',
+        body: { reply: 'Вот запуск', cards: [{ type: 'run', ...card }] },
+      },
       { method: 'POST', path: '/api/reports/t1/render', status: 201, body: { runId: 'run1' } },
     ]);
     renderRoute('/reports');
@@ -64,7 +68,11 @@ describe('панель ассистента', () => {
     const { calls } = mockApi([
       me(true),
       { path: '/api/templates', body: [] },
-      { method: 'POST', path: '/api/assistant/chat', body: { reply: 'Вот запуск', card } },
+      {
+        method: 'POST',
+        path: '/api/assistant/chat',
+        body: { reply: 'Вот запуск', cards: [{ type: 'run', ...card }] },
+      },
     ]);
     renderRoute('/reports');
     await userEvent.click(await screen.findByText('Ассистент'));

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AssistantChatBody, AssistantSettingsBody } from './assistant';
+import { AssistantSettingsBody } from './assistant';
+import { AssistantChatBody } from './index';
 
 const base = { enabled: false, baseUrl: '', model: '', extraInstructions: '' };
 
@@ -47,5 +48,24 @@ describe('AssistantChatBody', () => {
     expect(AssistantChatBody.safeParse({ messages: [long], page: { path: '/' } }).success).toBe(
       false,
     );
+  });
+  describe('page.editor', () => {
+    const msgs = [msg];
+    const page = (editor: unknown) => ({ messages: msgs, page: { path: '/', editor } });
+    it('пустой черновик допустим', () => {
+      expect(AssistantChatBody.safeParse(page({ queries: [], params: [] })).success).toBe(true);
+    });
+    it('31 запрос — нельзя', () => {
+      const queries = Array(31).fill({ key: 'q', mode: 'list', sql: 'select 1' });
+      expect(AssistantChatBody.safeParse(page({ queries, params: [] })).success).toBe(false);
+    });
+    it('SQL длиннее 20000 — нельзя', () => {
+      const queries = [{ key: 'q', mode: 'list', sql: 'x'.repeat(20_001) }];
+      expect(AssistantChatBody.safeParse(page({ queries, params: [] })).success).toBe(false);
+    });
+    it('неверный параметр — нельзя', () => {
+      const params = [{ name: '1x', label: 'x', type: 'string', required: false }];
+      expect(AssistantChatBody.safeParse(page({ queries: [], params })).success).toBe(false);
+    });
   });
 });

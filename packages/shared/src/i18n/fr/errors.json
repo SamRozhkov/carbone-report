@@ -305,6 +305,7 @@
     "model": "Le modèle est indisponible ou ne peut pas appeler d'outils. Contactez votre administrateur",
     "unavailable": "Le service du modèle ne répond pas, réessayez plus tard",
     "limit": "Impossible de trouver un rapport adapté. Précisez votre demande",
+    "tooManyRequests": "Trop de requêtes à l’assistant, réessayez dans une minute",
     "yes": "oui",
     "no": "non",
     "empty": "—"

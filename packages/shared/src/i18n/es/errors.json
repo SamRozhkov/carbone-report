@@ -305,6 +305,7 @@
     "model": "El modelo no está disponible o no puede llamar a herramientas. Póngase en contacto con su administrador",
     "unavailable": "El servicio del modelo no responde, inténtelo más tarde",
     "limit": "No se pudo encontrar un informe adecuado. Precise su solicitud",
+    "tooManyRequests": "Demasiadas solicitudes al asistente, inténtelo de nuevo en un minuto",
     "yes": "sí",
     "no": "no",
     "empty": "—"

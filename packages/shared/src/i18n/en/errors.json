@@ -297,6 +297,7 @@
     "model": "The model is unavailable or cannot call tools. Contact your administrator",
     "unavailable": "The model service is not responding, try again later",
     "limit": "Could not find a suitable report. Please refine your request",
+    "tooManyRequests": "Too many requests to the assistant, try again in a minute",
     "yes": "yes",
     "no": "no",
     "empty": "—"

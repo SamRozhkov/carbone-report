@@ -297,6 +297,7 @@
     "model": "Das Modell ist nicht verfügbar oder kann keine Tools aufrufen. Wenden Sie sich an Ihren Administrator",
     "unavailable": "Der Modelldienst antwortet nicht, versuchen Sie es später erneut",
     "limit": "Es konnte kein passender Bericht gefunden werden. Bitte präzisieren Sie Ihre Anfrage",
+    "tooManyRequests": "Zu viele Anfragen an den Assistenten, versuchen Sie es in einer Minute erneut",
     "yes": "ja",
     "no": "nein",
     "empty": "—"

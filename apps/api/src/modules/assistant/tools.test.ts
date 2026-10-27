@@ -1,6 +1,7 @@
 import type { TemplateDetails, TemplateSummary } from '@carbone-reports/shared';
-import { describe, expect, it } from 'vitest';
-import { shapeForm, shapeOptions, shapeReports } from './tools';
+import { describe, expect, it, vi } from 'vitest';
+import type { AppDeps } from '../../deps';
+import { createAssistantTools, type Inject, shapeForm, shapeOptions, shapeReports } from './tools';
 
 const summary = (name: string, extra: Partial<TemplateSummary> = {}): TemplateSummary => ({
   id: `id-${name}`,
@@ -121,5 +122,16 @@ describe('shapeOptions', () => {
     expect(shapeOptions({ options: [], waitingFor: ['region'] })).toEqual({
       waitingFor: ['region'],
     });
+  });
+});
+
+describe('createAssistantTools: имя инструмента', () => {
+  it('имена из прототипа объекта — неизвестный инструмент, а не исключение', async () => {
+    const inject = vi.fn<Inject>();
+    const tools = createAssistantTools({ inject, deps: {} as AppDeps, locale: 'ru' });
+    for (const name of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'nonexistent']) {
+      expect(await tools.run(name, {})).toEqual({ result: { error: `unknown tool: ${name}` } });
+    }
+    expect(inject).not.toHaveBeenCalled();
   });
 });

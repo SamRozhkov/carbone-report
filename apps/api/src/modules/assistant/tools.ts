@@ -218,7 +218,8 @@ export function createAssistantTools(ctx: ToolContext): AgentTools {
   }
 
   async function run(name: string, raw: unknown): Promise<ToolOutcome> {
-    if (!(name in ARGS)) return { result: { error: `unknown tool: ${name}` } };
+    // Object.hasOwn: имена из прототипа (constructor, toString) — тоже неизвестные
+    if (!Object.hasOwn(ARGS, name)) return { result: { error: `unknown tool: ${name}` } };
     const parsed = ARGS[name as keyof typeof ARGS].safeParse(raw ?? {});
     if (!parsed.success) return { result: { error: `invalid arguments: ${parsed.error.message}` } };
     const a = parsed.data as Record<string, unknown>;

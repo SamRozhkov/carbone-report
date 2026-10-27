@@ -3,6 +3,7 @@ import { Navigate } from 'react-router';
 import { AdminIndex, RequireRole, RequireUser } from './guards';
 import { Layout } from './Layout';
 import { AccessPage } from '../pages/admin/AccessPage';
+import { AssistantPage } from '../pages/admin/AssistantPage';
 import { BackupsPage } from '../pages/admin/BackupsPage';
 import { CategoriesPage } from '../pages/admin/CategoriesPage';
 import { DatasourcesPage } from '../pages/admin/DatasourcesPage';
@@ -68,6 +69,7 @@ export const routes: RouteObject[] = [
                 children: [
                   { path: 'datasources', element: <DatasourcesPage /> },
                   { path: 'users', element: <UsersPage /> },
+                  { path: 'assistant', element: <AssistantPage /> },
                   { path: 'backups', element: <BackupsPage /> },
                 ],
               },

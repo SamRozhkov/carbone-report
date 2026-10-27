@@ -145,5 +145,24 @@
     "warningTitle": "Datenbank und Dateien werden ersetzt",
     "warning": "Die Anwendungsdaten werden durch den Stand der Sicherung <b>{{name}}</b> ersetzt. Vor der Wiederherstellung wird eine Sicherung des aktuellen Zustands (pre-restore-…) erstellt, zu der Sie zurückkehren können. Benutzer, auch Sie, werden möglicherweise abgemeldet und müssen sich erneut anmelden.",
     "confirmLabel": "Geben Sie zur Bestätigung den Namen der Sicherung ein"
+  },
+  "assistant": {
+    "title": "KI-Assistent",
+    "enabled": "Assistent aktiviert",
+    "baseUrl": "API-URL",
+    "baseUrlHint": "OpenAI-kompatible API, zum Beispiel https://api.openai.com/v1 oder http://ollama:11434/v1",
+    "model": "Modell",
+    "apiKey": "API-Schlüssel",
+    "apiKeySet": "Schlüssel ist gesetzt",
+    "apiKeyReplace": "Ersetzen",
+    "apiKeyRemove": "Schlüssel entfernen",
+    "apiKeyHint": "Lokale Modelle benötigen möglicherweise keinen Schlüssel",
+    "extra": "Zusätzliche Anweisungen",
+    "extraHint": "Werden an die Anweisungen des Assistenten angehängt, zum Beispiel: „Verkaufsberichte befinden sich in der Kategorie Handel“",
+    "privacy": "Namen und Beschreibungen der Berichte, Parameter und Listenwerte werden an den Modellanbieter gesendet. Berichtsinhalte und Abfrageergebnisse werden nicht gesendet.",
+    "test": "Verbindung testen",
+    "testOk": "Das Modell antwortet und unterstützt Tool-Aufrufe",
+    "save": "Speichern",
+    "saved": "Einstellungen gespeichert"
   }
 }

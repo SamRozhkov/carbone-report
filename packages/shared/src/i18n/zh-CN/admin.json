@@ -145,5 +145,24 @@
     "warningTitle": "数据库和文件将被替换",
     "warning": "应用数据将被替换为备份 <b>{{name}}</b> 中的状态。恢复前会先备份当前状态（pre-restore-…），之后可以回到该状态。包括您在内的用户可能会被注销，需要重新登录。",
     "confirmLabel": "请输入备份名称以确认"
+  },
+  "assistant": {
+    "title": "AI 助手",
+    "enabled": "启用助手",
+    "baseUrl": "API 地址",
+    "baseUrlHint": "兼容 OpenAI 的 API，例如 https://api.openai.com/v1 或 http://ollama:11434/v1",
+    "model": "模型",
+    "apiKey": "API 密钥",
+    "apiKeySet": "已设置密钥",
+    "apiKeyReplace": "替换",
+    "apiKeyRemove": "删除密钥",
+    "apiKeyHint": "本地模型可能不需要密钥",
+    "extra": "附加说明",
+    "extraHint": "将附加到助手的说明中，例如：“销售报表位于“商务”类别”",
+    "privacy": "报表的名称和描述、参数以及列表值将发送给模型提供方。报表内容和查询结果不会发送。",
+    "test": "测试连接",
+    "testOk": "模型有响应，并支持工具调用",
+    "save": "保存",
+    "saved": "设置已保存"
   }
 }

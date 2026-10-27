@@ -12,6 +12,7 @@
     "templates": "Templates",
     "datasources": "Data sources",
     "users": "Users",
+    "assistant": "Assistant",
     "groups": "Groups",
     "categories": "Categories",
     "access": "Report access",

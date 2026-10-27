@@ -16,6 +16,7 @@ import {
   Persons,
   PersonsLock,
   ShieldCheck,
+  Sparkles,
   Sun,
 } from '@gravity-ui/icons';
 import type { AsideHeaderItem } from '@gravity-ui/navigation';
@@ -85,6 +86,7 @@ export function Layout() {
       ? [
           item('datasources', t('common:nav.datasources'), Database, '/admin/datasources'),
           item('users', t('common:nav.users'), Persons, '/admin/users'),
+          item('assistant', t('common:nav.assistant'), Sparkles, '/admin/assistant'),
         ]
       : []),
     ...(canManageAccess

@@ -145,5 +145,24 @@
     "warningTitle": "O banco de dados e os arquivos serão substituídos",
     "warning": "Os dados do aplicativo serão substituídos pelo estado do backup <b>{{name}}</b>. Antes da restauração, será feito um backup do estado atual (pre-restore-…), para o qual será possível voltar. Os usuários, inclusive você, podem ser desconectados e precisarão entrar novamente.",
     "confirmLabel": "Digite o nome do backup para confirmar"
+  },
+  "assistant": {
+    "title": "Assistente de IA",
+    "enabled": "Assistente ativado",
+    "baseUrl": "URL da API",
+    "baseUrlHint": "API compatível com OpenAI, por exemplo https://api.openai.com/v1 ou http://ollama:11434/v1",
+    "model": "Modelo",
+    "apiKey": "Chave de API",
+    "apiKeySet": "A chave está definida",
+    "apiKeyReplace": "Substituir",
+    "apiKeyRemove": "Remover a chave",
+    "apiKeyHint": "Modelos locais podem não precisar de chave",
+    "extra": "Instruções adicionais",
+    "extraHint": "Anexadas às instruções do assistente, por exemplo: “Os relatórios de vendas estão na categoria Comercial”",
+    "privacy": "Nomes e descrições dos relatórios, parâmetros e valores das listas são enviados ao provedor do modelo. O conteúdo dos relatórios e os resultados das consultas não são enviados.",
+    "test": "Testar a conexão",
+    "testOk": "O modelo responde e oferece suporte à chamada de ferramentas",
+    "save": "Salvar",
+    "saved": "Configurações salvas"
   }
 }

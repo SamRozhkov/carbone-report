@@ -145,5 +145,24 @@
     "warningTitle": "Se reemplazarán la base de datos y los archivos",
     "warning": "Los datos de la aplicación se reemplazarán por el estado de la copia de seguridad <b>{{name}}</b>. Antes de restaurar se creará una copia de seguridad del estado actual (pre-restore-…), a la que podrá volver. Es posible que los usuarios, incluido usted, tengan que volver a iniciar sesión.",
     "confirmLabel": "Introduzca el nombre de la copia de seguridad para confirmar"
+  },
+  "assistant": {
+    "title": "Asistente de IA",
+    "enabled": "Asistente activado",
+    "baseUrl": "URL de la API",
+    "baseUrlHint": "API compatible con OpenAI, por ejemplo https://api.openai.com/v1 o http://ollama:11434/v1",
+    "model": "Modelo",
+    "apiKey": "Clave de API",
+    "apiKeySet": "La clave está definida",
+    "apiKeyReplace": "Reemplazar",
+    "apiKeyRemove": "Eliminar la clave",
+    "apiKeyHint": "Es posible que los modelos locales no necesiten clave",
+    "extra": "Instrucciones adicionales",
+    "extraHint": "Se añaden a las instrucciones del asistente, por ejemplo: «Los informes de ventas están en la categoría Comercial»",
+    "privacy": "Los nombres y descripciones de los informes, los parámetros y los valores de las listas se envían al proveedor del modelo. El contenido de los informes y los resultados de las consultas no se envían.",
+    "test": "Probar la conexión",
+    "testOk": "El modelo responde y admite la llamada a herramientas",
+    "save": "Guardar",
+    "saved": "Configuración guardada"
   }
 }

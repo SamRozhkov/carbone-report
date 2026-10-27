@@ -145,5 +145,24 @@
     "warningTitle": "La base de données et les fichiers seront remplacés",
     "warning": "Les données de l’application seront remplacées par l’état de la sauvegarde <b>{{name}}</b>. Avant la restauration, une sauvegarde de l’état actuel (pre-restore-…) sera créée ; vous pourrez y revenir. Les utilisateurs, vous compris, peuvent être déconnectés et devront se reconnecter.",
     "confirmLabel": "Saisissez le nom de la sauvegarde pour confirmer"
+  },
+  "assistant": {
+    "title": "Assistant IA",
+    "enabled": "Assistant activé",
+    "baseUrl": "URL de l’API",
+    "baseUrlHint": "API compatible OpenAI, par exemple https://api.openai.com/v1 ou http://ollama:11434/v1",
+    "model": "Modèle",
+    "apiKey": "Clé API",
+    "apiKeySet": "La clé est définie",
+    "apiKeyReplace": "Remplacer",
+    "apiKeyRemove": "Supprimer la clé",
+    "apiKeyHint": "Les modèles locaux peuvent ne pas nécessiter de clé",
+    "extra": "Instructions supplémentaires",
+    "extraHint": "Ajoutées aux instructions de l’assistant, par exemple : « Les rapports de ventes sont dans la catégorie Commerce »",
+    "privacy": "Les noms et descriptions des rapports, les paramètres et les valeurs des listes sont envoyés au fournisseur du modèle. Le contenu des rapports et les résultats des requêtes ne sont pas envoyés.",
+    "test": "Tester la connexion",
+    "testOk": "Le modèle répond et prend en charge l’appel d’outils",
+    "save": "Enregistrer",
+    "saved": "Paramètres enregistrés"
   }
 }

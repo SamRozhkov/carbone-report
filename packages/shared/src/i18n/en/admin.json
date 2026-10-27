@@ -145,5 +145,24 @@
     "warningTitle": "The database and files will be replaced",
     "warning": "The application data will be replaced with the state from backup <b>{{name}}</b>. Before restoring, a backup of the current state (pre-restore-…) will be made, and you can return to it. Users, including you, may be signed out and will need to sign in again.",
     "confirmLabel": "Enter the backup name to confirm"
+  },
+  "assistant": {
+    "title": "AI assistant",
+    "enabled": "Assistant enabled",
+    "baseUrl": "API URL",
+    "baseUrlHint": "OpenAI-compatible API, for example https://api.openai.com/v1 or http://ollama:11434/v1",
+    "model": "Model",
+    "apiKey": "API key",
+    "apiKeySet": "Key is set",
+    "apiKeyReplace": "Replace",
+    "apiKeyRemove": "Remove key",
+    "apiKeyHint": "Local models may not need a key",
+    "extra": "Additional instructions",
+    "extraHint": "Appended to the assistant instructions, for example: “Sales reports are in the Commerce category”",
+    "privacy": "Report names and descriptions, parameters and list values are sent to the model provider. Report contents and query results are not sent.",
+    "test": "Test connection",
+    "testOk": "The model responds and supports tool calling",
+    "save": "Save",
+    "saved": "Settings saved"
   }
 }

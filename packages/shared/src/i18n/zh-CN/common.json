@@ -12,6 +12,7 @@
     "templates": "模板",
     "datasources": "数据源",
     "users": "用户",
+    "assistant": "助手",
     "groups": "用户组",
     "categories": "类别",
     "access": "报表访问权限",

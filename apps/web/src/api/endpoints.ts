@@ -1,4 +1,10 @@
 import type {
+  AssistantChatBody,
+  AssistantChatReply,
+  AssistantSettingsBody,
+  AssistantSettingsDto,
+  AssistantTestBody,
+  AssistantTestResult,
   AccessTemplateRow,
   BackupDto,
   BackupOperationDto,
@@ -122,6 +128,14 @@ export const api = {
       apiJson<CategoryDto>(`/api/categories/${id}/groups`, put({ groupIds })),
   },
 
+  assistant: {
+    settings: () => apiJson<AssistantSettingsDto>('/api/admin/assistant'),
+    save: (body: AssistantSettingsBody) => apiJson<void>('/api/admin/assistant', put(body)),
+    test: (body: AssistantTestBody) =>
+      apiJson<AssistantTestResult>('/api/admin/assistant/test', post(body)),
+    chat: (body: AssistantChatBody, signal?: AbortSignal) =>
+      apiJson<AssistantChatReply>('/api/assistant/chat', { ...post(body), signal }),
+  },
   datasources: {
     list: () => apiJson<DatasourceDto[]>('/api/datasources'),
     /** Только id и имя (§43.3): для выбора источника в шаблоне, доступно и редактору. */

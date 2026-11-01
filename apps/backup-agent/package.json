@@ -13,19 +13,19 @@
   },
   "dependencies": {
     "croner": "^10.0.1",
-    "drizzle-orm": "^0.45.3",
-    "fastify": "^5.12.5",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.7",
     "ioredis": "^5.11.1",
     "pg": "^8.23.1",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@testcontainers/postgresql": "^12.2.0",
+    "@testcontainers/postgresql": "^12.2.1",
     "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
-    "testcontainers": "^12.2.0",
+    "testcontainers": "^12.2.1",
     "tsup": "^8.5.1",
-    "vitest": "^5.0.3",
+    "vitest": "^5.0.5",
     "yaml": "^2.9.1"
   }
 }

@@ -66,11 +66,16 @@ export interface AssistantBridge {
   /** Документ этого шаблона зарегистрирован — сразу run; иначе run откладывается до регистрации
    *  документа и открывается вкладка «Документ» ('opened'), если другая вкладка не держит
    *  несохранённых правок ('queued'). null — открыт не тот шаблон или редактор закрыт.
-   *  editable — признак этой регистрации: отложенный run проверяет блокировку в момент запуска. */
+   *  editable — признак этой регистрации: отложенный run проверяет блокировку в момент запуска.
+   *  dropped — отложенный run снят без запуска (clearPending, revokeDocument, другой шаблон). */
   applyDocument<T>(
     templateId: string,
     run: DocumentRun<T>,
+    dropped?: () => void,
   ): Promise<T | 'opened' | 'queued' | null>;
+  /** Возможности формирования у шаблона больше нет (конфиг редактора без documentAutomation,
+   *  createConnector нет или бросил): признак снимается, отложенные run шаблона сбрасываются. */
+  revokeDocument(templateId: string): void;
   /** Снимок зарегистрированного документа; нет документа, ошибка или нет ответа за 3 с — undefined. */
   snapshot(): Promise<DocSnapshot | undefined>;
 }
@@ -80,6 +85,7 @@ export type DocumentRun<T> = (a: DocumentAdapter, editable: () => boolean) => Pr
 interface PendingDocument {
   templateId: string;
   run: DocumentRun<unknown>;
+  dropped?: () => void;
 }
 
 /** Снимок для запроса чата: дольше не ждём, реплика уходит без документа. */
@@ -119,6 +125,12 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
   const methods = useMemo<
     Omit<AssistantBridge, 'editor' | 'document' | 'documentAutomation'>
   >(() => {
+    /** Снять отложенные run документа, подходящие под условие, и сообщить о снятии. */
+    const dropDocuments = (match: (p: PendingDocument) => boolean) => {
+      const gone = pendingDocument.current.filter(match);
+      pendingDocument.current = pendingDocument.current.filter((p) => !match(p));
+      for (const p of gone) p.dropped?.();
+    };
     const othersDirty = () =>
       [...tabs.current.values()].some((t) => t.dirty()) || [...probes.current].some((p) => p());
     return {
@@ -126,9 +138,7 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
         // Очередь другого шаблона не должна достаться этому. Очередь того же шаблона сохраняется:
         // редактор перерегистрируется при каждом обновлении шаблона с сервера.
         pending.current = pending.current.filter((c) => c.templateId === r.templateId);
-        pendingDocument.current = pendingDocument.current.filter(
-          (p) => p.templateId === r.templateId,
-        );
+        dropDocuments((p) => p.templateId !== r.templateId);
         editorRef.current = r;
         setEditor(r);
         // Признак возможности другого шаблона не переносится. Тот же шаблон — сохраняется:
@@ -187,7 +197,7 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
       },
       clearPending: () => {
         pending.current = [];
-        pendingDocument.current = [];
+        dropDocuments(() => true);
         // Вызывается при уходе из редактора: возможность подтверждается заново в следующей сессии.
         setDocumentAutomation(null);
       },
@@ -207,16 +217,20 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
           setDocument(null);
         };
       },
-      applyDocument: async (templateId, run) => {
+      applyDocument: async (templateId, run, dropped) => {
         const ed = editorRef.current;
         if (!ed || ed.templateId !== templateId) return null;
         const doc = documentRef.current;
         if (doc && doc.templateId === templateId) return run(doc.adapter, doc.editable);
-        pendingDocument.current.push({ templateId, run });
+        pendingDocument.current.push({ templateId, run, dropped });
         // Как apply(): переключение потеряло бы несохранённые правки открытой вкладки.
         if (othersDirty()) return 'queued';
         ed.openTab('document');
         return 'opened';
+      },
+      revokeDocument: (templateId) => {
+        setDocumentAutomation((t) => (t === templateId ? null : t));
+        dropDocuments((p) => p.templateId === templateId);
       },
       snapshot: async () => {
         const doc = documentRef.current;

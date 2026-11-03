@@ -354,6 +354,52 @@ describe('мост', () => {
       expect(run).not.toHaveBeenCalled();
     });
 
+    it('clearPending сообщает отложенному run, что он снят (dropped)', async () => {
+      const { result } = setup();
+      const run = vi.fn(async () => 'done');
+      const dropped = vi.fn();
+      await act(async () => {
+        await result.current.applyDocument('t', run, dropped);
+      });
+      expect(dropped).not.toHaveBeenCalled();
+      act(() => result.current.clearPending());
+      expect(dropped).toHaveBeenCalledTimes(1);
+    });
+
+    it('revokeDocument: признак снят, отложенные run шаблона сброшены (dropped), чужой признак цел', async () => {
+      const { result } = setup();
+      let off = () => {};
+      act(() => {
+        off = result.current.registerDocument({
+          templateId: 't',
+          adapter: adapter(),
+          editable: () => true,
+        });
+      });
+      act(() => off());
+      expect(result.current.documentAutomation).toBe('t');
+      const run = vi.fn(async () => 'done');
+      const dropped = vi.fn();
+      await act(async () => {
+        await result.current.applyDocument('t', run, dropped);
+      });
+      act(() => result.current.revokeDocument('other'));
+      expect(result.current.documentAutomation).toBe('t');
+      expect(dropped).not.toHaveBeenCalled();
+      act(() => result.current.revokeDocument('t'));
+      expect(result.current.documentAutomation).toBeNull();
+      expect(dropped).toHaveBeenCalledTimes(1);
+      // Документ позже зарегистрирован — снятый run не выполняется.
+      await act(async () => {
+        result.current.registerDocument({
+          templateId: 't',
+          adapter: adapter(),
+          editable: () => true,
+        });
+      });
+      expect(run).not.toHaveBeenCalled();
+    });
+
     it('карточка другого шаблона или редактор закрыт — null', async () => {
       const { result, offEditor } = setup();
       await expect(result.current.applyDocument('other', vi.fn())).resolves.toBeNull();

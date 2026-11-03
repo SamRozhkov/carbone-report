@@ -112,7 +112,9 @@ export function DocumentTab({
 
   // Документ в мосте ассистента (§52.5): один connector на экземпляр редактора — после готовности
   // документа; при пересоздании редактора, смене конфига и размонтировании — disconnect и снятие.
-  const registerDocument = useOptionalAssistantBridge()?.registerDocument;
+  const assistantBridge = useOptionalAssistantBridge();
+  const registerDocument = assistantBridge?.registerDocument;
+  const revokeDocument = assistantBridge?.revokeDocument;
   const editingRef = useRef(lock.editing);
   editingRef.current = lock.editing;
   const dropDocument = useRef<(() => void) | null>(null);
@@ -121,14 +123,31 @@ export function DocumentTab({
     dropDocument.current = null;
   };
   useEffect(() => releaseDocument, [stableId, rebuildTitle, lock.forbidden]);
+  // Свежий конфиг без возможности (например, истекла лицензия при том же ключе документа):
+  // документ снимается с моста, признак и отложенные действия карточек — тоже, иначе кнопки
+  // остались бы, а их действия ждали бы регистрации вечно.
+  const serverAutomation = config.data?.documentAutomation;
+  const automationRef = useRef(serverAutomation === true);
+  automationRef.current = serverAutomation === true;
+  useEffect(() => {
+    if (serverAutomation !== false) return;
+    dropDocument.current?.();
+    dropDocument.current = null;
+    revokeDocument?.(template.id);
+  }, [serverAutomation, revokeDocument, template.id]);
   const onDocumentReady = () => {
     // Редактор построен по устаревшему конфигу — его пересоберут, connector к нему не нужен.
-    if (!automation || !registerDocument || stableId !== currentId.current) return;
+    if (!automation || !automationRef.current || !registerDocument) return;
+    if (stableId !== currentId.current) return;
     releaseDocument();
+    const revoke = () => revokeDocument?.(template.id);
     try {
       const editor = window.DocEditor?.instances[EDITOR_ID];
       // Возможность — по факту: createConnector есть и не бросил (§52.2); иначе молча без неё.
-      if (typeof editor?.createConnector !== 'function') return;
+      if (typeof editor?.createConnector !== 'function') {
+        revoke();
+        return;
+      }
       const adapter = createDocumentAdapter(editor.createConnector() as unknown as Connector);
       const off = registerDocument({
         templateId: template.id,
@@ -145,6 +164,7 @@ export function DocumentTab({
       };
     } catch {
       // Connector недоступен (лицензия без Automation API): формирования нет, ошибку не показываем.
+      revoke();
     }
   };
   const canSwitch = editorReady || loadError !== null || config.isError;

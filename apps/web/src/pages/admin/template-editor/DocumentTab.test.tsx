@@ -752,6 +752,82 @@ describe('DocumentTab: документ в мосте ассистента (§52
     expect(c.disconnect).toHaveBeenCalled();
   });
 
+  it('повторный конфиг с documentAutomation: false (лицензия истекла) — признак снят, документ снят', async () => {
+    const c = connector();
+    win.DocEditor = { instances: { 'cr-doc-editor': { createConnector: vi.fn(() => c) } } };
+    let automation = true;
+    mockApi([
+      ...lock,
+      {
+        path: '/api/templates/t1/editor-config',
+        handler: () => ({ body: { ...config, documentAutomation: automation } }),
+      },
+    ]);
+    function Host() {
+      const [v, setV] = useState(3);
+      return (
+        <AssistantBridgeProvider>
+          <Probe />
+          <button onClick={() => setV(4)}>bump</button>
+          <DocumentTab {...base} template={{ ...t, version: v }} />
+        </AssistantBridgeProvider>
+      );
+    }
+    renderWithProviders(<Host />);
+    await waitFor(() => expect(bridge!.documentAutomation).toBe('t1'));
+    // Тот же ключ документа: редактор не пересоздаётся, но конфиг пришёл заново.
+    automation = false;
+    await userEvent.click(screen.getByRole('button', { name: 'bump' }));
+    await waitFor(() => expect(bridge!.documentAutomation).toBeNull());
+    expect(bridge!.document).toBeNull();
+    expect(c.disconnect).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['createConnector нет', {}],
+    [
+      'createConnector бросает',
+      {
+        createConnector: () => {
+          throw new Error('not available');
+        },
+      },
+    ],
+  ])('%s — признак, оставшийся от прошлой регистрации, снят', async (_, instance) => {
+    win.DocEditor = { instances: { 'cr-doc-editor': instance } };
+    mockApi([
+      ...lock,
+      { path: '/api/templates/t1/editor-config', body: { ...config, documentAutomation: true } },
+    ]);
+    let show: (v: boolean) => void = () => {};
+    function Host() {
+      const [tab, setTab] = useState(false);
+      show = setTab;
+      return (
+        <AssistantBridgeProvider>
+          <Probe />
+          {tab && <DocumentTab {...base} />}
+        </AssistantBridgeProvider>
+      );
+    }
+    renderWithProviders(<Host />);
+    await waitFor(() => expect(bridge).not.toBeNull());
+    // В этой сессии редактора connector уже создавался — признак держится после снятия.
+    act(() => {
+      bridge!.registerDocument({
+        templateId: 't1',
+        adapter: {} as never,
+        editable: () => true,
+      })();
+    });
+    expect(bridge!.documentAutomation).toBe('t1');
+    act(() => show(true));
+    await waitFor(() =>
+      expect(screen.getByTestId('oo')).toHaveAttribute('data-built-mode', 'edit'),
+    );
+    await waitFor(() => expect(bridge!.documentAutomation).toBeNull());
+  });
+
   it('конфиг для OnlyOffice передаётся без documentAutomation', async () => {
     mockApi([
       ...lock,

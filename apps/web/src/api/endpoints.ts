@@ -57,11 +57,11 @@ import type {
 import type { Locale } from '@carbone-reports/shared/i18n';
 import type { ImportPreview, ImportResult } from '@carbone-reports/shared/template-transfer';
 import type { Config } from '@onlyoffice/doceditor-types';
+import { apiBlob, apiFile, apiJson, requestLocale } from './client';
+import type { SessionUser } from './session';
 
 /** Конфиг OnlyOffice и признак формирования в документе (вне подписанного конфига, §52.2). */
 export type EditorConfigResponse = Config & { documentAutomation: boolean };
-import { apiBlob, apiFile, apiJson, requestLocale } from './client';
-import type { SessionUser } from './session';
 
 export type TestResult = { ok: true } | { ok: false; message: string };
 

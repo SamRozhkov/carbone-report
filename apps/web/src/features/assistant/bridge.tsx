@@ -47,7 +47,8 @@ export interface AssistantBridge {
   /** Зарегистрированный документ; null — вкладка «Документ» не смонтирована или connector недоступен. */
   document: DocumentRegistration | null;
   /** Шаблон, для которого в этой сессии редактора connector уже создавался (формирование доступно),
-   *  даже если вкладка «Документ» сейчас размонтирована; сбрасывается с закрытием редактора. */
+   *  даже если вкладка «Документ» сейчас размонтирована; сбрасывается clearPending (уход из
+   *  редактора) и регистрацией редактора другого шаблона. */
   documentAutomation: string | null;
   registerEditor(r: EditorRegistration): () => void;
   registerTab(r: TabRegistration): () => void;
@@ -69,7 +70,7 @@ export interface AssistantBridge {
     templateId: string,
     run: (a: DocumentAdapter) => Promise<T>,
   ): Promise<T | 'opened' | 'queued' | null>;
-  /** Снимок зарегистрированного документа; нет документа или ошибка — undefined. */
+  /** Снимок зарегистрированного документа; нет документа, ошибка или нет ответа за 3 с — undefined. */
   snapshot(): Promise<DocSnapshot | undefined>;
 }
 
@@ -77,6 +78,9 @@ interface PendingDocument {
   templateId: string;
   run: (a: DocumentAdapter) => Promise<unknown>;
 }
+
+/** Снимок для запроса чата: дольше не ждём, реплика уходит без документа. */
+const SNAPSHOT_TIMEOUT_MS = 3_000;
 
 // Пределы EditorDraft на сервере: лишнее не отправляем, иначе сервер отклонит весь запрос чата.
 const MAX_QUERIES = 30;
@@ -124,13 +128,13 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
         );
         editorRef.current = r;
         setEditor(r);
-        // Перерегистрация при смонтированном документе: возможность по-прежнему подтверждена.
-        if (documentRef.current?.templateId === r.templateId) setDocumentAutomation(r.templateId);
+        // Признак возможности другого шаблона не переносится. Тот же шаблон — сохраняется:
+        // перерегистрация на каждом обновлении шаблона не должна убирать кнопки формирования.
+        setDocumentAutomation((t) => (t === r.templateId ? t : null));
         return () => {
           if (editorRef.current !== r) return;
           editorRef.current = null;
           setEditor(null);
-          setDocumentAutomation(null);
         };
       },
       registerTab: (r) => {
@@ -181,6 +185,8 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
       clearPending: () => {
         pending.current = [];
         pendingDocument.current = [];
+        // Вызывается при уходе из редактора: возможность подтверждается заново в следующей сессии.
+        setDocumentAutomation(null);
       },
       registerDocument: (r) => {
         documentRef.current = r;
@@ -212,10 +218,16 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
       snapshot: async () => {
         const doc = documentRef.current;
         if (!doc) return undefined;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const late = new Promise<undefined>((resolve) => {
+          timer = setTimeout(() => resolve(undefined), SNAPSHOT_TIMEOUT_MS);
+        });
         try {
-          return await doc.adapter.snapshot();
+          return await Promise.race([doc.adapter.snapshot(), late]);
         } catch {
           return undefined;
+        } finally {
+          clearTimeout(timer);
         }
       },
     };

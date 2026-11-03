@@ -47,7 +47,10 @@ async function send(setup: (b: ReturnType<typeof useAssistantBridge>) => void) {
     setup(result.current.bridge);
   });
   act(() => result.current.chat.send('сделай шаблон'));
-  await waitFor(() => expect(calls.some((c) => c.path === '/api/assistant/chat')).toBe(true));
+  // Зависший снимок ждём до 3 с (bridge.snapshot), затем запрос уходит без него.
+  await waitFor(() => expect(calls.some((c) => c.path === '/api/assistant/chat')).toBe(true), {
+    timeout: 5_000,
+  });
   const body = calls.find((c) => c.path === '/api/assistant/chat')!.body as {
     page: { templateId?: string; editor?: Editor };
   };
@@ -96,4 +99,15 @@ describe('useAssistantChat: снимок документа (§52.3)', () => {
     });
     expect(page.editor).toEqual(saved);
   });
+
+  it('снимок завис — запрос уходит без document и documentAutomation', async () => {
+    const page = await send((b) => {
+      b.registerDocument({
+        templateId: 't1',
+        adapter: adapter(() => new Promise<DocSnapshot>(() => {})),
+        editable: () => true,
+      });
+    });
+    expect(page.editor).toEqual(saved);
+  }, 10_000);
 });

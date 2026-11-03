@@ -1,5 +1,5 @@
 import type { ReplaceTable } from '@carbone-reports/shared';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDocumentAdapter, type Connector } from './documentAdapter';
 
 /* Фейковый Office JS API (Document) в памяти: те же классы и методы, что использует адаптер,
@@ -441,5 +441,32 @@ describe('ошибки и жизненный цикл', () => {
     a.dispose();
     expect(c.disconnected).toBe(true);
     await expect(a.snapshot()).rejects.toThrow();
+  });
+
+  it('команда без ответа отклоняется через 10 с, следующая команда выполняется', async () => {
+    vi.useFakeTimers();
+    try {
+      const real = fakeConnector();
+      let calls = 0;
+      // Первый вызов connector «теряет» (колбэк не приходит), дальше — как настоящий.
+      const c: Connector = {
+        ...real,
+        callCommand: (fn, cb) => {
+          if (calls++ === 0) return;
+          real.callCommand(fn, cb);
+        },
+      };
+      const a = createDocumentAdapter(c);
+      const first = a.snapshot();
+      const firstDone = expect(first).rejects.toThrow(/timeout/);
+      const second = a.snapshot();
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(calls).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await firstDone;
+      await expect(second).resolves.toHaveProperty('blocks');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

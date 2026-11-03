@@ -400,8 +400,66 @@ describe('мост', () => {
       await expect(result.current.snapshot()).resolves.toBeUndefined();
       // Вкладка «Документ» размонтирована, но возможность в этой сессии редактора уже подтверждена.
       expect(result.current.documentAutomation).toBe('t');
+      // Редактор закрыт (уход со страницы): TemplateEditorPage вызывает clearPending.
       offEditor();
+      act(() => result.current.clearPending());
       expect(result.current.documentAutomation).toBeNull();
+    });
+
+    it('перерегистрация редактора без смонтированного документа сохраняет признак; другой шаблон и clearPending — сбрасывают', () => {
+      const { result, offEditor } = setup();
+      let off = () => {};
+      act(() => {
+        off = result.current.registerDocument({
+          templateId: 't',
+          adapter: adapter(),
+          editable: () => true,
+        });
+      });
+      act(() => off());
+      // Сохранение на вкладке «Данные»: шаблон обновился, редактор перерегистрировался.
+      offEditor();
+      const reg = (templateId: string) =>
+        act(() => {
+          result.current.registerEditor({
+            templateId,
+            templateName: 'T',
+            saved: () => saved,
+            openTab: vi.fn(),
+          });
+        });
+      reg('t');
+      expect(result.current.documentAutomation).toBe('t');
+      act(() => result.current.clearPending());
+      expect(result.current.documentAutomation).toBeNull();
+      act(() => {
+        result.current.registerDocument({
+          templateId: 't',
+          adapter: adapter(),
+          editable: () => true,
+        });
+      });
+      reg('t2');
+      expect(result.current.documentAutomation).toBeNull();
+    });
+
+    it('снимок не пришёл за 3 с — snapshot() undefined', async () => {
+      vi.useFakeTimers();
+      try {
+        const { result } = setup();
+        act(() => {
+          result.current.registerDocument({
+            templateId: 't',
+            adapter: adapter({ snapshot: vi.fn(() => new Promise<DocSnapshot>(() => {})) }),
+            editable: () => true,
+          });
+        });
+        const p = result.current.snapshot();
+        await vi.advanceTimersByTimeAsync(3_000);
+        await expect(p).resolves.toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('перерегистрация редактора при смонтированном документе сохраняет признак возможности', () => {

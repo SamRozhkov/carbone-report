@@ -387,6 +387,9 @@ function replaceCommand(): unknown {
 
 // ---------- Адаптер ----------
 
+/** Команда без ответа (колбэк connector не пришёл) отклоняется, чтобы не держать очередь. */
+const COMMAND_TIMEOUT_MS = 10_000;
+
 export function createDocumentAdapter(connector: Connector): DocumentAdapter {
   let disposed = false;
   // Asc.scope общий для всех команд: команды идут строго по очереди.
@@ -403,14 +406,20 @@ export function createDocumentAdapter(connector: Connector): DocumentAdapter {
           const w = globalThis as unknown as { Asc?: { scope?: unknown } };
           w.Asc = w.Asc ?? {};
           w.Asc.scope = scope;
+          const timer = setTimeout(
+            () => reject(new Error('document command timeout')),
+            COMMAND_TIMEOUT_MS,
+          );
           try {
             connector.callCommand(fn, (r) => {
+              clearTimeout(timer);
               if (r && typeof r === 'object' && 'error' in r)
                 reject(new Error(String((r as { error: unknown }).error)));
               else if (r === undefined || r === null) reject(new Error('no command result'));
               else resolve(r);
             });
           } catch (e) {
+            clearTimeout(timer);
             reject(e instanceof Error ? e : new Error(String(e)));
           }
         }),

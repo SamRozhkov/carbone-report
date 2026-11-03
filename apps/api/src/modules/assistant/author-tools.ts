@@ -255,7 +255,7 @@ export function tagsError(text: string): string | null {
 /** Цепочка форматтеров без скобок тега: formatC(2) или formatN(2):ifEmpty('-'). */
 const FORMATTER = String.raw`[A-Za-z]\w*(?:\((?:'[^']*'|"[^"]*"|[^()'"])*\))?`;
 const FORMAT = new RegExp(`^${FORMATTER}(?::${FORMATTER})*$`);
-export const formatError = (f: string) =>
+const formatError = (f: string) =>
   /[{}]/.test(f) || !FORMAT.test(f)
     ? `invalid format "${f}": Carbone formatters without braces, e.g. formatC(2) or formatN(2):ifEmpty('-')`
     : null;
@@ -268,7 +268,7 @@ const pathError = (name: string) =>
 export type TableColumn = { header: string; column: string; format?: string | null };
 
 /** Строки таблицы (§51.8): заголовки, строка [i], служебная [i+1] — первая ячейка, прочие пустые. */
-export function tableRows(key: string, columns: TableColumn[]): string[][] {
+function tableRows(key: string, columns: TableColumn[]): string[][] {
   const tag = (c: TableColumn) => `{d.${key}[i].${c.column}${c.format ? `:${c.format}` : ''}}`;
   return [
     columns.map((c) => c.header),

@@ -18,12 +18,22 @@ const AUTHOR = (name: string) => [
   '- Suggest document fragments with propose_tags. The author applies cards with buttons; you do not change the template.',
 ];
 
+/** Формирование в документе (§52.3–52.4): только если редактор и OnlyOffice это умеют. */
+const DOCUMENT = [
+  'The template document is open in the editor: get_document returns its text (numbered blocks of the body, header and footer, without formatting).',
+  '- A fragment or a table at the cursor: propose_tags or propose_table; the author inserts the card into the document with a button.',
+  '- A document from scratch by description: propose_document with headings, paragraphs and tables of list-mode queries.',
+  '- A filled-in document (a real invoice, act) to turn into a template: if the template has no queries or parameters for its values yet, first propose them with propose_query and propose_param and let the author apply them; then propose_replacements.',
+  '- In propose_replacements, find is the exact text from the document; take a longer find with neighbouring words when a short value (a number, a date) occurs in different meanings. Convert repeating table rows with tables, not with items.',
+  '- Do not change formatting (fonts, colours, borders): only text and tags.',
+];
+
 export function systemPrompt(o: {
   locale: Locale;
   today: string;
   extra: string;
   page: { path: string; reportId?: string };
-  author?: { templateName: string };
+  author?: { templateName: string; document?: boolean };
 }): string {
   const lines = [
     'You are the report assistant of Carbone Reports. You help the user find a report template, fill in its parameters and propose a run.',
@@ -38,6 +48,7 @@ export function systemPrompt(o: {
     `Current page: ${o.page.path}${o.page.reportId ? `; the open report id is ${o.page.reportId}` : ''}.`,
   ];
   if (o.author) lines.push(...AUTHOR(o.author.templateName));
+  if (o.author?.document) lines.push(...DOCUMENT);
   if (o.extra.trim()) lines.push('Administrator instructions:', o.extra.trim());
   return lines.join('\n');
 }

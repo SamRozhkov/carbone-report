@@ -6,6 +6,7 @@ import {
   AssistantTestBody,
   type AssistantTestResult,
   type EditorDraft,
+  type TemplateExt,
 } from '@carbone-reports/shared';
 import type { FastifyRequest } from 'fastify';
 import type { App } from '../../app';
@@ -17,9 +18,11 @@ import type { SessionUser } from '../auth/session';
 import { loadTemplate, loadTemplateFull } from '../templates/service';
 import { AgentLimitError, runAgent } from './agent';
 import { AUTHOR_MAX_TOOL_CALLS, createAuthorTools } from './author-tools';
+import { createDocumentTools } from './document-tools';
 import { createLlmClient, LlmError, testLlm } from './llm';
 import { systemPrompt } from './prompt';
 import { loadAssistantSettings, saveAssistantSettings, toSettingsDto } from './settings';
+import { createPathChecker } from './tag-paths';
 import { createAssistantTools, type Inject, mergeTools, UUID_RE } from './tools';
 
 /** Ошибка модели → ответ 502 с кодом; detail — только в журнал (internal). */
@@ -42,20 +45,24 @@ async function authorMode(
   user: SessionUser,
   templateId: string | undefined,
   editor: EditorDraft | undefined,
-): Promise<{ templateId: string; templateName: string; draft: EditorDraft } | null> {
+): Promise<{
+  templateId: string;
+  templateName: string;
+  fileExt: TemplateExt;
+  draft: EditorDraft;
+} | null> {
   if (!templateId || !UUID_RE.test(templateId)) return null;
   if (!(await canEditTemplate(deps.db, user, templateId))) return null;
   try {
-    if (editor)
-      return {
-        templateId,
-        templateName: (await loadTemplate(deps.db, templateId)).name,
-        draft: editor,
-      };
+    if (editor) {
+      const row = await loadTemplate(deps.db, templateId);
+      return { templateId, templateName: row.name, fileExt: row.fileExt, draft: editor };
+    }
     const full = await loadTemplateFull(deps.db, templateId);
     return {
       templateId,
       templateName: full.row.name,
+      fileExt: full.row.fileExt,
       draft: {
         queries: full.queries.map(({ key, mode, sql }) => ({ key, mode, sql })),
         params: full.params,
@@ -159,15 +166,31 @@ export function registerAssistantRoutes(app: App, deps: AppDeps, guards: Guards)
         onError: (tool: string, status: number, body: unknown) =>
           req.log.warn({ tool, status, body }, 'ошибка эндпоинта в инструменте ассистента'),
       };
-      const tools = author
+      // Этап 3 (§52.3): флаг браузера, текстовый шаблон и проверка OnlyOffice на сервере.
+      const inDocument =
+        !!author &&
+        author.draft.documentAutomation === true &&
+        (author.fileExt === 'docx' || author.fileExt === 'odt') &&
+        (await deps.documentAutomation());
+      const authorCtx = author && {
+        ...toolCtx,
+        templateId: author.templateId,
+        templateName: author.templateName,
+        draft: author.draft,
+      };
+      const tools = authorCtx
         ? mergeTools(
             createAssistantTools(toolCtx),
-            createAuthorTools({
-              ...toolCtx,
-              templateId: author.templateId,
-              templateName: author.templateName,
-              draft: author.draft,
-            }),
+            createAuthorTools(authorCtx),
+            ...(inDocument
+              ? [
+                  createDocumentTools({
+                    ...authorCtx,
+                    snapshot: authorCtx.draft.document,
+                    checkPaths: createPathChecker(authorCtx),
+                  }),
+                ]
+              : []),
           )
         : createAssistantTools(toolCtx);
       try {
@@ -181,7 +204,9 @@ export function registerAssistantRoutes(app: App, deps: AppDeps, guards: Guards)
             extra: s.extraInstructions,
             // Только путь и id отчёта: черновик редактора в промпт не попадает.
             page: { path, reportId },
-            author: author ? { templateName: author.templateName } : undefined,
+            author: author
+              ? { templateName: author.templateName, document: inDocument }
+              : undefined,
           }),
           history: req.body.messages,
           onToolError: (name, e) =>

@@ -428,3 +428,84 @@ describe('авторский режим (§51.3)', () => {
     await llm.close();
   });
 });
+
+describe('формирование в документе (§52.3)', () => {
+  const snapshot = {
+    blocks: [{ type: 'p', text: 'Счёт для ООО Ромашка', area: 'body' }],
+    truncated: false,
+  };
+  const editor = {
+    queries: [{ key: 'company', mode: 'single', sql: 'select id, name from company' }],
+    params: [],
+    document: snapshot,
+    documentAutomation: true,
+  };
+  /** Инструменты и весь запрос к модели; результат get_document — если модель его вызвала. */
+  async function ask(templateId: string, ed: object, probe: boolean) {
+    let tools: string[] = [];
+    const bodies: string[] = [];
+    let step = 0;
+    const llm = await fakeLlm((body) => {
+      tools = ((body.tools ?? []) as { function: { name: string } }[]).map((x) => x.function.name);
+      bodies.push(JSON.stringify(body));
+      const steps = tools.includes('get_document') ? [toolCall('get_document', {})] : [];
+      return { message: steps[step++] ?? { content: 'ok' } };
+    });
+    await enable(llm.url);
+    const orig = t.deps.documentAutomation;
+    t.deps.documentAutomation = async () => probe;
+    try {
+      const r = await t.app.inject({
+        method: 'POST',
+        url: '/api/assistant/chat',
+        headers: { cookie: admin },
+        payload: {
+          messages: [{ role: 'user', content: 'сделай шаблон' }],
+          page: { path: `/admin/templates/${templateId}`, templateId, editor: ed },
+        },
+      });
+      expect(r.statusCode, r.body).toBe(200);
+    } finally {
+      t.deps.documentAutomation = orig;
+      await llm.close();
+    }
+    return { tools, all: bodies.join('\n') };
+  }
+
+  it('docx, флаг браузера и проверка сервера — инструменты и промпт этапа 3, снимок модели', async () => {
+    const { tools, all } = await ask(tplA, editor, true);
+    expect(tools).toEqual(
+      expect.arrayContaining(['get_document', 'propose_document', 'propose_replacements']),
+    );
+    expect(all).toContain('get_document returns its text');
+    expect(all).toContain('Счёт для ООО Ромашка'); // результат get_document
+  });
+
+  it('проверка сервера «нет» или нет флага браузера — этапа 3 нет нигде', async () => {
+    const { documentAutomation: _, ...noFlag } = editor;
+    for (const [ed, probe] of [
+      [editor, false],
+      [noFlag, true],
+    ] as const) {
+      const { tools, all } = await ask(tplA, ed, probe);
+      expect(tools).toContain('propose_tags');
+      expect(tools).not.toContain('get_document');
+      expect(all).not.toContain('propose_document');
+      expect(all).not.toContain('propose_replacements');
+    }
+  });
+
+  it('xlsx — инструментов этапа 3 нет', async () => {
+    const x = await t.app.inject({
+      method: 'POST',
+      url: '/api/templates',
+      headers: { cookie: admin },
+      payload: { name: 'Таблица', datasourceId: dsId, blank: 'xlsx' },
+    });
+    expect(x.statusCode, x.body).toBe(201);
+    const { tools, all } = await ask(x.json().id as string, editor, true);
+    expect(tools).toContain('propose_tags');
+    expect(tools).not.toContain('get_document');
+    expect(all).not.toContain('propose_document');
+  });
+});

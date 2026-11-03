@@ -209,4 +209,23 @@ describe('systemPrompt', () => {
     expect(s.endsWith('Administrator instructions:\nadmin note')).toBe(true);
     expect(systemPrompt({ locale: 'ru', today: 'x', extra: '', page })).not.toContain('check_sql');
   });
+
+  it('формирование в документе — только при author.document (§52.3)', () => {
+    const page = { path: '/admin/templates/t1' };
+    const base = { locale: 'ru' as const, today: 'x', extra: 'admin note', page };
+    const on = systemPrompt({ ...base, author: { templateName: 'Счёт', document: true } });
+    for (const s of ['get_document', 'propose_document', 'propose_replacements', 'propose_param'])
+      expect(on).toContain(s);
+    expect(on).toContain('exact text');
+    expect(on).toContain('formatting');
+    expect(on.endsWith('Administrator instructions:\nadmin note')).toBe(true);
+    for (const off of [
+      systemPrompt({ ...base, author: { templateName: 'Счёт' } }),
+      systemPrompt({ ...base, author: { templateName: 'Счёт', document: false } }),
+    ]) {
+      expect(off).not.toContain('get_document');
+      expect(off).not.toContain('propose_document');
+      expect(off).not.toContain('propose_replacements');
+    }
+  });
 });

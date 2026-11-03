@@ -261,6 +261,40 @@ describe('snapshot', () => {
     expect(s.truncated).toBe(true);
     expect(s.blocks).toHaveLength(30);
   });
+
+  it('2001 пустой абзац — 2000 блоков и truncated', async () => {
+    doc.elements = Array.from({ length: 2001 }, () => p(''));
+    const s = await createDocumentAdapter(fakeConnector()).snapshot();
+    expect(s.truncated).toBe(true);
+    expect(s.blocks).toHaveLength(2000);
+  });
+
+  it('таблица в 501 строку — первые 500 строк и truncated, дальше блоков нет', async () => {
+    doc.elements = [
+      new FakeTable(Array.from({ length: 501 }, (_, i) => [String(i), ''])),
+      p('after'),
+    ];
+    const s = await createDocumentAdapter(fakeConnector()).snapshot();
+    expect(s.truncated).toBe(true);
+    expect(s.blocks).toHaveLength(1);
+    const rows = (s.blocks[0] as { rows: string[][] }).rows;
+    expect(rows).toHaveLength(500);
+    expect(rows[499]).toEqual(['499', '']);
+  });
+
+  it('пустые абзацы и ячейки тратят бюджет символов (по 1)', async () => {
+    doc.elements = [
+      p('a'.repeat(29_990)),
+      new FakeTable(Array.from({ length: 4 }, () => ['', ''])),
+      p(''),
+      p(''),
+      p(''),
+    ];
+    const s = await createDocumentAdapter(fakeConnector()).snapshot();
+    // 29 990 + 8 ячеек + 2 абзаца = 30 000; третий пустой абзац не помещается.
+    expect(s.truncated).toBe(true);
+    expect(s.blocks).toHaveLength(4);
+  });
 });
 
 describe('вставка', () => {

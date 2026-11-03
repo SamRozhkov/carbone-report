@@ -115,35 +115,49 @@ export type QueryMode = z.infer<typeof QueryMode>;
 export const DocArea = z.enum(['body', 'header', 'footer']);
 export type DocArea = z.infer<typeof DocArea>;
 
+/** Лимиты снимка документа (§52.3) — общие для схемы и команды снимка в браузере. Пустой абзац
+ *  и пустая ячейка считаются за 1 символ: иначе документ из пустых строк не тратит бюджет, и тело
+ *  запроса чата превышает лимит сервера. */
+export const DOC_SNAPSHOT_LIMITS = {
+  chars: 30_000,
+  cell: 500,
+  tables: 30,
+  blocks: 2000,
+  rows: 500,
+} as const;
+
 export const DocSnapshotBlock = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('p'), text: z.string().max(30_000), area: DocArea }),
+  z.object({ type: z.literal('p'), text: z.string().max(DOC_SNAPSHOT_LIMITS.chars), area: DocArea }),
   z.object({
     type: z.literal('table'),
-    rows: z.array(z.array(z.string().max(500))),
+    rows: z
+      .array(z.array(z.string().max(DOC_SNAPSHOT_LIMITS.cell)))
+      .max(DOC_SNAPSHOT_LIMITS.rows),
     area: DocArea,
   }),
 ]);
 export type DocSnapshotBlock = z.infer<typeof DocSnapshotBlock>;
 
-const DOC_SNAPSHOT_MAX_CHARS = 30_000;
-const DOC_SNAPSHOT_MAX_TABLES = 30;
-
-/** Снимок текста документа, открытого в редакторе (§52.3): сумма символов ≤ 30 000, таблиц ≤ 30. */
+/** Снимок текста документа, открытого в редакторе (§52.3): блоков ≤ 2000, строк таблицы ≤ 500,
+ *  сумма символов ≤ 30 000 (абзац и ячейка — не меньше 1), таблиц ≤ 30. */
 export const DocSnapshot = z
-  .object({ blocks: z.array(DocSnapshotBlock), truncated: z.boolean() })
+  .object({
+    blocks: z.array(DocSnapshotBlock).max(DOC_SNAPSHOT_LIMITS.blocks),
+    truncated: z.boolean(),
+  })
   .superRefine((d, ctx) => {
     let chars = 0;
     let tables = 0;
     for (const b of d.blocks) {
-      if (b.type === 'p') chars += b.text.length;
+      if (b.type === 'p') chars += Math.max(1, b.text.length);
       else {
         tables += 1;
-        for (const row of b.rows) for (const cell of row) chars += cell.length;
+        for (const row of b.rows) for (const cell of row) chars += Math.max(1, cell.length);
       }
     }
-    if (chars > DOC_SNAPSHOT_MAX_CHARS)
+    if (chars > DOC_SNAPSHOT_LIMITS.chars)
       ctx.addIssue({ code: 'custom', path: ['blocks'], message: 'too many characters' });
-    if (tables > DOC_SNAPSHOT_MAX_TABLES)
+    if (tables > DOC_SNAPSHOT_LIMITS.tables)
       ctx.addIssue({ code: 'custom', path: ['blocks'], message: 'too many tables' });
   });
 export type DocSnapshot = z.infer<typeof DocSnapshot>;

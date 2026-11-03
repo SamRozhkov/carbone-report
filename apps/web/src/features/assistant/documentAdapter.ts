@@ -1,5 +1,5 @@
 import type { DocBlock, ReplaceItem, ReplaceTable } from '@carbone-reports/shared';
-import { DocSnapshot } from '@carbone-reports/shared';
+import { DOC_SNAPSHOT_LIMITS, DocSnapshot } from '@carbone-reports/shared';
 
 /* Адаптер документа поверх connector OnlyOffice (Automation API, §52.5).
  *
@@ -95,9 +95,14 @@ declare const Asc: { scope: Record<string, unknown> };
 
 function snapshotCommand(): unknown {
   try {
-    const MAX_CHARS = 30_000;
-    const MAX_CELL = 500;
-    const MAX_TABLES = 30;
+    // Лимиты — DOC_SNAPSHOT_LIMITS через Asc.scope (импорт внутри команды недоступен).
+    const limits = Asc.scope.limits as {
+      chars: number;
+      cell: number;
+      tables: number;
+      blocks: number;
+      rows: number;
+    };
     // В тексте абзаца OnlyOffice может вернуть завершающий перевод строки — отбрасываем.
     const paraText = (p: OoParagraph) => String(p.GetText()).replace(/[\r\n]+$/, '');
     const cellText = (cell: OoTableCell) => {
@@ -117,7 +122,8 @@ function snapshotCommand(): unknown {
       ['footer', section.GetFooter('default', false)],
     ];
     const blocks: unknown[] = [];
-    let left = MAX_CHARS;
+    // Пустой абзац и пустая ячейка тоже тратят бюджет — по 1 символу, как в схеме DocSnapshot.
+    let left = limits.chars;
     let tables = 0;
     let truncated = false;
     outer: for (const [area, content] of areas) {
@@ -125,30 +131,42 @@ function snapshotCommand(): unknown {
       for (let i = 0; i < content.GetElementsCount(); i++) {
         const e = content.GetElement(i);
         const type = e.GetClassType();
+        if (type !== 'paragraph' && type !== 'table') continue;
+        if (blocks.length === limits.blocks) {
+          truncated = true;
+          break outer;
+        }
         if (type === 'paragraph') {
           const text = paraText(e as OoParagraph);
-          if (text.length > left) {
-            if (left > 0) blocks.push({ type: 'p', text: text.slice(0, left), area });
+          const size = Math.max(1, text.length);
+          if (size > left) {
+            if (left > 0 && text.length > 0)
+              blocks.push({ type: 'p', text: text.slice(0, left), area });
             truncated = true;
             break outer;
           }
-          left -= text.length;
+          left -= size;
           blocks.push({ type: 'p', text, area });
-        } else if (type === 'table') {
-          if (tables === MAX_TABLES) {
+        } else {
+          if (tables === limits.tables) {
             truncated = true;
             break outer;
           }
           tables += 1;
           const t = e as OoTable;
           const rows: string[][] = [];
+          // Таблица целиком, если и строки, и символы в пределах; иначе — начало и конец снимка.
           let full = true;
           for (let r = 0; r < t.GetRowsCount() && full; r++) {
+            if (r === limits.rows) {
+              full = false;
+              break;
+            }
             const row = t.GetRow(r);
             const cells: string[] = [];
             for (let c = 0; c < row.GetCellsCount(); c++)
-              cells.push(cellText(row.GetCell(c)).slice(0, MAX_CELL));
-            const size = cells.reduce((s, x) => s + x.length, 0);
+              cells.push(cellText(row.GetCell(c)).slice(0, limits.cell));
+            const size = cells.reduce((s, x) => s + Math.max(1, x.length), 0);
             if (size > left) full = false;
             else {
               left -= size;
@@ -431,7 +449,7 @@ export function createDocumentAdapter(connector: Connector): DocumentAdapter {
 
   return {
     async snapshot() {
-      return DocSnapshot.parse(await run(snapshotCommand, {}));
+      return DocSnapshot.parse(await run(snapshotCommand, { limits: DOC_SNAPSHOT_LIMITS }));
     },
     async insertTags(text) {
       await run(insertTagsCommand, { lines: text.split(/\r?\n/) });

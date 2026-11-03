@@ -9,6 +9,7 @@ import {
   outputFormatsFor,
   BACKUP_NAME_RE,
   RecoveryBody,
+  DOC_SNAPSHOT_LIMITS,
   DocSnapshot,
   EditorDraft,
 } from './index';
@@ -338,6 +339,43 @@ describe('DocSnapshot (§52.3)', () => {
     expect(DocSnapshot.safeParse({ blocks: [p(20_000), p(10_000)], truncated: true }).success).toBe(
       true,
     );
+  });
+  it('не больше 2000 блоков и 500 строк в таблице (общие лимиты DOC_SNAPSHOT_LIMITS)', () => {
+    expect(DOC_SNAPSHOT_LIMITS).toMatchObject({ blocks: 2000, rows: 500, chars: 30_000 });
+    const p = { type: 'p', text: 'x', area: 'body' };
+    expect(DocSnapshot.safeParse({ blocks: Array(2001).fill(p), truncated: true }).success).toBe(
+      false,
+    );
+    expect(DocSnapshot.safeParse({ blocks: Array(2000).fill(p), truncated: true }).success).toBe(
+      true,
+    );
+    const table = (n: number) => ({
+      blocks: [{ type: 'table', rows: Array(n).fill(['a']), area: 'body' }],
+      truncated: true,
+    });
+    expect(DocSnapshot.safeParse(table(501)).success).toBe(false);
+    expect(DocSnapshot.safeParse(table(500)).success).toBe(true);
+  });
+  it('пустой абзац и пустая ячейка считаются за 1 символ', () => {
+    const empty = { type: 'p', text: '', area: 'body' };
+    const full = { type: 'p', text: 'x'.repeat(29_000), area: 'body' };
+    expect(
+      DocSnapshot.safeParse({ blocks: [full, ...Array(1000).fill(empty)], truncated: true })
+        .success,
+    ).toBe(true);
+    expect(
+      DocSnapshot.safeParse({ blocks: [full, ...Array(1001).fill(empty)], truncated: true })
+        .success,
+    ).toBe(false);
+    const cells = (n: number) => ({
+      blocks: [
+        full,
+        { type: 'table', rows: Array(n / 10).fill(Array(10).fill('')), area: 'body' },
+      ],
+      truncated: true,
+    });
+    expect(DocSnapshot.safeParse(cells(1000)).success).toBe(true);
+    expect(DocSnapshot.safeParse(cells(1010)).success).toBe(false);
   });
   it('EditorDraft без document валиден, с document и documentAutomation — тоже', () => {
     const base = { queries: [], params: [] };

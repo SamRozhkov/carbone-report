@@ -46,21 +46,35 @@ export function useDocumentAction(templateId: string): DocumentActionState {
   const run = (action: DocumentAction) => {
     if (busy) return;
     setBusy(true);
+    // Кнопка занята, пока действие не выполнено: отложенное (вкладка «Документ» открывается) —
+    // до запуска мостом или снятия (clearPending, revokeDocument), иначе повторный клик поставил
+    // бы его в очередь второй раз.
+    const release = () => {
+      if (mountedRef.current) setBusy(false);
+    };
     void bridge
-      .applyDocument(templateId, async (adapter, editable) => {
-        if (!editable()) return notify('cardDocumentReadOnly', 'warning');
-        try {
-          if ((await action(adapter)) !== false) notify('cardDocumentChanged', 'success');
-        } catch {
-          notify('cardDocumentFailed', 'danger');
-        }
-      })
+      .applyDocument(
+        templateId,
+        async (adapter, editable) => {
+          try {
+            if (!editable()) return notify('cardDocumentReadOnly', 'warning');
+            try {
+              if ((await action(adapter)) !== false) notify('cardDocumentChanged', 'success');
+            } catch {
+              notify('cardDocumentFailed', 'danger');
+            }
+          } finally {
+            release();
+          }
+        },
+        release,
+      )
       .then((r) => {
         if (r === 'queued') notify('cardQueuedDocument', 'info');
+        // null — шаблон не открыт: действие не ставилось.
+        if (r === null) release();
       })
-      .finally(() => {
-        if (mountedRef.current) setBusy(false);
-      });
+      .catch(release);
   };
 
   return {

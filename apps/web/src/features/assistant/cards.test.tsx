@@ -498,6 +498,82 @@ describe('формирование в документе (§52.4)', () => {
     expect(second.insertTags).not.toHaveBeenCalled();
   });
 
+  describe('отложенное действие (вкладка «Документ» не смонтирована)', () => {
+    let bridge: ReturnType<typeof useAssistantBridge> | null = null;
+    function Capture() {
+      bridge = useAssistantBridge();
+      return null;
+    }
+    /** Панель с карточкой tags; connector уже создавался, вкладка «Документ» закрыта. */
+    async function renderDeferred() {
+      bridge = null;
+      sessionStorage.clear();
+      sessionStorage.setItem(
+        ASSISTANT_KEY,
+        JSON.stringify({
+          open: true,
+          messages: [{ role: 'assistant', content: 'Вот', cards: [tags] }],
+        }),
+      );
+      renderWithProviders(
+        <AssistantBridgeProvider>
+          <Registrar templateId="t1" />
+          <Capture />
+          <Panel cards={[tags]} />
+        </AssistantBridgeProvider>,
+      );
+      await waitFor(() => expect(bridge?.editor).not.toBeNull());
+      act(() => {
+        bridge!.registerDocument({
+          templateId: 't1',
+          adapter: fakeAdapter(),
+          editable: () => true,
+        })();
+      });
+      const btn = await screen.findByRole('button', { name: insert });
+      await userEvent.click(btn);
+      // Действие отложено (вкладка открывается): кнопка занята до его выполнения.
+      await waitFor(() => expect(btn).toBeDisabled());
+      return btn;
+    }
+    const mountDocument = async (adapter: DocumentAdapter) =>
+      act(async () => {
+        bridge!.registerDocument({ templateId: 't1', adapter, editable: () => true });
+      });
+
+    it('повторный клик, пока действие ждёт документ, не ставит его второй раз', async () => {
+      const btn = await renderDeferred();
+      await userEvent.click(btn);
+      fireEvent.click(btn);
+      const adapter = fakeAdapter();
+      await mountDocument(adapter);
+      await waitFor(() => expect(adapter.insertTags).toHaveBeenCalledTimes(1));
+      expect(await screen.findByText('Изменено в документе')).toBeInTheDocument();
+      await waitFor(() => expect(btn).toBeEnabled());
+    });
+
+    it('clearPending снимает действие — кнопка снова доступна, действие не выполняется', async () => {
+      await renderDeferred();
+      act(() => bridge!.clearPending());
+      // clearPending снимает и признак: восстанавливаем его, как при следующем открытии документа.
+      const adapter = fakeAdapter();
+      await mountDocument(adapter);
+      expect(await screen.findByRole('button', { name: insert })).toBeEnabled();
+      expect(adapter.insertTags).not.toHaveBeenCalled();
+    });
+
+    it('revokeDocument (возможность пропала) — кнопок нет, действие снято', async () => {
+      await renderDeferred();
+      act(() => bridge!.revokeDocument('t1'));
+      await waitFor(() => expect(screen.queryByRole('button', { name: insert })).toBeNull());
+      const adapter = fakeAdapter();
+      await mountDocument(adapter);
+      expect(adapter.insertTags).not.toHaveBeenCalled();
+      // Документ снова с возможностью — кнопка доступна (не занята снятым действием).
+      expect(await screen.findByRole('button', { name: insert })).toBeEnabled();
+    });
+  });
+
   it('ошибка адаптера — общее уведомление об ошибке', async () => {
     const adapter = fakeAdapter();
     adapter.insertTags.mockRejectedValue(new Error('timeout'));

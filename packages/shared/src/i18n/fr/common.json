@@ -172,6 +172,19 @@
     "cardTableServiceRow": "Ligne technique — n’apparaît pas dans le rapport",
     "cardTableHint": "Collez dans le document : Ctrl+V ou faites glisser le tableau",
     "cardTableText": "Tableau proposé pour « {{key}} » : {{columns}}",
-    "cardTableDrag": "Faire glisser le tableau dans le document"
+    "cardTableDrag": "Faire glisser le tableau dans le document",
+    "cardInsert": "Insérer dans le document",
+    "cardFormDocument": "Générer le document",
+    "cardReplaceSelected": "Remplacer la sélection ({{count}})",
+    "cardReplaceDocumentConfirm": "Remplacer le contenu du document ? Annulation possible avec Ctrl+Z",
+    "cardReplaceDocumentApply": "Remplacer",
+    "cardDocumentChanged": "Document modifié",
+    "cardDocumentFailed": "Impossible de modifier le document",
+    "cardDocumentReadOnly": "Pour modifier le document, commencez l’édition",
+    "cardQueuedDocument": "La modification sera appliquée à l’ouverture de l’onglet « Document »",
+    "cardNotFound": "introuvable",
+    "cardReplaceTable": "Tableau : {{header}} → lignes de « {{key}} »",
+    "cardDocumentText": "Document proposé : {{text}}",
+    "cardReplaceText": "Remplacements proposés : {{items}} valeurs, {{tables}} tableaux"
   }
 }

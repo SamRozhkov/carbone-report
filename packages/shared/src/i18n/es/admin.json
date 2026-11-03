@@ -164,6 +164,6 @@
     "testOk": "El modelo responde y admite la llamada a herramientas",
     "save": "Guardar",
     "saved": "Configuración guardada",
-    "privacyAuthor": "Para los autores de plantillas también se envían el SQL de las consultas de la plantilla y el esquema de la base de datos de origen (tablas y columnas), pero no los datos."
+    "privacyAuthor": "Para los autores de plantillas también se envían el SQL de las consultas de la plantilla y el esquema de la base de datos de origen (tablas y columnas), pero no los datos. Si OnlyOffice permite crear plantillas en el documento, también se envía al modelo el texto del documento de la plantilla abierto en el editor."
   }
 }

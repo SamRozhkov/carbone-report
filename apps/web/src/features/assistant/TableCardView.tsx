@@ -2,7 +2,9 @@ import type { Card } from '@carbone-reports/shared';
 import { Grip } from '@gravity-ui/icons';
 import { Button, Icon, Text } from '@gravity-ui/uikit';
 import { useTranslation } from 'react-i18next';
+import { DocumentActionButton } from './DocumentActionButton';
 import { useCopy } from './useCopy';
+import { useDocumentAction } from './useDocumentAction';
 
 type TableCard = Extract<Card, { type: 'table' }>;
 
@@ -22,12 +24,33 @@ export const tableHtml = (rows: string[][]) =>
 /** Текстовая замена: строки «| a | b |». */
 export const tablePipe = (rows: string[][]) => rows.map((r) => `| ${r.join(' | ')} |`).join('\n');
 
-/** Карточка таблицы для запроса-списка (§51.8): копируется или перетаскивается в документ. */
+/** Превью таблицы для документа: моноширинные ячейки, последняя (служебная [i+1]) строка приглушена. */
+export function TablePreview({ rows }: { rows: string[][] }) {
+  const last = rows.length - 1;
+  return (
+    <div className="cr-assistant__table-wrap">
+      <table className="cr-assistant__table">
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className={i === last ? 'cr-assistant__table-service' : undefined}>
+              {r.map((c, j) => (
+                <td key={j}>{c}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Карточка таблицы для запроса-списка (§51.8): копируется или перетаскивается в документ,
+ *  а при доступном формировании — вставляется кнопкой в позицию курсора (§52.4). */
 export function TableCardView({ card }: { card: TableCard }) {
   const { t } = useTranslation();
   const copy = useCopy();
+  const doc = useDocumentAction(card.templateId);
   const content = () => ({ html: tableHtml(card.rows), text: tablePipe(card.rows) });
-  const last = card.rows.length - 1;
   return (
     <div className="cr-assistant__card">
       <div className="cr-assistant__table-row">
@@ -47,25 +70,18 @@ export function TableCardView({ card }: { card: TableCard }) {
         >
           <Icon data={Grip} size={14} />
         </span>
-        <div className="cr-assistant__table-wrap">
-          <table className="cr-assistant__table">
-            <tbody>
-              {card.rows.map((r, i) => (
-                <tr key={i} className={i === last ? 'cr-assistant__table-service' : undefined}>
-                  {r.map((c, j) => (
-                    <td key={j}>{c}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TablePreview rows={card.rows} />
       </div>
       <Text variant="caption-2" color="secondary">
         {t('common:assistant.cardTableServiceRow')}
       </Text>
       {card.explanation && <Text color="secondary">{card.explanation}</Text>}
       <div className="cr-assistant__actions">
+        <DocumentActionButton
+          state={doc}
+          label={t('common:assistant.cardInsert')}
+          onClick={() => doc.run((a) => a.insertTable(card.rows))}
+        />
         <Button view="outlined" onClick={() => copy(content())}>
           {t('common:assistant.cardCopyTable')}
         </Button>

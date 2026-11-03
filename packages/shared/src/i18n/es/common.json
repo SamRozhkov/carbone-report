@@ -172,6 +172,19 @@
     "cardTableServiceRow": "Fila auxiliar: no aparece en el informe",
     "cardTableHint": "Pegue en el documento: Ctrl+V o arrastre la tabla",
     "cardTableText": "Tabla propuesta para «{{key}}»: {{columns}}",
-    "cardTableDrag": "Arrastrar la tabla al documento"
+    "cardTableDrag": "Arrastrar la tabla al documento",
+    "cardInsert": "Insertar en el documento",
+    "cardFormDocument": "Crear documento",
+    "cardReplaceSelected": "Reemplazar lo seleccionado ({{count}})",
+    "cardReplaceDocumentConfirm": "¿Reemplazar el contenido del documento? Puede deshacerlo con Ctrl+Z",
+    "cardReplaceDocumentApply": "Reemplazar",
+    "cardDocumentChanged": "Documento modificado",
+    "cardDocumentFailed": "No se pudo modificar el documento",
+    "cardDocumentReadOnly": "Para modificar el documento, empiece a editar",
+    "cardQueuedDocument": "El cambio se aplicará cuando abra la pestaña «Documento»",
+    "cardNotFound": "no encontrado",
+    "cardReplaceTable": "Tabla: {{header}} → filas de «{{key}}»",
+    "cardDocumentText": "Documento propuesto: {{text}}",
+    "cardReplaceText": "Reemplazos propuestos: {{items}} valores, {{tables}} tablas"
   }
 }

@@ -170,6 +170,19 @@
     "cardTableServiceRow": "辅助行——不会出现在报表中",
     "cardTableHint": "粘贴到文档中：Ctrl+V 或拖动表格",
     "cardTableText": "为“{{key}}”建议的表格：{{columns}}",
-    "cardTableDrag": "将表格拖入文档"
+    "cardTableDrag": "将表格拖入文档",
+    "cardInsert": "插入文档",
+    "cardFormDocument": "生成文档",
+    "cardReplaceSelected": "替换所选项（{{count}}）",
+    "cardReplaceDocumentConfirm": "替换文档内容？可以用 Ctrl+Z 撤销",
+    "cardReplaceDocumentApply": "替换",
+    "cardDocumentChanged": "已在文档中更改",
+    "cardDocumentFailed": "无法更改文档",
+    "cardDocumentReadOnly": "要更改文档，请开始编辑",
+    "cardQueuedDocument": "打开“文档”选项卡时将应用此更改",
+    "cardNotFound": "未找到",
+    "cardReplaceTable": "表格：{{header}} → “{{key}}”的行",
+    "cardDocumentText": "建议的文档：{{text}}",
+    "cardReplaceText": "建议的替换：{{items}} 个值，{{tables}} 个表格"
   }
 }

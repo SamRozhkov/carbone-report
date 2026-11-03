@@ -22,6 +22,9 @@ export interface AssistantChat {
   reset: () => void;
 }
 
+/** Предел текста карточки в истории (§52.4), как у реплики. */
+const MAX_CARD_TEXT = 4000;
+
 /** Текст карточки для истории модели: модель видит, что предлагала (§51.5). */
 export function useCardText(): (c: Card) => string {
   const { t } = useTranslation();
@@ -57,9 +60,22 @@ export function useCardText(): (c: Card) => string {
             key: c.key,
             columns: c.rows[0]?.join(', ') ?? '',
           });
-        case 'document':
+        case 'document': {
+          // Заголовки блоков; без заголовков — начало первого абзаца (§52.4).
+          const headings = c.blocks.flatMap((b) => (b.type === 'heading' ? [b.text] : []));
+          const first = c.blocks.find((b) => b.type === 'p');
+          const text = headings.length
+            ? headings.join('; ')
+            : first?.type === 'p'
+              ? first.text.slice(0, 100)
+              : '';
+          return t('common:assistant.cardDocumentText', { text }).slice(0, MAX_CARD_TEXT);
+        }
         case 'replace':
-          return ''; // Task 7
+          return t('common:assistant.cardReplaceText', {
+            items: c.items.length,
+            tables: c.tables.length,
+          });
       }
     },
     [t],

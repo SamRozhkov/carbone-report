@@ -164,6 +164,6 @@
     "testOk": "O modelo responde e oferece suporte à chamada de ferramentas",
     "save": "Salvar",
     "saved": "Configurações salvas",
-    "privacyAuthor": "Para autores de modelos, também são enviados o SQL das consultas do modelo e o esquema do banco de dados de origem (tabelas e colunas), mas não os dados."
+    "privacyAuthor": "Para autores de modelos, também são enviados o SQL das consultas do modelo e o esquema do banco de dados de origem (tabelas e colunas), mas não os dados. Se o OnlyOffice permitir montar modelos no documento, o texto do documento do modelo aberto no editor também é enviado ao modelo."
   }
 }

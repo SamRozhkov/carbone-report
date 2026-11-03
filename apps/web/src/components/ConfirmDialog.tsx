@@ -9,6 +9,8 @@ export interface ConfirmDialogProps {
   confirmText: string;
   danger?: boolean;
   loading?: boolean;
+  /** Класс слоя диалога: например, чтобы поднять его над панелью ассистента. */
+  modalClassName?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -16,7 +18,13 @@ export interface ConfirmDialogProps {
 export function ConfirmDialog(p: ConfirmDialogProps) {
   const { t } = useTranslation();
   return (
-    <Dialog open={p.open} onClose={p.onCancel} aria-labelledby="cr-confirm-title" size="s">
+    <Dialog
+      open={p.open}
+      onClose={p.onCancel}
+      aria-labelledby="cr-confirm-title"
+      size="s"
+      modalClassName={p.modalClassName}
+    >
       <Dialog.Header caption={p.title} id="cr-confirm-title" />
       <Dialog.Body>
         <Text as="div">{p.text}</Text>

@@ -65,18 +65,21 @@ export interface AssistantBridge {
   registerDocument(r: DocumentRegistration): () => void;
   /** Документ этого шаблона зарегистрирован — сразу run; иначе run откладывается до регистрации
    *  документа и открывается вкладка «Документ» ('opened'), если другая вкладка не держит
-   *  несохранённых правок ('queued'). null — открыт не тот шаблон или редактор закрыт. */
+   *  несохранённых правок ('queued'). null — открыт не тот шаблон или редактор закрыт.
+   *  editable — признак этой регистрации: отложенный run проверяет блокировку в момент запуска. */
   applyDocument<T>(
     templateId: string,
-    run: (a: DocumentAdapter) => Promise<T>,
+    run: DocumentRun<T>,
   ): Promise<T | 'opened' | 'queued' | null>;
   /** Снимок зарегистрированного документа; нет документа, ошибка или нет ответа за 3 с — undefined. */
   snapshot(): Promise<DocSnapshot | undefined>;
 }
 
+export type DocumentRun<T> = (a: DocumentAdapter, editable: () => boolean) => Promise<T>;
+
 interface PendingDocument {
   templateId: string;
-  run: (a: DocumentAdapter) => Promise<unknown>;
+  run: DocumentRun<unknown>;
 }
 
 /** Снимок для запроса чата: дольше не ждём, реплика уходит без документа. */
@@ -197,7 +200,7 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
           (p) => p.templateId !== r.templateId,
         );
         // Результат и ошибки отложенного run обрабатывает он сам: вызвавший уже получил 'opened'/'queued'.
-        for (const p of mine) void p.run(r.adapter).catch(() => {});
+        for (const p of mine) void p.run(r.adapter, r.editable).catch(() => {});
         return () => {
           if (documentRef.current !== r) return;
           documentRef.current = null;
@@ -208,7 +211,7 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
         const ed = editorRef.current;
         if (!ed || ed.templateId !== templateId) return null;
         const doc = documentRef.current;
-        if (doc && doc.templateId === templateId) return run(doc.adapter);
+        if (doc && doc.templateId === templateId) return run(doc.adapter, doc.editable);
         pendingDocument.current.push({ templateId, run });
         // Как apply(): переключение потеряло бы несохранённые правки открытой вкладки.
         if (othersDirty()) return 'queued';

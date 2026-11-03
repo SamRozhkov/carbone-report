@@ -3,8 +3,10 @@ import { Alert, Button, Icon, Text, TextArea } from '@gravity-ui/uikit';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAssistantBridge } from './bridge';
+import { DocumentCardView } from './DocumentCardView';
 import { ParamCardView } from './ParamCardView';
 import { QueryCardView } from './QueryCardView';
+import { ReplaceCardView } from './ReplaceCardView';
 import { RunCardView } from './RunCardView';
 import { TableCardView } from './TableCardView';
 import { TagsCardView } from './TagsCardView';
@@ -100,8 +102,9 @@ export function AssistantPanel({ chat }: { chat: AssistantChat }) {
                   case 'table':
                     return <TableCardView key={j} card={c} />;
                   case 'document':
+                    return <DocumentCardView key={j} card={c} />;
                   case 'replace':
-                    return null; // Task 7
+                    return <ReplaceCardView key={j} card={c} />;
                 }
               })}
           </div>

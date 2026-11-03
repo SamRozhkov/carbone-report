@@ -171,6 +171,19 @@
     "cardTableServiceRow": "Hilfszeile – erscheint nicht im Bericht",
     "cardTableHint": "Ins Dokument einfügen: Strg+V oder Tabelle hineinziehen",
     "cardTableText": "Vorgeschlagene Tabelle für „{{key}}“: {{columns}}",
-    "cardTableDrag": "Tabelle ins Dokument ziehen"
+    "cardTableDrag": "Tabelle ins Dokument ziehen",
+    "cardInsert": "In das Dokument einfügen",
+    "cardFormDocument": "Dokument erstellen",
+    "cardReplaceSelected": "Auswahl ersetzen ({{count}})",
+    "cardReplaceDocumentConfirm": "Inhalt des Dokuments ersetzen? Rückgängig mit Strg+Z",
+    "cardReplaceDocumentApply": "Ersetzen",
+    "cardDocumentChanged": "Im Dokument geändert",
+    "cardDocumentFailed": "Das Dokument konnte nicht geändert werden",
+    "cardDocumentReadOnly": "Beginnen Sie mit der Bearbeitung, um das Dokument zu ändern",
+    "cardQueuedDocument": "Die Änderung wird übernommen, sobald Sie den Tab „Dokument“ öffnen",
+    "cardNotFound": "nicht gefunden",
+    "cardReplaceTable": "Tabelle: {{header}} → Zeilen von „{{key}}“",
+    "cardDocumentText": "Vorgeschlagenes Dokument: {{text}}",
+    "cardReplaceText": "Vorgeschlagene Ersetzungen: {{items}} Werte, {{tables}} Tabellen"
   }
 }

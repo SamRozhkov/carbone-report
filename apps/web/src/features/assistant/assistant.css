@@ -170,3 +170,50 @@ body:has(.cr-doc-full) .cr-assistant {
   color: var(--g-color-text-secondary);
   font-style: italic;
 }
+
+/* Документ целиком (§52.4): превью структуры с прокруткой. */
+.cr-assistant__doc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.cr-assistant__doc-p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Замены «было → станет» (§52.4). */
+.cr-assistant__replace {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.cr-assistant__replace li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cr-assistant__replace-text {
+  font-family: var(--g-font-family-monospace);
+  overflow-wrap: anywhere;
+}
+
+.cr-assistant__replace-count {
+  margin-left: 6px;
+  color: var(--g-color-text-secondary);
+}
+
+/* Подтверждение над панелью и над развёрнутым редактором (панель там — 1001). */
+.cr-assistant-dialog {
+  z-index: 1002;
+}

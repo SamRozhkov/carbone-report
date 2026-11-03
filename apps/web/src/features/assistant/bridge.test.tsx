@@ -315,7 +315,7 @@ describe('мост', () => {
         result.current.registerDocument({ templateId: 't', adapter: a, editable: () => true });
       });
       expect(run).toHaveBeenCalledTimes(1);
-      expect(run).toHaveBeenCalledWith(a);
+      expect(run).toHaveBeenCalledWith(a, expect.any(Function));
       expect(result.current.documentAutomation).toBe('t');
     });
 

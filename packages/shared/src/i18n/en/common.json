@@ -171,6 +171,19 @@
     "cardTableServiceRow": "Service row — not printed in the report",
     "cardTableHint": "Paste into the document: Ctrl+V or drag the table",
     "cardTableText": "Proposed table for “{{key}}”: {{columns}}",
-    "cardTableDrag": "Drag the table into the document"
+    "cardTableDrag": "Drag the table into the document",
+    "cardInsert": "Insert into document",
+    "cardFormDocument": "Build document",
+    "cardReplaceSelected": "Replace selected ({{count}})",
+    "cardReplaceDocumentConfirm": "Replace the document content? You can undo with Ctrl+Z",
+    "cardReplaceDocumentApply": "Replace",
+    "cardDocumentChanged": "Document updated",
+    "cardDocumentFailed": "Could not change the document",
+    "cardDocumentReadOnly": "Start editing to change the document",
+    "cardQueuedDocument": "The change will be applied when you open the Document tab",
+    "cardNotFound": "not found",
+    "cardReplaceTable": "Table: {{header}} → rows of “{{key}}”",
+    "cardDocumentText": "Proposed document: {{text}}",
+    "cardReplaceText": "Proposed replacements: {{items}} values, {{tables}} tables"
   }
 }

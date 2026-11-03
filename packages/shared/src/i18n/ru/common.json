@@ -173,6 +173,19 @@
     "cardTableServiceRow": "Служебная строка — в отчёт не попадает",
     "cardTableHint": "Вставьте в документ: Ctrl+V или перетащите таблицу",
     "cardTableText": "Предложена таблица для «{{key}}»: {{columns}}",
-    "cardTableDrag": "Перетащить таблицу в документ"
+    "cardTableDrag": "Перетащить таблицу в документ",
+    "cardInsert": "Вставить в документ",
+    "cardFormDocument": "Сформировать документ",
+    "cardReplaceSelected": "Заменить выбранное ({{count}})",
+    "cardReplaceDocumentConfirm": "Заменить содержимое документа? Отменить можно через Ctrl+Z",
+    "cardReplaceDocumentApply": "Заменить",
+    "cardDocumentChanged": "Изменено в документе",
+    "cardDocumentFailed": "Не удалось изменить документ",
+    "cardDocumentReadOnly": "Чтобы изменить документ, начните редактирование",
+    "cardQueuedDocument": "Изменение применится, когда вы откроете вкладку «Документ»",
+    "cardNotFound": "не найдено",
+    "cardReplaceTable": "Таблица: {{header}} → строки «{{key}}»",
+    "cardDocumentText": "Предложен документ: {{text}}",
+    "cardReplaceText": "Предложены замены: {{items}} значений, {{tables}} таблиц"
   }
 }

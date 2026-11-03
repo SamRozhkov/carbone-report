@@ -214,13 +214,13 @@ describe('createAuthorTools', () => {
   it('propose_tags: текст ≤ 2000', async () => {
     const { tools } = setup();
     expect(
-      await tools.run('propose_tags', { text: '{d.company.name}', explanation: 'Название' }),
+      await tools.run('propose_tags', { text: '{d.params.invoiceId}', explanation: 'Название' }),
     ).toEqual({
       card: {
         type: 'tags',
         templateId: TID,
         templateName: 'Счёт',
-        text: '{d.company.name}',
+        text: '{d.params.invoiceId}',
         explanation: 'Название',
       },
     });
@@ -244,20 +244,65 @@ describe('createAuthorTools', () => {
     }
   });
 
+  // Черновик с запросами, на которые ссылаются фрагменты: пути сверяются с ним (§52.3).
+  const fragmentDraft = {
+    queries: [
+      { key: 'orders', mode: 'list' as const, sql: 'select name, total_sum from orders' },
+      { key: 'inv', mode: 'single' as const, sql: 'select paid, date from invoice' },
+      draft.queries[0]!,
+    ],
+    params: [{ ...draft.params[0]!, name: 'from', type: 'date' as const }],
+  };
+  const fragmentColumns: Record<string, string[]> = {
+    'select name, total_sum from orders': ['name', 'total_sum'],
+    'select paid, date from invoice': ['paid', 'date'],
+    [draft.queries[0]!.sql]: ['name', 'qty', 'total'],
+  };
+  const setupFragments = () => {
+    const inject = vi.fn<Inject>(async (_m, _url, payload) => ({
+      status: 200,
+      body: {
+        ok: true,
+        columns: (fragmentColumns[(payload as { sql: string }).sql] ?? []).map((name) => ({
+          name,
+          type: 'text',
+        })),
+      },
+    }));
+    return createAuthorTools({
+      inject,
+      deps: {} as AppDeps,
+      locale: 'ru',
+      templateId: TID,
+      templateName: 'Счёт',
+      draft: fragmentDraft,
+    });
+  };
+
   it('propose_tags: таблица с [i]/[i+1], условия, форматтеры, псевдонимы — карточка', async () => {
-    const { tools } = setup();
+    const tools = setupFragments();
     for (const text of [
       [
         '| Название компании | Сумма заказов |',
         '| {d.orders[i].name} | {d.orders[i].total_sum:formatC(2)} |',
         '| {d.orders[i+1].name} | |',
       ].join('\n'),
-      "{d.x:ifEQ(1):show('да'):elseShow('нет')} {d.items[].total:aggSum}",
-      "{d.date:formatD('DD.MM.YYYY')} {d.params.from} {c.now} {t(Итого)}",
+      "{d.inv.paid:ifEQ(1):show('да'):elseShow('нет')} {d.items[].total:aggSum}",
+      "{d.inv.date:formatD('DD.MM.YYYY')} {d.params.from} {c.now} {t(Итого)}",
       '{#total = d.items[].total:aggSum} {$total}',
     ]) {
       const r = await tools.run('propose_tags', { text, explanation: '' });
       expect('card' in r, text).toBe(true);
+    }
+  });
+
+  it('propose_tags: путь не из черновика — ошибка модели с допустимыми путями, без карточки', async () => {
+    const tools = setupFragments();
+    for (const text of ['{d.orders[i].price}', '{d.orders.name}', '{d.params.to}', '{d.nope.x}']) {
+      const r = await tools.run('propose_tags', { text, explanation: '' });
+      expect('card' in r, text).toBe(false);
+      expect(JSON.stringify(r), text).toContain('invalid tag paths');
+      expect(JSON.stringify(r), text).toContain('d.orders[i].total_sum');
     }
   });
 

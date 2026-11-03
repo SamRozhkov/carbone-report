@@ -10,13 +10,14 @@ import {
 import { z } from 'zod';
 import { issueMessage } from '../../lib/errors';
 import type { ToolSpec } from './llm';
+import { createPathChecker } from './tag-paths';
 import { type AgentTools, errorOf, type ToolContext, type ToolOutcome } from './tools';
 
 export const AUTHOR_MAX_TOOL_CALLS = 12;
-const MAX_TAGS_TEXT = 2000;
+export const MAX_TAGS_TEXT = 2000;
 const enc = encodeURIComponent;
 
-const str = (description: string) => ({ type: 'string', description });
+export const str = (description: string) => ({ type: 'string', description });
 const PARAM_SCHEMA = {
   type: 'object',
   description:
@@ -78,6 +79,35 @@ function normalizeParam(raw: unknown): unknown {
     sql: p.type !== 'query' || empty(p.sql) ? null : p.sql,
   };
 }
+
+/** Столбцы таблицы запроса-списка (§51.8) — и в propose_table, и в блоке table propose_document. */
+export const TableColumnsArg = z
+  .array(
+    z.object({
+      header: z.string().max(200),
+      column: z.string().min(1).max(200),
+      format: z.string().max(500).nullish(),
+    }),
+  )
+  .min(1)
+  .max(20);
+
+/** JSON-схема тех же столбцов для модели. */
+export const TABLE_COLUMNS_SCHEMA = {
+  type: 'array',
+  description: 'Table columns, left to right (1 to 20)',
+  items: {
+    type: 'object',
+    properties: {
+      header: str('Column header text'),
+      column: str('Result column of the query'),
+      format: str(
+        "Optional Carbone formatters without braces, e.g. formatC(2) or formatN(2):ifEmpty('-')",
+      ),
+    },
+    required: ['header', 'column'],
+  },
+};
 
 const SPECS: ToolSpec[] = [
   {
@@ -171,21 +201,7 @@ const SPECS: ToolSpec[] = [
         type: 'object',
         properties: {
           key: str('Key of a list-mode query of the template'),
-          columns: {
-            type: 'array',
-            description: 'Table columns, left to right (1 to 20)',
-            items: {
-              type: 'object',
-              properties: {
-                header: str('Column header text'),
-                column: str('Result column of the query'),
-                format: str(
-                  "Optional Carbone formatters without braces, e.g. formatC(2) or formatN(2):ifEmpty('-')",
-                ),
-              },
-              required: ['header', 'column'],
-            },
-          },
+          columns: TABLE_COLUMNS_SCHEMA,
           explanation: str('Short explanation'),
         },
         required: ['key', 'columns', 'explanation'],
@@ -207,22 +223,13 @@ const ARGS = {
   }),
   propose_table: z.object({
     key: z.string().min(1).max(200),
-    columns: z
-      .array(
-        z.object({
-          header: z.string().max(200),
-          column: z.string().min(1).max(200),
-          format: z.string().max(500).nullish(),
-        }),
-      )
-      .min(1)
-      .max(20),
+    columns: TableColumnsArg,
     explanation: z.string().max(1000),
   }),
 };
 
 /** Сообщения схемы для модели — по-английски: в issue ключи каталога `v:…`, а не текст. */
-const issuesText = (issues: z.core.$ZodIssue[]) =>
+export const issuesText = (issues: z.core.$ZodIssue[]) =>
   issues
     .map((i) => `${i.path.length ? `${i.path.join('.')}: ` : ''}${issueMessage(i, 'en')}`)
     .join('; ');
@@ -235,7 +242,7 @@ const TAGS_HINT =
   "Conditions: {d.x:ifEQ(1):show('yes'):elseShow('no')}.";
 
 /** Теги не из Carbone (Handlebars, Mustache, {item.x}) — текст ошибки для модели; null — фрагмент годится. */
-function tagsError(text: string): string | null {
+export function tagsError(text: string): string | null {
   const bad = new Set<string>();
   if (/\{\{|\}\}/.test(text)) bad.add('{{ }}');
   for (const m of text.matchAll(/\{([^{}]*)\}/g)) {
@@ -248,7 +255,7 @@ function tagsError(text: string): string | null {
 /** Цепочка форматтеров без скобок тега: formatC(2) или formatN(2):ifEmpty('-'). */
 const FORMATTER = String.raw`[A-Za-z]\w*(?:\((?:'[^']*'|"[^"]*"|[^()'"])*\))?`;
 const FORMAT = new RegExp(`^${FORMATTER}(?::${FORMATTER})*$`);
-const formatError = (f: string) =>
+export const formatError = (f: string) =>
   /[{}]/.test(f) || !FORMAT.test(f)
     ? `invalid format "${f}": Carbone formatters without braces, e.g. formatC(2) or formatN(2):ifEmpty('-')`
     : null;
@@ -258,10 +265,10 @@ const BAD_PATH = /[\s{}[\].:,'"|]/;
 const pathError = (name: string) =>
   `"${name}" cannot be used in a Carbone tag path; alias the column in the query SQL with a simple name (e.g. select x as total_sum) and propose the query again`;
 
-type TableColumn = { header: string; column: string; format?: string | null };
+export type TableColumn = { header: string; column: string; format?: string | null };
 
 /** Строки таблицы (§51.8): заголовки, строка [i], служебная [i+1] — первая ячейка, прочие пустые. */
-function tableRows(key: string, columns: TableColumn[]): string[][] {
+export function tableRows(key: string, columns: TableColumn[]): string[][] {
   const tag = (c: TableColumn) => `{d.${key}[i].${c.column}${c.format ? `:${c.format}` : ''}}`;
   return [
     columns.map((c) => c.header),
@@ -280,11 +287,77 @@ const tagPaths = (draft: EditorDraft) => ({
   params: 'd.params.<name>',
 });
 
+/** Контекст сверки с черновиком: эндпоинты шаблона от имени пользователя. */
+export type DraftContext = Pick<ToolContext, 'inject' | 'onError'> & {
+  templateId: string;
+  draft: EditorDraft;
+};
+
+/**
+ * Ключ запроса-списка черновика и колонки из проверки его SQL (§51.8): текст ошибки для модели
+ * или null. Проверка не прошла или эндпоинт ответил ошибкой — «check failed».
+ */
+export async function listQueryError(
+  ctx: DraftContext,
+  tool: string,
+  key: string,
+  columns: string[],
+): Promise<string | null> {
+  if (BAD_PATH.test(key)) return pathError(key);
+  const query = ctx.draft.queries.find((q) => q.key === key && q.mode === 'list');
+  if (!query) {
+    const keys = ctx.draft.queries.filter((q) => q.mode === 'list').map((q) => q.key);
+    return `"${key}" is not a list-mode query of the template; list-mode queries: ${keys.join(', ') || 'none'}`;
+  }
+  const r = await ctx.inject('POST', `/api/templates/${enc(ctx.templateId)}/queries/check`, {
+    sql: query.sql,
+  });
+  if (r.status !== 200) {
+    ctx.onError?.(tool, r.status, r.body);
+    return `check failed: ${errorOf(r).error}`;
+  }
+  const check = r.body as QueryCheck;
+  if (!check.ok) return `check failed: ${check.error}`;
+  const names = check.columns.map((c) => c.name);
+  const unknown = columns.filter((c) => !names.includes(c));
+  if (unknown.length)
+    return `unknown columns ${unknown.join(', ')}; columns of "${key}": ${names.join(', ')}`;
+  const bad = columns.find((c) => BAD_PATH.test(c));
+  return bad ? pathError(bad) : null;
+}
+
+/** Строки таблицы запроса-списка (§51.8) после всех проверок — или ошибка для модели. */
+export async function buildListTable(
+  ctx: DraftContext,
+  tool: string,
+  key: string,
+  columns: TableColumn[],
+): Promise<{ rows: string[][] } | { error: string }> {
+  // Модели часто шлют формат с ведущим «:» (":formatC(2)") — одно двоеточие отбрасываем.
+  const cols = columns.map((c) => ({ ...c, format: c.format?.replace(/^:/, '') }));
+  for (const c of cols) {
+    const error = c.format ? formatError(c.format) : null;
+    if (error) return { error };
+  }
+  const error = await listQueryError(
+    ctx,
+    tool,
+    key,
+    cols.map((c) => c.column),
+  );
+  if (error) return { error };
+  const rows = tableRows(key, cols);
+  // Итоговые теги — та же проверка синтаксиса Carbone, что у propose_tags.
+  const syntax = tagsError(rows[1]!.join(' '));
+  return syntax ? { error: syntax } : { rows };
+}
+
 export function createAuthorTools(
   ctx: ToolContext & { templateId: string; templateName: string; draft: EditorDraft },
 ): AgentTools {
   const { inject, templateId, templateName, draft } = ctx;
   const base = `/api/templates/${enc(templateId)}`;
+  const checkPaths = createPathChecker({ inject, templateId, draft });
 
   /** Ответ эндпоинта: 200 — как есть (метаданные схемы, итог проверки); иначе — безопасная часть. */
   const call = async (
@@ -301,54 +374,16 @@ export function createAuthorTools(
 
   /** Таблица для запроса-списка: столбцы — из проверки SQL черновика; модели — только { ok }. */
   async function proposeTable(args: z.infer<typeof ARGS.propose_table>): Promise<ToolOutcome> {
-    // Модели часто шлют формат с ведущим «:» (":formatC(2)") — одно двоеточие отбрасываем.
-    const a = {
-      ...args,
-      columns: args.columns.map((c) => ({ ...c, format: c.format?.replace(/^:/, '') })),
-    };
-    if (BAD_PATH.test(a.key)) return { result: { error: pathError(a.key) } };
-    const query = draft.queries.find((q) => q.key === a.key && q.mode === 'list');
-    if (!query) {
-      const keys = draft.queries.filter((q) => q.mode === 'list').map((q) => q.key);
-      return {
-        result: {
-          error: `"${a.key}" is not a list-mode query of the template; list-mode queries: ${keys.join(', ') || 'none'}`,
-        },
-      };
-    }
-    for (const c of a.columns) {
-      const error = c.format ? formatError(c.format) : null;
-      if (error) return { result: { error } };
-    }
-    const r = await inject('POST', `${base}/queries/check`, { sql: query.sql });
-    if (r.status !== 200) {
-      ctx.onError?.('propose_table', r.status, r.body);
-      return { result: { error: `check failed: ${errorOf(r).error}` } };
-    }
-    const check = r.body as QueryCheck;
-    if (!check.ok) return { result: { error: `check failed: ${check.error}` } };
-    const names = check.columns.map((c) => c.name);
-    const unknown = a.columns.map((c) => c.column).filter((c) => !names.includes(c));
-    if (unknown.length)
-      return {
-        result: {
-          error: `unknown columns ${unknown.join(', ')}; columns of "${a.key}": ${names.join(', ')}`,
-        },
-      };
-    const bad = a.columns.find((c) => BAD_PATH.test(c.column));
-    if (bad) return { result: { error: pathError(bad.column) } };
-    const rows = tableRows(a.key, a.columns);
-    // Итоговые теги — та же проверка синтаксиса Carbone, что у propose_tags.
-    const error = tagsError(rows[1]!.join(' '));
-    if (error) return { result: { error } };
+    const t = await buildListTable(ctx, 'propose_table', args.key, args.columns);
+    if ('error' in t) return { result: { error: t.error } };
     return {
       card: {
         type: 'table',
         templateId,
         templateName,
-        key: a.key,
-        rows,
-        explanation: a.explanation,
+        key: args.key,
+        rows: t.rows,
+        explanation: args.explanation,
       },
       result: { ok: true },
     };
@@ -406,7 +441,7 @@ export function createAuthorTools(
       case 'propose_table':
         return proposeTable(a as z.infer<typeof ARGS.propose_table>);
       default: {
-        const error = tagsError(a.text as string);
+        const error = tagsError(a.text as string) ?? (await checkPaths(a.text as string));
         if (error) return { result: { error } };
         return {
           card: {

@@ -131,6 +131,10 @@ class FakeDocument extends FakeContent {
   section = new FakeSection(null, null);
   /** Куда InsertContent вставляет (позиция курсора). */
   cursor = 0;
+  /** Как ApiDocument: после очистки остаётся один пустой абзац (документ не бывает пустым). */
+  RemoveAllElements() {
+    this.elements = [new FakeParagraph()];
+  }
   GetFinalSection() {
     return this.section;
   }
@@ -372,6 +376,16 @@ describe('replace', () => {
       ['{d.items[i].name}', '2'],
       ['{d.items[i+1].name}', ''],
     ]);
+  });
+
+  it('следующая замена не задевает тег, вставленный предыдущей', async () => {
+    doc.elements = [p('Total 5 000,00'), p('Qty 2'), p('No 15')];
+    const r = await createDocumentAdapter(fakeConnector()).replace(
+      [item('5 000,00', '{d.total:formatN(2)}'), item('2', '{d.qty}'), item('No', '{d.no}')],
+      [],
+    );
+    expect(r.notFound.items).toEqual([]);
+    expect(texts(doc)).toEqual(['Total {d.total:formatN(2)}', 'Qty {d.qty}', '{d.no} 15']);
   });
 
   it('значения не задевают теги, вставленные в таблицу', async () => {

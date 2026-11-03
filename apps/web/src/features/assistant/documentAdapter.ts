@@ -214,6 +214,9 @@ function replaceAllCommand(): unknown {
     const blocks = Asc.scope.blocks as DocBlock[];
     const doc = Api.GetDocument();
     doc.RemoveAllElements();
+    // После очистки в документе остаётся пустой абзац (документ не бывает пустым): убираем его
+    // после вставки блоков, чтобы тело не начиналось с пустой строки.
+    const left = doc.GetElementsCount();
     for (const b of blocks) {
       if (b.type === 'table') {
         const cols = Math.max(1, ...b.rows.map((r) => r.length));
@@ -241,6 +244,12 @@ function replaceAllCommand(): unknown {
       }
       doc.Push(p);
     }
+    if (blocks.length)
+      for (let i = left - 1; i >= 0; i--) {
+        const e = doc.GetElement(i);
+        if (e.GetClassType() === 'paragraph' && !(e as OoParagraph).GetText().trim())
+          doc.RemoveElement(i);
+      }
     return { ok: true };
   } catch (e) {
     return { error: String(e) };
@@ -340,20 +349,25 @@ function replaceCommand(): unknown {
       located.push([found, x]);
     });
 
-    // 2. Значения: «не найдено» — ни одного вхождения до замен. Длинные строки — первыми,
-    // чтобы короткая («15») не разрезала длинную («No 15»).
+    // 2. Значения: «не найдено» — ни одного вхождения до замен. Два прохода: сначала каждое
+    // значение → уникальная метка (длинные строки первыми, чтобы короткая «15» не разрезала
+    // «No 15»), затем метки → теги. Иначе следующее значение («2») задело бы тег, вставленный
+    // предыдущим ({d.total:formatN(2)}). Метки — из символов области частного использования,
+    // которых нет в тексте документа и в значениях.
     const occurs = (find: string) => texts.some((t) => t.indexOf(find) >= 0);
     const present = items.map((it) => !!it.find && occurs(it.find));
     items.forEach((_, i) => {
       if (!present[i]) notFound.items.push(i);
     });
-    items
+    const mark = (i: number) => '\uE000' + String.fromCharCode(0xe100 + i) + '\uE001';
+    const order = items
       .map((it, i) => ({ it, i }))
       .filter((x) => present[x.i])
-      .sort((a, b) => b.it.find.length - a.it.find.length)
-      .forEach(({ it }) =>
-        doc.SearchAndReplace({ searchString: it.find, replaceString: it.tag, matchCase: true }),
-      );
+      .sort((a, b) => b.it.find.length - a.it.find.length);
+    for (const { it, i } of order)
+      doc.SearchAndReplace({ searchString: it.find, replaceString: mark(i), matchCase: true });
+    for (const { it, i } of order)
+      doc.SearchAndReplace({ searchString: mark(i), replaceString: it.tag, matchCase: true });
 
     // 3. Таблицы: заголовок остаётся, строка [i] — теги колонок, затем служебная [i+1].
     for (const [t, x] of located) {

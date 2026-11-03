@@ -60,6 +60,7 @@ beforeAll(async () => {
         forceSaved.push(key);
         if (forceSaveError) throw forceSaveError;
       },
+      license: async () => ({ packageType: 0, resultType: 0 }),
     },
   });
   a = await admin();

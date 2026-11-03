@@ -76,8 +76,15 @@ export type GostVerifier = (
   deadlineAt: number,
 ) => Promise<CadesResult>;
 
+/** Ответ команды `license` Document Server (§52.2): тип пакета и результат проверки лицензии. */
+export interface OnlyOfficeLicense {
+  packageType: number;
+  resultType: number;
+}
+
 export interface OnlyOfficeCommands {
   forceSave(key: string): Promise<void>;
+  license(): Promise<OnlyOfficeLicense>;
 }
 
 export type FileFetcher = (url: string) => Promise<Buffer>;
@@ -109,6 +116,8 @@ export interface AppDeps {
   /** Проверка подписи ГОСТ в пуле рендера (§42.4; тестам — в этом потоке). */
   gostVerify: GostVerifier;
   onlyoffice: OnlyOfficeCommands;
+  /** Умеет ли Document Server формирование в документе (§52.2); кэшируется, ошибка — false. */
+  documentAutomation: () => Promise<boolean>;
   fetchFile: FileFetcher;
   /** Общий Redis (лимит входа, режим обслуживания); null — лимиты считаются в памяти экземпляра. */
   redis: Redis | null;

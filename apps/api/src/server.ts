@@ -15,6 +15,7 @@ import { ensureAdmin } from './modules/auth/bootstrap';
 import { createLdapAuthenticator } from './modules/auth/ldap';
 import { createAgentClient } from './modules/backups/agent-client';
 import { createSourcePools } from './modules/datasources/pools';
+import { createAutomationProbe } from './modules/onlyoffice/automation';
 import { createOnlyOfficeCommands } from './modules/onlyoffice/commands';
 import { createPoolPdfPostprocessor } from './modules/pdf/postprocessor';
 import { createPoolGostPreparer, createPoolGostVerifier } from './modules/pdf/sign/gost/pool';
@@ -95,6 +96,10 @@ const carbone = createEmbeddedRenderer({
 // Остановка: /api/ready отвечает 503, пока доделываются незавершённые запросы и отчёты.
 let draining = false;
 const requests = createInflight();
+const onlyoffice = createOnlyOfficeCommands({
+  baseUrl: config.onlyofficeInternalUrl,
+  secret: config.onlyofficeJwtSecret,
+});
 const deps: AppDeps = {
   config,
   db,
@@ -108,10 +113,8 @@ const deps: AppDeps = {
   gostPrepare: createPoolGostPreparer(renderPool),
   gostVerify: createPoolGostVerifier(renderPool),
   pdfProtect: createQpdfProtector({ maxConcurrent: config.renderWorkers }),
-  onlyoffice: createOnlyOfficeCommands({
-    baseUrl: config.onlyofficeInternalUrl,
-    secret: config.onlyofficeJwtSecret,
-  }),
+  onlyoffice,
+  documentAutomation: createAutomationProbe(onlyoffice),
   fetchFile,
   redis,
   ldap: config.ldap ? createLdapAuthenticator(config.ldap, console) : null,

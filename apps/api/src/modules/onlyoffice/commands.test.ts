@@ -61,3 +61,43 @@ describe('createOnlyOfficeCommands.forceSave', () => {
     expect([e.code, e.status]).toEqual(['ONLYOFFICE_ERROR', 502]);
   });
 });
+
+describe('createOnlyOfficeCommands.license', () => {
+  it('шлёт подписанную команду license и возвращает тип пакета и результата', async () => {
+    const { fn, calls } = fake({ error: 0, server: { packageType: 2, resultType: 3 } });
+    const res = await createOnlyOfficeCommands({
+      baseUrl: 'http://oo',
+      secret,
+      fetch: fn,
+    }).license();
+    expect(res).toEqual({ packageType: 2, resultType: 3 });
+    expect(calls[0]!.url).toBe('http://oo/command');
+    expect(calls[0]!.body).toMatchObject({ c: 'license' });
+    const bearer = calls[0]!.auth!.replace(/^Bearer /, '');
+    expect(await verifyOnlyOffice(bearer, secret)).toMatchObject({ payload: { c: 'license' } });
+    expect(await verifyOnlyOffice(String(calls[0]!.body.token), secret)).toMatchObject({
+      c: 'license',
+    });
+  });
+
+  it('error !== 0, непонятный ответ и сетевая ошибка → ONLYOFFICE_ERROR', async () => {
+    for (const response of [
+      { error: 1 },
+      { error: 0 },
+      { error: 0, server: { packageType: 'x' } },
+    ]) {
+      const { fn } = fake(response);
+      await expect(
+        createOnlyOfficeCommands({ baseUrl: 'http://oo', secret, fetch: fn }).license(),
+      ).rejects.toMatchObject({ code: 'ONLYOFFICE_ERROR', status: 502 });
+    }
+    const down = (async () => {
+      throw new Error('ECONNREFUSED');
+    }) as typeof fetch;
+    const err = await createOnlyOfficeCommands({ baseUrl: 'http://oo', secret, fetch: down })
+      .license()
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect(err).toMatchObject({ code: 'ONLYOFFICE_ERROR' });
+  });
+});

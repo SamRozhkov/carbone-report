@@ -58,7 +58,10 @@ beforeAll(async () => {
       if (url === internal('boom')) throw new Error('network');
       return fetched;
     },
-    onlyoffice: { forceSave: async (key) => void forceSaved.push(key) },
+    onlyoffice: {
+      forceSave: async (key) => void forceSaved.push(key),
+      license: async () => ({ packageType: 0, resultType: 0 }),
+    },
   });
   const a = await loginAs(t, 'admin');
   admin = a.cookie;
@@ -160,6 +163,34 @@ describe('editor-config', () => {
       headers: { cookie: user },
     });
     expect(forbidden.statusCode).toBe(403);
+  });
+
+  it('documentAutomation: docx и возможность → true, токен без поля; xlsx или нет возможности → false (§52.2)', async () => {
+    const get = async () =>
+      (
+        await t.app.inject({
+          method: 'GET',
+          url: `/api/templates/${tplId}/editor-config?holder=${holder}`,
+          headers: { cookie: admin },
+        })
+      ).json();
+    const orig = t.deps.documentAutomation;
+    try {
+      t.deps.documentAutomation = async () => true;
+      const on = await get();
+      expect(on.documentAutomation).toBe(true);
+      expect(await verifyOnlyOffice(on.token, secret())).not.toHaveProperty('documentAutomation');
+
+      t.deps.documentAutomation = async () => false;
+      expect((await get()).documentAutomation).toBe(false);
+
+      t.deps.documentAutomation = async () => true;
+      await t.deps.db.update(templates).set({ fileExt: 'xlsx' }).where(eq(templates.id, tplId));
+      expect((await get()).documentAutomation).toBe(false);
+    } finally {
+      t.deps.documentAutomation = orig;
+      await t.deps.db.update(templates).set({ fileExt: 'docx' }).where(eq(templates.id, tplId));
+    }
   });
 
   it('язык и регион редактора — по языку запроса (§44.3)', async () => {

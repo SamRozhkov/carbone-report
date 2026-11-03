@@ -29,7 +29,12 @@ let pdf: Buffer;
 let docx: Buffer;
 
 beforeAll(async () => {
-  t = await createTestApp({ onlyoffice: { forceSave: async () => {} } });
+  t = await createTestApp({
+    onlyoffice: {
+      forceSave: async () => {},
+      license: async () => ({ packageType: 0, resultType: 0 }),
+    },
+  });
   adminCookie = (await loginAs(t, 'admin')).cookie;
   const e = await loginAs(t, 'editor');
   editor = { cookie: e.cookie, id: e.user.id };

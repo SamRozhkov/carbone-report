@@ -80,7 +80,7 @@ const SPECS: ToolSpec[] = [
               type: 'object',
               properties: {
                 find: str(
-                  'Exact text from the document; include neighbouring words when a short value occurs in different meanings',
+                  'Exact text from the document, within one paragraph (no line breaks); include neighbouring words when a short value occurs in different meanings',
                 ),
                 tag: str('Carbone tag, e.g. {d.company.name}'),
                 note: str('Optional short note for the author'),
@@ -228,7 +228,8 @@ export function createDocumentTools(
       });
     }
 
-    // Тексты снимка: всё и без строк данных преобразуемых таблиц (они будут удалены).
+    // Тексты снимка: всё и без строк данных преобразуемых таблиц (они будут удалены). В строке
+    // [i] (headerRows) ячейки с колонкой null сохраняют текст — они остаются.
     const all: string[] = [];
     const kept: string[] = [];
     snapshot.blocks.forEach((b, n) => {
@@ -241,6 +242,7 @@ export function createDocumentTools(
       b.rows.forEach((r, i) => {
         all.push(...r);
         if (!t || i < t.headerRows) kept.push(...r);
+        else if (i === t.headerRows) kept.push(...r.filter((_, c) => t.rowTags[c] === null));
       });
     });
     const count = (texts: string[], find: string) =>
@@ -255,6 +257,13 @@ export function createDocumentTools(
         continue;
       }
       finds.add(it.find);
+      // Поиск в редакторе — в пределах одного абзаца: текст с переводом строки не найдётся.
+      if (/[\r\n]/.test(it.find)) {
+        problems.push(
+          `"${it.find}" contains a line break; find must be text within one paragraph or one line of a cell`,
+        );
+        continue;
+      }
       if (!/\{[^{}]+\}/.test(it.tag)) {
         problems.push(`tag of "${it.find}" must be a Carbone tag like {d.company.name}`);
         continue;

@@ -192,6 +192,20 @@ describe('createDocumentTools', () => {
       expect(await run([{ find: 'Стол', tag: '{d.company.name}' }])).toHaveProperty('card');
     });
 
+    it('ячейка строки [i] с колонкой null сохраняет текст — её значение можно заменить', async () => {
+      const tb = { ...table, columns: [null, 'qty', 'price'] };
+      expect(await run([{ find: 'Стол', tag: '{d.company.name}' }], [tb])).toHaveProperty('card');
+      // Значение из следующих строк данных по-прежнему отклоняется.
+      expect(errorText(await run([{ find: 'Стул', tag: '{d.company.name}' }], [tb]))).toContain(
+        'data rows',
+      );
+    });
+
+    it('find с переводом строки — ошибка (поиск в пределах одного абзаца)', async () => {
+      const s = errorText(await run([{ find: 'ООО\nРомашка', tag: '{d.company.name}' }]));
+      expect(s).toContain('line break');
+    });
+
     it('block не таблица, число колонок не совпадает, неверный ключ — ошибка', async () => {
       expect(errorText(await run([], [{ ...table, block: 1 }]))).toContain('not a table');
       expect(errorText(await run([], [{ ...table, block: 9 }]))).toContain('not a table');

@@ -1,4 +1,4 @@
-import type { Card } from '@carbone-reports/shared';
+import type { Card, EditorDraft } from '@carbone-reports/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -96,21 +96,31 @@ export function useAssistantChat(): AssistantChat {
     setPending(true);
     const c = new AbortController();
     controller.current = c;
-    api.assistant
-      .chat(
-        {
-          messages: toHistory(messages, cardText),
-          page: {
-            path: pathname,
-            ...(reportId ? { reportId } : {}),
-            // Открыт редактор шаблона: несохранённые черновики «Данных» и «Параметров» (§51.3).
-            ...(bridge.editor
-              ? { templateId: bridge.editor.templateId, editor: bridge.draft() ?? undefined }
-              : {}),
+    const editor = bridge.editor;
+    // Открыт редактор шаблона: несохранённые черновики «Данных» и «Параметров» (§51.3).
+    const draft: EditorDraft | undefined = editor ? (bridge.draft() ?? undefined) : undefined;
+    // Открыт документ этого шаблона: снимок через connector и признак возможности (§52.2, §52.3).
+    // Снимок не получился — без обоих полей: сервер тогда не даёт инструментов формирования.
+    const withDocument = async (): Promise<EditorDraft | undefined> => {
+      if (!editor || !draft || bridge.document?.templateId !== editor.templateId) return draft;
+      const document = await bridge.snapshot();
+      return document ? { ...draft, document, documentAutomation: true } : draft;
+    };
+    withDocument()
+      .then((editorDraft) => {
+        if (c.signal.aborted) throw new DOMException('aborted', 'AbortError');
+        return api.assistant.chat(
+          {
+            messages: toHistory(messages, cardText),
+            page: {
+              path: pathname,
+              ...(reportId ? { reportId } : {}),
+              ...(editor ? { templateId: editor.templateId, editor: editorDraft } : {}),
+            },
           },
-        },
-        c.signal,
-      )
+          c.signal,
+        );
+      })
       .then((reply) => {
         if (c.signal.aborted) return;
         setState((s) => ({

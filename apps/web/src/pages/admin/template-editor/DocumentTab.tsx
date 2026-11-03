@@ -1,5 +1,6 @@
 import { ChevronsCollapseUpRight, ChevronsExpandUpRight, FloppyDisk, Tag } from '@gravity-ui/icons';
 import { Alert, Button, Icon, Link, Loader, Text, useToaster } from '@gravity-ui/uikit';
+import type { Config } from '@onlyoffice/doceditor-types';
 import { DocumentEditor } from '@onlyoffice/document-editor-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -8,6 +9,8 @@ import { api } from '../../../api/endpoints';
 import { ApiRequestError } from '../../../api/client';
 import { errorMessage } from '../../../api/errors';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
+import { useOptionalAssistantBridge } from '../../../features/assistant/bridge';
+import { createDocumentAdapter, type Connector } from '../../../features/assistant/documentAdapter';
 import { ErrorAlert } from '../../../components/ErrorAlert';
 import { currentLocale } from '../../../i18n';
 import { pickParams } from '../../../lib/params';
@@ -15,6 +18,9 @@ import type { TabProps } from './editorState';
 import { templateKey } from './editorState';
 import { TagsPanel } from './TagsPanel';
 import type { EditLock } from './useEditLock';
+
+/** id редактора: под ним @onlyoffice/document-editor-react кладёт экземпляр в window.DocEditor.instances. */
+const EDITOR_ID = 'cr-doc-editor';
 
 let toastSeq = 0;
 const toastName = (prefix: string) => `${prefix}-${++toastSeq}`;
@@ -77,14 +83,18 @@ export function DocumentTab({
   // (2.2.0); обновлять — только с прогоном e2e editor-lock.
   const key = config.data?.document?.key;
   const stableId = `${mode}:${key}`;
-  const stable = useRef<{ id: string | undefined; config: typeof config.data }>({
-    id: undefined,
-    config: undefined,
-  });
+  const stable = useRef<{
+    id: string | undefined;
+    config: Config | undefined;
+    automation: boolean;
+  }>({ id: undefined, config: undefined, automation: false });
   if (config.data && stable.current.id !== stableId) {
-    stable.current = { id: stableId, config: config.data };
+    // documentAutomation — не часть конфига OnlyOffice: в редактор не передаём.
+    const { documentAutomation, ...ooConfig } = config.data;
+    stable.current = { id: stableId, config: ooConfig, automation: documentAutomation === true };
   }
   const stableConfig = stable.current.config;
+  const automation = stable.current.automation;
 
   // Библиотека строит редактор из конфига того рендера, где загрузился api.js; смена режима за время загрузки
   // её не затрагивает. Поэтому готовность помним по id конфига, с которым редактор построен (колбэк замыкает id своего
@@ -99,6 +109,44 @@ export function DocumentTab({
       setRebuildTitle((v) => (v === undefined ? template.name : undefined));
   };
   const editorReady = config.data !== undefined && readyId === stableId;
+
+  // Документ в мосте ассистента (§52.5): один connector на экземпляр редактора — после готовности
+  // документа; при пересоздании редактора, смене конфига и размонтировании — disconnect и снятие.
+  const registerDocument = useOptionalAssistantBridge()?.registerDocument;
+  const editingRef = useRef(lock.editing);
+  editingRef.current = lock.editing;
+  const dropDocument = useRef<(() => void) | null>(null);
+  const releaseDocument = () => {
+    dropDocument.current?.();
+    dropDocument.current = null;
+  };
+  useEffect(() => releaseDocument, [stableId, rebuildTitle, lock.forbidden]);
+  const onDocumentReady = () => {
+    // Редактор построен по устаревшему конфигу — его пересоберут, connector к нему не нужен.
+    if (!automation || !registerDocument || stableId !== currentId.current) return;
+    releaseDocument();
+    try {
+      const editor = window.DocEditor?.instances[EDITOR_ID];
+      // Возможность — по факту: createConnector есть и не бросил (§52.2); иначе молча без неё.
+      if (typeof editor?.createConnector !== 'function') return;
+      const adapter = createDocumentAdapter(editor.createConnector() as unknown as Connector);
+      const off = registerDocument({
+        templateId: template.id,
+        adapter,
+        editable: () => editingRef.current,
+      });
+      dropDocument.current = () => {
+        off();
+        try {
+          adapter.dispose();
+        } catch {
+          // Редактор уже уничтожен вместе с connector.
+        }
+      };
+    } catch {
+      // Connector недоступен (лицензия без Automation API): формирования нет, ошибку не показываем.
+    }
+  };
   const canSwitch = editorReady || loadError !== null || config.isError;
 
   /** Пауза, которую размонтирование прерывает сразу. */
@@ -337,13 +385,14 @@ export function DocumentTab({
           {/* Право отозвано: редактор размонтируется, Document Server больше не получает правок. */}
           {lock.forbidden ? null : stableConfig ? (
             <DocumentEditor
-              id="cr-doc-editor"
+              id={EDITOR_ID}
               documentServerUrl="/onlyoffice/"
               config={stableConfig}
               height="100%"
               width="100%"
               document_title={rebuildTitle}
               events_onAppReady={onAppReady}
+              events_onDocumentReady={onDocumentReady}
               onLoadComponentError={(code, description) =>
                 setLoadError(t('editor:document.loadError', { description, code }))
               }

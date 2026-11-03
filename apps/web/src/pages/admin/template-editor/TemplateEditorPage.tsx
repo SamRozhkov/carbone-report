@@ -81,7 +81,7 @@ export function TemplateEditorPage() {
   // Уход из редактора сбрасывает очередь карточек: иначе она применится при следующем заходе.
   const clearPending = bridge?.clearPending;
   useEffect(() => () => clearPending?.(), [clearPending]);
-  const openTabRef = useRef<(tab: 'data' | 'params') => void>(() => {});
+  const openTabRef = useRef<(tab: 'data' | 'params' | 'document') => void>(() => {});
   useEffect(() => {
     if (!registerEditor || !tpl) return;
     return registerEditor({

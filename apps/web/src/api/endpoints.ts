@@ -57,6 +57,9 @@ import type {
 import type { Locale } from '@carbone-reports/shared/i18n';
 import type { ImportPreview, ImportResult } from '@carbone-reports/shared/template-transfer';
 import type { Config } from '@onlyoffice/doceditor-types';
+
+/** Конфиг OnlyOffice и признак формирования в документе (вне подписанного конфига, §52.2). */
+export type EditorConfigResponse = Config & { documentAutomation: boolean };
 import { apiBlob, apiFile, apiJson, requestLocale } from './client';
 import type { SessionUser } from './session';
 
@@ -205,7 +208,9 @@ export const api = {
     previewPdf: (id: string, params: ParamsInput) =>
       apiBlob(`/api/templates/${id}/preview`, post({ params, mode: 'pdf' })),
     editorConfig: (id: string, holder: string) =>
-      apiJson<Config>(`/api/templates/${id}/editor-config?holder=${encodeURIComponent(holder)}`),
+      apiJson<EditorConfigResponse>(
+        `/api/templates/${id}/editor-config?holder=${encodeURIComponent(holder)}`,
+      ),
     save: (id: string, holder: string) =>
       apiJson<void>(`/api/templates/${id}/save`, post({ holder })),
     editLock: (id: string, body: EditLockBody) =>

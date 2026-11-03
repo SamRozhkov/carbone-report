@@ -4,6 +4,11 @@ import userEvent from '@testing-library/user-event';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminTemplate } from '../../../test/fixtures';
+import {
+  AssistantBridgeProvider,
+  useAssistantBridge,
+  type AssistantBridge,
+} from '../../../features/assistant/bridge';
 import { mockApi, renderWithProviders } from '../../../test/utils';
 import { DocumentTab as DocumentTabView } from './DocumentTab';
 import { useEditLock } from './useEditLock';
@@ -15,6 +20,8 @@ function DocumentTab(props: Omit<ComponentProps<typeof DocumentTabView>, 'lock'>
 }
 
 const mounts = vi.hoisted(() => ({ count: 0, builds: 0 }));
+/** Конфиги, переданные в DocumentEditor (по рендерам). */
+const seenConfigs = vi.hoisted(() => [] as object[]);
 /** Управление загрузкой api.js в моке: пока hold, редактор не построен (как до загрузки скрипта). */
 const loader = vi.hoisted(() => ({ hold: false, finish: [] as Array<() => void> }));
 type EditorProps = {
@@ -22,6 +29,7 @@ type EditorProps = {
   config: { document: { key: string }; editorConfig?: { mode?: string } };
   document_title?: string;
   events_onAppReady?: (e: object) => void;
+  events_onDocumentReady?: (e: object) => void;
 };
 // Повторяет поведение @onlyoffice/document-editor-react 2.2.0: редактор строится ОДИН раз из конфига рендера,
 // в котором загрузился api.js; позже — пересборка при изменении содержимого config / document_title.
@@ -35,12 +43,14 @@ vi.mock('@onlyoffice/document-editor-react', () => ({
       mounts.builds++;
       setMode(from.config.editorConfig?.mode ?? 'edit');
       from.events_onAppReady?.({});
+      from.events_onDocumentReady?.({});
     };
     useEffect(() => {
       mounts.count++;
       if (loader.hold) loader.finish.push(() => build(first.current));
       else build(first.current);
     }, []);
+    seenConfigs.push(p.config);
     const json = JSON.stringify(p.config);
     const firstRun = useRef(true);
     useEffect(() => {
@@ -681,5 +691,90 @@ describe('DocumentTab', () => {
         await screen.findByText('Связь с сервером потеряна, изменения могут не сохраниться'),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe('DocumentTab: документ в мосте ассистента (§52.5)', () => {
+  type Win = { DocEditor?: { instances: Record<string, unknown> } };
+  const win = window as unknown as Win;
+  const connector = () => ({
+    callCommand: vi.fn(),
+    executeMethod: vi.fn(),
+    disconnect: vi.fn(),
+  });
+  let bridge: AssistantBridge | null = null;
+  function Probe() {
+    bridge = useAssistantBridge();
+    return null;
+  }
+  const render = () =>
+    renderWithProviders(
+      <AssistantBridgeProvider>
+        <Probe />
+        <DocumentTab {...base} />
+      </AssistantBridgeProvider>,
+    );
+  beforeEach(() => {
+    bridge = null;
+  });
+  afterEach(() => {
+    delete win.DocEditor;
+  });
+
+  it('documentAutomation: false — connector не создаётся, документ не регистрируется', async () => {
+    const createConnector = vi.fn(connector);
+    win.DocEditor = { instances: { 'cr-doc-editor': { createConnector } } };
+    mockApi([
+      ...lock,
+      { path: '/api/templates/t1/editor-config', body: { ...config, documentAutomation: false } },
+    ]);
+    render();
+    await waitFor(() =>
+      expect(screen.getByTestId('oo')).toHaveAttribute('data-built-mode', 'edit'),
+    );
+    expect(createConnector).not.toHaveBeenCalled();
+    expect(bridge!.document).toBeNull();
+  });
+
+  it('documentAutomation: true — регистрация после готовности документа; размонтирование — disconnect', async () => {
+    const c = connector();
+    const createConnector = vi.fn(() => c);
+    win.DocEditor = { instances: { 'cr-doc-editor': { createConnector } } };
+    mockApi([
+      ...lock,
+      { path: '/api/templates/t1/editor-config', body: { ...config, documentAutomation: true } },
+    ]);
+    const { unmount } = render();
+    await waitFor(() => expect(bridge!.document?.templateId).toBe('t1'));
+    expect(createConnector).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(bridge!.document!.editable()).toBe(true));
+    unmount();
+    expect(c.disconnect).toHaveBeenCalled();
+  });
+
+  it('конфиг для OnlyOffice передаётся без documentAutomation', async () => {
+    mockApi([
+      ...lock,
+      { path: '/api/templates/t1/editor-config', body: { ...config, documentAutomation: true } },
+    ]);
+    render();
+    await screen.findByTestId('oo');
+    expect(seenConfigs.at(-1)).not.toHaveProperty('documentAutomation');
+  });
+
+  it('createConnector бросает — без регистрации и без ошибки на экране', async () => {
+    const createConnector = vi.fn(() => {
+      throw new Error('not available');
+    });
+    win.DocEditor = { instances: { 'cr-doc-editor': { createConnector } } };
+    mockApi([
+      ...lock,
+      { path: '/api/templates/t1/editor-config', body: { ...config, documentAutomation: true } },
+    ]);
+    render();
+    await waitFor(() => expect(createConnector).toHaveBeenCalled());
+    expect(bridge!.document).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/not available/)).toBeNull();
   });
 });

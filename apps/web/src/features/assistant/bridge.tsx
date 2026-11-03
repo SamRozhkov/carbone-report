@@ -1,4 +1,4 @@
-import type { Card, EditorDraft, QueryMode } from '@carbone-reports/shared';
+import type { Card, DocSnapshot, EditorDraft, QueryMode } from '@carbone-reports/shared';
 import { TemplateParam } from '@carbone-reports/shared';
 import {
   createContext,
@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import type { DocumentAdapter } from './documentAdapter';
 
 /** Мост панели ассистента и редактора шаблона (§51.5). */
 
@@ -19,7 +20,15 @@ export interface EditorRegistration {
   templateName: string;
   /** Сохранённые запросы и параметры — для вкладок, которые сейчас не открыты. */
   saved: () => EditorDraft;
-  openTab: (tab: 'data' | 'params') => void;
+  openTab: (tab: 'data' | 'params' | 'document') => void;
+}
+
+/** Открытый во вкладке «Документ» документ шаблона с connector OnlyOffice (§52.5). */
+export interface DocumentRegistration {
+  templateId: string;
+  adapter: DocumentAdapter;
+  /** Документ открыт на редактирование (блокировка §38 у этой вкладки). */
+  editable: () => boolean;
 }
 
 export interface TabRegistration {
@@ -35,6 +44,11 @@ export type ApplyResult = 'applied' | 'opened' | 'queued';
 
 export interface AssistantBridge {
   editor: EditorRegistration | null;
+  /** Зарегистрированный документ; null — вкладка «Документ» не смонтирована или connector недоступен. */
+  document: DocumentRegistration | null;
+  /** Шаблон, для которого в этой сессии редактора connector уже создавался (формирование доступно),
+   *  даже если вкладка «Документ» сейчас размонтирована; сбрасывается с закрытием редактора. */
+  documentAutomation: string | null;
   registerEditor(r: EditorRegistration): () => void;
   registerTab(r: TabRegistration): () => void;
   /** Прочие вкладки с черновиком (диаграммы, PDF, настройки): только признак несохранённых правок. */
@@ -47,6 +61,21 @@ export interface AssistantBridge {
   takePending(kind: 'query' | 'param'): ApplyCard[];
   /** Редактор закрыт: очередь сбрасывается, чтобы карточка не применилась при следующем заходе. */
   clearPending(): void;
+  registerDocument(r: DocumentRegistration): () => void;
+  /** Документ этого шаблона зарегистрирован — сразу run; иначе run откладывается до регистрации
+   *  документа и открывается вкладка «Документ» ('opened'), если другая вкладка не держит
+   *  несохранённых правок ('queued'). null — открыт не тот шаблон или редактор закрыт. */
+  applyDocument<T>(
+    templateId: string,
+    run: (a: DocumentAdapter) => Promise<T>,
+  ): Promise<T | 'opened' | 'queued' | null>;
+  /** Снимок зарегистрированного документа; нет документа или ошибка — undefined. */
+  snapshot(): Promise<DocSnapshot | undefined>;
+}
+
+interface PendingDocument {
+  templateId: string;
+  run: (a: DocumentAdapter) => Promise<unknown>;
 }
 
 // Пределы EditorDraft на сервере: лишнее не отправляем, иначе сервер отклонит весь запрос чата.
@@ -68,7 +97,7 @@ export function limitDraft(d: EditorDraft): EditorDraft {
 const Ctx = createContext<AssistantBridge | null>(null);
 
 export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
-  // editor — в состоянии: панель включает кнопки «Применить», только пока редактор открыт.
+  // editor и документ — в состоянии: панель включает кнопки «Применить», только пока редактор открыт.
   // Вкладки, очередь и текущий редактор для методов — в ref: методы стабильны, и их регистрация
   // в эффектах редактора и вкладок не зацикливается на перерисовке моста.
   const [editor, setEditor] = useState<EditorRegistration | null>(null);
@@ -76,18 +105,32 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
   const tabs = useRef(new Map<'query' | 'param', TabRegistration>());
   const pending = useRef<ApplyCard[]>([]);
   const probes = useRef(new Set<() => boolean>());
-  const methods = useMemo<Omit<AssistantBridge, 'editor'>>(
-    () => ({
+  const [openDocument, setDocument] = useState<DocumentRegistration | null>(null);
+  const documentRef = useRef<DocumentRegistration | null>(null);
+  const [documentAutomation, setDocumentAutomation] = useState<string | null>(null);
+  const pendingDocument = useRef<PendingDocument[]>([]);
+  const methods = useMemo<
+    Omit<AssistantBridge, 'editor' | 'document' | 'documentAutomation'>
+  >(() => {
+    const othersDirty = () =>
+      [...tabs.current.values()].some((t) => t.dirty()) || [...probes.current].some((p) => p());
+    return {
       registerEditor: (r) => {
         // Очередь другого шаблона не должна достаться этому. Очередь того же шаблона сохраняется:
         // редактор перерегистрируется при каждом обновлении шаблона с сервера.
         pending.current = pending.current.filter((c) => c.templateId === r.templateId);
+        pendingDocument.current = pendingDocument.current.filter(
+          (p) => p.templateId === r.templateId,
+        );
         editorRef.current = r;
         setEditor(r);
+        // Перерегистрация при смонтированном документе: возможность по-прежнему подтверждена.
+        if (documentRef.current?.templateId === r.templateId) setDocumentAutomation(r.templateId);
         return () => {
           if (editorRef.current !== r) return;
           editorRef.current = null;
           setEditor(null);
+          setDocumentAutomation(null);
         };
       },
       registerTab: (r) => {
@@ -126,11 +169,7 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
         }
         pending.current.push(card);
         // Вкладки монтируются по одной: переключение потеряло бы несохранённые правки открытой.
-        if (
-          [...tabs.current.values()].some((t) => t.dirty()) ||
-          [...probes.current].some((p) => p())
-        )
-          return 'queued';
+        if (othersDirty()) return 'queued';
         ed.openTab(card.type === 'query' ? 'data' : 'params');
         return 'opened';
       },
@@ -141,11 +180,50 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
       },
       clearPending: () => {
         pending.current = [];
+        pendingDocument.current = [];
       },
-    }),
-    [],
+      registerDocument: (r) => {
+        documentRef.current = r;
+        setDocument(r);
+        setDocumentAutomation(r.templateId);
+        const mine = pendingDocument.current.filter((p) => p.templateId === r.templateId);
+        pendingDocument.current = pendingDocument.current.filter(
+          (p) => p.templateId !== r.templateId,
+        );
+        // Результат и ошибки отложенного run обрабатывает он сам: вызвавший уже получил 'opened'/'queued'.
+        for (const p of mine) void p.run(r.adapter).catch(() => {});
+        return () => {
+          if (documentRef.current !== r) return;
+          documentRef.current = null;
+          setDocument(null);
+        };
+      },
+      applyDocument: async (templateId, run) => {
+        const ed = editorRef.current;
+        if (!ed || ed.templateId !== templateId) return null;
+        const doc = documentRef.current;
+        if (doc && doc.templateId === templateId) return run(doc.adapter);
+        pendingDocument.current.push({ templateId, run });
+        // Как apply(): переключение потеряло бы несохранённые правки открытой вкладки.
+        if (othersDirty()) return 'queued';
+        ed.openTab('document');
+        return 'opened';
+      },
+      snapshot: async () => {
+        const doc = documentRef.current;
+        if (!doc) return undefined;
+        try {
+          return await doc.adapter.snapshot();
+        } catch {
+          return undefined;
+        }
+      },
+    };
+  }, []);
+  const value = useMemo<AssistantBridge>(
+    () => ({ ...methods, editor, document: openDocument, documentAutomation }),
+    [methods, editor, openDocument, documentAutomation],
   );
-  const value = useMemo<AssistantBridge>(() => ({ ...methods, editor }), [methods, editor]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

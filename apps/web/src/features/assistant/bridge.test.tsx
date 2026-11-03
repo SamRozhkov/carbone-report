@@ -1,7 +1,8 @@
-import type { TemplateParam } from '@carbone-reports/shared';
+import type { DocSnapshot, TemplateParam } from '@carbone-reports/shared';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import type { DocumentAdapter } from './documentAdapter';
 import {
   applyParam,
   applyQuery,
@@ -257,5 +258,172 @@ describe('мост', () => {
     act(() => off());
     expect(result.current.editor).toBeNull();
     expect(result.current.draft()).toBeNull();
+  });
+
+  describe('документ', () => {
+    const snap: DocSnapshot = {
+      blocks: [{ type: 'p', text: 'Счёт', area: 'body' }],
+      truncated: false,
+    };
+    const adapter = (over: Partial<DocumentAdapter> = {}): DocumentAdapter => ({
+      snapshot: vi.fn(async () => snap),
+      insertTags: vi.fn(async () => {}),
+      insertTable: vi.fn(async () => {}),
+      replaceAll: vi.fn(async () => {}),
+      replace: vi.fn(async () => ({ notFound: { items: [], tables: [] } })),
+      dispose: vi.fn(),
+      ...over,
+    });
+    const setup = () => {
+      const r = renderHook(() => useAssistantBridge(), { wrapper });
+      const openTab = vi.fn();
+      let offEditor = () => {};
+      act(() => {
+        offEditor = r.result.current.registerEditor({
+          templateId: 't',
+          templateName: 'T',
+          saved: () => saved,
+          openTab,
+        });
+      });
+      return { ...r, openTab, offEditor: () => act(() => offEditor()) };
+    };
+
+    it('документ смонтирован — run сразу и его результат', async () => {
+      const { result } = setup();
+      const a = adapter();
+      act(() => {
+        result.current.registerDocument({ templateId: 't', adapter: a, editable: () => true });
+      });
+      expect(result.current.document?.templateId).toBe('t');
+      const run = vi.fn(async (x: DocumentAdapter) => (x === a ? 'done' : 'wrong'));
+      await expect(result.current.applyDocument('t', run)).resolves.toBe('done');
+    });
+
+    it('документа нет — открыть вкладку «Документ», run после регистрации', async () => {
+      const { result, openTab } = setup();
+      const run = vi.fn(async () => 'done');
+      let res: unknown;
+      await act(async () => {
+        res = await result.current.applyDocument('t', run);
+      });
+      expect(res).toBe('opened');
+      expect(openTab).toHaveBeenCalledWith('document');
+      expect(run).not.toHaveBeenCalled();
+      const a = adapter();
+      await act(async () => {
+        result.current.registerDocument({ templateId: 't', adapter: a, editable: () => true });
+      });
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenCalledWith(a);
+      expect(result.current.documentAutomation).toBe('t');
+    });
+
+    it('другая вкладка с правками — queued без переключения; run после регистрации документа', async () => {
+      const { result, openTab } = setup();
+      act(() => {
+        result.current.registerDirty(() => true);
+      });
+      const run = vi.fn(async () => 'done');
+      await expect(result.current.applyDocument('t', run)).resolves.toBe('queued');
+      expect(openTab).not.toHaveBeenCalled();
+      await act(async () => {
+        result.current.registerDocument({
+          templateId: 't',
+          adapter: adapter(),
+          editable: () => true,
+        });
+      });
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+
+    it('clearPending сбрасывает отложенные run документа', async () => {
+      const { result } = setup();
+      const run = vi.fn(async () => 'done');
+      await act(async () => {
+        await result.current.applyDocument('t', run);
+      });
+      result.current.clearPending();
+      await act(async () => {
+        result.current.registerDocument({
+          templateId: 't',
+          adapter: adapter(),
+          editable: () => true,
+        });
+      });
+      expect(run).not.toHaveBeenCalled();
+    });
+
+    it('карточка другого шаблона или редактор закрыт — null', async () => {
+      const { result, offEditor } = setup();
+      await expect(result.current.applyDocument('other', vi.fn())).resolves.toBeNull();
+      offEditor();
+      await expect(result.current.applyDocument('t', vi.fn())).resolves.toBeNull();
+    });
+
+    it('snapshot(): без документа undefined; с документом — снимок; ошибка — undefined', async () => {
+      const { result } = setup();
+      await expect(result.current.snapshot()).resolves.toBeUndefined();
+      let off = () => {};
+      act(() => {
+        off = result.current.registerDocument({
+          templateId: 't',
+          adapter: adapter(),
+          editable: () => true,
+        });
+      });
+      await expect(result.current.snapshot()).resolves.toEqual(snap);
+      act(() => off());
+      act(() => {
+        result.current.registerDocument({
+          templateId: 't',
+          adapter: adapter({ snapshot: vi.fn(async () => Promise.reject(new Error('x'))) }),
+          editable: () => true,
+        });
+      });
+      await expect(result.current.snapshot()).resolves.toBeUndefined();
+    });
+
+    it('снятие регистрации сбрасывает document; признак возможности держится до закрытия редактора', async () => {
+      const { result, offEditor } = setup();
+      expect(result.current.documentAutomation).toBeNull();
+      let off = () => {};
+      act(() => {
+        off = result.current.registerDocument({
+          templateId: 't',
+          adapter: adapter(),
+          editable: () => true,
+        });
+      });
+      act(() => off());
+      expect(result.current.document).toBeNull();
+      await expect(result.current.snapshot()).resolves.toBeUndefined();
+      // Вкладка «Документ» размонтирована, но возможность в этой сессии редактора уже подтверждена.
+      expect(result.current.documentAutomation).toBe('t');
+      offEditor();
+      expect(result.current.documentAutomation).toBeNull();
+    });
+
+    it('перерегистрация редактора при смонтированном документе сохраняет признак возможности', () => {
+      const { result, offEditor } = setup();
+      act(() => {
+        result.current.registerDocument({
+          templateId: 't',
+          adapter: adapter(),
+          editable: () => true,
+        });
+      });
+      // Шаблон обновился с сервера: редактор снимает регистрацию и регистрируется заново.
+      offEditor();
+      act(() => {
+        result.current.registerEditor({
+          templateId: 't',
+          templateName: 'T',
+          saved: () => saved,
+          openTab: vi.fn(),
+        });
+      });
+      expect(result.current.documentAutomation).toBe('t');
+    });
   });
 });

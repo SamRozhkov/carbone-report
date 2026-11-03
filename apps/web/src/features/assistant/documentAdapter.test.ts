@@ -357,7 +357,7 @@ describe('replace', () => {
     block,
     headerRows: header.length,
     key: 'items',
-    fingerprint: { header, columns: 2 },
+    fingerprint: { header, columns: 2, sample: ['Pen', '2'] },
     rowTags: ['{d.items[i].name}', null],
     serviceRow: ['{d.items[i+1].name}', ''],
   });
@@ -401,7 +401,10 @@ describe('replace', () => {
     proto.SetText = undefined;
     try {
       (doc.elements[1] as FakeTable).rows[1]!.cells[0]!.content.Push(p('second line'));
-      await createDocumentAdapter(fakeConnector()).replace([], [table(1)]);
+      // Снимок видел ячейку с двумя абзацами — в отпечатке тот же текст.
+      const t = table(1);
+      t.fingerprint.sample = ['Pen\nsecond line', '2'];
+      await createDocumentAdapter(fakeConnector()).replace([], [t]);
     } finally {
       proto.SetText = setText;
     }
@@ -447,6 +450,58 @@ describe('replace', () => {
     expect(r).toEqual({ notFound: { items: [], tables: [0] } });
     expect((doc.elements[1] as FakeTable).texts()).toHaveLength(4);
     expect(texts(doc)[0]).toBe('Invoice No 15 for {d.company}');
+  });
+
+  it('строка [i] изменена (текст не совпадает с отпечатком) — таблица в notFound.tables', async () => {
+    fill();
+    (doc.elements[1] as FakeTable).rows[1]!.cells[0]!.SetText('Marker');
+    const r = await createDocumentAdapter(fakeConnector()).replace([], [table(1)]);
+    expect(r.notFound.tables).toEqual([0]);
+    expect((doc.elements[1] as FakeTable).texts()).toHaveLength(4);
+  });
+
+  it('headerRows 0: только точный номер блока, без поиска по другим таблицам', async () => {
+    const t0 = (): ReplaceTable => ({
+      block: 2,
+      headerRows: 0,
+      key: 'items',
+      fingerprint: { header: [], columns: 2, sample: ['x', 'y'] },
+      rowTags: ['{d.items[i].a}', '{d.items[i].b}'],
+      serviceRow: ['{d.items[i+1].a}', ''],
+    });
+    const make = () => [
+      p('title'),
+      new FakeTable([
+        ['a', 'b'],
+        ['c', 'd'],
+      ]),
+      new FakeTable([
+        ['x', 'y'],
+        ['z', 'w'],
+      ]),
+    ];
+    // Таблица на своём месте — преобразована.
+    doc.elements = make();
+    let r = await createDocumentAdapter(fakeConnector()).replace([], [t0()]);
+    expect(r.notFound.tables).toEqual([]);
+    expect((doc.elements[2] as FakeTable).texts()).toEqual([
+      ['{d.items[i].a}', '{d.items[i].b}'],
+      ['{d.items[i+1].a}', ''],
+    ]);
+    // Документ сдвинулся: под номером 2 — другая таблица с тем же числом колонок; её данные
+    // не удаляются, искать по отпечатку без заголовка нельзя.
+    doc.elements = make();
+    doc.elements.unshift(p('inserted'));
+    r = await createDocumentAdapter(fakeConnector()).replace([], [t0()]);
+    expect(r.notFound.tables).toEqual([0]);
+    expect((doc.elements[2] as FakeTable).texts()).toEqual([
+      ['a', 'b'],
+      ['c', 'd'],
+    ]);
+    expect((doc.elements[3] as FakeTable).texts()).toEqual([
+      ['x', 'y'],
+      ['z', 'w'],
+    ]);
   });
 
   it('find, которого нет в документе, — в notFound.items', async () => {

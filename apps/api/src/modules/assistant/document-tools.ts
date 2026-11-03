@@ -222,7 +222,7 @@ export function createDocumentTools(
         block: t.block,
         headerRows: t.headerRows,
         key: t.key,
-        fingerprint: { header: b.rows.slice(0, t.headerRows), columns: row.length },
+        fingerprint: { header: b.rows.slice(0, t.headerRows), columns: row.length, sample: row },
         rowTags: t.columns.map((c) => (c === null ? null : `{d.${t.key}[i].${c}}`)),
         serviceRow: row.map((_, i) => (i === first ? `{d.${t.key}[i+1].${named[0]}}` : '')),
       });

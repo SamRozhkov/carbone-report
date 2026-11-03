@@ -207,6 +207,17 @@ describe('createDocumentTools', () => {
       );
     });
 
+    it('headerRows 0 — в отпечатке пустой заголовок и текст первой строки', async () => {
+      const r = (await run([], [{ ...table, headerRows: 0 }])) as {
+        card: { tables: { fingerprint: unknown }[] };
+      };
+      expect(r.card.tables[0]!.fingerprint).toEqual({
+        header: [],
+        columns: 3,
+        sample: ['Товар', 'Кол-во', 'Цена'],
+      });
+    });
+
     it('неверный путь или синтаксис в tag — ошибка', async () => {
       expect(errorText(await run([{ find: 'ИНН 7701', tag: '{d.company.kpp}' }]))).toContain(
         'invalid tag paths',
@@ -240,7 +251,11 @@ describe('createDocumentTools', () => {
               block: 2,
               headerRows: 1,
               key: 'items',
-              fingerprint: { header: [['Товар', 'Кол-во', 'Цена']], columns: 3 },
+              fingerprint: {
+                header: [['Товар', 'Кол-во', 'Цена']],
+                columns: 3,
+                sample: ['Стол', '2', '100'],
+              },
               rowTags: [null, '{d.items[i].qty}', '{d.items[i].price}'],
               serviceRow: ['', '{d.items[i+1].qty}', ''],
             },

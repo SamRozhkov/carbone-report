@@ -415,7 +415,7 @@ describe('формирование в документе (§52.4)', () => {
         block: 4,
         headerRows: 1,
         key: 'items',
-        fingerprint: { header: [['Товар', 'Кол-во']], columns: 2 },
+        fingerprint: { header: [['Товар', 'Кол-во']], columns: 2, sample: ['Стол', '2'] },
         rowTags: ['{d.items[i].name}', '{d.items[i].qty}'],
         serviceRow: ['{d.items[i+1].name}', ''],
       },

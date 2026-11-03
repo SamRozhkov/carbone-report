@@ -275,9 +275,9 @@ function replaceAllCommand(): unknown {
 }
 
 /** Порядок (§52.4, решение контроллера): сначала найти все таблицы (по номеру блока со сверкой
- *  отпечатка, иначе по отпечатку среди всех таблиц), затем заменить значения, затем преобразовать
- *  найденные таблицы. Так значения не задевают вставленные теги {d.key[i].col}, а замена значений
- *  в заголовке таблицы не мешает её найти. Всё в одной команде — ссылки на таблицы сохраняются. */
+ *  отпечатка, иначе — если есть строки заголовка — по отпечатку среди всех таблиц), затем
+ *  заменить значения, затем преобразовать найденные таблицы. Так значения не задевают вставленные
+ *  теги {d.key[i].col}, а замена значений в заголовке таблицы не мешает её найти. Всё в одной команде — ссылки на таблицы сохраняются. */
 function replaceCommand(): unknown {
   try {
     const MAX_CELL = 500;
@@ -330,9 +330,16 @@ function replaceCommand(): unknown {
     };
     for (const a of areas) if (a) collect(a, true);
 
+    // Отпечаток: строки заголовка, число ячеек и тексты строки headerRows (она станет [i]).
+    // Без отпечатка строки (старая карточка) таблица не совпадает — данные не удаляются наугад.
     const matches = (t: OoTable, x: ReplaceTable) => {
       if (t.GetRowsCount() <= x.headerRows) return false;
-      if (t.GetRow(x.headerRows).GetCellsCount() !== x.fingerprint.columns) return false;
+      const data = t.GetRow(x.headerRows);
+      if (data.GetCellsCount() !== x.fingerprint.columns) return false;
+      const sample = x.fingerprint.sample ?? [];
+      if (sample.length !== x.fingerprint.columns) return false;
+      for (let c = 0; c < sample.length; c++)
+        if (cellText(data.GetCell(c)).slice(0, MAX_CELL) !== sample[c]) return false;
       for (let r = 0; r < x.headerRows; r++) {
         const row = t.GetRow(r);
         const want = x.fingerprint.header[r] ?? [];
@@ -353,7 +360,8 @@ function replaceCommand(): unknown {
       let found: OoTable | null = null;
       const byBlock = blocks[x.block];
       if (free(byBlock) && matches(byBlock, x)) found = byBlock;
-      else
+      // Без строк заголовка отпечаток слабый — только точный номер блока, без поиска.
+      else if (x.headerRows > 0)
         for (const e of blocks)
           if (free(e) && matches(e, x)) {
             found = e;

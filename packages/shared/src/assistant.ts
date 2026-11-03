@@ -128,12 +128,13 @@ export interface ReplaceItem {
   count: number;
 }
 
-/** Замена в таблице документа: block — индекс блока снимка, отпечаток для сверки перед применением. */
+/** Замена в таблице документа: block — индекс блока снимка, отпечаток для сверки перед применением
+ *  (строки заголовка, число ячеек и тексты строки headerRows — той, что станет строкой [i]). */
 export interface ReplaceTable {
   block: number;
   headerRows: number;
   key: string;
-  fingerprint: { header: string[][]; columns: number };
+  fingerprint: { header: string[][]; columns: number; sample: string[] };
   rowTags: (string | null)[];
   serviceRow: string[];
 }

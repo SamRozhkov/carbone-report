@@ -127,12 +127,14 @@ export const DOC_SNAPSHOT_LIMITS = {
 } as const;
 
 export const DocSnapshotBlock = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('p'), text: z.string().max(DOC_SNAPSHOT_LIMITS.chars), area: DocArea }),
+  z.object({
+    type: z.literal('p'),
+    text: z.string().max(DOC_SNAPSHOT_LIMITS.chars),
+    area: DocArea,
+  }),
   z.object({
     type: z.literal('table'),
-    rows: z
-      .array(z.array(z.string().max(DOC_SNAPSHOT_LIMITS.cell)))
-      .max(DOC_SNAPSHOT_LIMITS.rows),
+    rows: z.array(z.array(z.string().max(DOC_SNAPSHOT_LIMITS.cell))).max(DOC_SNAPSHOT_LIMITS.rows),
     area: DocArea,
   }),
 ]);

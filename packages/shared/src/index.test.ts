@@ -368,10 +368,7 @@ describe('DocSnapshot (§52.3)', () => {
         .success,
     ).toBe(false);
     const cells = (n: number) => ({
-      blocks: [
-        full,
-        { type: 'table', rows: Array(n / 10).fill(Array(10).fill('')), area: 'body' },
-      ],
+      blocks: [full, { type: 'table', rows: Array(n / 10).fill(Array(10).fill('')), area: 'body' }],
       truncated: true,
     });
     expect(DocSnapshot.safeParse(cells(1000)).success).toBe(true);

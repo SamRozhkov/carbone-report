@@ -1,0 +1,6 @@
+# Файл лицензии OnlyOffice Document Server. Включается в .env:
+# COMPOSE_FILE=docker-compose.yml:docker-compose.onlyoffice-license.yml
+services:
+  onlyoffice:
+    volumes:
+      - ${ONLYOFFICE_LICENSE_FILE:?задайте ONLYOFFICE_LICENSE_FILE в .env}:/var/www/onlyoffice/Data/license.lic:ro

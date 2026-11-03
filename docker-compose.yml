@@ -188,7 +188,7 @@ services:
     logging: *logging
 
   onlyoffice:
-    image: onlyoffice/documentserver:9.4.0.1
+    image: ${ONLYOFFICE_IMAGE:-onlyoffice/documentserver:9.4.0.1}
     environment:
       JWT_ENABLED: 'true'
       JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:?задайте ONLYOFFICE_JWT_SECRET в .env}

@@ -4,7 +4,7 @@
 
 Генерация отчётов на базе Carbone с редактированием шаблонов в браузере (OnlyOffice) и интерфейсом на GravityUI.
 
-Сайт со скриншотами интерфейса: <https://samrozhkov.github.io/carbone-report/>.
+Сайт со скриншотами интерфейса: <https://report.rozhkov.pro/>.
 
 Состав стека: web (nginx), API, агент бэкапа, OnlyOffice Document Server, PostgreSQL, Redis, S3 (SeaweedFS). Отдельного контейнера Carbone нет: отчёты собирает сам API встроенной сборкой Carbone Community Edition 3.8.2 (`packages/carbone`, воркеры `worker_threads`). Сборка выдаёт документ в формате шаблона; PDF и перевод в ODT/ODS делает OnlyOffice, поэтому **OnlyOffice обязателен для построения отчётов**: API сначала собирает PDF, и без Document Server отчёт не сформируется. Подробности про лицензию — в разделе [«Лицензия»](#лицензия), про переход с 1.x — в [«Обновление с 1.x»](#обновление-с-1x).
 

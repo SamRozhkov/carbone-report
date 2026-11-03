@@ -3,201 +3,335 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="yandex-verification" content="c48b9432da99645e" />
     <title>Carbone Reports — отчёты по шаблонам Word и Excel</title>
     <meta
       name="description"
       content="Сервер отчётов: шаблоны DOCX и XLSX, данные из PostgreSQL, редактирование в браузере, PDF и электронная подпись."
     />
+    <link rel="preload" href="fonts/golos-cyrillic.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <nav class="lang">
       <b>Русский</b> · <a href="en/index.html" lang="en" hreflang="en">English</a>
     </nav>
-    <header>
-      <h1>Carbone Reports</h1>
-      <p class="lead">
-        Отчёты по шаблонам Word и Excel с данными из ваших баз PostgreSQL. Шаблоны правятся прямо в
-        браузере, готовый документ — в PDF, DOCX или XLSX, с электронной подписью, в том числе по
-        ГОСТ.
-      </p>
-      <p>
-        <a href="https://github.com/SamRozhkov/carbone-report"
-          >Исходный код и установка на GitHub</a
-        >
-      </p>
+    <header class="wrap">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">C</span>Carbone Reports</div>
+      <div class="hero">
+        <div>
+          <h1>Отчёты из шаблонов Word и Excel с данными из ваших баз</h1>
+          <p class="lead">
+            Шаблон правится прямо в браузере, данные приходят из PostgreSQL, готовый документ — в
+            PDF, DOCX или XLSX, с электронной подписью, в том числе по ГОСТ.
+          </p>
+          <p class="actions">
+            <a class="button" href="#install">Установить</a>
+            <a class="button button-quiet" href="https://github.com/SamRozhkov/carbone-report"
+              >Исходный код на GitHub</a
+            >
+          </p>
+        </div>
+        <figure class="doc">
+          <div class="sheet">
+            <p class="sheet-title">
+              Счёт №
+              <span class="fill"
+                ><code class="tag" aria-hidden="true">{d.invoice.number}</code
+                ><span class="val">СЧ-001</span></span
+              >
+            </p>
+            <p class="sheet-meta">
+              от
+              <span class="fill" style="--d: 0.15s"
+                ><code class="tag" aria-hidden="true">{d.invoice.issued_on}</code
+                ><span class="val">30.09.2026</span></span
+              >
+            </p>
+            <p class="sheet-party">
+              Покупатель:
+              <span class="fill" style="--d: 0.3s"
+                ><code class="tag" aria-hidden="true">{d.company.name}</code
+                ><span class="val">ООО «Ромашка»</span></span
+              >, ИНН
+              <span class="fill" style="--d: 0.45s"
+                ><code class="tag" aria-hidden="true">{d.company.inn}</code
+                ><span class="val">7701234567</span></span
+              >
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Наименование</th>
+                  <th class="num">Кол-во</th>
+                  <th class="num price">Цена</th>
+                  <th class="num">Сумма</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <span class="fill" style="--d: 0.6s"
+                      ><code class="tag" aria-hidden="true">{d.items[i].name}</code
+                      ><span class="val">Бумага А4</span></span
+                    >
+                  </td>
+                  <td class="num">
+                    <span class="fill" style="--d: 0.6s"
+                      ><code class="tag" aria-hidden="true">{d.items[i].qty}</code
+                      ><span class="val">10</span></span
+                    >
+                  </td>
+                  <td class="num price">
+                    <span class="fill" style="--d: 0.6s"
+                      ><code class="tag" aria-hidden="true">{d.items[i].price}</code
+                      ><span class="val">350,00</span></span
+                    >
+                  </td>
+                  <td class="num"><span class="later" style="--d: 0.6s">3 500,00</span></td>
+                </tr>
+                <tr class="later" style="--d: 0.75s">
+                  <td>Картридж</td>
+                  <td class="num">2</td>
+                  <td class="num price">4 500,00</td>
+                  <td class="num">9 000,00</td>
+                </tr>
+                <tr class="later" style="--d: 0.9s">
+                  <td>Ручки шариковые</td>
+                  <td class="num">50</td>
+                  <td class="num price">25,50</td>
+                  <td class="num">1 275,00</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="later" style="--d: 1.05s">
+                  <td colspan="2">Итого</td>
+                  <td class="price"></td>
+                  <td class="num">13 775,00</td>
+                </tr>
+              </tfoot>
+            </table>
+            <div class="stamp">
+              <strong>Документ подписан электронной подписью</strong>
+              ГОСТ · КриптоПро
+            </div>
+          </div>
+          <figcaption>
+            Демо-шаблон «Счёт»: теги Carbone заполняются данными из демо-базы.
+          </figcaption>
+        </figure>
+      </div>
     </header>
+
     <main>
-      <section class="feature">
-        <div>
-          <h2>Вход</h2>
+      <section class="chapter" aria-labelledby="ch1">
+        <div class="wrap">
+          <div class="chapter-text">
+            <div class="step" aria-hidden="true">1</div>
+            <h2 id="ch1">Автор готовит шаблон</h2>
+            <p>
+              Шаблон — обычный документ Word или Excel с тегами вида
+              <code>{d.company.name}</code>. Он открывается во встроенном редакторе OnlyOffice —
+              ставить Word или Excel не нужно.
+            </p>
+            <p>
+              Данные приходят из SQL-запросов к подключённым базам. Запросы выполняются только на
+              чтение, параметры отчёта подставляются в них по имени.
+            </p>
+          </div>
+          <div class="shots">
+            <figure class="shot shot-main">
+              <a href="shots/ru/editor-document.png"
+                ><img
+                  src="shots/ru/editor-document.png"
+                  alt="Шаблон документа в редакторе OnlyOffice"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption>
+                <b>Шаблон в браузере.</b> Документ открывается во встроенном OnlyOffice.
+              </figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="shots/ru/editor-sql.png"
+                ><img
+                  src="shots/ru/editor-sql.png"
+                  alt="Редактор шаблона: SQL-запросы"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption><b>Запросы и параметры.</b> SQL к вашим базам, только чтение.</figcaption>
+            </figure>
+            <pre class="snippet" aria-label="Пример запроса демо-шаблона">
+select c.name, c.inn, c.address
+from company c
+join invoices i on i.company_id = c.id
+where i.id = <span class="p">:invoiceId</span></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="chapter" aria-labelledby="ch2">
+        <div class="wrap">
+          <div class="chapter-text">
+            <div class="step" aria-hidden="true">2</div>
+            <h2 id="ch2">Пользователь формирует отчёт</h2>
+            <p>
+              Отчёты разложены по категориям, и каждый видит только то, к чему ему открыт доступ.
+            </p>
+            <p>
+              Форма запуска строится из параметров шаблона: даты, числа и списки, в том числе
+              зависимые списки из SQL-запросов. Сформированные отчёты остаются в истории — их можно
+              открыть снова, скачать в другом формате или подписать позже.
+            </p>
+          </div>
+          <div class="shots">
+            <figure class="shot shot-main">
+              <a href="shots/ru/run.png"
+                ><img
+                  src="shots/ru/run.png"
+                  alt="Форма параметров отчёта"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption>
+                <b>Запуск с параметрами.</b> Значения по умолчанию и зависимые списки.
+              </figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="shots/ru/reports.png"
+                ><img
+                  src="shots/ru/reports.png"
+                  alt="Каталог отчётов по категориям"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption><b>Каталог отчётов</b> по категориям.</figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="shots/ru/history.png"
+                ><img
+                  src="shots/ru/history.png"
+                  alt="История сформированных отчётов"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption><b>История</b> сформированных отчётов.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="chapter" aria-labelledby="ch3">
+        <div class="wrap">
+          <div class="chapter-text">
+            <div class="step" aria-hidden="true">3</div>
+            <h2 id="ch3">Подпись и контроль</h2>
+            <p>
+              PDF подписывается сертификатом пользователя (.p12) или ключом по ГОСТ через КриптоПро
+              — ключ ГОСТ не покидает компьютер пользователя. В PDF добавляются водяной знак,
+              нумерация страниц и постоянные приложения; есть PDF/A и защита паролем.
+            </p>
+            <p>
+              Доступ выдаётся по группам и категориям; роли разделяют пользователей, авторов
+              шаблонов и тех, кто управляет доступом. Вход — локальные учётные записи, LDAP/Active
+              Directory или Keycloak (OpenID Connect).
+            </p>
+          </div>
+          <div class="shots">
+            <figure class="shot shot-main">
+              <a href="shots/ru/signature.png"
+                ><img
+                  src="shots/ru/signature.png"
+                  alt="Настройки PDF и электронной подписи"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption><b>Настройки PDF и подписи</b> в шаблоне.</figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="shots/ru/access.png"
+                ><img
+                  src="shots/ru/access.png"
+                  alt="Настройка доступа к шаблонам"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption><b>Доступ к отчётам</b> по группам и категориям.</figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="shots/ru/users.png"
+                ><img
+                  src="shots/ru/users.png"
+                  alt="Список пользователей"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption><b>Пользователи:</b> роли и блокировка.</figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="shots/ru/datasources.png"
+                ><img
+                  src="shots/ru/datasources.png"
+                  alt="Источники данных"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption>
+                <b>Источники данных</b> с проверкой соединения; пароли хранятся зашифрованными.
+              </figcaption>
+            </figure>
+            <figure class="shot">
+              <a href="shots/ru/login.png"
+                ><img
+                  src="shots/ru/login.png"
+                  alt="Страница входа"
+                  width="1440"
+                  height="900"
+                  loading="lazy"
+              /></a>
+              <figcaption><b>Вход.</b> Язык интерфейса можно выбрать до входа.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section class="install" id="install" aria-labelledby="install-h">
+        <div class="wrap">
+          <h2 id="install-h">Установка</h2>
           <p>
-            Локальные учётные записи, LDAP/Active Directory или Keycloak (OpenID Connect). Язык
-            интерфейса можно выбрать до входа.
+            В составе — веб-интерфейс, API, OnlyOffice Document Server, PostgreSQL, Redis и
+            S3-хранилище. В Kubernetes система ставится из Helm-чарта:
+          </p>
+          <pre>helm install cr oci://ghcr.io/samrozhkov/charts/carbone-reports --version <span data-version="2.18.0">2.18.0</span> -n reports -f my-values.yaml</pre>
+          <p>
+            <a
+              href="https://github.com/SamRozhkov/carbone-report/blob/main/README.md#kubernetes-helm"
+              >Установка в Kubernetes (Helm)</a
+            >
+            ·
+            <a
+              href="https://github.com/SamRozhkov/carbone-report/blob/main/README.md#запуск-в-docker"
+              >Запуск в Docker</a
+            >
           </p>
         </div>
-        <a href="shots/ru/login.png"
-          ><img
-            src="shots/ru/login.png"
-            alt="Страница входа"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Каталог отчётов</h2>
-          <p>Отчёты разложены по категориям; каждый видит только то, к чему ему открыт доступ.</p>
-        </div>
-        <a href="shots/ru/reports.png"
-          ><img
-            src="shots/ru/reports.png"
-            alt="Каталог отчётов по категориям"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Запуск с параметрами</h2>
-          <p>
-            Форма строится из параметров шаблона: даты, числа, списки, в том числе зависимые списки
-            из SQL-запросов.
-          </p>
-        </div>
-        <a href="shots/ru/run.png"
-          ><img
-            src="shots/ru/run.png"
-            alt="Форма параметров отчёта"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>История</h2>
-          <p>
-            Все сформированные отчёты сохраняются: их можно открыть, скачать в другом формате или
-            подписать позже.
-          </p>
-        </div>
-        <a href="shots/ru/history.png"
-          ><img
-            src="shots/ru/history.png"
-            alt="История сформированных отчётов"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Запросы и параметры</h2>
-          <p>
-            Данные для шаблона — SQL-запросы к подключённым базам. Запросы выполняются только на
-            чтение.
-          </p>
-        </div>
-        <a href="shots/ru/editor-sql.png"
-          ><img
-            src="shots/ru/editor-sql.png"
-            alt="Редактор шаблона: SQL-запросы"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Шаблон в браузере</h2>
-          <p>
-            Документ шаблона открывается во встроенном редакторе OnlyOffice — Word и Excel не нужны.
-          </p>
-        </div>
-        <a href="shots/ru/editor-document.png"
-          ><img
-            src="shots/ru/editor-document.png"
-            alt="Шаблон документа в редакторе OnlyOffice"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>PDF и электронная подпись</h2>
-          <p>
-            Защита PDF паролем, нумерация страниц и подпись: сертификатом пользователя (.p12) или
-            ключом по ГОСТ через КриптоПро — ключ ГОСТ не покидает компьютер пользователя.
-          </p>
-        </div>
-        <a href="shots/ru/signature.png"
-          ><img
-            src="shots/ru/signature.png"
-            alt="Настройки PDF и электронной подписи"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Доступ и роли</h2>
-          <p>
-            Доступ к отчётам — по группам и категориям; роли разделяют пользователей, авторов
-            шаблонов и тех, кто управляет доступом.
-          </p>
-        </div>
-        <a href="shots/ru/access.png"
-          ><img
-            src="shots/ru/access.png"
-            alt="Настройка доступа к шаблонам"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Пользователи</h2>
-          <p>Учётные записи, роли и блокировка в одном списке.</p>
-        </div>
-        <a href="shots/ru/users.png"
-          ><img
-            src="shots/ru/users.png"
-            alt="Список пользователей"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
-      </section>
-      <section class="feature">
-        <div>
-          <h2>Источники данных</h2>
-          <p>
-            Подключения к базам PostgreSQL с проверкой соединения; пароли хранятся зашифрованными.
-          </p>
-        </div>
-        <a href="shots/ru/datasources.png"
-          ><img
-            src="shots/ru/datasources.png"
-            alt="Источники данных"
-            width="1440"
-            height="900"
-            loading="lazy"
-        /></a>
       </section>
     </main>
+
     <footer>
-      <div class="inner">
+      <div class="wrap">
         <a href="https://github.com/SamRozhkov/carbone-report">GitHub</a>
         <a href="https://github.com/SamRozhkov/carbone-report/blob/main/README.md">Документация</a>
-        <a href="https://github.com/SamRozhkov/carbone-report/blob/main/README.md#kubernetes-helm"
-          >Установка в Kubernetes (Helm)</a
-        >
         <a href="https://github.com/SamRozhkov/carbone-report/blob/main/LICENSE.md">Лицензия</a>
         <span class="ver">Версия <span data-version="2.18.0">2.18.0</span></span>
       </div>

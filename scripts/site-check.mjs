@@ -3,7 +3,7 @@
 // Использование: node scripts/site-check.mjs [--root <корень репозитория>]
 // Проверяет site/: страницы ru и en с переключателем языка, относительные ссылки внутри site/,
 // alt/width/height у <img>, одинаковый набор снимков ru/en (= SHOTS) и показ каждого на своей
-// странице, размеры файлов, отсутствие <script> и внешних ресурсов, версию в подвале = CHANGELOG.
+// странице, размеры файлов, отсутствие <script> и внешних ресурсов, версию (каждый data-version) = CHANGELOG.
 // Ошибки — «файл[:строка]: …», код выхода 1; неверные аргументы — сообщение в stderr, код 2.
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, posix, relative } from 'node:path';
@@ -134,11 +134,12 @@ function checkPage(root, lang, version, errors) {
   for (const s of SHOTS)
     if (!shown.has(s)) errors.push(`${rel}: снимок не показан на странице: ${s}`);
 
-  // 7. Версия в подвале.
-  const v = /data-version="([^"]*)"/.exec(html)?.[1];
-  if (!v) errors.push(`${rel}: нет элемента с data-version`);
-  else if (version && v !== version)
-    errors.push(`${rel}: версия ${v}, а в CHANGELOG.md — ${version}`);
+  // 7. Версия (подвал, команда установки): каждый data-version = версия из CHANGELOG.
+  const versions = [...html.matchAll(/data-version="([^"]*)"/g)].map((m) => m[1]);
+  if (!versions.length) errors.push(`${rel}: нет элемента с data-version`);
+  else if (version)
+    for (const v of new Set(versions))
+      if (v !== version) errors.push(`${rel}: версия ${v}, а в CHANGELOG.md — ${version}`);
 }
 
 /** Все ошибки сайта root/site; root — корень репозитория. */

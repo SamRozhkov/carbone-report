@@ -111,12 +111,53 @@ export type TemplateParamDto = z.infer<typeof TemplateParamDto>;
 export const QueryMode = z.enum(['list', 'single']);
 export type QueryMode = z.infer<typeof QueryMode>;
 
+/** Область документа в снимке (§52.3). */
+export const DocArea = z.enum(['body', 'header', 'footer']);
+export type DocArea = z.infer<typeof DocArea>;
+
+export const DocSnapshotBlock = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('p'), text: z.string().max(30_000), area: DocArea }),
+  z.object({
+    type: z.literal('table'),
+    rows: z.array(z.array(z.string().max(500))),
+    area: DocArea,
+  }),
+]);
+export type DocSnapshotBlock = z.infer<typeof DocSnapshotBlock>;
+
+const DOC_SNAPSHOT_MAX_CHARS = 30_000;
+const DOC_SNAPSHOT_MAX_TABLES = 30;
+
+/** Снимок текста документа, открытого в редакторе (§52.3): сумма символов ≤ 30 000, таблиц ≤ 30. */
+export const DocSnapshot = z
+  .object({ blocks: z.array(DocSnapshotBlock), truncated: z.boolean() })
+  .superRefine((d, ctx) => {
+    let chars = 0;
+    let tables = 0;
+    for (const b of d.blocks) {
+      if (b.type === 'p') chars += b.text.length;
+      else {
+        tables += 1;
+        for (const row of b.rows) for (const cell of row) chars += cell.length;
+      }
+    }
+    if (chars > DOC_SNAPSHOT_MAX_CHARS)
+      ctx.addIssue({ code: 'custom', path: ['blocks'], message: 'too many characters' });
+    if (tables > DOC_SNAPSHOT_MAX_TABLES)
+      ctx.addIssue({ code: 'custom', path: ['blocks'], message: 'too many tables' });
+  });
+export type DocSnapshot = z.infer<typeof DocSnapshot>;
+
 /** Черновик редактора шаблона, который панель ассистента передаёт в запросе (§51.3). */
 export const EditorDraft = z.object({
   queries: z
     .array(z.object({ key: z.string().max(100), mode: QueryMode, sql: z.string().max(20_000) }))
     .max(30),
   params: z.array(TemplateParam).max(50),
+  /** Снимок документа (§52.3): только если редактор умеет формировать документ. */
+  document: DocSnapshot.optional(),
+  /** Браузер умеет менять документ (createConnector) — включает инструменты этапа 3. */
+  documentAutomation: z.literal(true).optional(),
 });
 export type EditorDraft = z.infer<typeof EditorDraft>;
 

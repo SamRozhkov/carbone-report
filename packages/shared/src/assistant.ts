@@ -114,6 +114,30 @@ export interface SchemaTableDetails extends SchemaTable {
   foreignKeys: SchemaForeignKey[];
 }
 
+/** Блок документа, предложенный ассистентом (§52.4); строки таблицы построены сервером, как у карточки table. */
+export type DocBlock =
+  | { type: 'heading'; level: 1 | 2 | 3; text: string }
+  | { type: 'p'; text: string }
+  | { type: 'table'; key: string; rows: string[][] };
+
+/** Замена значения на тег; count — число вхождений в снимке документа. */
+export interface ReplaceItem {
+  find: string;
+  tag: string;
+  note?: string;
+  count: number;
+}
+
+/** Замена в таблице документа: block — индекс блока снимка, отпечаток для сверки перед применением. */
+export interface ReplaceTable {
+  block: number;
+  headerRows: number;
+  key: string;
+  fingerprint: { header: string[][]; columns: number };
+  rowTags: (string | null)[];
+  serviceRow: string[];
+}
+
 /** Карточка в ответе ассистента: запуск (§50.3) или предложение автору шаблона (§51). */
 export type Card =
   | ({ type: 'run' } & RunCard)
@@ -135,6 +159,23 @@ export type Card =
       templateName: string;
       key: string;
       rows: string[][];
+      explanation: string;
+    }
+  | {
+      /** Документ целиком (§52.4): вставляется кнопкой автора. */
+      type: 'document';
+      templateId: string;
+      templateName: string;
+      blocks: DocBlock[];
+      explanation: string;
+    }
+  | {
+      /** Замены значений на теги и таблицы (§52.4). */
+      type: 'replace';
+      templateId: string;
+      templateName: string;
+      items: ReplaceItem[];
+      tables: ReplaceTable[];
       explanation: string;
     };
 

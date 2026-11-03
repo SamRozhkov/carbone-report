@@ -57,6 +57,9 @@ export function useCardText(): (c: Card) => string {
             key: c.key,
             columns: c.rows[0]?.join(', ') ?? '',
           });
+        case 'document':
+        case 'replace':
+          return ''; // Task 7
       }
     },
     [t],

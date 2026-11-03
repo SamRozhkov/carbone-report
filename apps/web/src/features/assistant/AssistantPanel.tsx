@@ -99,6 +99,9 @@ export function AssistantPanel({ chat }: { chat: AssistantChat }) {
                     return <TagsCardView key={j} card={c} />;
                   case 'table':
                     return <TableCardView key={j} card={c} />;
+                  case 'document':
+                  case 'replace':
+                    return null; // Task 7
                 }
               })}
           </div>

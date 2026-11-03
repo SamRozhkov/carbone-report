@@ -9,6 +9,8 @@ import {
   outputFormatsFor,
   BACKUP_NAME_RE,
   RecoveryBody,
+  DocSnapshot,
+  EditorDraft,
 } from './index';
 import { createTranslator } from './i18n/server';
 import { TransferParam, TransferQuery } from './template-transfer';
@@ -289,5 +291,60 @@ describe('только чтение в схемах (§47.2)', () => {
         sortOrder: 0,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('DocSnapshot (§52.3)', () => {
+  const ok = {
+    blocks: [
+      { type: 'p', text: 'Счёт № {d.number}', area: 'body' },
+      {
+        type: 'table',
+        rows: [
+          ['Товар', 'Цена'],
+          ['{d.items[i].name}', '{d.items[i].price}'],
+        ],
+        area: 'body',
+      },
+      { type: 'p', text: 'Стр.', area: 'footer' },
+    ],
+    truncated: false,
+  };
+  it('принимает абзац, таблицу и колонтитул', () => {
+    expect(DocSnapshot.safeParse(ok).success).toBe(true);
+  });
+  it('отклоняет 31 таблицу', () => {
+    const t = { type: 'table', rows: [['a']], area: 'body' };
+    expect(DocSnapshot.safeParse({ blocks: Array(31).fill(t), truncated: false }).success).toBe(
+      false,
+    );
+    expect(DocSnapshot.safeParse({ blocks: Array(30).fill(t), truncated: false }).success).toBe(
+      true,
+    );
+  });
+  it('отклоняет ячейку в 501 символ', () => {
+    const cell = (n: number) => ({
+      blocks: [{ type: 'table', rows: [['x'.repeat(n)]], area: 'body' }],
+      truncated: false,
+    });
+    expect(DocSnapshot.safeParse(cell(501)).success).toBe(false);
+    expect(DocSnapshot.safeParse(cell(500)).success).toBe(true);
+  });
+  it('отклоняет сумму символов 30 001', () => {
+    const p = (n: number) => ({ type: 'p', text: 'x'.repeat(n), area: 'body' });
+    expect(DocSnapshot.safeParse({ blocks: [p(20_000), p(10_001)], truncated: true }).success).toBe(
+      false,
+    );
+    expect(DocSnapshot.safeParse({ blocks: [p(20_000), p(10_000)], truncated: true }).success).toBe(
+      true,
+    );
+  });
+  it('EditorDraft без document валиден, с document и documentAutomation — тоже', () => {
+    const base = { queries: [], params: [] };
+    expect(EditorDraft.safeParse(base).success).toBe(true);
+    expect(EditorDraft.safeParse({ ...base, document: ok, documentAutomation: true }).success).toBe(
+      true,
+    );
+    expect(EditorDraft.safeParse({ ...base, documentAutomation: false }).success).toBe(false);
   });
 });

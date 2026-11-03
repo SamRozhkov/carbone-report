@@ -454,6 +454,30 @@ Report names and descriptions, parameters, and list values are sent to the model
 
 In the template editor the assistant helps the author: it writes and checks SQL queries against the data source schema and suggests parameters and Carbone tags for the document. Suggestions appear as cards; buttons such as “Add query” and “Create parameter” move them into the unsaved drafts of the editor tabs, and the author saves. For authors the model additionally receives the template's query SQL and the source database schema (tables and columns, everything visible to the source DB user), but not data.
 
+### Forming in the document
+
+When OnlyOffice supports the Automation API, the assistant can make suggestions directly in the open template document (docx and odt only). The image and license are set in `.env`:
+
+```bash
+ONLYOFFICE_IMAGE=onlyoffice/documentserver-de:9.3.1.2
+ONLYOFFICE_LICENSE_FILE=./certs/onlyoffice-license.lic
+COMPOSE_FILE=docker-compose.yml:docker-compose.onlyoffice-license.yml
+```
+
+The default is `ONLYOFFICE_IMAGE=onlyoffice/documentserver:9.4.0.1` (Community, no forming); `ONLYOFFICE_LICENSE_FILE` and `COMPOSE_FILE` are needed only with a license: the file is mounted into the container read-only. Availability is detected by fact: the server asks OnlyOffice for its license (a Developer or Enterprise build with a valid license; the result is cached for 10 minutes), and the browser checks that the editor provided `createConnector`. With an expired license or a Community image there are no forming buttons; only “Copy” remains.
+
+Three scenarios; every change happens on the author's button and is undone with Ctrl+Z:
+
+- **Fragment at the cursor** — “Insert into document” on the “Fragment” and “Table” cards (replaces the selection, if any).
+- **Template from a description** — a document card with the “Form document” button replaces the document body (a non-empty document only after confirmation; headers and footers are untouched).
+- **Template from a filled document** — a replacements card with a “was → becomes” list and checkboxes; “Replace selected (N)” substitutes tags for values, preserving formatting, and turns tables into list-query tables.
+
+Tag paths the assistant suggests are now always checked against the template draft's queries and parameters.
+
+When forming is available, the model additionally receives the text of the open document (paragraphs and table cells, including headers and footers, up to 30,000 characters, no formatting or images). If a real filled report is open, its values (names, amounts, details) go to the model.
+
+Switching from Community 9.4 to Developer 9.3 on existing `oo_*` volumes: if documents do not open, recreate the OnlyOffice volumes (`oo_*`); template files are stored in S3, the volumes hold only the document server's cache and state.
+
 ## Demo and E2E
 
 ```bash

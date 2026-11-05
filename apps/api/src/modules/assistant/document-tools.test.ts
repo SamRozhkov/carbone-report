@@ -1,9 +1,10 @@
 import type { DocSnapshot } from '@carbone-reports/shared';
 import { describe, expect, it, vi } from 'vitest';
 import type { AppDeps } from '../../deps';
+import { createAuthorTools } from './author-tools';
 import { createDocumentTools } from './document-tools';
 import { createPathChecker } from './tag-paths';
-import type { Inject } from './tools';
+import { createAssistantTools, type Inject } from './tools';
 
 const TID = '0b6a4c1e-5f2d-4e8a-9c3b-7d1e2f3a4b5c';
 const CHECK = `/api/templates/${TID}/queries/check`;
@@ -64,6 +65,32 @@ const errorText = (r: unknown) => {
 };
 
 describe('createDocumentTools', () => {
+  it('схемы всех инструментов: type — строка (GigaChat отклоняет type-массив)', () => {
+    const ctx = { inject: vi.fn<Inject>(), deps: {} as AppDeps, locale: 'ru' as const };
+    const specs = [
+      ...createAssistantTools(ctx).specs,
+      ...createAuthorTools({ ...ctx, templateId: TID, templateName: 'Счёт', draft }).specs,
+      ...setup().specs,
+    ];
+    const bad: string[] = [];
+    const walk = (node: unknown, path: string) => {
+      if (Array.isArray(node)) return node.forEach((n, i) => walk(n, `${path}[${i}]`));
+      if (!node || typeof node !== 'object') return;
+      for (const [k, v] of Object.entries(node)) {
+        // properties — карта имён полей: поле может называться type, это не тип схемы.
+        if (k === 'properties' && v && typeof v === 'object') {
+          for (const [name, sub] of Object.entries(v)) walk(sub, `${path}.properties.${name}`);
+          continue;
+        }
+        if (k === 'type' && typeof v !== 'string') bad.push(`${path}.type`);
+        if (k === 'anyOf' || k === 'oneOf') bad.push(`${path}.${k}`);
+        walk(v, `${path}.${k}`);
+      }
+    };
+    for (const s of specs) walk(s.function.parameters, s.function.name);
+    expect(bad).toEqual([]);
+  });
+
   it('нет снимка — все инструменты отвечают ошибкой', async () => {
     const tools = setup(null);
     for (const [name, args] of [
@@ -190,6 +217,15 @@ describe('createDocumentTools', () => {
       );
       // Без таблицы в tables то же значение допустимо.
       expect(await run([{ find: 'Стол', tag: '{d.company.name}' }])).toHaveProperty('card');
+    });
+
+    it('пустая строка в columns — ячейка без тега, как null', async () => {
+      const r = await run([], [{ ...table, columns: ['', 'qty', 'price'] }]);
+      expect(r).toHaveProperty('card.tables.0.rowTags', [
+        null,
+        '{d.items[i].qty}',
+        '{d.items[i].price}',
+      ]);
     });
 
     it('ячейка строки [i] с колонкой null сохраняет текст — её значение можно заменить', async () => {

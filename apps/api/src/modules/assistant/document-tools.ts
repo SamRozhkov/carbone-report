@@ -100,8 +100,9 @@ const SPECS: ToolSpec[] = [
                 columns: {
                   type: 'array',
                   description:
-                    'Query column for every cell of the row, left to right; null keeps the cell text without a tag',
-                  items: { type: ['string', 'null'] },
+                    'Query column for every cell of the row, left to right; an empty string keeps the cell text without a tag',
+                  // GigaChat принимает только строковый type: «без тега» — пустая строка, не null.
+                  items: { type: 'string' },
                 },
               },
               required: ['block', 'headerRows', 'key', 'columns'],
@@ -147,7 +148,17 @@ const ARGS = {
           block: z.number().int().min(0),
           headerRows: z.number().int().min(0),
           key: z.string().min(1).max(200),
-          columns: z.array(z.string().min(1).max(200).nullable()).min(1).max(50),
+          // Пустая строка (и null от моделей, что его всё же шлют) — ячейка без тега.
+          columns: z
+            .array(
+              z
+                .string()
+                .max(200)
+                .nullable()
+                .transform((c) => (c === '' ? null : c)),
+            )
+            .min(1)
+            .max(50),
         }),
       )
       .max(10),

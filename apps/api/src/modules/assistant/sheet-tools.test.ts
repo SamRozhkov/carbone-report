@@ -2,7 +2,7 @@ import type { QueryProbe, SheetSnapshot } from '@carbone-reports/shared';
 import { describe, expect, it, vi } from 'vitest';
 import type { AppDeps } from '../../deps';
 import { buildSheetLayout } from './sheet-layout';
-import { createSheetTools } from './sheet-tools';
+import { createSheetTools, looksNumeric } from './sheet-tools';
 import { createPathChecker } from './tag-paths';
 import type { Inject } from './tools';
 
@@ -121,6 +121,7 @@ describe('createSheetTools', () => {
     for (const [name, args] of [
       ['get_sheet', {}],
       ['propose_sheet', sheet(simple)],
+      ['propose_sheet_replacements', { items: [], explanation: 'x' }],
     ] as const) {
       expect(errorText(await tools.run(name, args))).toContain(
         'spreadsheet is not open — ask the author to open the Document tab',
@@ -472,5 +473,482 @@ describe('createSheetTools', () => {
         ),
       ).toContain('unknown columns inn');
     });
+  });
+
+  describe('propose_sheet_replacements', () => {
+    const TOOL = 'propose_sheet_replacements';
+    const c = (ref: string, text: string) => ({ ref, text });
+    /** Заполненный реестр: шапка в 4-й строке, данные 5–7, итог 8. */
+    const filled: SheetSnapshot = {
+      name: 'Лист1',
+      cells: [
+        c('A1', 'Реестр заказов'),
+        c('A2', 'Период: 01.01.2026 — 31.01.2026'),
+        c('A4', 'Дата'),
+        c('B4', 'Сумма'),
+        c('C4', 'Клиент'),
+        c('A5', '01.01.2026'),
+        c('B5', '1 234,50'),
+        c('C5', 'ООО Ромашка'),
+        c('A6', '02.01.2026'),
+        c('B6', '765,50'),
+        c('C6', 'ООО Лютик'),
+        c('A7', '03.01.2026'),
+        c('B7', '1 000,00'),
+        c('C7', 'ООО Ромашка'),
+        c('A8', 'Итого'),
+        c('B8', '3 000,00'),
+        c('A9', 'Исполнитель: Иванов, тел. 11-11'),
+      ],
+      usedRange: 'A1:C9',
+      active: 'A1',
+      truncated: false,
+    };
+    const table = {
+      headerRow: 4,
+      firstDataRow: 5,
+      lastDataRow: 7,
+      key: 'orders',
+      columns: ['date', 'sum', 'name'],
+      totals: { row: 8, cells: [{ ref: 'B8', column: 'sum', agg: 'aggSum' }] },
+    };
+    const item = { ref: 'A2', find: '01.01.2026', tag: '{d.params.from}' };
+    const args = (extra: object) => ({ items: [], explanation: 'Шаблон', ...extra });
+    const run = (a: object, snap: SheetSnapshot = filled, probe?: QueryProbe) =>
+      setup(snap, probe).tools.run(TOOL, a);
+
+    it('простая таблица и замена — карточка sheetReplace (0-based), отпечаток, итог, сдвиг строк', async () => {
+      const r = await run(
+        args({
+          items: [{ ...item, ref: 'a2', note: 'начало периода' }],
+          table,
+        }),
+      );
+      expect(r).toEqual({
+        card: {
+          type: 'sheetReplace',
+          templateId: TID,
+          templateName: 'Реестр',
+          items: [
+            { ref: 'A2', find: '01.01.2026', tag: '{d.params.from}', note: 'начало периода' },
+          ],
+          table: {
+            key: 'orders',
+            grouped: false,
+            firstCol: 0,
+            headerRow: 3,
+            firstDataRow: 4,
+            lastDataRow: 6,
+            rowShift: -1,
+            fingerprint: {
+              header: ['Дата', 'Сумма', 'Клиент'],
+              columns: 3,
+              sample: ['01.01.2026', '1 234,50', 'ООО Ромашка'],
+            },
+            rows: [
+              {
+                styleFrom: 4,
+                cells: [
+                  '{d.orders[i].date:cellDate}',
+                  '{d.orders[i].sum:formatN(2)}',
+                  '{d.orders[i].name}',
+                ],
+              },
+              { styleFrom: 4, cells: ['{d.orders[i+1].date}', '', ''] },
+            ],
+            totals: { row: 7, cells: [{ col: 1, tag: '{d.orders[].sum:aggSum:formatN(2)}' }] },
+          },
+          explanation: 'Шаблон',
+        },
+        result: { ok: true },
+      });
+    });
+
+    it('отпечаток (F13): пустая ячейка внутри шапки — "", ширина от левой до правой непустой', async () => {
+      const snap: SheetSnapshot = {
+        ...filled,
+        cells: filled.cells.filter((x) => x.ref !== 'B4' && x.ref !== 'B5'),
+      };
+      const r = (await run(args({ table: { ...table, totals: undefined } }), snap)) as {
+        card: { table: { fingerprint: unknown; firstCol: number } };
+      };
+      expect(r.card.table.fingerprint).toEqual({
+        header: ['Дата', '', 'Клиент'],
+        columns: 3,
+        sample: ['01.01.2026', '', 'ООО Ромашка'],
+      });
+      expect(r.card.table.firstCol).toBe(0);
+    });
+
+    it("шапка в C5:F5 при usedRange 'C3:AB40' — firstCol 2, headerRow 4", async () => {
+      const snap: SheetSnapshot = {
+        name: 'Лист1',
+        cells: [
+          c('C3', 'Реестр'),
+          c('C5', 'Дата'),
+          c('D5', 'Сумма'),
+          c('E5', 'Клиент'),
+          c('F5', 'Примечание'),
+          c('C6', '01.01.2026'),
+          c('D6', '10,00'),
+          c('E6', 'ООО Ромашка'),
+          c('F6', 'срочно'),
+          c('AB40', 'конец'),
+        ],
+        usedRange: 'C3:AB40',
+        active: 'C3',
+        truncated: false,
+      };
+      const r = (await run(
+        args({
+          table: {
+            headerRow: 5,
+            firstDataRow: 6,
+            lastDataRow: 6,
+            key: 'orders',
+            columns: ['date', 'sum', 'name', ''],
+          },
+        }),
+        snap,
+      )) as unknown as { card: { table: Record<string, unknown> } };
+      expect(r.card.table).toMatchObject({
+        firstCol: 2,
+        headerRow: 4,
+        firstDataRow: 5,
+        lastDataRow: 5,
+        rowShift: 1,
+        fingerprint: {
+          header: ['Дата', 'Сумма', 'Клиент', 'Примечание'],
+          columns: 4,
+          sample: ['01.01.2026', '10,00', 'ООО Ромашка', 'срочно'],
+        },
+        rows: [
+          {
+            styleFrom: 5,
+            cells: [
+              '{d.orders[i].date:cellDate}',
+              '{d.orders[i].sum:formatN(2)}',
+              '{d.orders[i].name}',
+              null,
+            ],
+          },
+          { styleFrom: 5, cells: ['{d.orders[i+1].date}', '', '', ''] },
+        ],
+        totals: null,
+      });
+    });
+
+    it('только items — карточка с table: null; ничего — nothing to replace', async () => {
+      const r = (await run(args({ items: [item] }))) as { card: { table: unknown } };
+      expect(r.card.table).toBeNull();
+      expect(errorText(await run(args({})))).toContain('nothing to replace');
+      // Строгие модели шлют «пустые» объекты вместо отсутствующих.
+      expect(
+        errorText(await run(args({ table: { key: '', columns: [], headerRow: 0 } }))),
+      ).toContain('nothing to replace');
+    });
+
+    it('find не из текста ячейки, пустая ячейка, неверный адрес — ошибка', async () => {
+      expect(errorText(await run(args({ items: [{ ...item, find: '05.05.2026' }] })))).toContain(
+        'not found in cell A2',
+      );
+      expect(errorText(await run(args({ items: [{ ...item, ref: 'B2' }] })))).toContain('B2');
+      expect(errorText(await run(args({ items: [{ ...item, ref: 'A0' }] })))).toContain('A0');
+    });
+
+    it('весь отображаемый текст числовой ячейки — find принимается (Review Focus 1)', async () => {
+      const r = await run(
+        args({ items: [{ ref: 'B8', find: '3 000,00', tag: '{d.params.from}' }] }),
+      );
+      expect(r).toHaveProperty('card');
+    });
+
+    it('одна ячейка: разные непересекающиеся find — можно; тот же find дважды, пересечение, неоднозначный find — ошибка', async () => {
+      const two = [item, { ref: 'A2', find: '31.01.2026', tag: '{d.params.from}' }];
+      const r = (await run(args({ items: two }))) as { card: { items: unknown[] } };
+      expect(r.card.items).toHaveLength(2);
+      expect(
+        errorText(await run(args({ items: [item, { ...item, tag: '{d.params.from}' }] }))),
+      ).toContain('more than once');
+      expect(
+        errorText(
+          await run(
+            args({ items: [item, { ref: 'A2', find: '01.2026 —', tag: '{d.params.from}' }] }),
+          ),
+        ),
+      ).toContain('overlap');
+      expect(
+        errorText(await run(args({ items: [{ ref: 'A9', find: '11', tag: '{d.params.from}' }] }))),
+      ).toContain('2 times');
+    });
+
+    it('ref в строках данных таблицы (любая колонка) или в ячейке итога — ошибка', async () => {
+      for (const ref of ['B6', 'D5'])
+        expect(
+          errorText(
+            await run(args({ items: [{ ref, find: '765,50', tag: '{d.params.from}' }], table })),
+          ),
+          ref,
+        ).toContain('data rows');
+      expect(
+        errorText(
+          await run(
+            args({ items: [{ ref: 'B8', find: '3 000,00', tag: '{d.params.from}' }], table }),
+          ),
+        ),
+      ).toContain('totals cell');
+    });
+
+    it('tag: формула, не Carbone, неверный путь, без тега — ошибка', async () => {
+      expect(errorText(await run(args({ items: [{ ...item, tag: '=A1' }] })))).toContain(
+        'formulas are not allowed',
+      );
+      expect(errorText(await run(args({ items: [{ ...item, tag: '{{from}}' }] })))).toContain(
+        'not Carbone syntax',
+      );
+      expect(errorText(await run(args({ items: [{ ...item, tag: '{d.params.to}' }] })))).toContain(
+        'invalid tag paths',
+      );
+      expect(errorText(await run(args({ items: [{ ...item, tag: 'from' }] })))).toContain(
+        'Carbone tag',
+      );
+    });
+
+    it('columns длиной не по ширине шапки — ошибка с обеими длинами; ни одной колонки — ошибка', async () => {
+      const t = errorText(await run(args({ table: { ...table, columns: ['date', 'sum'] } })));
+      expect(t).toContain('3 cells');
+      expect(t).toContain('got 2');
+      expect(errorText(await run(args({ table: { ...table, columns: ['', '', ''] } })))).toContain(
+        'at least one column',
+      );
+      expect(
+        errorText(await run(args({ table: { ...table, columns: ['date', 'sum', 'inn'] } }))),
+      ).toContain('unknown columns inn');
+      expect(errorText(await run(args({ table: { ...table, key: 'company' } })))).toContain(
+        'not a list-mode query',
+      );
+    });
+
+    it('номера строк: порядок, пределы usedRange, пустая шапка — ошибка', async () => {
+      for (const bad of [
+        { headerRow: 5, firstDataRow: 5 },
+        { firstDataRow: 7, lastDataRow: 6 },
+        { lastDataRow: 12, totals: undefined },
+        { headerRow: 3, firstDataRow: 4 },
+      ])
+        expect(
+          errorText(await run(args({ table: { ...table, ...bad } }))),
+          JSON.stringify(bad),
+        ).toMatch(/headerRow|used range|empty/);
+    });
+
+    it('totals: текстовая колонка с aggSum — ошибка, с aggCount — formatN(0); строка, ширина, колонка', async () => {
+      const totals = (cells: object[], row = 8) => ({
+        table: { ...table, totals: { row, cells } },
+      });
+      expect(
+        errorText(await run(args(totals([{ ref: 'C8', column: 'name', agg: 'aggSum' }])))),
+      ).toContain('not a numeric column');
+      const r = (await run(args(totals([{ ref: 'C8', column: 'name', agg: 'aggCount' }])))) as {
+        card: { table: { totals: unknown } };
+      };
+      expect(r.card.table.totals).toEqual({
+        row: 7,
+        cells: [{ col: 2, tag: '{d.orders[].name:aggCount:formatN(0)}' }],
+      });
+      for (const [cells, row, text] of [
+        [[{ ref: 'B9', column: 'sum', agg: 'aggSum' }], 8, 'row 8'],
+        [[{ ref: 'D8', column: 'sum', agg: 'aggSum' }], 8, 'outside'],
+        [[{ ref: 'B8', column: 'inn', agg: 'aggSum' }], 8, 'inn'],
+        [[{ ref: 'B7', column: 'sum', agg: 'aggSum' }], 7, 'below'],
+        [
+          [
+            { ref: 'B8', column: 'sum', agg: 'aggSum' },
+            { ref: 'B8', column: 'sum', agg: 'aggMax' },
+          ],
+          8,
+          'more than once',
+        ],
+      ] as const)
+        expect(errorText(await run(args(totals([...cells], row)))), text).toContain(text);
+      expect(
+        errorText(await run(args(totals([{ ref: 'B8', column: 'sum', agg: 'aggMedian' }])))),
+      ).toContain('invalid arguments');
+      // Пустой список ячеек итога — итога нет.
+      const none = (await run(args(totals([], 0)))) as { card: { table: { totals: unknown } } };
+      expect(none.card.table.totals).toBeNull();
+    });
+
+    it('лимиты: items ≤ 100, columns ≤ 50', async () => {
+      const snap: SheetSnapshot = {
+        name: 'Лист1',
+        cells: Array.from({ length: 101 }, (_, i) => c(`A${i + 1}`, `v${i + 1}`)),
+        usedRange: 'A1:A101',
+        active: 'A1',
+        truncated: false,
+      };
+      const items = (n: number) =>
+        Array.from({ length: n }, (_, i) => ({
+          ref: `A${i + 1}`,
+          find: `v${i + 1}`,
+          tag: '{d.params.from}',
+        }));
+      expect(errorText(await run(args({ items: items(101) }), snap))).toContain(
+        'invalid arguments',
+      );
+      expect(await run(args({ items: items(100) }), snap)).toHaveProperty('card');
+      expect(
+        errorText(await run(args({ table: { ...table, columns: Array(51).fill('') } }))),
+      ).toContain('invalid arguments');
+    });
+
+    describe('grouped', () => {
+      /** Пример с подитогами: шапка 1, группа 2, строки 3–4, подитог 5, группа 6–8, итог 9. */
+      const gsnap: SheetSnapshot = {
+        name: 'Лист1',
+        cells: [
+          c('A1', 'Дата'),
+          c('B1', 'Сумма'),
+          c('C1', 'Примечание'),
+          c('A2', 'ООО Ромашка'),
+          c('A3', '01.01.2026'),
+          c('B3', '100,00'),
+          c('C3', 'срочно'),
+          c('A4', '02.01.2026'),
+          c('B4', '200,00'),
+          c('A5', 'Итого по группе'),
+          c('B5', '300,00'),
+          c('C5', '2'),
+          c('A6', 'ООО Лютик'),
+          c('A7', '03.01.2026'),
+          c('B7', '50,00'),
+          c('A8', 'Итого по группе'),
+          c('B8', '50,00'),
+          c('A9', 'Всего'),
+          c('B9', '350,00'),
+        ],
+        usedRange: 'A1:C9',
+        active: 'A1',
+        truncated: false,
+      };
+      const gtable = {
+        headerRow: 1,
+        firstDataRow: 2,
+        lastDataRow: 8,
+        key: 'groups',
+        columns: ['date', 'sum', ''],
+        totals: { row: 9, cells: [{ ref: 'B9', column: 'sum', agg: 'aggSum' }] },
+        grouped: {
+          groupRow: 2,
+          subtotalRow: 5,
+          group: ['contractor', '', ''],
+          rows: 'rows',
+          subtotal: ['sum'],
+        },
+      };
+      const grun = (t: object, probe?: QueryProbe) => run(args({ table: t }), gsnap, probe);
+
+      it('5 строк со styleFrom по правилу, подитог с агрегатором, числа примера в подитоге очищены (F15)', async () => {
+        const r = (await grun(gtable)) as { card: { table: unknown } };
+        expect(r.card.table).toEqual({
+          key: 'groups',
+          grouped: true,
+          firstCol: 0,
+          headerRow: 0,
+          firstDataRow: 1,
+          lastDataRow: 7,
+          rowShift: -2,
+          fingerprint: {
+            header: ['Дата', 'Сумма', 'Примечание'],
+            columns: 3,
+            sample: ['ООО Ромашка', '', ''],
+          },
+          rows: [
+            { styleFrom: 1, cells: ['{d.groups[i].contractor}', null, null] },
+            {
+              styleFrom: 2,
+              cells: [
+                '{d.groups[i].rows[i].date:cellDate}',
+                '{d.groups[i].rows[i].sum:formatN(2)}',
+                null,
+              ],
+            },
+            { styleFrom: 2, cells: ['{d.groups[i].rows[i+1].date}', '', ''] },
+            { styleFrom: 4, cells: [null, '{d.groups[i].rows[].sum:aggSum:formatN(2)}', ''] },
+            { styleFrom: 1, cells: ['{d.groups[i+1].contractor}', '', ''] },
+          ],
+          totals: { row: 8, cells: [{ col: 1, tag: '{d.groups[].rows[].sum:aggSum:formatN(2)}' }] },
+        });
+      });
+
+      it('grouped.columns (F7): равен table.columns — принят, иначе ошибка', async () => {
+        expect(
+          await grun({ ...gtable, grouped: { ...gtable.grouped, columns: ['date', 'sum', ''] } }),
+        ).toHaveProperty('card');
+        expect(
+          errorText(
+            await grun({ ...gtable, grouped: { ...gtable.grouped, columns: ['sum', 'date', ''] } }),
+          ),
+        ).toContain('grouped.columns');
+      });
+
+      it('subtotalRow === groupRow + 1, groupRow ≠ firstDataRow, subtotalRow ниже lastDataRow — ошибка', async () => {
+        for (const g of [{ subtotalRow: 3 }, { groupRow: 3 }, { subtotalRow: 9 }])
+          expect(
+            errorText(await grun({ ...gtable, grouped: { ...gtable.grouped, ...g } })),
+            JSON.stringify(g),
+          ).toMatch(/groupRow|subtotalRow/);
+      });
+
+      it('group: длина, пустая, колонка вложенных строк; subtotal не из колонок или текстовый — ошибка', async () => {
+        const g = (x: object) => grun({ ...gtable, grouped: { ...gtable.grouped, ...x } });
+        expect(errorText(await g({ group: ['contractor'] }))).toContain('got 1');
+        expect(errorText(await g({ group: ['', '', ''] }))).toContain('at least one group column');
+        expect(errorText(await g({ group: ['rows', '', ''] }))).toContain('nested rows');
+        expect(errorText(await g({ subtotal: ['inn'] }))).toContain('not one of the table columns');
+        expect(errorText(await g({ subtotal: ['date'] }))).toContain('not a numeric column');
+        expect(errorText(await g({ rows: '' }))).toContain('grouped.rows');
+      });
+
+      it('rows не вложенный массив при sampled: true — ошибка с json_agg; неизвестная вложенная колонка — ошибка', async () => {
+        const probe: QueryProbe = { ok: true, sampled: true, nested: [] };
+        expect(errorText(await grun(gtable, probe))).toContain('json_agg');
+        expect(
+          errorText(await grun({ ...gtable, columns: ['date', 'qty', ''], totals: undefined })),
+        ).toContain('unknown columns qty');
+      });
+
+      it('проба sampled: false — колонки не сверяются, subtotal/total — decimal', async () => {
+        const r = (await grun(gtable, { ok: true, sampled: false, nested: [] })) as {
+          card: { table: { rows: { cells: unknown[] }[] } };
+        };
+        expect(r.card.table.rows[1]!.cells).toEqual([
+          '{d.groups[i].rows[i].date}',
+          '{d.groups[i].rows[i].sum:formatN(2)}',
+          null,
+        ]);
+      });
+
+      it('строгие модели: пустой grouped (rows "", group []) — простая таблица', async () => {
+        const r = (await run(
+          args({
+            table: {
+              ...table,
+              grouped: { groupRow: 0, subtotalRow: 0, group: [], rows: '', subtotal: [] },
+            },
+          }),
+        )) as { card: { table: { grouped: boolean } } };
+        expect(r.card.table.grouped).toBe(false);
+      });
+    });
+  });
+});
+
+describe('looksNumeric (F15)', () => {
+  it('числа в отображаемом виде — да, подписи и даты с текстом — нет', () => {
+    for (const t of ['2', '1 234,50', '-12.5', '(3 000)', '15 %', '100 ₽', '1\u00a0000,00', '−7'])
+      expect(looksNumeric(t), t).toBe(true);
+    for (const t of ['', 'Итого по группе', 'ООО 1', '12a', ',', '1,', 'n/a'])
+      expect(looksNumeric(t), t).toBe(false);
   });
 });

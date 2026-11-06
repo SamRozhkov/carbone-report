@@ -83,7 +83,13 @@ describe('createDocumentTools', () => {
     ];
     // Все наборы на месте: этапы 3 и 4 тоже проверены.
     expect(specs.map((s) => s.function.name)).toEqual(
-      expect.arrayContaining(['propose_table', 'get_document', 'get_sheet', 'propose_sheet']),
+      expect.arrayContaining([
+        'propose_table',
+        'get_document',
+        'get_sheet',
+        'propose_sheet',
+        'propose_sheet_replacements',
+      ]),
     );
     const bad: string[] = [];
     const walk = (node: unknown, path: string) => {

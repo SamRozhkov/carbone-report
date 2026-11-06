@@ -150,7 +150,10 @@ export interface ReplaceTable {
   serviceRow: string[];
 }
 
-/** Замена значения на тег в листе: ref — ячейка 'A1', find — текущий текст. */
+/**
+ * Замена значения на тег в листе: ref — ячейка 'A1' снимка, find — текст ячейки или его часть,
+ * встречается в ней ровно один раз; несколько пунктов одной ячейки не пересекаются.
+ */
 export interface SheetReplaceItem {
   ref: string;
   find: string;
@@ -164,7 +167,14 @@ export interface SheetReplaceRow {
   cells: (string | null)[];
 }
 
-/** Таблица листа для замены (§53.3); все номера 0-based. */
+/**
+ * Таблица листа для замены (§53.3); все номера 0-based, в координатах снимка (до применения).
+ * Строки firstDataRow..lastDataRow (целиком, по всей ширине листа) заменяются строками rows;
+ * rowShift = rows.length − (lastDataRow − firstDataRow + 1) — сдвиг всех строк ниже lastDataRow
+ * (итог totals.row и адреса items) после применения таблицы. Таблица не применена (снята галочка,
+ * отпечаток не совпал) — адреса items используются как есть. totals.cells[].col — абсолютная
+ * колонка листа.
+ */
 export interface SheetReplaceTable {
   key: string;
   grouped: boolean;
@@ -172,6 +182,7 @@ export interface SheetReplaceTable {
   headerRow: number;
   firstDataRow: number;
   lastDataRow: number;
+  rowShift: number;
   fingerprint: { header: string[]; columns: number; sample: string[] };
   rows: SheetReplaceRow[];
   totals: { row: number; cells: { col: number; tag: string }[] } | null;

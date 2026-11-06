@@ -456,7 +456,7 @@ In the template editor the assistant helps the author: it writes and checks SQL 
 
 ### Forming in the document
 
-When OnlyOffice supports the Automation API, the assistant can make suggestions directly in the open template document (docx and odt only). The image and license are set in `.env`:
+When OnlyOffice supports the Automation API, the assistant can make suggestions directly in the open template document (docx and odt; xlsx and ods spreadsheets are in the subsection below). The image and license are set in `.env`:
 
 ```bash
 ONLYOFFICE_IMAGE=onlyoffice/documentserver-de:9.3.1.2
@@ -475,6 +475,27 @@ Three scenarios; every change happens on the author's button and is undone with 
 Tag paths the assistant suggests are now always checked against the template draft's queries and parameters.
 
 When forming is available, the model additionally receives the text of the open document (paragraphs and table cells, including headers and footers, up to 30,000 characters, no formatting or images). If a real filled report is open, its values (names, amounts, details) go to the model.
+
+### Forming in the sheet
+
+For spreadsheet templates (xlsx, ods) the assistant works under the same condition as for documents: OnlyOffice with the Automation API (a Developer or Enterprise license, server and browser checks — see above). Without it there are no forming buttons. The assistant reads and changes only the **active sheet** of the open workbook; multi-sheet templates, charts, pivot tables and Excel formulas are not supported. Every change happens on the author's button and is undone with Ctrl+Z.
+
+Three scenarios:
+
+- **Fragment or table at the active cell** — “Insert into sheet” on the “Fragment” and “Table” cards; if the cells to be overwritten are not empty, the assistant asks for confirmation.
+- **Sheet from a description** — a sheet card with the “Form sheet” button: a simple table (header, loop row) or a table with subtotals by group and a grand total. A non-empty sheet is replaced after confirmation. The assistant formats the sheet itself in one fixed neutral style: bold header with fill and borders, borders on data and total rows, bold total rows, number and date formats by query column types, column widths.
+- **Template from a filled sheet** — a replacements card with a “was → becomes” list and checkboxes; “Replace selected (N)” puts tags in place of values, collapses the example's data rows into a loop row and replaces totals with aggregators, keeping the example's formatting.
+
+Subtotals need a list query of groups with a nested array of rows, for example:
+
+```sql
+select contractor, json_agg(json_build_object('date', date, 'sum', sum) order by date) as rows
+from payments group by contractor
+```
+
+If there is no such query, the assistant first proposes it as a query card. Totals and subtotals are computed by Carbone (aggregators `aggSum`, `aggCount` and others with `partitionBy`), not by Excel formulas: in the finished report numbers stay numbers (`:formatN`) and dates stay Excel/Calc dates (`:cellDate`), so sorting, filters and summing work for the user. The server places the tags, not the model; the assistant does not write Excel formulas.
+
+Additionally the model receives the text of the cells in the used range of the active sheet (up to 5,000 cells and 30,000 characters, no formatting), including the values of a filled report if one is open. The trial row of the subtotals query is run on the server read-only, and its values do not go to the model.
 
 Switching from Community 9.4 to Developer 9.3 on existing `oo_*` volumes: if documents do not open, recreate the OnlyOffice volumes (`oo_*`); template files are stored in S3, the volumes hold only the document server's cache and state.
 

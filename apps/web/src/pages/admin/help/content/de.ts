@@ -230,6 +230,14 @@ export const HELP_SECTIONS: HelpSection[] = [
         note: 'Eine Uhrzeit ohne Versatz gilt als UTC und wird um 3 Stunden verschoben. Übergeben Sie Zeiten mit Versatz oder ein Datum ohne Uhrzeit.',
       },
       {
+        id: 'fmt-cell-date',
+        title: 'Datum in einer Excel-Zelle',
+        template: '{d.date:cellDate}',
+        data: j({ date: '2026-03-08' }),
+        result: '2026-03-08',
+        note: "In einer XLSX- oder ODS-Zelle, die nur dieses Tag enthält, macht `cellDate` die Zelle zu einem echten Datum: Sie lässt sich sortieren, filtern und in Formeln verwenden. Das Aussehen bestimmt das Zellenformat in der Vorlage — geben Sie der Zelle ein Datumsformat: Ohne es zeigen sowohl Excel als auch LibreOffice Calc eine Zahl (46089). Eine Uhrzeit im Wert bleibt erhalten, in der Zeitzone des Berichts. Im Dokumenttext und in einer Zelle mit weiterem Text wird das Datum als `YYYY-MM-DD` ausgegeben. Das Eingabeformat funktioniert wie bei `formatD`: `cellDate('DD.MM.YYYY')`. Ein leerer oder ungültiger Wert ergibt eine leere Zelle.",
+      },
+      {
         id: 'fmt-number',
         title: 'Zahl',
         template: '{d.n:formatN(2)}',

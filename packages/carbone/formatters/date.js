@@ -251,8 +251,105 @@ function formatI (d, patternOut, patternIn) {
   return _duration.as(patternOut || 'millisecond');
 }
 
+/**
+ * :cellDate (carbone-reports §54): разбор значения для даты в ячейке XLSX/ODS — как у formatD (parse, patternIn,
+ * часовой пояс отчёта). Дата без времени не сдвигается часовым поясом (это календарная дата, а не момент), дата
+ * со временем переводится в this.timezone.
+ *
+ * @private
+ * @param  {String|Number|Object} d          значение
+ * @param  {String}               patternIn  [optional] входной формат, по умолчанию ISO 8601
+ * @return {Object|null}  { y, M (1–12), D, h, m, s, ms, hasTime } или null — пустое или нераспознаваемое значение
+ */
+function cellDateParts (d, patternIn) {
+  if (d === null || d === undefined || d === '' || (typeof d === 'number' && isFinite(d) === false)) {
+    return null;
+  }
+  var _isDayjs = typeof d === 'object' && d.isValid instanceof Function;
+  // с входным форматом — строгий разбор: «31.02.2026» по 'DD.MM.YYYY' не переносится на март, а не распознаётся
+  // (formatD разбирает нестрого и не меняется)
+  var _parsed = (patternIn && _isDayjs === false) ? dayjs.utc(d, patternIn, true) : parse(d, patternIn);
+  if (_parsed.isValid() !== true) {
+    return null;
+  }
+  var _str = _isDayjs === true ? '' : String(d).trim();
+  if (_isDayjs === false && !patternIn) {
+    // dayjs переносит лишние месяцы и дни («2026-02-30» → 2 марта): такие даты считаются нераспознанными
+    var _ymd = /^[+-]?(\d{4})-?(\d{2})-?(\d{2})/.exec(_str);
+    if (_ymd !== null) {
+      var _month = parseInt(_ymd[2], 10);
+      var _day = parseInt(_ymd[3], 10);
+      if (_month < 1 || _month > 12 || _day < 1 || _day > new Date(Date.UTC(parseInt(_ymd[1], 10), _month, 0)).getUTCDate()) {
+        return null;
+      }
+    }
+  }
+  var _hasTime;
+  if (_isDayjs === true) {
+    var _u = _parsed.utc();
+    _hasTime = _u.hour() !== 0 || _u.minute() !== 0 || _u.second() !== 0 || _u.millisecond() !== 0;
+  }
+  else if (patternIn) {
+    // токены времени во входном формате (текст в [скобках] — литерал)
+    _hasTime = /[HhkmsSAaXxZ]/.test(String(patternIn).replace(/\[[^\]]*\]/g, ''));
+  }
+  else {
+    // только дата: YYYY, YYYY-MM, YYYY-MM-DD, YYYYMMDD (разделители «-» и «/», как у разбора dayjs)
+    _hasTime = /^\d{4}(?:[-/]?\d{1,2}(?:[-/]?\d{1,2})?)?$/.test(_str) === false;
+  }
+  var _local = _hasTime === true ? _parsed.tz(this.timezone) : _parsed.utc();
+  if (_local.isValid() !== true) {
+    return null;
+  }
+  return {
+    y       : _local.year(),
+    M       : _local.month() + 1,
+    D       : _local.date(),
+    h       : _local.hour(),
+    m       : _local.minute(),
+    s       : _local.second(),
+    ms      : _local.millisecond(),
+    hasTime : _hasTime
+  };
+}
+
+function pad (n, len) {
+  var _s = String(Math.abs(n));
+  while (_s.length < len) {
+    _s = '0' + _s;
+  }
+  return (n < 0 ? '-' : '') + _s;
+}
+
+/** YYYY-MM-DD из cellDateParts */
+function cellDateISODate (p) {
+  return pad(p.y, 4) + '-' + pad(p.M, 2) + '-' + pad(p.D, 2);
+}
+
+/**
+ * Дата в ячейке XLSX/ODS (своё расширение carbone-reports, §54). Метка `{d.x:cellDate}` — одна в ячейке листа,
+ * `cellDate` — последний форматтер: ячейка становится настоящей датой (XLSX — серийный номер Excel, вид задаёт
+ * числовой формат ячейки шаблона; ODS — `office:date-value`). В остальных местах (в том числе в ячейке с текстом или
+ * несколькими метками, в DOCX, ODT, PPTX) печатает дату строкой ISO `YYYY-MM-DD`. Значение разбирается как в
+ * formatD; пустое или нераспознаваемое — пустая строка.
+ *
+ * @exampleContext {"lang":"ru", "timezone":"Europe/Moscow"}
+ * @example ["2026-03-08"]
+ * @example ["2026-03-08T22:00:00Z"]
+ * @example ["08.03.2026", "DD.MM.YYYY"]
+ *
+ * @param  {String|Number} d          дата
+ * @param  {String}        patternIn  [optional] входной формат, по умолчанию ISO 8601
+ * @return {String}                   YYYY-MM-DD или ''
+ */
+function cellDate (d, patternIn) {
+  var _parts = cellDateParts.call(this, d, patternIn);
+  return _parts === null ? '' : cellDateISODate(_parts);
+}
+
 module.exports = {
   formatD,
+  cellDate,
   formatI,
   diffD,
   convDate,
@@ -261,3 +358,7 @@ module.exports = {
   startOfD,
   endOfD
 };
+
+// служебное для lib/celldate.js: неперечисляемые, чтобы addFormatters не сделал их форматтерами
+Object.defineProperty(module.exports, 'cellDateParts', { enumerable : false, value : cellDateParts });
+Object.defineProperty(module.exports, 'cellDateISODate', { enumerable : false, value : cellDateISODate });

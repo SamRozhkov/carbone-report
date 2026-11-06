@@ -754,7 +754,11 @@ describe('createSheetTools', () => {
       };
       expect(r.card.table.totals).toEqual({
         row: 7,
-        cells: [{ col: 2, tag: '{d.orders[].name:aggCount:formatN(0)}' }],
+        // B8 «3 000,00» не в totals.cells — число примера очищается.
+        cells: [
+          { col: 2, tag: '{d.orders[].name:aggCount:formatN(0)}' },
+          { col: 1, tag: '' },
+        ],
       });
       for (const [cells, row, text] of [
         [[{ ref: 'B9', column: 'sum', agg: 'aggSum' }], 8, 'row 8'],
@@ -800,6 +804,55 @@ describe('createSheetTools', () => {
       expect(
         errorText(await run(args({ table: { ...table, columns: Array(51).fill('') } }))),
       ).toContain('invalid arguments');
+    });
+
+    it('строка итога: числа примера вне totals.cells и не из items очищаются (tag ""), текст остаётся', async () => {
+      const snap: SheetSnapshot = { ...filled, cells: [...filled.cells, c('C8', '3')] };
+      const r = (await run(args({ table }), snap)) as {
+        card: { table: { totals: unknown } };
+      };
+      expect(r.card.table.totals).toEqual({
+        row: 7,
+        cells: [
+          { col: 1, tag: '{d.orders[].sum:aggSum:formatN(2)}' },
+          { col: 2, tag: '' },
+        ],
+      });
+      // Ячейку итога, занятую пунктом, не очищаем.
+      const withItem = (await run(
+        args({ table, items: [{ ref: 'C8', find: '3', tag: '{d.params.from}' }] }),
+        snap,
+      )) as { card: { table: { totals: { cells: unknown[] } } } };
+      expect(withItem.card.table.totals.cells).toEqual([
+        { col: 1, tag: '{d.orders[].sum:aggSum:formatN(2)}' },
+      ]);
+    });
+
+    it('строка [i]: колонка "" над числом или датой примера — "", над текстом — null (постоянный текст)', async () => {
+      const cells = async (columns: string[]) =>
+        (
+          (await run(args({ table: { ...table, columns, totals: undefined } }))) as {
+            card: { table: { rows: { cells: unknown[] }[] } };
+          }
+        ).card.table.rows[0]!.cells;
+      expect(await cells(['date', '', 'name'])).toEqual([
+        '{d.orders[i].date:cellDate}',
+        '',
+        '{d.orders[i].name}',
+      ]);
+      expect(await cells(['', 'sum', ''])).toEqual(['', '{d.orders[i].sum:formatN(2)}', null]);
+    });
+
+    it('totals.cells[].column обрезается, как columns', async () => {
+      const r = await run(
+        args({
+          table: {
+            ...table,
+            totals: { row: 8, cells: [{ ref: 'B8', column: ' sum ', agg: 'aggSum' }] },
+          },
+        }),
+      );
+      expect(r).toHaveProperty('card');
     });
 
     describe('grouped', () => {
@@ -879,6 +932,20 @@ describe('createSheetTools', () => {
           ],
           totals: { row: 8, cells: [{ col: 1, tag: '{d.groups[].rows[].sum:aggSum:formatN(2)}' }] },
         });
+      });
+
+      it('вложенная строка [i]: "" над числом примера — "", над текстом — null', async () => {
+        const r = (await grun({
+          ...gtable,
+          columns: ['date', '', ''],
+          totals: undefined,
+          grouped: { ...gtable.grouped, subtotal: [] },
+        })) as { card: { table: { rows: { cells: unknown[] }[] } } };
+        expect(r.card.table.rows[1]!.cells).toEqual([
+          '{d.groups[i].rows[i].date:cellDate}',
+          '',
+          null,
+        ]);
       });
 
       it('grouped.columns (F7): равен table.columns — принят, иначе ошибка', async () => {

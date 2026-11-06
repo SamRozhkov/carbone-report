@@ -155,7 +155,7 @@ const SPECS: ToolSpec[] = [
     function: {
       name: 'propose_sheet_replacements',
       description:
-        'Turn the filled-in active sheet (an example report with real values) into a template (a card; the author applies chosen items with a button). Row numbers and A1 addresses are as in get_sheet. items: a value in a cell outside the data rows (title, header fields, notes) → Carbone tag, replaced only in that cell. table: the data rows of the example collapse into one repeated row of a list-mode query (the server builds the [i] and [i+1] rows and keeps the formatting of the example); totals: Carbone aggregators in the totals row; grouped: groups with subtotals, the query returns one row per group with the group columns and a nested array of rows (json_agg). If groups are not recognised, describe the table as simple and say so in explanation.',
+        'Turn the filled-in active sheet (an example report with real values) into a template (a card; the author applies chosen items with a button). Row numbers and A1 addresses are as in get_sheet. items: a value in a cell outside the data rows (title, header fields, notes) → Carbone tag, replaced only in that cell. table: the data rows of the example collapse into one repeated row of a list-mode query (the server builds the [i] and [i+1] rows and keeps the formatting of the example); totals: Carbone aggregators in the totals row; grouped: groups with subtotals, the query returns one row per group with the group columns and a nested array of rows (json_agg). If groups are not recognised, describe the table as simple and say so in explanation. Data rows are rebuilt as whole sheet rows: content beside the table in those rows (outside the header width) is lost — if there is any, warn the author in explanation.',
       parameters: {
         type: 'object',
         properties: {
@@ -186,7 +186,7 @@ const SPECS: ToolSpec[] = [
               columns: {
                 type: 'array',
                 description:
-                  'Query column for every cell of the header row, from its leftmost to its rightmost non-empty cell; an empty string keeps the cell text without a tag. With grouped — columns of the nested rows',
+                  'Query column for every cell of the header row, from its leftmost to its rightmost non-empty cell; an empty string means no tag: only constant text of the example stays in that cell (numbers and dates of the example are cleared). With grouped — columns of the nested rows',
                 items: { type: 'string' },
               },
               totals: {
@@ -349,7 +349,13 @@ const ARGS = {
               .object({
                 row: RowNo,
                 cells: z
-                  .array(z.object({ ref: CellRef, column: ColumnName, agg: z.enum(SHEET_AGGS) }))
+                  .array(
+                    z.object({
+                      ref: CellRef,
+                      column: z.string().trim().min(1).max(200),
+                      agg: z.enum(SHEET_AGGS),
+                    }),
+                  )
                   .max(LIMITS.width),
               })
               .optional(),
@@ -459,6 +465,17 @@ export function looksNumeric(text: string): boolean {
     .replace(/\)$/, '');
   return /^\d[\d.,]*$/.test(t) && /\d$/.test(t);
 }
+
+/** Отображаемая дата (с временем или без): «01.01.2026», «2026-01-31 10:00». */
+export function looksDate(text: string): boolean {
+  return /^\d{1,4}[./-]\d{1,2}[./-]\d{1,4}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?$/.test(text.trim());
+}
+
+/**
+ * Ячейка повторяемой строки без тега: число или дата примера очищаются (''), иначе это
+ * постоянный текст, он остаётся (null).
+ */
+const keepConstant = (text: string) => (looksNumeric(text) || looksDate(text) ? '' : null);
 
 /** Непересекающиеся вхождения подстроки. */
 const occurrences = (text: string, find: string) => text.split(find).length - 1;
@@ -618,6 +635,7 @@ export function createSheetTools(
     snapshot: SheetSnapshot,
     textAt: (row: number, col: number) => string,
     t: ReplaceTableArgs,
+    itemRefs: Set<string>,
   ): Promise<SheetReplaceTable | { error: string }> {
     const fail = (error: string) => ({ error });
     const range = parseRange(snapshot.usedRange)!;
@@ -691,7 +709,12 @@ export function createSheetTools(
       kindOf = (col) => columnKind(types.find((y) => y.name === col)?.type ?? '');
       const tag = (col: string) => valueTag(`d.${t.key}[i].${col}`, kindOf(col));
       rows = [
-        { styleFrom: f, cells: t.columns.map((col) => (col ? tag(col) : null)) },
+        {
+          styleFrom: f,
+          cells: t.columns.map((col, i) =>
+            col ? tag(col) : keepConstant(textAt(f, firstCol + i)),
+          ),
+        },
         {
           styleFrom: f,
           cells: t.columns.map((_, i) => (i === first ? `{d.${t.key}[i+1].${named[0]}}` : '')),
@@ -752,13 +775,19 @@ export function createSheetTools(
       rows = [
         {
           styleFrom: gr,
-          cells: g.group.map((col) =>
-            col ? valueTag(`d.${t.key}[i].${col}`, groupKind(col)) : null,
+          cells: g.group.map((col, i) =>
+            col
+              ? valueTag(`d.${t.key}[i].${col}`, groupKind(col))
+              : keepConstant(textAt(gr, firstCol + i)),
           ),
         },
         {
           styleFrom: gr + 1,
-          cells: t.columns.map((col) => (col ? valueTag(nestedPath('i', col), kindOf(col)) : null)),
+          cells: t.columns.map((col, i) =>
+            col
+              ? valueTag(nestedPath('i', col), kindOf(col))
+              : keepConstant(textAt(gr + 1, firstCol + i)),
+          ),
         },
         {
           styleFrom: gr + 1,
@@ -796,6 +825,12 @@ export function createSheetTools(
         col: parseRef(x.ref)!.col,
         tag: aggTag(totalPath(x.column), x.agg, kindOf(x.column)),
       }));
+      // Прочие числа примера в строке итога (не агрегаторы и не пункты) очищаются: tag ''.
+      for (let col = firstCol; col <= lastCol; col++) {
+        const ref = toRef(tr, col);
+        if (totalCells.some((x) => x.col === col) || itemRefs.has(ref)) continue;
+        if (looksNumeric(textAt(tr, col))) totalCells.push({ col, tag: '' });
+      }
     }
     return {
       key: t.key,
@@ -827,7 +862,8 @@ export function createSheetTools(
     const c: DraftContext = { ...ctx, inject: memoInject(ctx.inject) };
     let table: SheetReplaceTable | null = null;
     if (a.table) {
-      const built = await replaceTable(c, snapshot, textAt, a.table);
+      const itemRefs = new Set(a.items.map((it) => it.ref));
+      const built = await replaceTable(c, snapshot, textAt, a.table, itemRefs);
       if ('error' in built) return fail(built.error);
       table = built;
     }

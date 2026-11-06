@@ -161,7 +161,11 @@ export interface SheetReplaceItem {
   note?: string;
 }
 
-/** Строка таблицы листа: styleFrom — 0-based строка-образец (оформление и текст); null — оставить текст образца. */
+/**
+ * Строка таблицы листа: styleFrom — 0-based строка-образец (оформление и текст); cells — по ширине
+ * таблицы: тег, '' — очистить, null — оставить текст образца (постоянный текст). Ячейки вне ширины
+ * таблицы в новой строке: оформление копируется из styleFrom, значения очищаются.
+ */
 export interface SheetReplaceRow {
   styleFrom: number;
   cells: (string | null)[];
@@ -172,8 +176,9 @@ export interface SheetReplaceRow {
  * Строки firstDataRow..lastDataRow (целиком, по всей ширине листа) заменяются строками rows;
  * rowShift = rows.length − (lastDataRow − firstDataRow + 1) — сдвиг всех строк ниже lastDataRow
  * (итог totals.row и адреса items) после применения таблицы. Таблица не применена (снята галочка,
- * отпечаток не совпал) — адреса items используются как есть. totals.cells[].col — абсолютная
- * колонка листа.
+ * отпечаток не совпал) — адреса items используются как есть. Содержимое рядом с таблицей в
+ * удалённых строках данных теряется (модель предупреждает автора в explanation).
+ * totals.cells[].col — абсолютная колонка листа; tag '' — очистить число примера в строке итога.
  */
 export interface SheetReplaceTable {
   key: string;

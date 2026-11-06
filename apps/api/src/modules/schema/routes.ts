@@ -1,11 +1,11 @@
-// Схема источника и проверка SQL для авторов шаблонов (§51.2).
+// Схема источника, проверка SQL и пробная строка для авторов шаблонов (§51.2, §53.2).
 import { CheckQueryBody, IdParams } from '@carbone-reports/shared';
 import { z } from 'zod';
 import type { App } from '../../app';
 import type { AppDeps } from '../../deps';
 import { notFound } from '../../lib/errors';
 import type { Guards } from '../auth/guards';
-import { checkQuery, withReadOnly } from '../queries/executor';
+import { checkQuery, probeQuery, withReadOnly } from '../queries/executor';
 import { loadTemplate } from '../templates/service';
 import { describeTable, listTables } from './introspect';
 
@@ -49,6 +49,16 @@ export function registerSchemaRoutes(app: App, deps: AppDeps, guards: Guards): v
     async (req) => {
       const { pool, name } = await source(req.params.id);
       return checkQuery(pool, name, req.body.sql, timeout, req.locale);
+    },
+  );
+
+  // Пробная строка: только форма вложенных массивов, без значений (§53.2).
+  app.post(
+    '/api/templates/:id/queries/probe',
+    { ...pre, schema: { params: IdParams, body: CheckQueryBody } },
+    async (req) => {
+      const { pool, name } = await source(req.params.id);
+      return probeQuery(pool, name, req.body.sql, timeout, req.locale);
     },
   );
 }

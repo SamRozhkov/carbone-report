@@ -81,6 +81,9 @@ export function DocumentTab({
   // React key на DocumentEditor ставить нельзя: перемонтирование ломает DocsAPI («removeChild»).
   // На этом поведении держится смена режима, поэтому версия @onlyoffice/document-editor-react закреплена точно
   // (2.2.0); обновлять — только с прогоном e2e editor-lock.
+  // Адаптер документа — только для текстовых шаблонов: сервер сообщает возможность и для таблиц
+  // (§53), но адаптера таблицы пока нет.
+  const textDocument = template.fileExt === 'docx' || template.fileExt === 'odt';
   const key = config.data?.document?.key;
   const stableId = `${mode}:${key}`;
   const stable = useRef<{
@@ -91,7 +94,11 @@ export function DocumentTab({
   if (config.data && stable.current.id !== stableId) {
     // documentAutomation — не часть конфига OnlyOffice: в редактор не передаём.
     const { documentAutomation, ...ooConfig } = config.data;
-    stable.current = { id: stableId, config: ooConfig, automation: documentAutomation === true };
+    stable.current = {
+      id: stableId,
+      config: ooConfig,
+      automation: documentAutomation === true && textDocument,
+    };
   }
   const stableConfig = stable.current.config;
   const automation = stable.current.automation;
@@ -127,8 +134,8 @@ export function DocumentTab({
   // документ снимается с моста, признак и отложенные действия карточек — тоже, иначе кнопки
   // остались бы, а их действия ждали бы регистрации вечно.
   const serverAutomation = config.data?.documentAutomation;
-  const automationRef = useRef(serverAutomation === true);
-  automationRef.current = serverAutomation === true;
+  const automationRef = useRef(serverAutomation === true && textDocument);
+  automationRef.current = serverAutomation === true && textDocument;
   useEffect(() => {
     if (serverAutomation !== false) return;
     dropDocument.current?.();

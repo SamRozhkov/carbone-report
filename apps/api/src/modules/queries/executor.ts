@@ -4,6 +4,9 @@ import {
   MAX_PARAM_OPTIONS,
   type ParamValue,
   type QueryCheck,
+  type QueryProbe,
+  type QueryProbeColumn,
+  type QueryProbeColumnType,
   type RunQueryResult,
   type SelectOptionValue,
   type TemplateParam,
@@ -378,46 +381,39 @@ function stripTrailingSemicolon(sql: string): string {
 }
 
 /**
- * Проверка SQL автора (§51.2): колонки и типы без строк. Все :параметры — null; запрос
- * оборачивается в select * from (…) q limit 0, ; в конце снимается, перенос строки перед )
- * закрывает комментарий -- в последней строке. Текст ошибки — на языке locale.
+ * Черновик SQL автора (§51.2, §53.2) в read-only транзакции: все :параметры — null; запрос
+ * оборачивается в select * from (…) q limit N, ; в конце снимается, перенос строки перед )
+ * закрывает комментарий -- в последней строке. Ошибки SQL и таймаут → {ok: false} на языке locale.
  */
-export async function checkQuery(
+async function runDraft<T>(
   pool: pg.Pool,
   sourceName: string,
   sql: string,
   timeoutMs: number,
   locale: Locale,
-): Promise<QueryCheck> {
+  limit: 0 | 1,
+  fn: (tx: Tx, r: pg.QueryResult<Row>, what: Msg) => Promise<T>,
+): Promise<T | { ok: false; error: string }> {
   // Проверка черновика: SQL ещё не запрос шаблона — без ключа в тексте ошибки.
   const what = text('sql.check');
   try {
     assertReadOnly(what, sql);
     const parsed = parseSqlParams(stripTrailingSemicolon(sql));
     return await withReadOnly(pool, sourceName, timeoutMs, async (tx) => {
-      let fields: { name: string; dataTypeID: number }[];
+      let r: pg.QueryResult<Row>;
       try {
-        const r = await tx.client.query({
-          text: `select * from (\n${parsed.text}\n) q limit 0`,
+        r = await tx.client.query({
+          text: `select * from (\n${parsed.text}\n) q limit ${limit}`,
           values: parsed.names.map(() => null),
           // Расширенный протокол и без параметров: сервер откажет в нескольких операторах в тексте.
           queryMode: 'extended',
         } as pg.QueryConfig);
-        fields = r.fields;
       } catch (e) {
         throw mapPgError(what, e);
       }
-      const oids = [...new Set(fields.map((f) => f.dataTypeID))];
-      const { rows } = await tx.client.query<{ oid: number; name: string }>(
-        'select oid::int as oid, pg_catalog.format_type(oid, null) as name from pg_catalog.pg_type where oid = any($1::oid[])',
-        [oids],
-      );
-      const names = new Map(rows.map((r) => [r.oid, r.name]));
+      const out = await fn(tx, r, what);
       await tx.guard(what);
-      return {
-        ok: true as const,
-        columns: fields.map((f) => ({ name: f.name, type: names.get(f.dataTypeID) ?? 'unknown' })),
-      };
+      return out;
     });
   } catch (e) {
     if (e instanceof SqlParamError)
@@ -426,4 +422,75 @@ export async function checkQuery(
       return { ok: false, error: e.textIn(locale) };
     throw e;
   }
+}
+
+/** Проверка SQL автора (§51.2): колонки и типы без строк (limit 0). */
+export function checkQuery(
+  pool: pg.Pool,
+  sourceName: string,
+  sql: string,
+  timeoutMs: number,
+  locale: Locale,
+): Promise<QueryCheck> {
+  return runDraft(pool, sourceName, sql, timeoutMs, locale, 0, async (tx, r) => {
+    const oids = [...new Set(r.fields.map((f) => f.dataTypeID))];
+    const { rows } = await tx.client.query<{ oid: number; name: string }>(
+      'select oid::int as oid, pg_catalog.format_type(oid, null) as name from pg_catalog.pg_type where oid = any($1::oid[])',
+      [oids],
+    );
+    const names = new Map(rows.map((x) => [x.oid, x.name]));
+    return {
+      ok: true as const,
+      columns: r.fields.map((f) => ({ name: f.name, type: names.get(f.dataTypeID) ?? 'unknown' })),
+    };
+  });
+}
+
+const PROBE_ITEMS = 50;
+const PROBE_KEYS = 50;
+
+function probeType(v: unknown): QueryProbeColumnType {
+  if (typeof v === 'number') return 'number';
+  if (typeof v === 'boolean') return 'boolean';
+  if (v instanceof Date || (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v))) return 'date';
+  return 'text';
+}
+
+/** Колонки вложенных строк по значению-массиву: объединение ключей, тип — по первому не-null. */
+function nestedColumns(items: unknown[]): QueryProbeColumn[] {
+  const types = new Map<string, QueryProbeColumnType | null>();
+  for (const item of items.slice(0, PROBE_ITEMS)) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    for (const [k, v] of Object.entries(item)) {
+      if (!types.has(k)) {
+        if (types.size >= PROBE_KEYS) continue;
+        types.set(k, null);
+      }
+      if (types.get(k) === null && v !== null && v !== undefined) types.set(k, probeType(v));
+    }
+  }
+  return [...types].map(([name, type]) => ({ name, type: type ?? 'text' }));
+}
+
+/**
+ * Пробная строка запроса (§53.2): limit 1 в той же read-only обёртке, что checkQuery.
+ * nested — колонки, чьё значение в строке — массив (в том числе пустой), с колонками его
+ * элементов-объектов. Значения строки наружу не выходят.
+ */
+export function probeQuery(
+  pool: pg.Pool,
+  sourceName: string,
+  sql: string,
+  timeoutMs: number,
+  locale: Locale,
+): Promise<QueryProbe> {
+  return runDraft(pool, sourceName, sql, timeoutMs, locale, 1, async (_tx, r) => {
+    const row = r.rows[0];
+    const nested = row
+      ? r.fields
+          .filter((f) => Array.isArray(row[f.name]))
+          .map((f) => ({ column: f.name, columns: nestedColumns(row[f.name] as unknown[]) }))
+      : [];
+    return { ok: true as const, sampled: row !== undefined, nested };
+  });
 }

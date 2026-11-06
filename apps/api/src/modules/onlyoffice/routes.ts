@@ -11,6 +11,8 @@ import { handleCallback } from './callback';
 import { buildEditorConfig } from './editor-config';
 import { verifyFileToken } from './jwt';
 
+const AUTOMATION_EXTS = new Set(['docx', 'odt', 'xlsx', 'ods']);
+
 export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards): void {
   app.get(
     '/api/templates/:id/editor-config',
@@ -28,9 +30,10 @@ export function registerOnlyOfficeRoutes(app: App, deps: AppDeps, guards: Guards
         lock?.holder === req.query.holder,
         req.locale,
       );
-      // Поле вне подписи: токен считается над конфигом без него. Только текстовые шаблоны (§52.2).
+      // Поле вне подписи: токен считается над конфигом без него. Текстовые и табличные шаблоны
+      // (§52.2, §53); презентации — нет.
       const documentAutomation =
-        (row.fileExt === 'docx' || row.fileExt === 'odt') && (await deps.documentAutomation());
+        AUTOMATION_EXTS.has(row.fileExt) && (await deps.documentAutomation());
       return { ...config, documentAutomation };
     },
   );

@@ -165,7 +165,7 @@ describe('editor-config', () => {
     expect(forbidden.statusCode).toBe(403);
   });
 
-  it('documentAutomation: docx и возможность → true, токен без поля; xlsx или нет возможности → false (§52.2)', async () => {
+  it('documentAutomation: docx/xlsx/ods и возможность → true, токен без поля; pptx или нет возможности → false (§52.2, §53)', async () => {
     const get = async () =>
       (
         await t.app.inject({
@@ -185,7 +185,11 @@ describe('editor-config', () => {
       expect((await get()).documentAutomation).toBe(false);
 
       t.deps.documentAutomation = async () => true;
-      await t.deps.db.update(templates).set({ fileExt: 'xlsx' }).where(eq(templates.id, tplId));
+      for (const ext of ['xlsx', 'ods'] as const) {
+        await t.deps.db.update(templates).set({ fileExt: ext }).where(eq(templates.id, tplId));
+        expect((await get()).documentAutomation).toBe(true);
+      }
+      await t.deps.db.update(templates).set({ fileExt: 'pptx' }).where(eq(templates.id, tplId));
       expect((await get()).documentAutomation).toBe(false);
     } finally {
       t.deps.documentAutomation = orig;

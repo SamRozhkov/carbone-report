@@ -147,6 +147,36 @@ describe('схема источника и проверка SQL', () => {
     expect(write.ok).toBe(false);
   });
 
+  it('пробная строка: вложенные массивы и типы их колонок без значений (§53.2)', async () => {
+    const probe = (sql: string, cookie = editor) =>
+      post(`/api/templates/${tpl}/queries/probe`, { sql }, cookie);
+    const ok = await probe(
+      "select 'A' as c, json_agg(json_build_object('date', d, 'sum', s)) as rows from (values ('2026-01-05'::date, 1.5::numeric)) v(d, s)",
+    );
+    expect(ok.json()).toEqual({
+      ok: true,
+      sampled: true,
+      nested: [
+        {
+          column: 'rows',
+          columns: [
+            { name: 'date', type: 'date' },
+            { name: 'sum', type: 'number' },
+          ],
+        },
+      ],
+    });
+    expect(JSON.stringify(ok.json())).not.toContain('1.5');
+    expect(JSON.stringify(ok.json())).not.toContain('A');
+    expect((await probe('select id from company where false')).json()).toEqual({
+      ok: true,
+      sampled: false,
+      nested: [],
+    });
+    expect((await probe('delete from company')).json().ok).toBe(false);
+    expect((await probe('select 1', plainUser)).statusCode).toBe(403);
+  });
+
   it('права: пользователь без права правки — 403; без входа — 401', async () => {
     expect((await get(`/api/templates/${tpl}/schema/tables`, plainUser)).statusCode).toBe(403);
     expect(

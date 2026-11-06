@@ -97,3 +97,99 @@ describe('createPathChecker', () => {
     expect(await failed.check('{d.orders.anything}')).toContain('d.orders[i]');
   });
 });
+
+describe('createPathChecker: вложенные строки (§53.2)', () => {
+  const PROBE = `/api/templates/${TID}/queries/probe`;
+  const groupsSql = 'select contractor, json_agg(json_build_object(...)) as rows from x group by 1';
+  const groupsDraft = {
+    queries: [{ key: 'groups', mode: 'list' as const, sql: groupsSql }],
+    params: [],
+  };
+  const nestedSetup = (probe: unknown) => {
+    const inject = vi.fn<Inject>(async (_m, url) => {
+      if (url === CHECK)
+        return {
+          status: 200,
+          body: {
+            ok: true,
+            columns: [
+              { name: 'contractor', type: 'text' },
+              { name: 'total', type: 'numeric' },
+              { name: 'rows', type: 'json' },
+            ],
+          },
+        };
+      if (url === PROBE) return { status: 200, body: probe };
+      return { status: 404, body: {} };
+    });
+    return {
+      inject,
+      check: createPathChecker({ inject, templateId: TID, draft: groupsDraft }),
+    };
+  };
+  const sampled = {
+    ok: true,
+    sampled: true,
+    nested: [
+      {
+        column: 'rows',
+        columns: [
+          { name: 'date', type: 'date' },
+          { name: 'sum', type: 'number' },
+        ],
+      },
+    ],
+  };
+
+  it('верные вложенные пути, подитог и конец вложенной строки — null; проба одна', async () => {
+    const { check, inject } = nestedSetup(sampled);
+    expect(
+      await check(
+        '{d.groups[i].contractor} {d.groups[i].rows[i].sum} {d.groups[i].rows[i].date:cellDate} {d.groups[i].rows[i+1]} {d.groups[i].rows[].sum:aggSum} {d.groups[].rows[].sum:aggSum}',
+      ),
+    ).toBeNull();
+    expect(inject.mock.calls.filter((c) => c[1] === PROBE)).toHaveLength(1);
+    expect(inject.mock.calls.filter((c) => c[1] === CHECK)).toHaveLength(1);
+  });
+
+  it('неизвестная вложенная колонка — ошибка с её именем', async () => {
+    const e = await nestedSetup(sampled).check('{d.groups[i].rows[i].nope}');
+    expect(e).toContain('nope');
+    expect(e).toContain('{d.groups[i].rows[i].nope}');
+  });
+
+  it('колонка не вложенный массив при sampled — ошибка с json_agg', async () => {
+    const e = await nestedSetup(sampled).check('{d.groups[i].total[i].sum}');
+    expect(e).toContain('json_agg');
+    expect(e).toContain('"total" of "groups"');
+  });
+
+  it('колонка вложенного пути проверяется по queries/check', async () => {
+    const e = await nestedSetup(sampled).check('{d.groups[i].lines[i].sum}');
+    expect(e).toContain('unknown column "lines" of "groups"');
+  });
+
+  it('sampled: false, проба ok: false или columns: [] — вложенная колонка принята', async () => {
+    expect(
+      await nestedSetup({ ok: true, sampled: false, nested: [] }).check(
+        '{d.groups[i].rows[i].anything} {d.groups[i].total[i].x}',
+      ),
+    ).toBeNull();
+    expect(
+      await nestedSetup({ ok: false, error: 'timeout' }).check('{d.groups[i].rows[i].anything}'),
+    ).toBeNull();
+    expect(
+      await nestedSetup({
+        ok: true,
+        sampled: true,
+        nested: [{ column: 'rows', columns: [] }],
+      }).check('{d.groups[i].rows[i].anything}'),
+    ).toBeNull();
+  });
+
+  it('текст без вложенных сегментов не вызывает queries/probe', async () => {
+    const { check, inject } = nestedSetup(sampled);
+    expect(await check('{d.groups[i].contractor} {d.groups[i+1].contractor}')).toBeNull();
+    expect(inject.mock.calls.some((c) => c[1] === PROBE)).toBe(false);
+  });
+});

@@ -707,11 +707,11 @@ describe('DocumentTab: документ в мосте ассистента (§52
     bridge = useAssistantBridge();
     return null;
   }
-  const render = () =>
+  const render = (template = t) =>
     renderWithProviders(
       <AssistantBridgeProvider>
         <Probe />
-        <DocumentTab {...base} />
+        <DocumentTab {...base} template={template} />
       </AssistantBridgeProvider>,
     );
   beforeEach(() => {
@@ -732,6 +732,22 @@ describe('DocumentTab: документ в мосте ассистента (§52
     await waitFor(() =>
       expect(screen.getByTestId('oo')).toHaveAttribute('data-built-mode', 'edit'),
     );
+    expect(createConnector).not.toHaveBeenCalled();
+    expect(bridge!.document).toBeNull();
+  });
+
+  it('xlsx и documentAutomation: true — адаптер документа не регистрируется (§53)', async () => {
+    const createConnector = vi.fn(connector);
+    win.DocEditor = { instances: { 'cr-doc-editor': { createConnector } } };
+    mockApi([
+      ...lock,
+      { path: '/api/templates/t1/editor-config', body: { ...config, documentAutomation: true } },
+    ]);
+    render({ ...t, fileExt: 'xlsx' });
+    await waitFor(() =>
+      expect(screen.getByTestId('oo')).toHaveAttribute('data-built-mode', 'edit'),
+    );
+    await sleep(50);
     expect(createConnector).not.toHaveBeenCalled();
     expect(bridge!.document).toBeNull();
   });

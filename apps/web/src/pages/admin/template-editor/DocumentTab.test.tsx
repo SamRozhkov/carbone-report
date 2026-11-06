@@ -1,10 +1,11 @@
 import type { TemplateAdminDetails } from '@carbone-reports/shared';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useEffect, useRef, useState, type ComponentProps } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { adminTemplate } from '../../../test/fixtures';
 import {
+  AssistantBridgeContext,
   AssistantBridgeProvider,
   useAssistantBridge,
   type AssistantBridge,
@@ -799,6 +800,7 @@ describe('DocumentTab: документ в мосте ассистента (§52
     expect(bridge!.sheet).toBeNull();
     expect(bridge!.document).toBeNull();
     expect(bridge!.documentAutomation).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByText(/not available/)).toBeNull();
   });
 
@@ -916,7 +918,37 @@ describe('DocumentTab: документ в мосте ассистента (§52
     render();
     await waitFor(() => expect(createConnector).toHaveBeenCalled());
     expect(bridge!.document).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByText(/not available/)).toBeNull();
-    expect(screen.queryByText(/not available/)).toBeNull();
+  });
+
+  it('docx: мост без registerSheet — документ всё равно регистрируется', async () => {
+    win.DocEditor = { instances: { 'cr-doc-editor': { createConnector: vi.fn(connector) } } };
+    mockApi([
+      ...lock,
+      { path: '/api/templates/t1/editor-config', body: { ...config, documentAutomation: true } },
+    ]);
+    // Мост без метода листа: вкладка проверяет только метод регистрации своего вида.
+    function WithoutSheet({ children }: { children: ReactNode }) {
+      const b = useAssistantBridge();
+      const stripped = useMemo(
+        () => ({ ...b, registerSheet: undefined }) as unknown as AssistantBridge,
+        [b],
+      );
+      return (
+        <AssistantBridgeContext.Provider value={stripped}>
+          {children}
+        </AssistantBridgeContext.Provider>
+      );
+    }
+    renderWithProviders(
+      <AssistantBridgeProvider>
+        <Probe />
+        <WithoutSheet>
+          <DocumentTab {...base} template={{ ...t, fileExt: 'docx' }} />
+        </WithoutSheet>
+      </AssistantBridgeProvider>,
+    );
+    await waitFor(() => expect(bridge!.document?.templateId).toBe('t1'));
   });
 });

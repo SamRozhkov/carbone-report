@@ -146,7 +146,9 @@ export function DocumentTab({
   }, [serverAutomation, revokeDocument, template.id]);
   const onDocumentReady = () => {
     // Редактор построен по устаревшему конфигу — его пересоберут, connector к нему не нужен.
-    if (!automation || !automationRef.current || !registerDocument || !registerSheet) return;
+    // Нужен только метод регистрации своего вида (лист или документ).
+    const canRegister = forming === 'sheet' ? !!registerSheet : !!registerDocument;
+    if (!automation || !automationRef.current || !canRegister) return;
     if (stableId !== currentId.current) return;
     releaseDocument();
     const revoke = () => revokeDocument?.(template.id);
@@ -164,11 +166,11 @@ export function DocumentTab({
       if (forming === 'sheet') {
         const sheet = createSheetAdapter(connector);
         adapter = sheet;
-        off = registerSheet({ templateId: template.id, adapter: sheet, editable });
+        off = registerSheet!({ templateId: template.id, adapter: sheet, editable });
       } else {
         const doc = createDocumentAdapter(connector);
         adapter = doc;
-        off = registerDocument({ templateId: template.id, adapter: doc, editable });
+        off = registerDocument!({ templateId: template.id, adapter: doc, editable });
       }
       dropDocument.current = () => {
         off();

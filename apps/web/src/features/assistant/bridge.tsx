@@ -130,7 +130,9 @@ export interface AssistantBridge {
 export type DocumentRun<T> = (a: DocumentAdapter, editable: () => boolean) => Promise<T>;
 export type SheetRun<T> = (a: SheetAdapter, editable: () => boolean) => Promise<T>;
 
-/** Отложенный run формирования: запускается регистрацией своего вида (документ или лист). */
+/** Отложенный run формирования: запускается регистрацией своего вида (документ или лист).
+ *  Очередь общая для обоих видов: несмотря на имена (PendingDocument, takeDocuments,
+ *  dropDocuments, revokeDocument), всё это относится и к листам (§53.4). */
 type PendingDocument =
   | { kind: 'document'; templateId: string; run: DocumentRun<unknown>; dropped?: () => void }
   | { kind: 'sheet'; templateId: string; run: SheetRun<unknown>; dropped?: () => void };
@@ -170,6 +172,8 @@ export function limitDraft(d: EditorDraft): EditorDraft {
 }
 
 const Ctx = createContext<AssistantBridge | null>(null);
+/** Контекст моста — для тестов, подменяющих отдельные методы. */
+export const AssistantBridgeContext = Ctx;
 
 export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
   // editor и документ — в состоянии: панель включает кнопки «Применить», только пока редактор открыт.

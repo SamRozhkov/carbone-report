@@ -13,6 +13,7 @@ var media = require('./media');
 var html = require('./html');
 var links = require('./links');
 var charts = require('./charts');
+var celldate = require('./celldate');
 var dayjs = require('dayjs');
 var locales = require('../formatters/_locale');
 
@@ -356,6 +357,11 @@ Object.defineProperty(input.formatters, '__img', { enumerable : false, configura
 // __htmlUrl (defaultURL в метке с :html) неперечисляемый — как __img
 carbone.addFormatters({ html : html.formatters.html });
 Object.defineProperty(input.formatters, '__htmlUrl', { enumerable : false, configurable : true, writable : true, value : html.formatters.__htmlUrl });
+// :cellDate (§54): cellDate — в formatters/date.js; служебные __cellDateSerial/__cellDateIso (ячейки-даты XLSX/ODS)
+// неперечисляемые, как __img (lib/celldate.js)
+Object.keys(celldate.formatters).forEach(function (name) {
+  Object.defineProperty(input.formatters, name, { enumerable : false, configurable : true, writable : true, value : celldate.formatters[name] });
+});
 // ссылки (2.4.0): defaultURL — для шаблонов; служебный __url неперечисляемый, как __img (lib/links.js)
 carbone.addFormatters({ defaultURL : links.formatters.defaultURL });
 Object.defineProperty(input.formatters, '__url', { enumerable : false, configurable : true, writable : true, value : links.formatters.__url });

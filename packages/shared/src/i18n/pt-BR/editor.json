@@ -96,6 +96,7 @@
     "hideEnd": "Ocultar bloco: fim",
     "dateDigits": "Data como DD.MM.YYYY",
     "number": "Número",
+    "cellDate": "Data em uma célula do Excel",
     "money": "Valor com moeda",
     "loopRow": "Linha do loop",
     "loopEnd": "Próxima linha — fim do loop",

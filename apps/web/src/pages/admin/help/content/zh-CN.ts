@@ -229,6 +229,14 @@ export const HELP_SECTIONS: HelpSection[] = [
         note: '不带偏移量的时间被视为 UTC，并平移 3 小时。请传入带偏移量的时间，或不带时间的日期。',
       },
       {
+        id: 'fmt-cell-date',
+        title: 'Excel 单元格中的日期',
+        template: '{d.date:cellDate}',
+        data: j({ date: '2026-03-08' }),
+        result: '2026-03-08',
+        note: "在 XLSX 或 ODS 单元格中，如果此标签是唯一内容，`cellDate` 会把单元格变成真正的日期：可以排序、筛选并用于公式。日期的显示方式由模板中单元格的格式决定——请为单元格设置日期格式，否则 Excel 和 LibreOffice Calc 都会显示数字（46089）。值中的时间会保留，按报表时区计算。在文档正文中以及含有其他文本的单元格中，日期输出为 `YYYY-MM-DD`。输入格式与 `formatD` 相同：`cellDate('DD.MM.YYYY')`。空值或无效值得到空单元格。",
+      },
+      {
         id: 'fmt-number',
         title: '数字',
         template: '{d.n:formatN(2)}',

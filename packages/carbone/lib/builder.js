@@ -9,6 +9,7 @@ var color = require('./color');
 var media = require('./media');
 var html = require('./html');
 var links = require('./links');
+var celldate = require('./celldate');
 
 var builder = {
 
@@ -81,7 +82,9 @@ var builder = {
               }
               // адреса динамических ссылок проверяются после сборки файла (lib/links.js)
               var _hasLinks = links.prepare(xmlWithoutMarkers, _markers);
-              var _done = _dropRegistry === null && _colorRegistry === null && _hasLinks === false ? callback : function (err, result) {
+              // :cellDate в ячейках XLSX/ODS: пустые даты — ячейки без значения после сборки (lib/celldate.js)
+              var _hasCellDates = celldate.hasMarkers(_markers);
+              var _done = _dropRegistry === null && _colorRegistry === null && _hasLinks === false && _hasCellDates === false ? callback : function (err, result) {
                 if (err) {
                   return callback(err, result);
                 }
@@ -91,6 +94,7 @@ var builder = {
                   _out = color.apply(result, _colorRegistry, options.extension);
                   _out = drop.apply(_out, _dropRegistry, options.extension);
                   _out = links.apply(_out);
+                  _out = celldate.apply(_out);
                 }
                 catch (e) {
                   return callback(e, null);

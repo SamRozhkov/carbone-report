@@ -14,6 +14,7 @@ const draft = {
     { key: 'orders', mode: 'list' as const, sql: 'select date, sum, name from orders' },
     { key: 'groups', mode: 'list' as const, sql: 'select contractor, rows from g' },
     { key: 'company', mode: 'single' as const, sql: 'select name from company' },
+    { key: 'totals', mode: 'single' as const, sql: 'select total, cnt, paid_on, info from totals' },
   ],
   params: [
     {
@@ -39,6 +40,12 @@ const checks: Record<string, [string, string][]> = {
     ['rows', 'json'],
   ],
   'select name from company': [['name', 'text']],
+  'select total, cnt, paid_on, info from totals': [
+    ['total', 'numeric'],
+    ['cnt', 'bigint'],
+    ['paid_on', 'date'],
+    ['info', 'json'],
+  ],
 };
 const sampledProbe: QueryProbe = {
   ok: true,
@@ -663,6 +670,33 @@ describe('createSheetTools', () => {
       expect(r).toHaveProperty('card');
     });
 
+    it('тег один во всей ячейке без форматтера — форматтер по типу колонки; иначе как есть (final #1)', async () => {
+      const tagOf = async (it: { ref: string; find: string; tag: string }) => {
+        const r = (await run(args({ items: [it] }))) as { card: { items: { tag: string }[] } };
+        return r.card.items[0]!.tag;
+      };
+      // Вся ячейка: число, целое, дата — форматтер типа последним.
+      expect(await tagOf({ ref: 'B8', find: '3 000,00', tag: '{d.totals.total}' })).toBe(
+        '{d.totals.total:formatN(2)}',
+      );
+      expect(await tagOf({ ref: 'B8', find: '3 000,00', tag: ' { d.totals.cnt } ' })).toBe(
+        '{d.totals.cnt:formatN(0)}',
+      );
+      expect(await tagOf({ ref: 'A5', find: '01.01.2026', tag: '{d.totals.paid_on}' })).toBe(
+        '{d.totals.paid_on:cellDate}',
+      );
+      // Форматтер модели, часть ячейки, текст, неизвестный тип, параметр — без изменений.
+      for (const it of [
+        { ref: 'B8', find: '3 000,00', tag: '{d.totals.total:formatN(0)}' },
+        { ref: 'A2', find: '01.01.2026', tag: '{d.totals.paid_on}' },
+        { ref: 'A1', find: 'Реестр заказов', tag: '{d.company.name}' },
+        { ref: 'B8', find: '3 000,00', tag: '{d.totals.info}' },
+        { ref: 'A5', find: '01.01.2026', tag: '{d.params.from}' },
+        { ref: 'B8', find: '3 000,00', tag: '{d.totals.total} ₽' },
+      ])
+        expect(await tagOf(it), it.tag).toBe(it.tag);
+    });
+
     it('одна ячейка: разные непересекающиеся find — можно; тот же find дважды, пересечение, неоднозначный find — ошибка', async () => {
       const two = [item, { ref: 'A2', find: '31.01.2026', tag: '{d.params.from}' }];
       const r = (await run(args({ items: two }))) as { card: { items: unknown[] } };
@@ -985,15 +1019,63 @@ describe('createSheetTools', () => {
         ).toContain('unknown columns qty');
       });
 
-      it('проба sampled: false — колонки не сверяются, subtotal/total — decimal', async () => {
+      it('проба sampled: false — колонки не сверяются, subtotal/total — decimal, дата — по примеру', async () => {
         const r = (await grun(gtable, { ok: true, sampled: false, nested: [] })) as {
           card: { table: { rows: { cells: unknown[] }[] } };
         };
         expect(r.card.table.rows[1]!.cells).toEqual([
-          '{d.groups[i].rows[i].date}',
+          '{d.groups[i].rows[i].date:cellDate}',
           '{d.groups[i].rows[i].sum:formatN(2)}',
           null,
         ]);
+      });
+
+      it('проба без строк — типы вложенных колонок по строке примера: дата, дробное, целое, текст (final #3)', async () => {
+        const snap: SheetSnapshot = {
+          ...gsnap,
+          cells: [
+            ...gsnap.cells.filter((x) => x.ref !== 'C1' && x.ref !== 'C3'),
+            c('C1', 'Кол-во'),
+            c('C3', '5'),
+            c('D1', 'Примечание'),
+            c('D3', 'срочно'),
+          ],
+          usedRange: 'A1:D9',
+        };
+        const t = {
+          ...gtable,
+          columns: ['date', 'sum', 'qty', 'note'],
+          totals: undefined,
+          grouped: { ...gtable.grouped, group: ['contractor', '', '', ''], subtotal: [] },
+        };
+        const r = (await run(args({ table: t }), snap, {
+          ok: true,
+          sampled: false,
+          nested: [],
+        })) as { card: { table: { rows: { cells: unknown[] }[] } } };
+        expect(r.card.table.rows[1]!.cells).toEqual([
+          '{d.groups[i].rows[i].date:cellDate}',
+          '{d.groups[i].rows[i].sum:formatN(2)}',
+          '{d.groups[i].rows[i].qty:formatN(0)}',
+          '{d.groups[i].rows[i].note}',
+        ]);
+        // Строки пробы есть — тип пробы, не примера.
+        const probed = (await run(args({ table: t }), snap, {
+          ok: true,
+          sampled: true,
+          nested: [
+            {
+              column: 'rows',
+              columns: [
+                { name: 'date', type: 'text' },
+                { name: 'sum', type: 'number' },
+                { name: 'qty', type: 'number' },
+                { name: 'note', type: 'text' },
+              ],
+            },
+          ],
+        })) as { card: { table: { rows: { cells: unknown[] }[] } } };
+        expect(probed.card.table.rows[1]!.cells[0]).toBe('{d.groups[i].rows[i].date}');
       });
 
       it('строгие модели: пустой grouped (rows "", group []) — простая таблица', async () => {

@@ -241,6 +241,11 @@ describe('systemPrompt', () => {
       'json_agg(json_build_object(',
       'propose_query',
       'Excel formulas',
+      // Тег один в ячейке — форматтер типа, без formatC/formatD (final #1).
+      'A tag alone in a cell ends with :formatN(0)',
+      'never formatC or formatD in a sheet',
+      // Типы вложенных колонок для пустой пробы (final #4).
+      'type of every nested column',
     ])
       expect(on, s).toContain(s);
     expect(on).not.toContain('get_document');

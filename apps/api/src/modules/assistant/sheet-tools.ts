@@ -53,6 +53,11 @@ const SHEET_AGGS = [
   'aggMin',
   'aggMax',
 ] as const satisfies readonly SheetAgg[];
+/** Путь тега без форматтеров: d.<ключ>[индекс].<колонка>[индекс2].<вложенная колонка>. */
+const SEG = String.raw`[^.[\]:\s,()'"|{}]+`;
+const DATA_PATH = new RegExp(
+  String.raw`^d\.(${SEG})(?:\[([^\]]*)\])?\.(${SEG})(?:\[([^\]]*)\]\.(${SEG}))?$`,
+);
 /** Предел номера строки листа (Excel). */
 const MAX_ROW = 1_048_576;
 
@@ -472,6 +477,16 @@ export function looksDate(text: string): boolean {
 }
 
 /**
+ * Тип значения по отображаемому тексту примера (final #3): дата, целое (без разделителя дробной
+ * части), дробное; прочее — неизвестно (undefined, тип по умолчанию).
+ */
+export function exampleType(text: string): SheetDeclaredType | undefined {
+  if (looksDate(text)) return 'date';
+  if (looksNumeric(text)) return /[.,]/.test(text) ? 'decimal' : 'int';
+  return undefined;
+}
+
+/**
  * Ячейка повторяемой строки без тега: число или дата примера очищаются (''), иначе это
  * постоянный текст, он остаётся (null).
  */
@@ -755,12 +770,21 @@ export function createSheetTools(
       const { known } = nested;
       const subtotal = uniq(g.subtotal);
       const types = (await queryColumns(c, t.key)) ?? [];
-      kindOf = (col) =>
-        nestedColumnKind({
+      // Проба без строк: тип вложенной колонки — по ячейке первой вложенной строки примера.
+      const example = (col: string) =>
+        exampleType(textAt(gr + 1, firstCol + t.columns.indexOf(col)));
+      kindOf = (col) => {
+        const aggregated = subtotal.includes(col) || summed.has(col);
+        const declared = example(col);
+        return nestedColumnKind({
           sampled: !!known,
           probed: known?.find((k) => k.name === col),
-          aggregated: subtotal.includes(col) || summed.has(col),
+          // Агрегируемая колонка с нечисловым примером остаётся дробной.
+          declared:
+            aggregated && (declared === 'date' || declared === 'text') ? undefined : declared,
+          aggregated,
         });
+      };
       const bad = aggregatesError(
         'subtotal',
         subtotal,
@@ -844,6 +868,31 @@ export function createSheetTools(
       rows,
       totals: totals ? { row: tr, cells: totalCells } : null,
     };
+  }
+
+  /**
+   * Тип колонки по пути тега (final #1): колонка запроса — по проверке SQL, колонка вложенных
+   * строк — по пробе со строками; параметр, конец строки [i+1] или неизвестная колонка — null.
+   */
+  async function pathKind(c: DraftContext, path: string): Promise<SheetColumn['kind'] | null> {
+    const m = DATA_PATH.exec(path);
+    if (!m) return null;
+    const [, key, index, column, subIndex, sub] = m as unknown as [
+      string,
+      string,
+      string | undefined,
+      string,
+      string | undefined,
+      string | undefined,
+    ];
+    if (key === 'params' || index?.includes('+') || subIndex?.includes('+')) return null;
+    if (subIndex === undefined) {
+      const type = (await queryColumns(c, key))?.find((x) => x.name === column)?.type;
+      return type === undefined ? null : columnKind(type);
+    }
+    const nested = await nestedColumns(c, key, column);
+    const type = nested.sampled ? nested.columns?.find((x) => x.name === sub)?.type : undefined;
+    return type === undefined ? null : columnKind(type);
   }
 
   async function proposeSheetReplacements(
@@ -935,6 +984,14 @@ export function createSheetTools(
     const tags = a.items.map((it) => it.tag).join('\n');
     const error = tagsError(tags) ?? (await checkPaths(tags));
     if (error) return fail(error);
+    // Тег один во всей ячейке без форматтера (final #1): число и дата остаются числом и датой —
+    // форматтер типа колонки последним; тип неизвестен или текст — тег как есть.
+    for (const it of items) {
+      if (it.find.trim() !== texts.get(it.ref)!.trim()) continue;
+      const path = /^\{\s*(d\.[^{}:\s]+)\s*\}$/.exec(it.tag.trim())?.[1];
+      const kind = path ? await pathKind(c, path) : null;
+      if (path && kind && kind !== 'text') it.tag = valueTag(path, kind);
+    }
     return {
       card: {
         type: 'sheetReplace',

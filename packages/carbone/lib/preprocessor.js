@@ -4,6 +4,7 @@ var parser = require('./parser');
 var media = require('./media');
 var links = require('./links');
 var charts = require('./charts');
+var celldate = require('./celldate');
 
 
 var preprocessor = {
@@ -48,6 +49,7 @@ var preprocessor = {
           break;
         case 'ods':
           preprocessor.convertNumberMarkersIntoNumericFormat(template);
+          preprocessor.convertDateMarkersIntoDateCells(template);
           break;
         case 'odt':
           preprocessor.removeSoftPageBreak(template);
@@ -240,6 +242,11 @@ var preprocessor = {
         // replace the index by the string
         var _sharedStringIndex = parseInt(_tab[1], 10);
         var _selectedSharedString = sharedStrings[_sharedStringIndex];
+        // :cellDate (§54): ячейка — одна метка с последним форматтером cellDate → ячейка-дата (lib/celldate.js)
+        var _dateCell = celldate.xlsxCell(openTag, _selectedSharedString);
+        if (_dateCell !== null) {
+          return _dateCell + closeTag;
+        }
         const _contentAsNumber = /{[d|c][.].*:formatN\(.*\)}/.exec(_selectedSharedString);
         if (_contentAsNumber instanceof Array && _tab.length > 0) {
           // Convert the marker into number cell type when it using the ':formatN' formatter
@@ -576,6 +583,21 @@ var preprocessor = {
         xml = xml.replace(/calcext:value-type="string"/, 'calcext:value-type="float"');
         return xml;
       });
+    }
+    return template;
+  },
+
+  /**
+   * [ODS] :cellDate (§54): текстовая ячейка, весь текст которой — одна метка с последним форматтером `cellDate`,
+   * становится ячейкой-датой (office:value-type="date", lib/celldate.js)
+   *
+   * @param {Object} template
+   * @return {Object} template
+   */
+  convertDateMarkersIntoDateCells : function (template) {
+    const _contentFileId = template.files.findIndex(x => x.name === 'content.xml');
+    if (_contentFileId > -1 && !!template.files[_contentFileId] === true) {
+      template.files[_contentFileId].data = celldate.odsContent(template.files[_contentFileId].data);
     }
     return template;
   }

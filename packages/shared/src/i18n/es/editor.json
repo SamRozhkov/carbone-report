@@ -96,6 +96,7 @@
     "hideEnd": "Ocultar bloque: fin",
     "dateDigits": "Fecha como DD.MM.YYYY",
     "number": "Número",
+    "cellDate": "Fecha en una celda de Excel",
     "money": "Importe con moneda",
     "loopRow": "Fila del bucle",
     "loopEnd": "Fila siguiente: fin del bucle",

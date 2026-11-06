@@ -96,6 +96,7 @@
     "hideEnd": "Hide block: end",
     "dateDigits": "Date as DD.MM.YYYY",
     "number": "Number",
+    "cellDate": "Date in an Excel cell",
     "money": "Amount with currency",
     "loopRow": "Loop row",
     "loopEnd": "Next row — end of the loop",

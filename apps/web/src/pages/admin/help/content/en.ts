@@ -230,6 +230,14 @@ export const HELP_SECTIONS: HelpSection[] = [
         note: 'A time without an offset is treated as UTC and shifted by 3 hours. Pass times with an offset, or a date without a time.',
       },
       {
+        id: 'fmt-cell-date',
+        title: 'Date in an Excel cell',
+        template: '{d.date:cellDate}',
+        data: j({ date: '2026-03-08' }),
+        result: '2026-03-08',
+        note: "In an XLSX or ODS cell where this tag is the only content, `cellDate` turns the cell into a real date: it can be sorted, filtered and used in formulas. The date's appearance comes from the cell format in the template — give the cell a date format: without it both Excel and LibreOffice Calc show a number (46089). A time in the value is kept, in the report time zone. In document text and in a cell with other text, the date is printed as `YYYY-MM-DD`. The input format works as in `formatD`: `cellDate('DD.MM.YYYY')`. An empty or invalid value gives an empty cell.",
+      },
+      {
         id: 'fmt-number',
         title: 'Number',
         template: '{d.n:formatN(2)}',

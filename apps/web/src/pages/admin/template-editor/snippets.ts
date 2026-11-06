@@ -50,6 +50,12 @@ export const SNIPPETS: Snippet[] = [
     template: '{d.{field}:formatN(2)}',
   },
   {
+    id: 'cellDate',
+    helpId: 'fmt-cell-date',
+    group: 'format',
+    template: '{d.{field}:cellDate}',
+  },
+  {
     id: 'money',
     helpId: 'fmt-money',
     group: 'format',

@@ -96,6 +96,7 @@
     "hideEnd": "Block ausblenden: Ende",
     "dateDigits": "Datum als DD.MM.YYYY",
     "number": "Zahl",
+    "cellDate": "Datum in einer Excel-Zelle",
     "money": "Betrag mit Währung",
     "loopRow": "Schleifenzeile",
     "loopEnd": "Nächste Zeile — Ende der Schleife",

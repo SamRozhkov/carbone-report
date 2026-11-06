@@ -96,6 +96,7 @@
     "hideEnd": "隐藏块：结束",
     "dateDigits": "DD.MM.YYYY 格式日期",
     "number": "数字",
+    "cellDate": "Excel 单元格中的日期",
     "money": "带货币的金额",
     "loopRow": "循环行",
     "loopEnd": "下一行——循环结束",

@@ -230,6 +230,14 @@ export const HELP_SECTIONS: HelpSection[] = [
         note: 'Une heure sans décalage est considérée comme UTC et décalée de 3 heures. Transmettez les heures avec un décalage, ou une date sans heure.',
       },
       {
+        id: 'fmt-cell-date',
+        title: 'Date dans une cellule Excel',
+        template: '{d.date:cellDate}',
+        data: j({ date: '2026-03-08' }),
+        result: '2026-03-08',
+        note: "Dans une cellule XLSX ou ODS qui ne contient que cette balise, `cellDate` fait de la cellule une vraie date : on peut la trier, la filtrer et l'utiliser dans des formules. Son aspect vient du format de la cellule dans le modèle — donnez à la cellule un format de date : sans lui, Excel comme LibreOffice Calc affichent un nombre (46089). L'heure de la valeur est conservée, dans le fuseau horaire du rapport. Dans le texte du document et dans une cellule avec d'autre texte, la date est imprimée au format `YYYY-MM-DD`. Le format d'entrée fonctionne comme pour `formatD` : `cellDate('DD.MM.YYYY')`. Une valeur vide ou invalide donne une cellule vide.",
+      },
+      {
         id: 'fmt-number',
         title: 'Nombre',
         template: '{d.n:formatN(2)}',

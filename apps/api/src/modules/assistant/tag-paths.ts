@@ -70,6 +70,23 @@ export function createColumnLookup(ctx: { inject: Inject; templateId: string }):
   };
 }
 
+/**
+ * inject с кэшем ответов (метод, адрес и тело): на время одного вызова инструмента проверка
+ * и проба одного SQL идут к эндпоинтам один раз, сколько бы помощников их ни спрашивали.
+ */
+export function memoInject(inject: Inject): Inject {
+  const cache = new Map<string, ReturnType<Inject>>();
+  return (method, url, payload) => {
+    const k = `${method} ${url} ${JSON.stringify(payload ?? null)}`;
+    let r = cache.get(k);
+    if (!r) {
+      r = payload === undefined ? inject(method, url) : inject(method, url, payload);
+      cache.set(k, r);
+    }
+    return r;
+  };
+}
+
 export function createPathChecker(ctx: {
   inject: Inject;
   templateId: string;

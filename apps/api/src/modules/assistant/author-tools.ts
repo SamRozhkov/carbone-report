@@ -10,7 +10,14 @@ import {
 import { z } from 'zod';
 import { issueMessage } from '../../lib/errors';
 import type { ToolSpec } from './llm';
-import { createPathChecker } from './tag-paths';
+import {
+  columnKind,
+  layoutTexts,
+  type SheetColumn,
+  sheetLabels,
+  tableLayout,
+} from './sheet-layout';
+import { createColumnLookup, createPathChecker, memoInject } from './tag-paths';
 import { type AgentTools, errorOf, type ToolContext, type ToolOutcome } from './tools';
 
 export const AUTHOR_MAX_TOOL_CALLS = 12;
@@ -255,15 +262,30 @@ export function tagsError(text: string): string | null {
 /** Цепочка форматтеров без скобок тега: formatC(2) или formatN(2):ifEmpty('-'). */
 const FORMATTER = String.raw`[A-Za-z]\w*(?:\((?:'[^']*'|"[^"]*"|[^()'"])*\))?`;
 const FORMAT = new RegExp(`^${FORMATTER}(?::${FORMATTER})*$`);
-const formatError = (f: string) =>
+export const formatError = (f: string) =>
   /[{}]/.test(f) || !FORMAT.test(f)
     ? `invalid format "${f}": Carbone formatters without braces, e.g. formatC(2) or formatN(2):ifEmpty('-')`
     : null;
 
 /** Символы, с которыми имя не войдёт в путь тега Carbone; кириллица допустима. */
-const BAD_PATH = /[\s{}[\].:,'"|]/;
-const pathError = (name: string) =>
+export const BAD_PATH = /[\s{}[\].:,'"|]/;
+export const pathError = (name: string) =>
   `"${name}" cannot be used in a Carbone tag path; alias the column in the query SQL with a simple name (e.g. select x as total_sum) and propose the query again`;
+
+/**
+ * Формулы Excel в ячейках листа (§53.1): текст, начинающийся с «=», станет формулой — ошибка
+ * для модели; null — формул нет.
+ */
+export function formulaError(texts: string[]): string | null {
+  const bad = texts.filter((t) => t.trimStart().startsWith('='));
+  if (!bad.length) return null;
+  return `formulas are not allowed: ${bad
+    .slice(0, 5)
+    .map((t) => JSON.stringify(t))
+    .join(
+      ', ',
+    )} start with "="; write plain text or Carbone tags, totals are built by the server with Carbone aggregators`;
+}
 
 export type TableColumn = { header: string; column: string; format?: string | null };
 
@@ -353,7 +375,13 @@ export async function buildListTable(
 }
 
 export function createAuthorTools(
-  ctx: ToolContext & { templateId: string; templateName: string; draft: EditorDraft },
+  ctx: ToolContext & {
+    templateId: string;
+    templateName: string;
+    draft: EditorDraft;
+    /** Открыт лист xlsx/ods с формированием (§53.2): карточки вставляются в ячейки. */
+    sheet?: boolean;
+  },
 ): AgentTools {
   const { inject, templateId, templateName, draft } = ctx;
   const base = `/api/templates/${enc(templateId)}`;
@@ -374,6 +402,7 @@ export function createAuthorTools(
 
   /** Таблица для запроса-списка: столбцы — из проверки SQL черновика; модели — только { ok }. */
   async function proposeTable(args: z.infer<typeof ARGS.propose_table>): Promise<ToolOutcome> {
+    if (ctx.sheet) return proposeSheetTable(args);
     const t = await buildListTable(ctx, 'propose_table', args.key, args.columns);
     if ('error' in t) return { result: { error: t.error } };
     return {
@@ -383,6 +412,45 @@ export function createAuthorTools(
         templateName,
         key: args.key,
         rows: t.rows,
+        explanation: args.explanation,
+      },
+      result: { ok: true },
+    };
+  }
+
+  /**
+   * Таблица в листе (§53.3, сценарий 1): типы колонок — из проверки SQL, теги и раскладку
+   * строит сервер. Формат модели остаётся только у текстовых колонок: у чисел и дат форматтер
+   * типа — последний и единственный.
+   */
+  async function proposeSheetTable(args: z.infer<typeof ARGS.propose_table>): Promise<ToolOutcome> {
+    const formula = formulaError(args.columns.map((c) => c.header));
+    if (formula) return { result: { error: formula } };
+    // Проверка SQL — один вызов на инструмент: и для сверки колонок, и для типов.
+    const c = { ...ctx, inject: memoInject(ctx.inject) };
+    const t = await buildListTable(c, 'propose_table', args.key, args.columns);
+    if ('error' in t) return { result: { error: t.error } };
+    const query = draft.queries.find((q) => q.key === args.key)!;
+    const types = (await createColumnLookup(c).queryColumns(query.sql)) ?? [];
+    const columns: SheetColumn[] = args.columns.map((col) => {
+      const kind = columnKind(types.find((x) => x.name === col.column)?.type ?? '');
+      const format = col.format?.replace(/^:/, '');
+      return {
+        column: col.column,
+        label: col.header,
+        kind,
+        ...(kind === 'text' && format ? { format } : {}),
+      };
+    });
+    const layout = tableLayout({ key: args.key, columns, total: [] }, sheetLabels(ctx.locale));
+    return {
+      card: {
+        type: 'table',
+        templateId,
+        templateName,
+        key: args.key,
+        rows: layoutTexts(layout),
+        layout,
         explanation: args.explanation,
       },
       result: { ok: true },
@@ -441,7 +509,10 @@ export function createAuthorTools(
       case 'propose_table':
         return proposeTable(a as z.infer<typeof ARGS.propose_table>);
       default: {
-        const error = tagsError(a.text as string) ?? (await checkPaths(a.text as string));
+        // В листе строки фрагмента ложатся в ячейки: строка с «=» стала бы формулой.
+        const formula = ctx.sheet ? formulaError((a.text as string).split(/\r?\n/)) : null;
+        const error =
+          formula ?? tagsError(a.text as string) ?? (await checkPaths(a.text as string));
         if (error) return { result: { error } };
         return {
           card: {

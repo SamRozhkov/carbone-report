@@ -10,6 +10,8 @@ import type {
   SheetLayout,
   SheetLayoutCell,
 } from '@carbone-reports/shared';
+import type { Locale } from '@carbone-reports/shared/i18n';
+import { createTranslator } from '@carbone-reports/shared/i18n/server';
 
 export type SheetAgg = 'aggSum' | 'aggCount' | 'aggAvg' | 'aggMin' | 'aggMax';
 
@@ -279,4 +281,17 @@ export function buildSheetLayout(spec: SheetSpec): SheetLayout {
 /** Только таблица (карточка table в листе, §53.3 сценарий 1): шапка, [i], [i+1], итог. */
 export function tableLayout(table: SimpleTableSpec, labels: SheetLabels): SheetLayout {
   return buildSheetLayout({ header: [], table, labels });
+}
+
+/** Подписи итогов на языке пользователя (§53.3). */
+export function sheetLabels(locale: Locale): SheetLabels {
+  const t = createTranslator(locale);
+  return { total: t('common:assistant.sheetTotal'), subtotal: t('common:assistant.sheetSubtotal') };
+}
+
+/** Тексты раскладки сеткой rows × cols (пустые ячейки — ''): строки карточки table в листе. */
+export function layoutTexts(layout: SheetLayout): string[][] {
+  const g = Array.from({ length: layout.rows }, () => Array<string>(layout.cols).fill(''));
+  for (const c of layout.cells) g[c.row]![c.col] = c.value;
+  return g;
 }

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppDeps } from '../../deps';
 import { createAuthorTools } from './author-tools';
 import { createDocumentTools } from './document-tools';
+import { createSheetTools } from './sheet-tools';
 import { createPathChecker } from './tag-paths';
 import { createAssistantTools, type Inject } from './tools';
 
@@ -65,13 +66,25 @@ const errorText = (r: unknown) => {
 };
 
 describe('createDocumentTools', () => {
-  it('схемы всех инструментов: type — строка (GigaChat отклоняет type-массив)', () => {
+  it('схемы всех инструментов (этапы 1–4): type — строка, без anyOf/oneOf (GigaChat)', () => {
     const ctx = { inject: vi.fn<Inject>(), deps: {} as AppDeps, locale: 'ru' as const };
     const specs = [
       ...createAssistantTools(ctx).specs,
       ...createAuthorTools({ ...ctx, templateId: TID, templateName: 'Счёт', draft }).specs,
       ...setup().specs,
+      ...createSheetTools({
+        ...ctx,
+        templateId: TID,
+        templateName: 'Счёт',
+        draft,
+        snapshot: undefined,
+        checkPaths: async () => null,
+      }).specs,
     ];
+    // Все наборы на месте: этапы 3 и 4 тоже проверены.
+    expect(specs.map((s) => s.function.name)).toEqual(
+      expect.arrayContaining(['propose_table', 'get_document', 'get_sheet', 'propose_sheet']),
+    );
     const bad: string[] = [];
     const walk = (node: unknown, path: string) => {
       if (Array.isArray(node)) return node.forEach((n, i) => walk(n, `${path}[${i}]`));

@@ -184,6 +184,8 @@
     "cardNotFound": "nicht gefunden",
     "cardReplaceTable": "Tabelle: {{header}} → Zeilen von „{{key}}“",
     "cardDocumentText": "Vorgeschlagenes Dokument: {{text}}",
-    "cardReplaceText": "Vorgeschlagene Ersetzungen: {{items}} Werte, {{tables}} Tabellen"
+    "cardReplaceText": "Vorgeschlagene Ersetzungen: {{items}} Werte, {{tables}} Tabellen",
+    "sheetTotal": "Summe",
+    "sheetSubtotal": "Gruppensumme"
   }
 }

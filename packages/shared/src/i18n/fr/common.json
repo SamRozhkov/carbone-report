@@ -185,6 +185,8 @@
     "cardNotFound": "introuvable",
     "cardReplaceTable": "Tableau : {{header}} → lignes de « {{key}} »",
     "cardDocumentText": "Document proposé : {{text}}",
-    "cardReplaceText": "Remplacements proposés : {{items}} valeurs, {{tables}} tableaux"
+    "cardReplaceText": "Remplacements proposés : {{items}} valeurs, {{tables}} tableaux",
+    "sheetTotal": "Total",
+    "sheetSubtotal": "Total du groupe"
   }
 }

@@ -228,4 +228,31 @@ describe('systemPrompt', () => {
       expect(off).not.toContain('propose_replacements');
     }
   });
+
+  it('формирование в таблице — только при author.sheet (§53.2)', () => {
+    const page = { path: '/admin/templates/t1' };
+    const base = { locale: 'ru' as const, today: 'x', extra: 'admin note', page };
+    const on = systemPrompt({ ...base, author: { templateName: 'Реестр', sheet: true } });
+    for (const s of [
+      'get_sheet',
+      'A1 addresses',
+      'propose_sheet',
+      'propose_sheet_replacements',
+      'json_agg(json_build_object(',
+      'propose_query',
+      'Excel formulas',
+    ])
+      expect(on, s).toContain(s);
+    expect(on).not.toContain('get_document');
+    expect(on.endsWith('Administrator instructions:\nadmin note')).toBe(true);
+    for (const off of [
+      systemPrompt({ ...base, author: { templateName: 'Реестр' } }),
+      systemPrompt({ ...base, author: { templateName: 'Реестр', sheet: false } }),
+      systemPrompt({ ...base, author: { templateName: 'Счёт', document: true } }),
+    ]) {
+      expect(off).not.toContain('get_sheet');
+      expect(off).not.toContain('propose_sheet');
+      expect(off).not.toContain('json_agg');
+    }
+  });
 });

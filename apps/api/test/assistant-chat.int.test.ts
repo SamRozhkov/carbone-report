@@ -509,3 +509,114 @@ describe('формирование в документе (§52.3)', () => {
     expect(all).not.toContain('propose_document');
   });
 });
+
+describe('формирование в таблице (§53.2)', () => {
+  const sheet = {
+    name: 'Лист1',
+    cells: [{ ref: 'A1', text: 'Реестр заказов' }],
+    usedRange: 'A1',
+    active: 'A1',
+    truncated: false,
+  };
+  const editor = {
+    queries: [{ key: 'company', mode: 'single', sql: 'select id, name from company' }],
+    params: [],
+    sheet,
+    documentAutomation: true,
+  };
+  let xlsx: string;
+  // Свой администратор: лимит 20 запросов в минуту считается на пользователя.
+  let cookie: string;
+
+  beforeAll(async () => {
+    cookie = (await loginAs(t, 'admin')).cookie;
+    const x = await t.app.inject({
+      method: 'POST',
+      url: '/api/templates',
+      headers: { cookie: admin },
+      payload: { name: 'Реестр', datasourceId: dsId, blank: 'xlsx' },
+    });
+    expect(x.statusCode, x.body).toBe(201);
+    xlsx = x.json().id as string;
+  });
+
+  /** Инструменты и весь запрос к модели; результат get_sheet — если модель его вызвала. */
+  async function ask(templateId: string, ed: object, probe: boolean) {
+    let tools: string[] = [];
+    const bodies: string[] = [];
+    let step = 0;
+    const llm = await fakeLlm((body) => {
+      tools = ((body.tools ?? []) as { function: { name: string } }[]).map((x) => x.function.name);
+      bodies.push(JSON.stringify(body));
+      const steps = tools.includes('get_sheet') ? [toolCall('get_sheet', {})] : [];
+      return { message: steps[step++] ?? { content: 'ok' } };
+    });
+    await enable(llm.url);
+    const orig = t.deps.documentAutomation;
+    t.deps.documentAutomation = async () => probe;
+    try {
+      const r = await t.app.inject({
+        method: 'POST',
+        url: '/api/assistant/chat',
+        headers: { cookie },
+        payload: {
+          messages: [{ role: 'user', content: 'сделай реестр' }],
+          page: { path: `/admin/templates/${templateId}`, templateId, editor: ed },
+        },
+      });
+      expect(r.statusCode, r.body).toBe(200);
+    } finally {
+      t.deps.documentAutomation = orig;
+      await llm.close();
+    }
+    return { tools, all: bodies.join('\n') };
+  }
+
+  it('xlsx, флаг браузера, снимок листа и проверка сервера — инструменты и промпт этапа 4', async () => {
+    const { tools, all } = await ask(xlsx, editor, true);
+    expect(tools).toEqual(expect.arrayContaining(['get_sheet', 'propose_sheet', 'propose_table']));
+    expect(tools).not.toContain('get_document');
+    expect(all).toContain('get_sheet returns the text');
+    expect(all).toContain('Реестр заказов'); // результат get_sheet
+  });
+
+  it('docx с тем же телом — инструментов этапа 4 нет', async () => {
+    const { tools, all } = await ask(tplA, editor, true);
+    expect(tools).toContain('propose_tags');
+    expect(tools).not.toContain('get_sheet');
+    expect(all).not.toContain('propose_sheet');
+  });
+
+  it('проверка сервера «нет», нет флага браузера или снимка — этапа 4 нет нигде', async () => {
+    const { documentAutomation: _, ...noFlag } = editor;
+    const { sheet: __, ...noSheet } = editor;
+    for (const [ed, probe] of [
+      [editor, false],
+      [noFlag, true],
+      [noSheet, true],
+    ] as const) {
+      const { tools, all } = await ask(xlsx, ed, probe);
+      expect(tools).toContain('propose_tags');
+      expect(tools).not.toContain('get_sheet');
+      expect(all).not.toContain('get_sheet');
+      expect(all).not.toContain('propose_sheet');
+    }
+  });
+
+  it('sheet и document вместе — 400', async () => {
+    const r = await t.app.inject({
+      method: 'POST',
+      url: '/api/assistant/chat',
+      headers: { cookie },
+      payload: {
+        messages: [{ role: 'user', content: 'x' }],
+        page: {
+          path: `/admin/templates/${xlsx}`,
+          templateId: xlsx,
+          editor: { ...editor, document: { blocks: [], truncated: false } },
+        },
+      },
+    });
+    expect(r.statusCode, r.body).toBe(400);
+  });
+});

@@ -183,6 +183,8 @@
     "cardNotFound": "未找到",
     "cardReplaceTable": "表格：{{header}} → “{{key}}”的行",
     "cardDocumentText": "建议的文档：{{text}}",
-    "cardReplaceText": "建议的替换：{{items}} 个值，{{tables}} 个表格"
+    "cardReplaceText": "建议的替换：{{items}} 个值，{{tables}} 个表格",
+    "sheetTotal": "合计",
+    "sheetSubtotal": "小计"
   }
 }

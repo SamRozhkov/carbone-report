@@ -28,12 +28,22 @@ const DOCUMENT = [
   '- Do not change formatting (fonts, colours, borders): only text and tags.',
 ];
 
+/** Формирование в таблице (§53.2–53.3): только если редактор и OnlyOffice это умеют, лист xlsx/ods. */
+const SHEET = [
+  'The template spreadsheet is open in the editor: get_sheet returns the text of the non-empty cells of its active sheet with A1 addresses and the active cell (no formatting). Work only with the active sheet.',
+  '- A fragment or a table at the active cell: propose_tags or propose_table; the author inserts the card into the sheet with a button (every line of a fragment goes to a cell below the active one).',
+  '- A whole sheet by description: propose_sheet with an optional title, label/value rows above the table and a table of a list-mode query; the server builds the cells, tags and styles.',
+  "- Subtotals by groups: the query must return one row per group with the group columns and a nested array of rows, e.g. select contractor, json_agg(json_build_object('date', date, 'sum', sum) order by date) as rows from … group by contractor. If the template has no such query, first propose it with propose_query; then propose_sheet with group, rows, columns of the nested rows and subtotal/total.",
+  '- A filled-in table (a real register with numbers) to turn into a template: first propose the missing queries and parameters with propose_query and propose_param, then propose_sheet_replacements; take cell addresses and row numbers from get_sheet.',
+  '- Never write Excel formulas (no text starting with =): totals and subtotals are Carbone aggregators built by the server. Do not add number or date formatters: the server sets them by column type.',
+];
+
 export function systemPrompt(o: {
   locale: Locale;
   today: string;
   extra: string;
   page: { path: string; reportId?: string };
-  author?: { templateName: string; document?: boolean };
+  author?: { templateName: string; document?: boolean; sheet?: boolean };
 }): string {
   const lines = [
     'You are the report assistant of Carbone Reports. You help the user find a report template, fill in its parameters and propose a run.',
@@ -49,6 +59,7 @@ export function systemPrompt(o: {
   ];
   if (o.author) lines.push(...AUTHOR(o.author.templateName));
   if (o.author?.document) lines.push(...DOCUMENT);
+  if (o.author?.sheet) lines.push(...SHEET);
   if (o.extra.trim()) lines.push('Administrator instructions:', o.extra.trim());
   return lines.join('\n');
 }

@@ -186,6 +186,8 @@
     "cardNotFound": "не найдено",
     "cardReplaceTable": "Таблица: {{header}} → строки «{{key}}»",
     "cardDocumentText": "Предложен документ: {{text}}",
-    "cardReplaceText": "Предложены замены: {{items}} значений, {{tables}} таблиц"
+    "cardReplaceText": "Предложены замены: {{items}} значений, {{tables}} таблиц",
+    "sheetTotal": "Итого",
+    "sheetSubtotal": "Итого по группе"
   }
 }

@@ -184,6 +184,8 @@
     "cardNotFound": "not found",
     "cardReplaceTable": "Table: {{header}} → rows of “{{key}}”",
     "cardDocumentText": "Proposed document: {{text}}",
-    "cardReplaceText": "Proposed replacements: {{items}} values, {{tables}} tables"
+    "cardReplaceText": "Proposed replacements: {{items}} values, {{tables}} tables",
+    "sheetTotal": "Total",
+    "sheetSubtotal": "Group total"
   }
 }

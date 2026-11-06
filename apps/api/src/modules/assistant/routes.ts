@@ -22,6 +22,7 @@ import { createDocumentTools } from './document-tools';
 import { createLlmClient, LlmError, testLlm } from './llm';
 import { systemPrompt } from './prompt';
 import { loadAssistantSettings, saveAssistantSettings, toSettingsDto } from './settings';
+import { createSheetTools } from './sheet-tools';
 import { createPathChecker } from './tag-paths';
 import { createAssistantTools, type Inject, mergeTools, UUID_RE } from './tools';
 
@@ -172,6 +173,13 @@ export function registerAssistantRoutes(app: App, deps: AppDeps, guards: Guards)
         author.draft.documentAutomation === true &&
         (author.fileExt === 'docx' || author.fileExt === 'odt') &&
         (await deps.documentAutomation());
+      // Этап 4 (§53.2): то же для xlsx/ods, и браузер прислал снимок листа.
+      const inSheet =
+        !!author &&
+        author.draft.documentAutomation === true &&
+        (author.fileExt === 'xlsx' || author.fileExt === 'ods') &&
+        !!author.draft.sheet &&
+        (await deps.documentAutomation());
       const authorCtx = author && {
         ...toolCtx,
         templateId: author.templateId,
@@ -181,12 +189,21 @@ export function registerAssistantRoutes(app: App, deps: AppDeps, guards: Guards)
       const tools = authorCtx
         ? mergeTools(
             createAssistantTools(toolCtx),
-            createAuthorTools(authorCtx),
+            createAuthorTools({ ...authorCtx, sheet: inSheet }),
             ...(inDocument
               ? [
                   createDocumentTools({
                     ...authorCtx,
                     snapshot: authorCtx.draft.document,
+                    checkPaths: createPathChecker(authorCtx),
+                  }),
+                ]
+              : []),
+            ...(inSheet
+              ? [
+                  createSheetTools({
+                    ...authorCtx,
+                    snapshot: authorCtx.draft.sheet,
                     checkPaths: createPathChecker(authorCtx),
                   }),
                 ]
@@ -205,7 +222,7 @@ export function registerAssistantRoutes(app: App, deps: AppDeps, guards: Guards)
             // Только путь и id отчёта: черновик редактора в промпт не попадает.
             page: { path, reportId },
             author: author
-              ? { templateName: author.templateName, document: inDocument }
+              ? { templateName: author.templateName, document: inDocument, sheet: inSheet }
               : undefined,
           }),
           history: req.body.messages,

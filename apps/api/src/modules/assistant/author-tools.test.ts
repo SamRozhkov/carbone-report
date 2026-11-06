@@ -501,6 +501,158 @@ describe('createAuthorTools', () => {
     });
   });
 
+  describe('в листе xlsx/ods (sheet: true, §53.3)', () => {
+    const CHECK = `/api/templates/${TID}/queries/check`;
+    const sheetDraft = {
+      queries: [
+        { key: 'orders', mode: 'list' as const, sql: 'select date, sum, name from orders' },
+      ],
+      params: [],
+    };
+    const setupSheet = (sheet?: boolean) => {
+      const inject = vi.fn<Inject>(async (_m, url) =>
+        url === CHECK
+          ? {
+              status: 200,
+              body: {
+                ok: true,
+                columns: [
+                  { name: 'date', type: 'date' },
+                  { name: 'sum', type: 'numeric' },
+                  { name: 'name', type: 'text' },
+                ],
+              },
+            }
+          : { status: 404, body: {} },
+      );
+      return {
+        inject,
+        tools: createAuthorTools({
+          inject,
+          deps: {} as AppDeps,
+          locale: 'ru',
+          templateId: TID,
+          templateName: 'Реестр',
+          draft: sheetDraft,
+          sheet,
+        }),
+      };
+    };
+    const errorText = (r: unknown) => {
+      expect(r).not.toHaveProperty('card');
+      return JSON.stringify((r as { result: unknown }).result);
+    };
+
+    it('propose_table: раскладка, теги по типам из проверки; формат модели — только у текста', async () => {
+      const { inject, tools } = setupSheet(true);
+      const r = await tools.run('propose_table', {
+        key: 'orders',
+        columns: [
+          { header: 'Дата', column: 'date', format: "formatD('DD.MM.YYYY')" },
+          { header: 'Сумма', column: 'sum', format: 'formatC(2)' },
+          { header: 'Имя', column: 'name', format: ":ifEmpty('-')" },
+        ],
+        explanation: '',
+      });
+      const card = (r as { card: { rows: string[][]; layout: { cells: object[] } } }).card;
+      expect(card.rows).toEqual([
+        ['Дата', 'Сумма', 'Имя'],
+        [
+          '{d.orders[i].date:cellDate}',
+          '{d.orders[i].sum:formatN(2)}',
+          "{d.orders[i].name:ifEmpty('-')}",
+        ],
+        ['{d.orders[i+1].date}', '', ''],
+      ]);
+      expect(card.layout.cells).toContainEqual(
+        expect.objectContaining({ row: 1, col: 1, kind: 'decimal', style: 'data' }),
+      );
+      expect(card.layout.cells).toContainEqual(
+        expect.objectContaining({ row: 1, col: 2, kind: 'text', format: "ifEmpty('-')" }),
+      );
+      expect(r).toMatchObject({ result: { ok: true } });
+      // Проверка SQL — один вызов на инструмент.
+      expect(inject).toHaveBeenCalledTimes(1);
+    });
+
+    it('propose_table по orders(date, sum) — rows[1] с cellDate и formatN(2) даже при formatC(2)', async () => {
+      const r = await setupSheet(true).tools.run('propose_table', {
+        key: 'orders',
+        columns: [
+          { header: 'Дата', column: 'date' },
+          { header: 'Сумма', column: 'sum', format: 'formatC(2)' },
+        ],
+        explanation: '',
+      });
+      expect((r as { card: { rows: string[][] } }).card.rows[1]).toEqual([
+        '{d.orders[i].date:cellDate}',
+        '{d.orders[i].sum:formatN(2)}',
+      ]);
+      expect(r).toHaveProperty('card.layout');
+    });
+
+    it('без sheet — как раньше: формат модели, layout нет', async () => {
+      const r = await setupSheet().tools.run('propose_table', {
+        key: 'orders',
+        columns: [
+          { header: 'Дата', column: 'date' },
+          { header: 'Сумма', column: 'sum', format: 'formatC(2)' },
+        ],
+        explanation: '',
+      });
+      expect(r).not.toHaveProperty('card.layout');
+      expect((r as { card: { rows: string[][] } }).card.rows[1]).toEqual([
+        '{d.orders[i].date}',
+        '{d.orders[i].sum:formatC(2)}',
+      ]);
+    });
+
+    it('propose_table: заголовок с «=» — formulas are not allowed; формат со скобками — ошибка', async () => {
+      const { tools } = setupSheet(true);
+      const t = errorText(
+        await tools.run('propose_table', {
+          key: 'orders',
+          columns: [{ header: '=SUM(B2:B9)', column: 'sum' }],
+          explanation: '',
+        }),
+      );
+      expect(t).toContain('formulas are not allowed');
+      expect(
+        errorText(
+          await tools.run('propose_table', {
+            key: 'orders',
+            columns: [{ header: 'Имя', column: 'name', format: 'x}{d.secret' }],
+            explanation: '',
+          }),
+        ),
+      ).toContain('invalid format');
+      // Без листа «=» в заголовке документа — обычный текст.
+      expect(
+        await setupSheet().tools.run('propose_table', {
+          key: 'orders',
+          columns: [{ header: '=SUM(B2:B9)', column: 'sum' }],
+          explanation: '',
+        }),
+      ).toHaveProperty('card');
+    });
+
+    it('propose_tags: строка с «=» — formulas are not allowed только в листе', async () => {
+      const text = 'Итого:\n=SUM(B2:B9)';
+      expect(
+        errorText(await setupSheet(true).tools.run('propose_tags', { text, explanation: '' })),
+      ).toContain('formulas are not allowed');
+      expect(
+        await setupSheet().tools.run('propose_tags', { text, explanation: '' }),
+      ).toHaveProperty('card');
+      expect(
+        await setupSheet(true).tools.run('propose_tags', {
+          text: 'Дата: {d.orders[i].date}\nа = б',
+          explanation: '',
+        }),
+      ).toHaveProperty('card');
+    });
+  });
+
   it('ошибка эндпоинта схемы — безопасный текст (errorOf)', async () => {
     const { tools } = setup({
       [`/api/templates/${TID}/schema/tables`]: {

@@ -119,10 +119,16 @@ export function useAssistantChat(): AssistantChat {
     const editor = bridge.editor;
     // Открыт редактор шаблона: несохранённые черновики «Данных» и «Параметров» (§51.3).
     const draft: EditorDraft | undefined = editor ? (bridge.draft() ?? undefined) : undefined;
-    // Открыт документ этого шаблона: снимок через connector и признак возможности (§52.2, §52.3).
-    // Снимок не получился — без обоих полей: сервер тогда не даёт инструментов формирования.
+    // Открыт документ или лист этого шаблона: снимок через connector и признак возможности
+    // (§52.2, §52.3, §53.4). Снимок не получился — без обоих полей: сервер тогда не даёт
+    // инструментов формирования. document и sheet вместе не отправляются (схема EditorDraft).
     const withDocument = async (): Promise<EditorDraft | undefined> => {
-      if (!editor || !draft || bridge.document?.templateId !== editor.templateId) return draft;
+      if (!editor || !draft) return draft;
+      if (bridge.sheet?.templateId === editor.templateId) {
+        const sheet = await bridge.sheetSnapshot();
+        return sheet ? { ...draft, sheet, documentAutomation: true } : draft;
+      }
+      if (bridge.document?.templateId !== editor.templateId) return draft;
       const document = await bridge.snapshot();
       return document ? { ...draft, document, documentAutomation: true } : draft;
     };

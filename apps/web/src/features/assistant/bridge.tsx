@@ -1,4 +1,10 @@
-import type { Card, DocSnapshot, EditorDraft, QueryMode } from '@carbone-reports/shared';
+import type {
+  Card,
+  DocSnapshot,
+  EditorDraft,
+  QueryMode,
+  SheetSnapshot,
+} from '@carbone-reports/shared';
 import { TemplateParam } from '@carbone-reports/shared';
 import {
   createContext,
@@ -10,6 +16,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { DocumentAdapter } from './documentAdapter';
+import type { SheetAdapter } from './sheetAdapter';
 
 /** Мост панели ассистента и редактора шаблона (§51.5). */
 
@@ -18,6 +25,9 @@ export type ApplyCard = Extract<Card, { type: 'query' } | { type: 'param' }>;
 export interface EditorRegistration {
   templateId: string;
   templateName: string;
+  /** Расширение файла шаблона: по нему карточки выбирают формирование в документе или в листе
+   *  (formingKind); не передано — текстовый шаблон, как до §53. */
+  fileExt?: string;
   /** Сохранённые запросы и параметры — для вкладок, которые сейчас не открыты. */
   saved: () => EditorDraft;
   openTab: (tab: 'data' | 'params' | 'document') => void;
@@ -29,6 +39,29 @@ export interface DocumentRegistration {
   adapter: DocumentAdapter;
   /** Документ открыт на редактирование (блокировка §38 у этой вкладки). */
   editable: () => boolean;
+}
+
+/** Открытый во вкладке «Документ» лист шаблона xlsx/ods с connector OnlyOffice (§53.4). */
+export interface SheetRegistration {
+  templateId: string;
+  adapter: SheetAdapter;
+  /** Лист открыт на редактирование (блокировка §38 у этой вкладки). */
+  editable: () => boolean;
+}
+
+/** Вид формирования шаблона по расширению файла: docx/odt — документ, xlsx/ods — лист, иное — нет. */
+export function formingKind(fileExt: string | undefined): 'document' | 'sheet' | null {
+  switch (fileExt) {
+    case undefined:
+    case 'docx':
+    case 'odt':
+      return 'document';
+    case 'xlsx':
+    case 'ods':
+      return 'sheet';
+    default:
+      return null;
+  }
 }
 
 export interface TabRegistration {
@@ -50,6 +83,9 @@ export interface AssistantBridge {
    *  даже если вкладка «Документ» сейчас размонтирована; сбрасывается clearPending (уход из
    *  редактора) и регистрацией редактора другого шаблона. */
   documentAutomation: string | null;
+  /** Зарегистрированный лист; null — вкладка «Документ» не смонтирована, шаблон не xlsx/ods
+   *  или connector недоступен. */
+  sheet: SheetRegistration | null;
   registerEditor(r: EditorRegistration): () => void;
   registerTab(r: TabRegistration): () => void;
   /** Прочие вкладки с черновиком (диаграммы, PDF, настройки): только признак несохранённых правок. */
@@ -76,16 +112,42 @@ export interface AssistantBridge {
   /** Возможности формирования у шаблона больше нет (конфиг редактора без documentAutomation,
    *  createConnector нет или бросил): признак снимается, отложенные run шаблона сбрасываются. */
   revokeDocument(templateId: string): void;
+  /** Как registerDocument: выставляет documentAutomation и запускает отложенные run листа шаблона
+   *  (отложенные run документа не трогает). */
+  registerSheet(r: SheetRegistration): () => void;
+  /** Как applyDocument, но run ждёт регистрации листа (registerSheet), а не документа. */
+  applySheet<T>(
+    templateId: string,
+    run: SheetRun<T>,
+    dropped?: () => void,
+  ): Promise<T | 'opened' | 'queued' | null>;
+  /** Снимок зарегистрированного листа; нет листа, ошибка или нет ответа за 3 с — undefined. */
+  sheetSnapshot(): Promise<SheetSnapshot | undefined>;
   /** Снимок зарегистрированного документа; нет документа, ошибка или нет ответа за 3 с — undefined. */
   snapshot(): Promise<DocSnapshot | undefined>;
 }
 
 export type DocumentRun<T> = (a: DocumentAdapter, editable: () => boolean) => Promise<T>;
+export type SheetRun<T> = (a: SheetAdapter, editable: () => boolean) => Promise<T>;
 
-interface PendingDocument {
-  templateId: string;
-  run: DocumentRun<unknown>;
-  dropped?: () => void;
+/** Отложенный run формирования: запускается регистрацией своего вида (документ или лист). */
+type PendingDocument =
+  | { kind: 'document'; templateId: string; run: DocumentRun<unknown>; dropped?: () => void }
+  | { kind: 'sheet'; templateId: string; run: SheetRun<unknown>; dropped?: () => void };
+
+/** Снимок с пределом ожидания: ошибка или нет ответа за SNAPSHOT_TIMEOUT_MS — undefined. */
+async function snapshotWithin<T>(take: () => Promise<T>): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), SNAPSHOT_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([take(), late]);
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Снимок для запроса чата: дольше не ждём, реплика уходит без документа. */
@@ -122,8 +184,10 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
   const documentRef = useRef<DocumentRegistration | null>(null);
   const [documentAutomation, setDocumentAutomation] = useState<string | null>(null);
   const pendingDocument = useRef<PendingDocument[]>([]);
+  const [openSheet, setSheet] = useState<SheetRegistration | null>(null);
+  const sheetRef = useRef<SheetRegistration | null>(null);
   const methods = useMemo<
-    Omit<AssistantBridge, 'editor' | 'document' | 'documentAutomation'>
+    Omit<AssistantBridge, 'editor' | 'document' | 'documentAutomation' | 'sheet'>
   >(() => {
     /** Снять отложенные run документа, подходящие под условие, и сообщить о снятии. */
     const dropDocuments = (match: (p: PendingDocument) => boolean) => {
@@ -133,6 +197,21 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
     };
     const othersDirty = () =>
       [...tabs.current.values()].some((t) => t.dirty()) || [...probes.current].some((p) => p());
+    /** Забрать отложенные run этого вида и шаблона. */
+    const takeDocuments = (kind: PendingDocument['kind'], templateId: string) => {
+      const match = (p: PendingDocument) => p.kind === kind && p.templateId === templateId;
+      const mine = pendingDocument.current.filter(match);
+      pendingDocument.current = pendingDocument.current.filter((p) => !match(p));
+      return mine;
+    };
+    /** Отложить run до регистрации и открыть вкладку «Документ», если это не потеряет правок. */
+    const defer = (p: PendingDocument, ed: EditorRegistration): 'opened' | 'queued' => {
+      pendingDocument.current.push(p);
+      // Как apply(): переключение потеряло бы несохранённые правки открытой вкладки.
+      if (othersDirty()) return 'queued';
+      ed.openTab('document');
+      return 'opened';
+    };
     return {
       registerEditor: (r) => {
         // Очередь другого шаблона не должна достаться этому. Очередь того же шаблона сохраняется:
@@ -205,12 +284,10 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
         documentRef.current = r;
         setDocument(r);
         setDocumentAutomation(r.templateId);
-        const mine = pendingDocument.current.filter((p) => p.templateId === r.templateId);
-        pendingDocument.current = pendingDocument.current.filter(
-          (p) => p.templateId !== r.templateId,
-        );
         // Результат и ошибки отложенного run обрабатывает он сам: вызвавший уже получил 'opened'/'queued'.
-        for (const p of mine) void p.run(r.adapter, r.editable).catch(() => {});
+        for (const p of takeDocuments('document', r.templateId)) {
+          if (p.kind === 'document') void p.run(r.adapter, r.editable).catch(() => {});
+        }
         return () => {
           if (documentRef.current !== r) return;
           documentRef.current = null;
@@ -222,11 +299,7 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
         if (!ed || ed.templateId !== templateId) return null;
         const doc = documentRef.current;
         if (doc && doc.templateId === templateId) return run(doc.adapter, doc.editable);
-        pendingDocument.current.push({ templateId, run, dropped });
-        // Как apply(): переключение потеряло бы несохранённые правки открытой вкладки.
-        if (othersDirty()) return 'queued';
-        ed.openTab('document');
-        return 'opened';
+        return defer({ kind: 'document', templateId, run, dropped }, ed);
       },
       revokeDocument: (templateId) => {
         setDocumentAutomation((t) => (t === templateId ? null : t));
@@ -235,23 +308,39 @@ export function AssistantBridgeProvider({ children }: { children: ReactNode }) {
       snapshot: async () => {
         const doc = documentRef.current;
         if (!doc) return undefined;
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const late = new Promise<undefined>((resolve) => {
-          timer = setTimeout(() => resolve(undefined), SNAPSHOT_TIMEOUT_MS);
-        });
-        try {
-          return await Promise.race([doc.adapter.snapshot(), late]);
-        } catch {
-          return undefined;
-        } finally {
-          clearTimeout(timer);
+        return snapshotWithin(() => doc.adapter.snapshot());
+      },
+      registerSheet: (r) => {
+        sheetRef.current = r;
+        setSheet(r);
+        // Возможность формирования одна на шаблон (§52.2): лист выставляет тот же признак.
+        setDocumentAutomation(r.templateId);
+        for (const p of takeDocuments('sheet', r.templateId)) {
+          if (p.kind === 'sheet') void p.run(r.adapter, r.editable).catch(() => {});
         }
+        return () => {
+          if (sheetRef.current !== r) return;
+          sheetRef.current = null;
+          setSheet(null);
+        };
+      },
+      applySheet: async (templateId, run, dropped) => {
+        const ed = editorRef.current;
+        if (!ed || ed.templateId !== templateId) return null;
+        const sheet = sheetRef.current;
+        if (sheet && sheet.templateId === templateId) return run(sheet.adapter, sheet.editable);
+        return defer({ kind: 'sheet', templateId, run, dropped }, ed);
+      },
+      sheetSnapshot: async () => {
+        const sheet = sheetRef.current;
+        if (!sheet) return undefined;
+        return snapshotWithin(() => sheet.adapter.snapshot());
       },
     };
   }, []);
   const value = useMemo<AssistantBridge>(
-    () => ({ ...methods, editor, document: openDocument, documentAutomation }),
-    [methods, editor, openDocument, documentAutomation],
+    () => ({ ...methods, editor, document: openDocument, documentAutomation, sheet: openSheet }),
+    [methods, editor, openDocument, documentAutomation, openSheet],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

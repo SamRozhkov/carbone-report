@@ -1,4 +1,4 @@
-import type { DocSnapshot } from '@carbone-reports/shared';
+import type { DocSnapshot, SheetSnapshot } from '@carbone-reports/shared';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockApi, wrapper as TestProviders } from '../../test/utils';
 import { AssistantBridgeProvider, useAssistantBridge } from './bridge';
 import type { DocumentAdapter } from './documentAdapter';
+import type { SheetAdapter } from './sheetAdapter';
 import { useAssistantChat } from './useAssistantChat';
 
 const Wrapper = ({ children }: { children: ReactNode }) => (
@@ -27,7 +28,7 @@ const adapter = (snapshot: () => Promise<DocSnapshot>): DocumentAdapter => ({
 });
 const saved = { queries: [], params: [] };
 
-type Editor = { document?: unknown; documentAutomation?: unknown };
+type Editor = { document?: unknown; sheet?: unknown; documentAutomation?: unknown };
 
 async function send(setup: (b: ReturnType<typeof useAssistantBridge>) => void) {
   const { calls } = mockApi([
@@ -110,4 +111,60 @@ describe('useAssistantChat: снимок документа (§52.3)', () => {
     });
     expect(page.editor).toEqual(saved);
   }, 10_000);
+});
+
+const sheetSnap: SheetSnapshot = {
+  name: 'Лист1',
+  cells: [{ ref: 'A1', text: 'Реестр' }],
+  usedRange: 'A1:A1',
+  active: 'A2',
+  truncated: false,
+};
+const sheetAdapter = (snapshot: () => Promise<SheetSnapshot>): SheetAdapter => ({
+  snapshot: vi.fn(snapshot),
+  insertCells: vi.fn(),
+  applyLayout: vi.fn(),
+  replace: vi.fn(),
+  dispose: vi.fn(),
+});
+
+describe('useAssistantChat: снимок листа (§53.4)', () => {
+  it('лист шаблона зарегистрирован — sheet и documentAutomation: true, без document', async () => {
+    const page = await send((b) => {
+      b.registerSheet({
+        templateId: 't1',
+        adapter: sheetAdapter(async () => sheetSnap),
+        editable: () => true,
+      });
+    });
+    expect(page.editor).toEqual({ ...saved, sheet: sheetSnap, documentAutomation: true });
+    expect(page.editor).not.toHaveProperty('document');
+  });
+
+  it('листа нет — ни sheet, ни documentAutomation', async () => {
+    const page = await send(() => {});
+    expect(page.editor).toEqual(saved);
+  });
+
+  it('лист другого шаблона — без снимка', async () => {
+    const page = await send((b) => {
+      b.registerSheet({
+        templateId: 't2',
+        adapter: sheetAdapter(async () => sheetSnap),
+        editable: () => true,
+      });
+    });
+    expect(page.editor).toEqual(saved);
+  });
+
+  it('снимок листа не получился — без обоих полей', async () => {
+    const page = await send((b) => {
+      b.registerSheet({
+        templateId: 't1',
+        adapter: sheetAdapter(() => Promise.reject(new Error('connector'))),
+        editable: () => true,
+      });
+    });
+    expect(page.editor).toEqual(saved);
+  });
 });

@@ -9,8 +9,9 @@ import { api } from '../../../api/endpoints';
 import { ApiRequestError } from '../../../api/client';
 import { errorMessage } from '../../../api/errors';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
-import { useOptionalAssistantBridge } from '../../../features/assistant/bridge';
+import { formingKind, useOptionalAssistantBridge } from '../../../features/assistant/bridge';
 import { createDocumentAdapter, type Connector } from '../../../features/assistant/documentAdapter';
+import { createSheetAdapter } from '../../../features/assistant/sheetAdapter';
 import { ErrorAlert } from '../../../components/ErrorAlert';
 import { currentLocale } from '../../../i18n';
 import { pickParams } from '../../../lib/params';
@@ -81,9 +82,8 @@ export function DocumentTab({
   // React key на DocumentEditor ставить нельзя: перемонтирование ломает DocsAPI («removeChild»).
   // На этом поведении держится смена режима, поэтому версия @onlyoffice/document-editor-react закреплена точно
   // (2.2.0); обновлять — только с прогоном e2e editor-lock.
-  // Адаптер документа — только для текстовых шаблонов: сервер сообщает возможность и для таблиц
-  // (§53), но адаптера таблицы пока нет.
-  const textDocument = template.fileExt === 'docx' || template.fileExt === 'odt';
+  // Адаптер: docx/odt — документа (§52.5), xlsx/ods — листа (§53.4); прочим (pptx) — нет.
+  const forming = formingKind(template.fileExt);
   const key = config.data?.document?.key;
   const stableId = `${mode}:${key}`;
   const stable = useRef<{
@@ -97,7 +97,7 @@ export function DocumentTab({
     stable.current = {
       id: stableId,
       config: ooConfig,
-      automation: documentAutomation === true && textDocument,
+      automation: documentAutomation === true && forming !== null,
     };
   }
   const stableConfig = stable.current.config;
@@ -117,10 +117,12 @@ export function DocumentTab({
   };
   const editorReady = config.data !== undefined && readyId === stableId;
 
-  // Документ в мосте ассистента (§52.5): один connector на экземпляр редактора — после готовности
-  // документа; при пересоздании редактора, смене конфига и размонтировании — disconnect и снятие.
+  // Документ или лист в мосте ассистента (§52.5, §53.4): один connector на экземпляр редактора —
+  // после готовности документа; при пересоздании редактора, смене конфига и размонтировании —
+  // disconnect и снятие.
   const assistantBridge = useOptionalAssistantBridge();
   const registerDocument = assistantBridge?.registerDocument;
+  const registerSheet = assistantBridge?.registerSheet;
   const revokeDocument = assistantBridge?.revokeDocument;
   const editingRef = useRef(lock.editing);
   editingRef.current = lock.editing;
@@ -134,8 +136,8 @@ export function DocumentTab({
   // документ снимается с моста, признак и отложенные действия карточек — тоже, иначе кнопки
   // остались бы, а их действия ждали бы регистрации вечно.
   const serverAutomation = config.data?.documentAutomation;
-  const automationRef = useRef(serverAutomation === true && textDocument);
-  automationRef.current = serverAutomation === true && textDocument;
+  const automationRef = useRef(serverAutomation === true && forming !== null);
+  automationRef.current = serverAutomation === true && forming !== null;
   useEffect(() => {
     if (serverAutomation !== false) return;
     dropDocument.current?.();
@@ -144,7 +146,7 @@ export function DocumentTab({
   }, [serverAutomation, revokeDocument, template.id]);
   const onDocumentReady = () => {
     // Редактор построен по устаревшему конфигу — его пересоберут, connector к нему не нужен.
-    if (!automation || !automationRef.current || !registerDocument) return;
+    if (!automation || !automationRef.current || !registerDocument || !registerSheet) return;
     if (stableId !== currentId.current) return;
     releaseDocument();
     const revoke = () => revokeDocument?.(template.id);
@@ -155,12 +157,19 @@ export function DocumentTab({
         revoke();
         return;
       }
-      const adapter = createDocumentAdapter(editor.createConnector() as unknown as Connector);
-      const off = registerDocument({
-        templateId: template.id,
-        adapter,
-        editable: () => editingRef.current,
-      });
+      const connector = editor.createConnector() as unknown as Connector;
+      const editable = () => editingRef.current;
+      let adapter: { dispose(): void };
+      let off: () => void;
+      if (forming === 'sheet') {
+        const sheet = createSheetAdapter(connector);
+        adapter = sheet;
+        off = registerSheet({ templateId: template.id, adapter: sheet, editable });
+      } else {
+        const doc = createDocumentAdapter(connector);
+        adapter = doc;
+        off = registerDocument({ templateId: template.id, adapter: doc, editable });
+      }
       dropDocument.current = () => {
         off();
         try {

@@ -1,6 +1,6 @@
 import { Button, Text } from '@gravity-ui/uikit';
 import { useTranslation } from 'react-i18next';
-import type { DocumentActionState } from './useDocumentAction';
+import type { FormingActionState } from './useDocumentAction';
 
 /** Кнопка формирования в документе (§52.4) и подсказка, если документ открыт только для просмотра. */
 export function DocumentActionButton({
@@ -9,7 +9,7 @@ export function DocumentActionButton({
   disabled,
   onClick,
 }: {
-  state: DocumentActionState;
+  state: FormingActionState<'document' | 'sheet'>;
   label: string;
   disabled?: boolean;
   onClick: () => void;

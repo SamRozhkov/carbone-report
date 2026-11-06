@@ -87,6 +87,7 @@ export function TemplateEditorPage() {
     return registerEditor({
       templateId: tpl.id,
       templateName: tpl.name,
+      fileExt: tpl.fileExt,
       saved: () => ({
         queries: tpl.queries.map(({ key, mode, sql }) => ({ key, mode, sql })),
         params: tpl.params,

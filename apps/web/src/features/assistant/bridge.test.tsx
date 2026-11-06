@@ -1,8 +1,9 @@
-import type { DocSnapshot, TemplateParam } from '@carbone-reports/shared';
+import type { DocSnapshot, SheetSnapshot, TemplateParam } from '@carbone-reports/shared';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { DocumentAdapter } from './documentAdapter';
+import type { SheetAdapter } from './sheetAdapter';
 import {
   applyParam,
   applyQuery,
@@ -528,6 +529,200 @@ describe('мост', () => {
         });
       });
       expect(result.current.documentAutomation).toBe('t');
+    });
+  });
+  describe('лист (§53.4)', () => {
+    const sheetSnap: SheetSnapshot = {
+      name: 'Лист1',
+      cells: [{ ref: 'A1', text: 'Реестр' }],
+      usedRange: 'A1:A1',
+      active: 'B3',
+      truncated: false,
+    };
+    const sheet = (over: Partial<SheetAdapter> = {}): SheetAdapter => ({
+      snapshot: vi.fn(async () => sheetSnap),
+      insertCells: vi.fn(async () => {}),
+      applyLayout: vi.fn(async () => {}),
+      replace: vi.fn(async () => ({ notFound: { items: [], table: false } })),
+      dispose: vi.fn(),
+      ...over,
+    });
+    const doc = (): DocumentAdapter => ({
+      snapshot: vi.fn(async () => ({ blocks: [], truncated: false })),
+      insertTags: vi.fn(async () => {}),
+      insertTable: vi.fn(async () => {}),
+      replaceAll: vi.fn(async () => {}),
+      replace: vi.fn(async () => ({ notFound: { items: [], tables: [] } })),
+      dispose: vi.fn(),
+    });
+    const setup = () => {
+      const r = renderHook(() => useAssistantBridge(), { wrapper });
+      const openTab = vi.fn();
+      act(() => {
+        r.result.current.registerEditor({
+          templateId: 't',
+          templateName: 'T',
+          fileExt: 'xlsx',
+          saved: () => saved,
+          openTab,
+        });
+      });
+      return { ...r, openTab };
+    };
+
+    it('лист смонтирован — run сразу с адаптером листа', async () => {
+      const { result } = setup();
+      const a = sheet();
+      act(() => {
+        result.current.registerSheet({ templateId: 't', adapter: a, editable: () => true });
+      });
+      expect(result.current.sheet?.templateId).toBe('t');
+      expect(result.current.documentAutomation).toBe('t');
+      const run = vi.fn(async (x: SheetAdapter) => (x === a ? 'done' : 'wrong'));
+      await expect(result.current.applySheet('t', run)).resolves.toBe('done');
+    });
+
+    it('листа нет — открыть вкладку «Документ», run после registerSheet', async () => {
+      const { result, openTab } = setup();
+      const run = vi.fn(async () => 'done');
+      let res: unknown;
+      await act(async () => {
+        res = await result.current.applySheet('t', run);
+      });
+      expect(res).toBe('opened');
+      expect(openTab).toHaveBeenCalledWith('document');
+      expect(run).not.toHaveBeenCalled();
+      const a = sheet();
+      await act(async () => {
+        result.current.registerSheet({ templateId: 't', adapter: a, editable: () => true });
+      });
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenCalledWith(a, expect.any(Function));
+    });
+
+    it('регистрация документа того же шаблона отложенный run листа не запускает (и наоборот)', async () => {
+      const { result } = setup();
+      const sheetRun = vi.fn(async () => 'sheet');
+      const docRun = vi.fn(async () => 'doc');
+      await act(async () => {
+        await result.current.applySheet('t', sheetRun);
+        await result.current.applyDocument('t', docRun);
+      });
+      await act(async () => {
+        result.current.registerDocument({ templateId: 't', adapter: doc(), editable: () => true });
+      });
+      expect(sheetRun).not.toHaveBeenCalled();
+      expect(docRun).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        result.current.registerSheet({ templateId: 't', adapter: sheet(), editable: () => true });
+      });
+      expect(sheetRun).toHaveBeenCalledTimes(1);
+      expect(docRun).toHaveBeenCalledTimes(1);
+    });
+
+    it('другая вкладка с правками — queued без переключения', async () => {
+      const { result, openTab } = setup();
+      act(() => {
+        result.current.registerDirty(() => true);
+      });
+      await expect(
+        result.current.applySheet(
+          't',
+          vi.fn(async () => 1),
+        ),
+      ).resolves.toBe('queued');
+      expect(openTab).not.toHaveBeenCalled();
+    });
+
+    it('карточка другого шаблона — null', async () => {
+      const { result } = setup();
+      await expect(result.current.applySheet('other', vi.fn())).resolves.toBeNull();
+    });
+
+    it('sheetSnapshot(): без листа undefined; с листом — снимок; ошибка — undefined', async () => {
+      const { result } = setup();
+      await expect(result.current.sheetSnapshot()).resolves.toBeUndefined();
+      let off = () => {};
+      act(() => {
+        off = result.current.registerSheet({
+          templateId: 't',
+          adapter: sheet(),
+          editable: () => true,
+        });
+      });
+      await expect(result.current.sheetSnapshot()).resolves.toEqual(sheetSnap);
+      // Снимок документа листом не подменяется.
+      await expect(result.current.snapshot()).resolves.toBeUndefined();
+      act(() => off());
+      expect(result.current.sheet).toBeNull();
+      await expect(result.current.sheetSnapshot()).resolves.toBeUndefined();
+      act(() => {
+        result.current.registerSheet({
+          templateId: 't',
+          adapter: sheet({ snapshot: vi.fn(async () => Promise.reject(new Error('x'))) }),
+          editable: () => true,
+        });
+      });
+      await expect(result.current.sheetSnapshot()).resolves.toBeUndefined();
+    });
+
+    it('снимок листа не пришёл за 3 с — sheetSnapshot() undefined', async () => {
+      vi.useFakeTimers();
+      try {
+        const { result } = setup();
+        act(() => {
+          result.current.registerSheet({
+            templateId: 't',
+            adapter: sheet({ snapshot: vi.fn(() => new Promise<SheetSnapshot>(() => {})) }),
+            editable: () => true,
+          });
+        });
+        const p = result.current.sheetSnapshot();
+        await vi.advanceTimersByTimeAsync(3_000);
+        await expect(p).resolves.toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('revokeDocument сбрасывает отложенные run листа (dropped) и признак', async () => {
+      const { result } = setup();
+      let off = () => {};
+      act(() => {
+        off = result.current.registerSheet({
+          templateId: 't',
+          adapter: sheet(),
+          editable: () => true,
+        });
+      });
+      act(() => off());
+      expect(result.current.documentAutomation).toBe('t');
+      const run = vi.fn(async () => 'done');
+      const dropped = vi.fn();
+      await act(async () => {
+        await result.current.applySheet('t', run, dropped);
+      });
+      act(() => result.current.revokeDocument('t'));
+      expect(result.current.documentAutomation).toBeNull();
+      expect(dropped).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        result.current.registerSheet({ templateId: 't', adapter: sheet(), editable: () => true });
+      });
+      expect(run).not.toHaveBeenCalled();
+    });
+
+    it('clearPending сбрасывает отложенные run листа (dropped)', async () => {
+      const { result } = setup();
+      const dropped = vi.fn();
+      await act(async () => {
+        await result.current.applySheet(
+          't',
+          vi.fn(async () => 1),
+          dropped,
+        );
+      });
+      act(() => result.current.clearPending());
+      expect(dropped).toHaveBeenCalledTimes(1);
     });
   });
 });

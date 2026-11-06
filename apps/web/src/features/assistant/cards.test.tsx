@@ -7,6 +7,7 @@ import { mockApi, renderWithProviders, wrapper } from '../../test/utils';
 import { AssistantBridgeProvider, useAssistantBridge, type TabRegistration } from './bridge';
 import { AssistantPanel } from './AssistantPanel';
 import type { DocumentAdapter } from './documentAdapter';
+import type { SheetAdapter } from './sheetAdapter';
 import { ASSISTANT_KEY, toHistory } from './storage';
 import { useAssistantChat, useCardText } from './useAssistantChat';
 
@@ -50,20 +51,30 @@ interface DocOptions {
   editable?: boolean;
 }
 
+interface SheetOptions {
+  adapter: SheetAdapter;
+  editable?: boolean;
+}
+
 function Registrar({
   templateId,
   dirtyTab,
   doc,
+  fileExt,
+  sheet,
 }: {
   templateId: string;
   dirtyTab?: boolean;
   doc?: DocOptions;
+  fileExt?: string;
+  sheet?: SheetOptions;
 }) {
-  const { registerEditor, registerTab, registerDocument } = useAssistantBridge();
+  const { registerEditor, registerTab, registerDocument, registerSheet } = useAssistantBridge();
   useEffect(() => {
     const off = registerEditor({
       templateId,
       templateName: 'Счёт',
+      fileExt,
       saved: () => saved,
       openTab: vi.fn(),
     });
@@ -84,12 +95,30 @@ function Registrar({
           editable: () => doc.editable ?? true,
         })
       : () => {};
+    const offSheet = sheet
+      ? registerSheet({
+          templateId,
+          adapter: sheet.adapter,
+          editable: () => sheet.editable ?? true,
+        })
+      : () => {};
     return () => {
+      offSheet();
       offDoc();
       offTab();
       off();
     };
-  }, [registerEditor, registerTab, registerDocument, templateId, dirtyTab, doc]);
+  }, [
+    registerEditor,
+    registerTab,
+    registerDocument,
+    registerSheet,
+    templateId,
+    dirtyTab,
+    doc,
+    fileExt,
+    sheet,
+  ]);
   return null;
 }
 
@@ -101,7 +130,13 @@ function Panel({ cards }: { cards: Card[] }) {
 
 function setup(
   cards: Card[],
-  editor: { templateId: string; dirtyTab?: boolean; doc?: DocOptions } | null = {
+  editor: {
+    templateId: string;
+    dirtyTab?: boolean;
+    doc?: DocOptions;
+    fileExt?: string;
+    sheet?: SheetOptions;
+  } | null = {
     templateId: 't1',
   },
 ) {
@@ -439,6 +474,31 @@ describe('формирование в документе (§52.4)', () => {
     expect(await screen.findByText('Изменено в документе')).toBeInTheDocument();
     await userEvent.click(tableBtn!);
     expect(adapter.insertTable).toHaveBeenCalledWith(rows);
+  });
+
+  it('лист xlsx открыт — кнопок формирования в документе нет (лист — свой путь, §53.4)', async () => {
+    const sheet: SheetAdapter = {
+      snapshot: vi.fn(async () => ({
+        name: 'S',
+        cells: [],
+        usedRange: 'A1',
+        active: 'A1',
+        truncated: false,
+      })),
+      insertCells: vi.fn(async () => {}),
+      applyLayout: vi.fn(async () => {}),
+      replace: vi.fn(async () => ({ notFound: { items: [], table: false } })),
+      dispose: vi.fn(),
+    };
+    setup([tags, table, documentCard, replaceCard], {
+      templateId: 't1',
+      fileExt: 'xlsx',
+      sheet: { adapter: sheet },
+    });
+    expect(await screen.findByText('Счёт № {d.number}')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: insert })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Сформировать документ' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Заменить выбранное/ })).toBeNull();
   });
 
   it('документ другого шаблона — кнопки нет', async () => {

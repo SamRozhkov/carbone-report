@@ -736,20 +736,70 @@ describe('DocumentTab: документ в мосте ассистента (§52
     expect(bridge!.document).toBeNull();
   });
 
-  it('xlsx и documentAutomation: true — адаптер документа не регистрируется (§53)', async () => {
+  it.each(['xlsx', 'ods'] as const)(
+    '%s и documentAutomation: true — регистрируется лист, не документ (§53.4)',
+    async (fileExt) => {
+      const c = connector();
+      const createConnector = vi.fn(() => c);
+      win.DocEditor = { instances: { 'cr-doc-editor': { createConnector } } };
+      mockApi([
+        ...lock,
+        { path: '/api/templates/t1/editor-config', body: { ...config, documentAutomation: true } },
+      ]);
+      const { unmount } = render({ ...t, fileExt });
+      await waitFor(() => expect(bridge!.sheet?.templateId).toBe('t1'));
+      expect(createConnector).toHaveBeenCalledTimes(1);
+      expect(bridge!.document).toBeNull();
+      expect(bridge!.documentAutomation).toBe('t1');
+      await waitFor(() => expect(bridge!.sheet!.editable()).toBe(true));
+      unmount();
+      expect(c.disconnect).toHaveBeenCalled();
+    },
+  );
+
+  it('docx — регистрируется документ, не лист', async () => {
+    win.DocEditor = { instances: { 'cr-doc-editor': { createConnector: vi.fn(connector) } } };
+    mockApi([
+      ...lock,
+      { path: '/api/templates/t1/editor-config', body: { ...config, documentAutomation: true } },
+    ]);
+    render({ ...t, fileExt: 'docx' });
+    await waitFor(() => expect(bridge!.document?.templateId).toBe('t1'));
+    expect(bridge!.sheet).toBeNull();
+  });
+
+  it('pptx и documentAutomation: true — connector не создаётся', async () => {
     const createConnector = vi.fn(connector);
     win.DocEditor = { instances: { 'cr-doc-editor': { createConnector } } };
     mockApi([
       ...lock,
       { path: '/api/templates/t1/editor-config', body: { ...config, documentAutomation: true } },
     ]);
-    render({ ...t, fileExt: 'xlsx' });
+    render({ ...t, fileExt: 'pptx' });
     await waitFor(() =>
       expect(screen.getByTestId('oo')).toHaveAttribute('data-built-mode', 'edit'),
     );
     await sleep(50);
     expect(createConnector).not.toHaveBeenCalled();
     expect(bridge!.document).toBeNull();
+    expect(bridge!.sheet).toBeNull();
+  });
+
+  it('xlsx: createConnector бросает — ничего не зарегистрировано, ошибки на экране нет', async () => {
+    const createConnector = vi.fn(() => {
+      throw new Error('not available');
+    });
+    win.DocEditor = { instances: { 'cr-doc-editor': { createConnector } } };
+    mockApi([
+      ...lock,
+      { path: '/api/templates/t1/editor-config', body: { ...config, documentAutomation: true } },
+    ]);
+    render({ ...t, fileExt: 'xlsx' });
+    await waitFor(() => expect(createConnector).toHaveBeenCalled());
+    expect(bridge!.sheet).toBeNull();
+    expect(bridge!.document).toBeNull();
+    expect(bridge!.documentAutomation).toBeNull();
+    expect(screen.queryByText(/not available/)).toBeNull();
   });
 
   it('documentAutomation: true — регистрация после готовности документа; размонтирование — disconnect', async () => {
@@ -866,7 +916,7 @@ describe('DocumentTab: документ в мосте ассистента (§52
     render();
     await waitFor(() => expect(createConnector).toHaveBeenCalled());
     expect(bridge!.document).toBeNull();
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/not available/)).toBeNull();
     expect(screen.queryByText(/not available/)).toBeNull();
   });
 });

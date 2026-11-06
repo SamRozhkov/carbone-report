@@ -164,6 +164,6 @@
     "testOk": "Das Modell antwortet und unterstützt Tool-Aufrufe",
     "save": "Speichern",
     "saved": "Einstellungen gespeichert",
-    "privacyAuthor": "Für Vorlagenautoren werden außerdem das SQL der Vorlagenabfragen und das Schema der Quelldatenbank (Tabellen und Spalten) übermittelt, aber keine Daten. Wenn OnlyOffice das Erstellen im Dokument unterstützt, wird dem Modell außerdem der Text des im Editor geöffneten Vorlagendokuments übermittelt."
+    "privacyAuthor": "Für Vorlagenautoren werden außerdem das SQL der Vorlagenabfragen und das Schema der Quelldatenbank (Tabellen und Spalten) übermittelt, aber keine Daten. Wenn OnlyOffice das Erstellen im Dokument unterstützt, wird dem Modell außerdem der Text des im Editor geöffneten Vorlagendokuments oder der Vorlagentabelle übermittelt."
   }
 }

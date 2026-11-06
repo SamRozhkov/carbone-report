@@ -8,6 +8,8 @@ import { ParamCardView } from './ParamCardView';
 import { QueryCardView } from './QueryCardView';
 import { ReplaceCardView } from './ReplaceCardView';
 import { RunCardView } from './RunCardView';
+import { SheetCardView } from './SheetCardView';
+import { SheetReplaceCardView } from './SheetReplaceCardView';
 import { TableCardView } from './TableCardView';
 import { TagsCardView } from './TagsCardView';
 import type { AssistantChat } from './useAssistantChat';
@@ -106,9 +108,9 @@ export function AssistantPanel({ chat }: { chat: AssistantChat }) {
                   case 'replace':
                     return <ReplaceCardView key={j} card={c} />;
                   case 'sheet':
+                    return <SheetCardView key={j} card={c} />;
                   case 'sheetReplace':
-                    // Task 10: отображение карточек листа
-                    return null;
+                    return <SheetReplaceCardView key={j} card={c} />;
                 }
               })}
           </div>

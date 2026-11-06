@@ -164,6 +164,6 @@
     "testOk": "The model responds and supports tool calling",
     "save": "Save",
     "saved": "Settings saved",
-    "privacyAuthor": "For template authors, template SQL and the data source schema (tables and columns) are also sent, but not data. If OnlyOffice supports building templates in the document, the text of the template document open in the editor is also sent to the model."
+    "privacyAuthor": "For template authors, template SQL and the data source schema (tables and columns) are also sent, but not data. If OnlyOffice supports building templates in the document, the text of the template document or spreadsheet open in the editor is also sent to the model."
   }
 }

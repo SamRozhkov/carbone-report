@@ -185,6 +185,14 @@
     "cardReplaceTable": "Table: {{header}} → rows of “{{key}}”",
     "cardDocumentText": "Proposed document: {{text}}",
     "cardReplaceText": "Proposed replacements: {{items}} values, {{tables}} tables",
+    "cardInsertSheet": "Insert into sheet",
+    "cardFormSheet": "Build sheet",
+    "cardReplaceSheetConfirm": "Replace the sheet content? You can undo with Ctrl+Z",
+    "cardOverwriteCellsConfirm": "Overwrite non-empty cells? You can undo with Ctrl+Z",
+    "cardSheetTable": "Table: rows {{first}}–{{last}} → “{{key}}”",
+    "cardSheetText": "Proposed sheet: {{key}}",
+    "cardSheetReplaceText": "Proposed replacements: {{items}} values, table",
+    "cardSheetReplaceItemsText": "Proposed replacements: {{items}} values",
     "sheetTotal": "Total",
     "sheetSubtotal": "Group total"
   }

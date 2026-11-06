@@ -1,4 +1,10 @@
-import type { Card, DocSnapshot, EditorDraft } from '@carbone-reports/shared';
+import type {
+  Card,
+  DocSnapshot,
+  EditorDraft,
+  SheetLayout,
+  SheetSnapshot,
+} from '@carbone-reports/shared';
 import { act, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect } from 'react';
@@ -7,7 +13,8 @@ import { mockApi, renderWithProviders, wrapper } from '../../test/utils';
 import { AssistantBridgeProvider, useAssistantBridge, type TabRegistration } from './bridge';
 import { AssistantPanel } from './AssistantPanel';
 import type { DocumentAdapter } from './documentAdapter';
-import type { SheetAdapter } from './sheetAdapter';
+import { gridLayout, textLayout, type SheetAdapter } from './sheetAdapter';
+import { overlaps } from './sheetOverlap';
 import { ASSISTANT_KEY, toHistory } from './storage';
 import { useAssistantChat, useCardText } from './useAssistantChat';
 
@@ -764,6 +771,269 @@ describe('формирование в документе (§52.4)', () => {
       text: `${i}`.repeat(100),
     }));
     expect(result.current({ ...documentCard, blocks: many }).length).toBeLessThanOrEqual(4000);
+  });
+});
+
+describe('формирование в листе (§53.3)', () => {
+  const emptySnapshot: SheetSnapshot = {
+    name: 'Лист1',
+    cells: [],
+    usedRange: 'A1',
+    active: 'B2',
+    truncated: false,
+  };
+  const fakeSheet = (snapshot: SheetSnapshot = emptySnapshot) => ({
+    snapshot: vi.fn(async () => snapshot),
+    insertCells: vi.fn(async () => {}),
+    applyLayout: vi.fn(async () => {}),
+    replace: vi.fn(async () => ({ notFound: { items: [] as number[], table: false } })),
+    dispose: vi.fn(),
+  });
+  const inSheet = (adapter: SheetAdapter, editable = true) => ({
+    templateId: 't1',
+    fileExt: 'xlsx',
+    sheet: { adapter, editable },
+  });
+  const tags: Card = {
+    type: 'tags',
+    templateId: 't1',
+    templateName: 'Счёт',
+    text: '{d.number}\n{d.date}',
+    explanation: '',
+  };
+  const rows = [
+    ['Товар', 'Цена'],
+    ['{d.items[i].name}', '{d.items[i].price}'],
+    ['{d.items[i+1].name}', ''],
+  ];
+  const tableLayout: SheetLayout = {
+    rows: 2,
+    cols: 2,
+    widths: [20, 10],
+    cells: [
+      { row: 0, col: 0, value: 'Товар', kind: 'text', style: 'header' },
+      { row: 0, col: 1, value: 'Цена', kind: 'text', style: 'header' },
+      { row: 1, col: 0, value: '{d.items[i].name}', kind: 'text', style: 'data' },
+      { row: 1, col: 1, value: '{d.items[i].price}', kind: 'decimal', style: 'data' },
+    ],
+  };
+  const table: Card = {
+    type: 'table',
+    templateId: 't1',
+    templateName: 'Счёт',
+    key: 'items',
+    rows,
+    explanation: '',
+  };
+  const bigLayout: SheetLayout = {
+    rows: 14,
+    cols: 2,
+    widths: [20, 10],
+    cells: Array.from({ length: 14 }, (_, row) => ({
+      row,
+      col: 0,
+      value: `Строка ${row + 1}`,
+      kind: 'text' as const,
+      style: 'plain' as const,
+    })),
+  };
+  const sheetCard: Extract<Card, { type: 'sheet' }> = {
+    type: 'sheet',
+    templateId: 't1',
+    templateName: 'Счёт',
+    key: 'items',
+    layout: bigLayout,
+    explanation: 'Лист счёта',
+  };
+  const sheetReplaceCard: Extract<Card, { type: 'sheetReplace' }> = {
+    type: 'sheetReplace',
+    templateId: 't1',
+    templateName: 'Счёт',
+    items: [
+      { ref: 'B2', find: 'ООО Ромашка', tag: '{d.buyer}' },
+      { ref: 'C3', find: '15.03.2026', tag: '{d.date}', note: 'дата счёта' },
+    ],
+    table: {
+      key: 'items',
+      grouped: false,
+      firstCol: 0,
+      headerRow: 4,
+      firstDataRow: 5,
+      lastDataRow: 9,
+      rowShift: -3,
+      fingerprint: { header: ['Товар', 'Цена'], columns: 2, sample: ['Стол', '100'] },
+      rows: [
+        { styleFrom: 5, cells: ['{d.items[i].name}', '{d.items[i].price}'] },
+        { styleFrom: 5, cells: ['{d.items[i+1].name}', ''] },
+      ],
+      totals: null,
+    },
+    explanation: '',
+  };
+  const insertSheet = 'Вставить в таблицу';
+  const formSheet = 'Сформировать лист';
+
+  it('overlaps: ячейка раскладки на непустой ячейке снимка; truncated — всегда', () => {
+    const snap: SheetSnapshot = { ...emptySnapshot, cells: [{ ref: 'C3', text: 'x' }] };
+    expect(overlaps(snap, 'B2', tableLayout)).toBe(true);
+    expect(overlaps(snap, 'D3', tableLayout)).toBe(false);
+    expect(overlaps(snap, 'A1', tableLayout)).toBe(false);
+    expect(overlaps({ ...emptySnapshot, truncated: true }, 'Z99', tableLayout)).toBe(true);
+  });
+
+  it('без возможности у фрагмента и таблицы в xlsx нет кнопок формирования', async () => {
+    setup([tags, table], { templateId: 't1', fileExt: 'xlsx' });
+    expect(await screen.findByRole('button', { name: 'Копировать таблицу' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: insertSheet })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Вставить в документ' })).toBeNull();
+  });
+
+  it('«Вставить в таблицу»: фрагмент — строками вниз от активной ячейки, таблица — раскладкой', async () => {
+    const adapter = fakeSheet();
+    setup([tags, { ...table, layout: tableLayout }, { ...table, key: 'other' }], inSheet(adapter));
+    const [tagsBtn, layoutBtn, gridBtn] = await screen.findAllByRole('button', {
+      name: insertSheet,
+    });
+    expect(screen.queryByRole('button', { name: 'Вставить в документ' })).toBeNull();
+    await userEvent.click(tagsBtn!);
+    await waitFor(() =>
+      expect(adapter.insertCells).toHaveBeenCalledWith('B2', textLayout('{d.number}\n{d.date}')),
+    );
+    expect(await screen.findByText('Изменено в документе')).toBeInTheDocument();
+    await userEvent.click(layoutBtn!);
+    await waitFor(() => expect(adapter.insertCells).toHaveBeenLastCalledWith('B2', tableLayout));
+    await userEvent.click(gridBtn!);
+    await waitFor(() =>
+      expect(adapter.insertCells).toHaveBeenLastCalledWith('B2', gridLayout(rows)),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('непустые ячейки под раскладкой — подтверждение; отказ — insertCells не вызван', async () => {
+    const adapter = fakeSheet({ ...emptySnapshot, cells: [{ ref: 'B3', text: 'старое' }] });
+    setup([tags], inSheet(adapter));
+    await userEvent.click(await screen.findByRole('button', { name: insertSheet }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText('Перезаписать непустые ячейки? Отменить можно через Ctrl+Z'),
+    ).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Отмена' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(adapter.insertCells).not.toHaveBeenCalled();
+    expect(screen.queryByText('Изменено в документе')).toBeNull();
+  });
+
+  it('снимок усечён — подтверждение всегда; согласие — insertCells', async () => {
+    const adapter = fakeSheet({ ...emptySnapshot, truncated: true });
+    setup([tags], inSheet(adapter));
+    await userEvent.click(await screen.findByRole('button', { name: insertSheet }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Заменить' }));
+    await waitFor(() => expect(adapter.insertCells).toHaveBeenCalledTimes(1));
+  });
+
+  it('лист: превью из первых 10 строк раскладки, пояснение; пустой лист — без вопроса', async () => {
+    const adapter = fakeSheet();
+    setup([sheetCard], inSheet(adapter));
+    expect(await screen.findByText('Строка 10')).toBeInTheDocument();
+    expect(screen.queryByText('Строка 11')).toBeNull();
+    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(10);
+    expect(screen.getByText('Лист счёта')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: formSheet }));
+    await waitFor(() => expect(adapter.applyLayout).toHaveBeenCalledWith(bigLayout));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(await screen.findByText('Изменено в документе')).toBeInTheDocument();
+  });
+
+  it('лист: без возможности — без кнопки «Сформировать лист»', async () => {
+    setup([sheetCard], { templateId: 't1', fileExt: 'xlsx' });
+    expect(await screen.findByText('Строка 1')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: formSheet })).toBeNull();
+  });
+
+  it('лист: непустой — подтверждение; отмена и согласие', async () => {
+    const adapter = fakeSheet({ ...emptySnapshot, cells: [{ ref: 'Z50', text: 'x' }] });
+    setup([sheetCard], inSheet(adapter));
+    await userEvent.click(await screen.findByRole('button', { name: formSheet }));
+    let dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText('Заменить содержимое листа? Отменить можно через Ctrl+Z'),
+    ).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Отмена' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(adapter.applyLayout).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: formSheet }));
+    dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Заменить' }));
+    await waitFor(() => expect(adapter.applyLayout).toHaveBeenCalledWith(bigLayout));
+  });
+
+  it('лист только для просмотра — кнопки неактивны с подсказкой', async () => {
+    setup([tags, sheetCard, sheetReplaceCard], inSheet(fakeSheet(), false));
+    expect(await screen.findByRole('button', { name: insertSheet })).toBeDisabled();
+    expect(screen.getByRole('button', { name: formSheet })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Заменить выбранное (3)' })).toBeDisabled();
+    expect(screen.getAllByText('Чтобы изменить документ, начните редактирование')).toHaveLength(3);
+  });
+
+  describe('замены в листе', () => {
+    it('«было → станет» с адресом, таблица строками 1-based; все отмечены', async () => {
+      setup([sheetReplaceCard], inSheet(fakeSheet()));
+      const boxes = await screen.findAllByRole('checkbox');
+      expect(boxes).toHaveLength(3);
+      for (const b of boxes) expect(b).toBeChecked();
+      expect(screen.getByText('ООО Ромашка → {d.buyer}')).toBeInTheDocument();
+      expect(boxes[0]!.closest('li')).toHaveTextContent('B2');
+      expect(screen.getByText('дата счёта')).toBeInTheDocument();
+      expect(screen.getByText('Таблица: строки 6–10 → «items»')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Заменить выбранное (3)' })).toBeEnabled();
+    });
+
+    it('снятая галочка уменьшает счётчик и исключает пункт; снятая таблица — null', async () => {
+      const adapter = fakeSheet();
+      setup([sheetReplaceCard], inSheet(adapter));
+      const boxes = await screen.findAllByRole('checkbox');
+      await userEvent.click(boxes[0]!);
+      await userEvent.click(boxes[2]!);
+      await userEvent.click(screen.getByRole('button', { name: 'Заменить выбранное (1)' }));
+      await waitFor(() =>
+        expect(adapter.replace).toHaveBeenCalledWith([sheetReplaceCard.items[1]], null),
+      );
+      expect(await screen.findByText('Изменено в документе')).toBeInTheDocument();
+      await userEvent.click(boxes[1]!);
+      expect(screen.getByRole('button', { name: 'Заменить выбранное (0)' })).toBeDisabled();
+    });
+
+    it('notFound помечает пункты и таблицу «не найдено» (индексы — среди выбранных)', async () => {
+      const adapter = fakeSheet();
+      adapter.replace.mockResolvedValue({ notFound: { items: [0], table: true } });
+      setup([sheetReplaceCard], inSheet(adapter));
+      const boxes = await screen.findAllByRole('checkbox');
+      await userEvent.click(boxes[0]!);
+      await userEvent.click(screen.getByRole('button', { name: 'Заменить выбранное (2)' }));
+      await waitFor(() =>
+        expect(adapter.replace).toHaveBeenCalledWith(
+          [sheetReplaceCard.items[1]],
+          sheetReplaceCard.table,
+        ),
+      );
+      await waitFor(() => expect(screen.getAllByText('не найдено')).toHaveLength(2));
+      expect(boxes[0]!.closest('li')).not.toHaveTextContent('не найдено');
+      expect(boxes[1]!.closest('li')).toHaveTextContent('не найдено');
+      expect(boxes[2]!.closest('li')).toHaveTextContent('не найдено');
+    });
+  });
+
+  it('в историю — ключ листа и число замен (с таблицей и без)', () => {
+    const { result } = renderHook(() => useCardText(), { wrapper });
+    expect(result.current(sheetCard)).toBe('Предложен лист: items');
+    expect(result.current(sheetReplaceCard)).toBe('Предложены замены: 2 значений, таблица');
+    expect(result.current({ ...sheetReplaceCard, table: null })).toBe(
+      'Предложены замены: 2 значений',
+    );
+    expect(result.current({ ...sheetCard, key: 'k'.repeat(5000) }).length).toBeLessThanOrEqual(
+      4000,
+    );
   });
 });
 

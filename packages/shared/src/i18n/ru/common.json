@@ -187,6 +187,14 @@
     "cardReplaceTable": "Таблица: {{header}} → строки «{{key}}»",
     "cardDocumentText": "Предложен документ: {{text}}",
     "cardReplaceText": "Предложены замены: {{items}} значений, {{tables}} таблиц",
+    "cardInsertSheet": "Вставить в таблицу",
+    "cardFormSheet": "Сформировать лист",
+    "cardReplaceSheetConfirm": "Заменить содержимое листа? Отменить можно через Ctrl+Z",
+    "cardOverwriteCellsConfirm": "Перезаписать непустые ячейки? Отменить можно через Ctrl+Z",
+    "cardSheetTable": "Таблица: строки {{first}}–{{last}} → «{{key}}»",
+    "cardSheetText": "Предложен лист: {{key}}",
+    "cardSheetReplaceText": "Предложены замены: {{items}} значений, таблица",
+    "cardSheetReplaceItemsText": "Предложены замены: {{items}} значений",
     "sheetTotal": "Итого",
     "sheetSubtotal": "Итого по группе"
   }

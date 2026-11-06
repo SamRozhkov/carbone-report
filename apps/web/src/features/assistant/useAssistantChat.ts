@@ -77,9 +77,14 @@ export function useCardText(): (c: Card) => string {
             tables: c.tables.length,
           });
         case 'sheet':
+          return t('common:assistant.cardSheetText', { key: c.key }).slice(0, MAX_CARD_TEXT);
         case 'sheetReplace':
-          // Task 10: тексты карточек листа
-          return '';
+          return t(
+            c.table
+              ? 'common:assistant.cardSheetReplaceText'
+              : 'common:assistant.cardSheetReplaceItemsText',
+            { items: c.items.length },
+          );
       }
     },
     [t],

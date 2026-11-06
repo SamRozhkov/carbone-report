@@ -3,6 +3,8 @@ import { Grip } from '@gravity-ui/icons';
 import { Button, Icon, Text } from '@gravity-ui/uikit';
 import { useTranslation } from 'react-i18next';
 import { DocumentActionButton } from './DocumentActionButton';
+import { gridLayout } from './sheetAdapter';
+import { SheetInsertButton } from './SheetCardView';
 import { useCopy } from './useCopy';
 import { useDocumentAction } from './useDocumentAction';
 
@@ -45,7 +47,8 @@ export function TablePreview({ rows }: { rows: string[][] }) {
 }
 
 /** Карточка таблицы для запроса-списка (§51.8): копируется или перетаскивается в документ,
- *  а при доступном формировании — вставляется кнопкой в позицию курсора (§52.4). */
+ *  а при доступном формировании — вставляется кнопкой в позицию курсора (§52.4) или от активной
+ *  ячейки листа (§53.3). */
 export function TableCardView({ card }: { card: TableCard }) {
   const { t } = useTranslation();
   const copy = useCopy();
@@ -81,6 +84,11 @@ export function TableCardView({ card }: { card: TableCard }) {
           state={doc}
           label={t('common:assistant.cardInsert')}
           onClick={() => doc.run((a) => a.insertTable(card.rows))}
+        />
+        {/* В листе — раскладка сервера с форматами; без неё — сетка текста (§53.3). */}
+        <SheetInsertButton
+          templateId={card.templateId}
+          layout={() => card.layout ?? gridLayout(card.rows)}
         />
         <Button view="outlined" onClick={() => copy(content())}>
           {t('common:assistant.cardCopyTable')}

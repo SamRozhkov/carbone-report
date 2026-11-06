@@ -186,6 +186,14 @@
     "cardReplaceTable": "Tabela: {{header}} → linhas de “{{key}}”",
     "cardDocumentText": "Documento proposto: {{text}}",
     "cardReplaceText": "Substituições propostas: {{items}} valores, {{tables}} tabelas",
+    "cardInsertSheet": "Inserir na planilha",
+    "cardFormSheet": "Montar planilha",
+    "cardReplaceSheetConfirm": "Substituir o conteúdo da planilha? É possível desfazer com Ctrl+Z",
+    "cardOverwriteCellsConfirm": "Sobrescrever células não vazias? É possível desfazer com Ctrl+Z",
+    "cardSheetTable": "Tabela: linhas {{first}}–{{last}} → “{{key}}”",
+    "cardSheetText": "Planilha proposta: {{key}}",
+    "cardSheetReplaceText": "Substituições propostas: {{items}} valores, tabela",
+    "cardSheetReplaceItemsText": "Substituições propostas: {{items}} valores",
     "sheetTotal": "Total",
     "sheetSubtotal": "Total do grupo"
   }

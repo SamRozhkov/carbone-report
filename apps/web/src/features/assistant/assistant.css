@@ -166,6 +166,13 @@ body:has(.cr-doc-full) .cr-assistant {
   overflow-wrap: anywhere;
 }
 
+/* Превью листа (§53.3): пустые ячейки сетки сохраняют высоту строки. */
+.cr-assistant__sheet td {
+  min-width: 2em;
+  height: 1.5em;
+  white-space: pre-wrap;
+}
+
 .cr-assistant__table-service td {
   color: var(--g-color-text-secondary);
   font-style: italic;
@@ -206,6 +213,13 @@ body:has(.cr-doc-full) .cr-assistant {
 .cr-assistant__replace-text {
   font-family: var(--g-font-family-monospace);
   overflow-wrap: anywhere;
+}
+
+/* Адрес ячейки слева от замены в листе (§53.3). */
+.cr-assistant__replace-ref {
+  margin-right: 6px;
+  color: var(--g-color-text-secondary);
+  font-family: var(--g-font-family-monospace);
 }
 
 .cr-assistant__replace-count {

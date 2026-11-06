@@ -185,6 +185,14 @@
     "cardReplaceTable": "Tabelle: {{header}} → Zeilen von „{{key}}“",
     "cardDocumentText": "Vorgeschlagenes Dokument: {{text}}",
     "cardReplaceText": "Vorgeschlagene Ersetzungen: {{items}} Werte, {{tables}} Tabellen",
+    "cardInsertSheet": "In die Tabelle einfügen",
+    "cardFormSheet": "Tabellenblatt erstellen",
+    "cardReplaceSheetConfirm": "Inhalt des Tabellenblatts ersetzen? Rückgängig mit Strg+Z",
+    "cardOverwriteCellsConfirm": "Nicht leere Zellen überschreiben? Rückgängig mit Strg+Z",
+    "cardSheetTable": "Tabelle: Zeilen {{first}}–{{last}} → „{{key}}“",
+    "cardSheetText": "Vorgeschlagenes Tabellenblatt: {{key}}",
+    "cardSheetReplaceText": "Vorgeschlagene Ersetzungen: {{items}} Werte, Tabelle",
+    "cardSheetReplaceItemsText": "Vorgeschlagene Ersetzungen: {{items}} Werte",
     "sheetTotal": "Summe",
     "sheetSubtotal": "Gruppensumme"
   }

@@ -61,7 +61,7 @@ export function SheetInsertButton({
         open={confirm.open}
         title={t('common:assistant.cardInsertSheet')}
         text={t('common:assistant.cardOverwriteCellsConfirm')}
-        confirmText={t('common:assistant.cardReplaceDocumentApply')}
+        confirmText={t('common:assistant.cardOverwriteCellsApply')}
         danger
         modalClassName="cr-assistant-dialog"
         onCancel={() => confirm.answer(false)}

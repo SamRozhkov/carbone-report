@@ -190,6 +190,7 @@
     "cardFormSheet": "Générer la feuille",
     "cardReplaceSheetConfirm": "Remplacer le contenu de la feuille ? Annulation possible avec Ctrl+Z",
     "cardOverwriteCellsConfirm": "Écraser les cellules non vides ? Annulation possible avec Ctrl+Z",
+    "cardOverwriteCellsApply": "Écraser",
     "cardSheetTable": "Tableau : lignes {{first}}–{{last}} → « {{key}} »",
     "cardSheetText": "Feuille proposée : {{key}}",
     "cardSheetReplaceText": "Remplacements proposés : {{items}} valeurs, tableau",

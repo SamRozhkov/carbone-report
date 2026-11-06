@@ -190,6 +190,7 @@
     "cardFormSheet": "Crear hoja",
     "cardReplaceSheetConfirm": "¿Reemplazar el contenido de la hoja? Puede deshacerlo con Ctrl+Z",
     "cardOverwriteCellsConfirm": "¿Sobrescribir celdas no vacías? Puede deshacerlo con Ctrl+Z",
+    "cardOverwriteCellsApply": "Sobrescribir",
     "cardSheetTable": "Tabla: filas {{first}}–{{last}} → «{{key}}»",
     "cardSheetText": "Hoja propuesta: {{key}}",
     "cardSheetReplaceText": "Reemplazos propuestos: {{items}} valores, tabla",

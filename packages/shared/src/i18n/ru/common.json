@@ -191,6 +191,7 @@
     "cardFormSheet": "Сформировать лист",
     "cardReplaceSheetConfirm": "Заменить содержимое листа? Отменить можно через Ctrl+Z",
     "cardOverwriteCellsConfirm": "Перезаписать непустые ячейки? Отменить можно через Ctrl+Z",
+    "cardOverwriteCellsApply": "Перезаписать",
     "cardSheetTable": "Таблица: строки {{first}}–{{last}} → «{{key}}»",
     "cardSheetText": "Предложен лист: {{key}}",
     "cardSheetReplaceText": "Предложены замены: {{items}} значений, таблица",

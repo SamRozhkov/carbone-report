@@ -189,6 +189,7 @@
     "cardFormSheet": "Build sheet",
     "cardReplaceSheetConfirm": "Replace the sheet content? You can undo with Ctrl+Z",
     "cardOverwriteCellsConfirm": "Overwrite non-empty cells? You can undo with Ctrl+Z",
+    "cardOverwriteCellsApply": "Overwrite",
     "cardSheetTable": "Table: rows {{first}}–{{last}} → “{{key}}”",
     "cardSheetText": "Proposed sheet: {{key}}",
     "cardSheetReplaceText": "Proposed replacements: {{items}} values, table",

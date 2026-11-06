@@ -190,6 +190,7 @@
     "cardFormSheet": "Montar planilha",
     "cardReplaceSheetConfirm": "Substituir o conteúdo da planilha? É possível desfazer com Ctrl+Z",
     "cardOverwriteCellsConfirm": "Sobrescrever células não vazias? É possível desfazer com Ctrl+Z",
+    "cardOverwriteCellsApply": "Sobrescrever",
     "cardSheetTable": "Tabela: linhas {{first}}–{{last}} → “{{key}}”",
     "cardSheetText": "Planilha proposta: {{key}}",
     "cardSheetReplaceText": "Substituições propostas: {{items}} valores, tabela",

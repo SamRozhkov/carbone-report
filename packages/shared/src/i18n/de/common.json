@@ -189,6 +189,7 @@
     "cardFormSheet": "Tabellenblatt erstellen",
     "cardReplaceSheetConfirm": "Inhalt des Tabellenblatts ersetzen? Rückgängig mit Strg+Z",
     "cardOverwriteCellsConfirm": "Nicht leere Zellen überschreiben? Rückgängig mit Strg+Z",
+    "cardOverwriteCellsApply": "Überschreiben",
     "cardSheetTable": "Tabelle: Zeilen {{first}}–{{last}} → „{{key}}“",
     "cardSheetText": "Vorgeschlagenes Tabellenblatt: {{key}}",
     "cardSheetReplaceText": "Vorgeschlagene Ersetzungen: {{items}} Werte, Tabelle",

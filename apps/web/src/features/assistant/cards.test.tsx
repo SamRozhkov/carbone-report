@@ -879,6 +879,27 @@ describe('формирование в листе (§53.3)', () => {
     expect(overlaps(snap, 'D3', tableLayout)).toBe(false);
     expect(overlaps(snap, 'A1', tableLayout)).toBe(false);
     expect(overlaps({ ...emptySnapshot, truncated: true }, 'Z99', tableLayout)).toBe(true);
+    // Пустые значения раскладки адаптер не пишет — ячейка под ними не перезаписывается.
+    expect(
+      overlaps(
+        snap,
+        'B2',
+        gridLayout([
+          ['a', 'b'],
+          ['c', ''],
+        ]),
+      ),
+    ).toBe(false);
+    expect(
+      overlaps(
+        snap,
+        'B2',
+        gridLayout([
+          ['a', 'b'],
+          ['c', 'd'],
+        ]),
+      ),
+    ).toBe(true);
   });
 
   it('без возможности у фрагмента и таблицы в xlsx нет кнопок формирования', async () => {
@@ -928,7 +949,7 @@ describe('формирование в листе (§53.3)', () => {
     setup([tags], inSheet(adapter));
     await userEvent.click(await screen.findByRole('button', { name: insertSheet }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Заменить' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Перезаписать' }));
     await waitFor(() => expect(adapter.insertCells).toHaveBeenCalledTimes(1));
   });
 

@@ -2,6 +2,7 @@
 // Порт buildDocx/docxText из scripts/help-check.ts на CommonJS с yazl/yauzl.
 const yazl = require('yazl');
 const yauzl = require('yauzl');
+const assert = require('assert');
 
 const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -276,4 +277,126 @@ function buildOdf (ext, body, opts) {
 
 const buildOdt = (body, opts) => buildOdf('odt', body, opts);
 
-module.exports = { ODF_NS, buildOdf, buildOdt, buildDocx, buildDocxWithChart, buildXlsxWithChart, docxText, entryNames, normalizeError, readEntry, zipBuffer };
+// Листы XLSX/ODS для тестов рендера ячеек (§53, §54): сборка из строк текстов ячеек и разбор результата.
+// renderBuffer подключается при вызове — golden-lib загружается и без движка.
+const RU = { lang: 'ru', timezone: 'Europe/Moscow' };
+
+/** XLSX: строки — массивы текстов ячеек (общие строки, как сохраняет Excel); ячейки со стилем s="1" */
+function xlsx (rows) {
+  const strings = [];
+  const cell = (v, r, c) => {
+    strings.push(v);
+    return '<c r="' + String.fromCharCode(65 + c) + r + '" s="1" t="s"><v>' + (strings.length - 1) + '</v></c>';
+  };
+  const sheet = rows.map((cells, r) => '<row r="' + (r + 1) + '">' + cells.map((v, c) => cell(v, r + 1, c)).join('') + '</row>').join('');
+  return zipBuffer([
+    { name: '[Content_Types].xml', data: XML + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>' },
+    { name: '_rels/.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+    { name: 'xl/workbook.xml', data: XML + '<workbook xmlns="' + SHEET_NS + '" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Лист1" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+    { name: 'xl/_rels/workbook.xml.rels', data: XML + '<Relationships xmlns="' + RELS + '"><Relationship Id="rId1" Type="' + OFFICE_REL + '/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="' + OFFICE_REL + '/sharedStrings" Target="sharedStrings.xml"/></Relationships>' },
+    { name: 'xl/sharedStrings.xml', data: XML + '<sst xmlns="' + SHEET_NS + '">' + strings.map((s) => '<si><t xml:space="preserve">' + s + '</t></si>').join('') + '</sst>' },
+    { name: 'xl/worksheets/sheet1.xml', data: XML + '<worksheet xmlns="' + SHEET_NS + '"><sheetData>' + sheet + '</sheetData></worksheet>' }
+  ]);
+}
+
+/**
+ * Собранный XLSX → строки ячеек { t, v } (t — тип ячейки, v — содержимое <v> или null, если элемента нет);
+ * текст общих строк подставляется в v.
+ */
+async function renderXlsx (rows, data, options) {
+  const out = await require('../lib/index').renderBuffer(await xlsx(rows), 'xlsx', data, options || RU);
+  const sheet = await readEntry(out, 'xl/worksheets/sheet1.xml');
+  assertWellFormed(sheet);
+  let sst = '';
+  try {
+    sst = await readEntry(out, 'xl/sharedStrings.xml');
+  }
+  catch (e) {
+    sst = '';
+  }
+  const strings = [...sst.matchAll(/<si>([\s\S]*?)<\/si>/g)].map(([, si]) => [...si.matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map((m) => m[1]).join(''));
+  const result = [];
+  for (const [, body = ''] of sheet.matchAll(/<row\b[^>]*?(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+    const cells = [];
+    for (const [, attrs, inner = ''] of body.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+      const t = (/\st="([^"]*)"/.exec(attrs) || [])[1] || null;
+      const v = (/<v>([^<]*)<\/v>/.exec(inner) || [])[1];
+      assert.ok(!/<v\s*\/>|<v><\/v>/.test(inner), 'пустой <v> в ячейке: ' + inner);
+      assert.match(attrs, /\ss="1"/, 'стиль ячейки потерян: ' + attrs);
+      cells.push({ t, v: v === undefined ? null : (t === 's' ? strings[Number(v)] : v) });
+    }
+    result.push(cells);
+  }
+  return { rows: result, sheet };
+}
+
+/**
+ * XML правильно построен — без парсера в зависимостях (строгого XML-парсера в пакете нет, htmlparser2 ошибки не
+ * ловит): теги вложены парно, атрибуты в кавычках, у элемента нет повторных атрибутов, и каждый префикс имени
+ * элемента или атрибута объявлен (xmlns:префикс) в нём или в предке.
+ */
+function assertWellFormed (xml) {
+  const stack = [];
+  const re = /<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<(\/?)([^\s/>!?]+)((?:\s+[^\s=<>"']+\s*=\s*"[^"<]*")*)\s*(\/?)>|</g;
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    if (m[0] === '<') assert.fail('сломанный тег в позиции ' + m.index + ': ' + xml.slice(m.index, m.index + 80));
+    if (m[2] === undefined) continue;
+    if (m[1] === '/') {
+      const open = stack.pop();
+      assert.strictEqual(open && open.name, m[2], 'непарный закрывающий тег </' + m[2] + '>');
+      continue;
+    }
+    const attrs = [...m[3].matchAll(/([^\s=]+)\s*=\s*"([^"]*)"/g)].map((a) => a[1]);
+    assert.strictEqual(new Set(attrs).size, attrs.length, 'повторный атрибут: ' + m[0]);
+    const ns = new Set(stack.length > 0 ? stack[stack.length - 1].ns : ['xml']);
+    attrs.filter((a) => a.startsWith('xmlns:')).forEach((a) => ns.add(a.slice(6)));
+    for (const name of [m[2], ...attrs.filter((a) => !a.startsWith('xmlns'))]) {
+      const i = name.indexOf(':');
+      if (i !== -1) assert.ok(ns.has(name.slice(0, i)), 'префикс «' + name.slice(0, i) + '» не объявлен: ' + m[0]);
+    }
+    if (m[4] !== '/') stack.push({ name: m[2], ns });
+  }
+  assert.deepStrictEqual(stack.map((e) => e.name), []);
+}
+
+const CALCEXT_NS = 'xmlns:calcext="urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0"';
+
+/**
+ * ODS: строки — массивы текстов ячеек. По умолчанию — как сохраняет LibreOffice (пространство calcext объявлено,
+ * у ячеек calcext:value-type); excel: true — как сохраняют Excel и Google Sheets (calcext нет)
+ */
+const odsCell = (text, excel) => '<table:table-cell table:style-name="ce1" office:value-type="string"' + (excel ? '' : ' calcext:value-type="string"') + '><text:p>' + text + '</text:p></table:table-cell>';
+const odsBody = (rows, excel) => '<table:table table:name="S"><table:table-column table:number-columns-repeated="' + Math.max(...rows.map((r) => r.length)) + '"/>'
+  + rows.map((cells) => '<table:table-row>' + cells.map((c) => odsCell(c, excel)).join('') + '</table:table-row>').join('') + '</table:table>';
+
+/** Собранный ODS → строки ячеек: открывающий тег и текст абзаца (у массива — свойство content); content.xml шаблона и результата — правильный XML */
+async function renderOds (rows, data, options, excel) {
+  const template = await buildOdf('ods', odsBody(rows, excel), excel ? {} : { ns: CALCEXT_NS });
+  assertWellFormed(await readEntry(template, 'content.xml'));
+  const out = await require('../lib/index').renderBuffer(template, 'ods', data, options || RU);
+  const content = await readEntry(out, 'content.xml');
+  assertWellFormed(content);
+  const result = [];
+  for (const [, body] of content.matchAll(/<table:table-row\b[^>]*>([\s\S]*?)<\/table:table-row>/g)) {
+    const cells = [];
+    for (const [, tag, text] of body.matchAll(/(<table:table-cell\b[^>]*>)<text:p>([^<]*)<\/text:p><\/table:table-cell>/g)) {
+      const attr = (name) => (new RegExp('\\s' + name + '="([^"]*)"').exec(tag) || [])[1] || null;
+      assert.match(tag, /table:style-name="ce1"/, 'стиль ячейки потерян: ' + tag);
+      cells.push({ type: attr('office:value-type'), calc: attr('calcext:value-type'), date: attr('office:date-value'), text });
+    }
+    result.push(cells);
+  }
+  // content.xml результата — неперечисляемым свойством, чтобы сравнение строк ячеек его не видело
+  Object.defineProperty(result, 'content', { value: content });
+  return result;
+}
+
+// данные тестов листов (§53): группы с вложенными строками и те же строки плоским списком
+const GROUPS = [
+  { contractor: 'Альфа', rows: [{ date: '2026-01-05', sum: 100.5, qty: 2 }, { date: '2026-01-07', sum: 50, qty: 1 }] },
+  { contractor: 'Бета', rows: [{ date: '2026-02-01', sum: 10.25, qty: 3 }] }
+];
+const LIST = GROUPS.flatMap((g) => g.rows.map((r) => ({ contractor: g.contractor, ...r })));
+
+module.exports = { GROUPS, LIST, ODF_NS, RU, assertWellFormed, renderOds, renderXlsx, xlsx, buildOdf, buildOdt, buildDocx, buildDocxWithChart, buildXlsxWithChart, docxText, entryNames, normalizeError, readEntry, zipBuffer };

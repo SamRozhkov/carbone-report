@@ -411,12 +411,19 @@ function replaceCommand(): unknown {
   }
 }
 
-// ---------- Адаптер ----------
+// ---------- Очередь команд (общая для адаптеров документа и листа) ----------
 
 /** Команда без ответа (колбэк connector не пришёл) отклоняется, чтобы не держать очередь. */
 const COMMAND_TIMEOUT_MS = 10_000;
 
-export function createDocumentAdapter(connector: Connector): DocumentAdapter {
+export interface CommandQueue {
+  /** Выполнить команду в редакторе: scope — в Asc.scope, результат {error} — отклонение. */
+  run(fn: () => unknown, scope: Record<string, unknown>): Promise<unknown>;
+  /** Отключить connector; дальнейшие команды отклоняются. */
+  dispose(): void;
+}
+
+export function createCommandQueue(connector: Connector): CommandQueue {
   let disposed = false;
   // Asc.scope общий для всех команд: команды идут строго по очереди.
   let queue: Promise<unknown> = Promise.resolve();
@@ -426,16 +433,13 @@ export function createDocumentAdapter(connector: Connector): DocumentAdapter {
       () =>
         new Promise<unknown>((resolve, reject) => {
           if (disposed) {
-            reject(new Error('document connector is disposed'));
+            reject(new Error('connector is disposed'));
             return;
           }
           const w = globalThis as unknown as { Asc?: { scope?: unknown } };
           w.Asc = w.Asc ?? {};
           w.Asc.scope = scope;
-          const timer = setTimeout(
-            () => reject(new Error('document command timeout')),
-            COMMAND_TIMEOUT_MS,
-          );
+          const timer = setTimeout(() => reject(new Error('command timeout')), COMMAND_TIMEOUT_MS);
           try {
             connector.callCommand(fn, (r) => {
               clearTimeout(timer);
@@ -454,6 +458,21 @@ export function createDocumentAdapter(connector: Connector): DocumentAdapter {
     queue = next.catch(() => undefined);
     return next;
   }
+
+  return {
+    run,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      connector.disconnect();
+    },
+  };
+}
+
+// ---------- Адаптер ----------
+
+export function createDocumentAdapter(connector: Connector): DocumentAdapter {
+  const { run, dispose } = createCommandQueue(connector);
 
   return {
     async snapshot() {
@@ -475,10 +494,6 @@ export function createDocumentAdapter(connector: Connector): DocumentAdapter {
       })) as { notFound: { items: number[]; tables: number[] } };
       return { notFound: r.notFound };
     },
-    dispose() {
-      if (disposed) return;
-      disposed = true;
-      connector.disconnect();
-    },
+    dispose,
   };
 }

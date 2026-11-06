@@ -374,6 +374,17 @@ export async function buildListTable(
   return syntax ? { error: syntax } : { rows };
 }
 
+/**
+ * Подсказка модели к частой ошибке PostgreSQL в запросе групп (§53.2): агрегат внутри json_agg.
+ * Текст ошибки — на языке сервера базы, поэтому оба варианта.
+ */
+const NESTED_AGG =
+  /aggregate function calls cannot be nested|вызовы агрегатных функций не могут быть вложенными/i;
+function sqlHint(check: Partial<QueryCheck>): string | undefined {
+  if (check.ok !== false || !NESTED_AGG.test(String(check.error ?? ''))) return undefined;
+  return 'Nested rows of json_agg hold plain row values, not aggregates: compute per-row sums or counts in a subquery or CTE first, then json_agg over it (subtotals and totals come from Carbone aggregators in the sheet).';
+}
+
 export function createAuthorTools(
   ctx: ToolContext & {
     templateId: string;
@@ -475,8 +486,11 @@ export function createAuthorTools(
       }
       case 'describe_table':
         return call(name, 'GET', `${base}/schema/tables/${enc(a.name as string)}`);
-      case 'check_sql':
-        return call(name, 'POST', `${base}/queries/check`, { sql: a.sql });
+      case 'check_sql': {
+        const out = await call(name, 'POST', `${base}/queries/check`, { sql: a.sql });
+        const hint = sqlHint(out.result as Partial<QueryCheck>);
+        return hint ? { result: { ...(out.result as object), hint } } : out;
+      }
       case 'propose_query': {
         // Схема TemplateQuery: ключ-идентификатор, не params, SQL только на чтение.
         const q = TemplateQuery.safeParse({ key: a.key, mode: a.mode, sql: a.sql });
@@ -486,6 +500,7 @@ export function createAuthorTools(
         if (r.status !== 200) ctx.onError?.(name, r.status, r.body);
         const check: QueryCheck =
           r.status === 200 ? (r.body as QueryCheck) : { ok: false, error: errorOf(r).error };
+        const hint = sqlHint(check);
         return {
           card: {
             type: 'query',
@@ -497,7 +512,7 @@ export function createAuthorTools(
             check,
           },
           // Итог проверки (столбцы или ошибка) — модели, чтобы исправить SQL.
-          result: { ok: true, check },
+          result: { ok: true, check, ...(hint && { hint }) },
         };
       }
       case 'propose_param': {

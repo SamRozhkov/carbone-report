@@ -109,6 +109,22 @@ describe('createAuthorTools', () => {
     expect(JSON.stringify(write)).not.toContain('v:');
   });
 
+  it('вложенный агрегат в SQL — подсказка модели в check_sql и propose_query', async () => {
+    const fail = { ok: false, error: 'aggregate function calls cannot be nested' };
+    const { tools } = setup({
+      [`/api/templates/${TID}/queries/check`]: { status: 200, body: fail },
+    });
+    const sql = "select c, json_agg(json_build_object('s', sum(x))) as rows from t group by c";
+    const checked = await tools.run('check_sql', { sql });
+    expect(checked).toMatchObject({ result: fail });
+    expect(JSON.stringify(checked)).toContain('subquery');
+    const r = await tools.run('propose_query', { key: 'g', mode: 'list', sql });
+    expect(r).toMatchObject({ card: { check: fail }, result: { ok: true, check: fail } });
+    expect(JSON.stringify('result' in r && r.result)).toContain('subquery');
+    // Карточка — без подсказки для модели.
+    expect(JSON.stringify('card' in r && r.card)).not.toContain('subquery');
+  });
+
   it('propose_query: сбой проверки — безопасный текст в карточке', async () => {
     const { tools } = setup({
       [`/api/templates/${TID}/queries/check`]: {

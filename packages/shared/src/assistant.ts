@@ -82,8 +82,13 @@ export interface QueryCheckColumn {
   type: string;
 }
 /** Проба запроса с реальными данными (§53.4): вложенные колонки по полям-массивам; sampled — были ли строки. */
+export type QueryProbeColumnType = 'number' | 'date' | 'text' | 'boolean';
+export interface QueryProbeColumn {
+  name: string;
+  type: QueryProbeColumnType;
+}
 export type QueryProbe =
-  | { ok: true; sampled: boolean; nested: { column: string; columns: QueryCheckColumn[] }[] }
+  | { ok: true; sampled: boolean; nested: { column: string; columns: QueryProbeColumn[] }[] }
   | { ok: false; error: string };
 
 export type QueryCheck = { ok: true; columns: QueryCheckColumn[] } | { ok: false; error: string };

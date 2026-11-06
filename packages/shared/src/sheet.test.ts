@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { QueryProbe } from './assistant';
 import { parseRef, toRef, parseRange, SheetSnapshot } from './sheet';
 
 const ok = {
@@ -54,5 +55,20 @@ describe('SheetSnapshot', () => {
       }),
     ).toBe(false);
     expect(bad({ cells: [{ ref: 'a1', text: '' }] })).toBe(false);
+  });
+});
+
+describe('QueryProbe', () => {
+  it('типы вложенных колонок ограничены', () => {
+    const p: QueryProbe = {
+      ok: true,
+      sampled: true,
+      nested: [{ column: 'items', columns: [{ name: 'n', type: 'number' }] }],
+    };
+    expect(p.ok).toBe(true);
+    const col = { name: 'n', type: 'int4' };
+    // @ts-expect-error неизвестный тип колонки
+    const bad: QueryProbe = { ok: true, sampled: true, nested: [{ column: 'a', columns: [col] }] };
+    expect(bad.ok).toBe(true);
   });
 });

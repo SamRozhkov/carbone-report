@@ -76,6 +76,10 @@ export function useCardText(): (c: Card) => string {
             items: c.items.length,
             tables: c.tables.length,
           });
+        case 'sheet':
+        case 'sheetReplace':
+          // Task 10: тексты карточек листа
+          return '';
       }
     },
     [t],

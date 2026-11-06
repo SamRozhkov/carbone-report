@@ -1,6 +1,7 @@
 // ИИ-ассистент (§50): настройки подключения к модели, чат, карточка запуска.
 import { z } from 'zod';
 import type { OutputFormat, ParamValue, QueryMode, TemplateParam } from './index';
+import type { SheetLayout } from './sheet';
 
 const httpUrl = (v: string) => {
   try {
@@ -80,6 +81,11 @@ export interface QueryCheckColumn {
   name: string;
   type: string;
 }
+/** Проба запроса с реальными данными (§53.4): вложенные колонки по полям-массивам; sampled — были ли строки. */
+export type QueryProbe =
+  | { ok: true; sampled: boolean; nested: { column: string; columns: QueryCheckColumn[] }[] }
+  | { ok: false; error: string };
+
 export type QueryCheck = { ok: true; columns: QueryCheckColumn[] } | { ok: false; error: string };
 
 /** POST /api/templates/:id/queries/check — проверка SQL автора без строк (§51.2). */
@@ -139,6 +145,33 @@ export interface ReplaceTable {
   serviceRow: string[];
 }
 
+/** Замена значения на тег в листе: ref — ячейка 'A1', find — текущий текст. */
+export interface SheetReplaceItem {
+  ref: string;
+  find: string;
+  tag: string;
+  note?: string;
+}
+
+/** Строка таблицы листа: styleFrom — 0-based строка-образец (оформление и текст); null — оставить текст образца. */
+export interface SheetReplaceRow {
+  styleFrom: number;
+  cells: (string | null)[];
+}
+
+/** Таблица листа для замены (§53.3); все номера 0-based. */
+export interface SheetReplaceTable {
+  key: string;
+  grouped: boolean;
+  firstCol: number;
+  headerRow: number;
+  firstDataRow: number;
+  lastDataRow: number;
+  fingerprint: { header: string[]; columns: number; sample: string[] };
+  rows: SheetReplaceRow[];
+  totals: { row: number; cells: { col: number; tag: string }[] } | null;
+}
+
 /** Карточка в ответе ассистента: запуск (§50.3) или предложение автору шаблона (§51). */
 export type Card =
   | ({ type: 'run' } & RunCard)
@@ -160,6 +193,25 @@ export type Card =
       templateName: string;
       key: string;
       rows: string[][];
+      layout?: SheetLayout;
+      explanation: string;
+    }
+  | {
+      /** Таблица для листа (§53.3). */
+      type: 'sheet';
+      templateId: string;
+      templateName: string;
+      key: string;
+      layout: SheetLayout;
+      explanation: string;
+    }
+  | {
+      /** Замены значений на теги и таблица в листе (§53.3). */
+      type: 'sheetReplace';
+      templateId: string;
+      templateName: string;
+      items: SheetReplaceItem[];
+      table: SheetReplaceTable | null;
       explanation: string;
     }
   | {

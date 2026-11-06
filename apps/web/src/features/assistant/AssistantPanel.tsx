@@ -105,6 +105,10 @@ export function AssistantPanel({ chat }: { chat: AssistantChat }) {
                     return <DocumentCardView key={j} card={c} />;
                   case 'replace':
                     return <ReplaceCardView key={j} card={c} />;
+                  case 'sheet':
+                  case 'sheetReplace':
+                    // Task 10: отображение карточек листа
+                    return null;
                 }
               })}
           </div>

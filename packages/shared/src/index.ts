@@ -6,8 +6,10 @@ import { RunSignature, SignMethod } from './signature';
 import { Locale, zodReportLocale } from './i18n';
 import { checkReadOnlySql } from './sql-readonly';
 import { ChatTurn } from './assistant';
+import { SheetSnapshot } from './sheet';
 
 export * from './charts';
+export * from './sheet';
 export * from './pdf-options';
 export * from './signature';
 export * from './edit-lock';
@@ -165,16 +167,20 @@ export const DocSnapshot = z
 export type DocSnapshot = z.infer<typeof DocSnapshot>;
 
 /** Черновик редактора шаблона, который панель ассистента передаёт в запросе (§51.3). */
-export const EditorDraft = z.object({
-  queries: z
-    .array(z.object({ key: z.string().max(100), mode: QueryMode, sql: z.string().max(20_000) }))
-    .max(30),
-  params: z.array(TemplateParam).max(50),
-  /** Снимок документа (§52.3): только если редактор умеет формировать документ. */
-  document: DocSnapshot.optional(),
-  /** Браузер умеет менять документ (createConnector) — включает инструменты этапа 3. */
-  documentAutomation: z.literal(true).optional(),
-});
+export const EditorDraft = z
+  .object({
+    queries: z
+      .array(z.object({ key: z.string().max(100), mode: QueryMode, sql: z.string().max(20_000) }))
+      .max(30),
+    params: z.array(TemplateParam).max(50),
+    /** Снимок документа (§52.3): только если редактор умеет формировать документ. */
+    document: DocSnapshot.optional(),
+    /** Браузер умеет менять документ (createConnector) — включает инструменты этапа 3. */
+    documentAutomation: z.literal(true).optional(),
+    /** Снимок листа (§53.2): редактор открыт на xlsx/ods; вместе с document не передаётся. */
+    sheet: SheetSnapshot.optional(),
+  })
+  .refine((d) => !(d.sheet && d.document), { message: 'sheet and document are exclusive' });
 export type EditorDraft = z.infer<typeof EditorDraft>;
 
 export const AssistantChatBody = z.object({

@@ -382,4 +382,10 @@ describe('DocSnapshot (§52.3)', () => {
     );
     expect(EditorDraft.safeParse({ ...base, documentAutomation: false }).success).toBe(false);
   });
+  it('EditorDraft: sheet валиден, sheet вместе с document — нет', () => {
+    const base = { queries: [], params: [] };
+    const sheet = { name: 'S', cells: [], usedRange: 'A1', active: 'A1', truncated: false };
+    expect(EditorDraft.safeParse({ ...base, sheet }).success).toBe(true);
+    expect(EditorDraft.safeParse({ ...base, sheet, document: ok }).success).toBe(false);
+  });
 });

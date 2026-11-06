@@ -3,7 +3,6 @@ import { Grip } from '@gravity-ui/icons';
 import { Button, Icon, Text } from '@gravity-ui/uikit';
 import { useTranslation } from 'react-i18next';
 import { DocumentActionButton } from './DocumentActionButton';
-import { gridLayout } from './sheetAdapter';
 import { SheetInsertButton } from './SheetCardView';
 import { useCopy } from './useCopy';
 import { useDocumentAction } from './useDocumentAction';
@@ -54,6 +53,7 @@ export function TableCardView({ card }: { card: TableCard }) {
   const copy = useCopy();
   const doc = useDocumentAction(card.templateId);
   const content = () => ({ html: tableHtml(card.rows), text: tablePipe(card.rows) });
+  const layout = card.layout;
   return (
     <div className="cr-assistant__card">
       <div className="cr-assistant__table-row">
@@ -85,11 +85,9 @@ export function TableCardView({ card }: { card: TableCard }) {
           label={t('common:assistant.cardInsert')}
           onClick={() => doc.run((a) => a.insertTable(card.rows))}
         />
-        {/* В листе — раскладка сервера с форматами; без неё — сетка текста (§53.3). */}
-        <SheetInsertButton
-          templateId={card.templateId}
-          layout={() => card.layout ?? gridLayout(card.rows)}
-        />
+        {/* В листе — только раскладка сервера с форматами (§53.3): таблица без неё (запрос без
+            снимка листа) дала бы текст вместо чисел и дат — остаётся копирование. */}
+        {layout && <SheetInsertButton templateId={card.templateId} layout={() => layout} />}
         <Button view="outlined" onClick={() => copy(content())}>
           {t('common:assistant.cardCopyTable')}
         </Button>

@@ -912,9 +912,11 @@ describe('формирование в листе (§53.3)', () => {
   it('«Вставить в таблицу»: фрагмент — строками вниз от активной ячейки, таблица — раскладкой', async () => {
     const adapter = fakeSheet();
     setup([tags, { ...table, layout: tableLayout }, { ...table, key: 'other' }], inSheet(adapter));
-    const [tagsBtn, layoutBtn, gridBtn] = await screen.findAllByRole('button', {
-      name: insertSheet,
-    });
+    // Таблица без раскладки сервера (запрос без снимка листа) — только копирование (final #2).
+    const buttons = await screen.findAllByRole('button', { name: insertSheet });
+    expect(buttons).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Копировать таблицу' })).toHaveLength(2);
+    const [tagsBtn, layoutBtn] = buttons;
     expect(screen.queryByRole('button', { name: 'Вставить в документ' })).toBeNull();
     await userEvent.click(tagsBtn!);
     await waitFor(() =>
@@ -923,10 +925,6 @@ describe('формирование в листе (§53.3)', () => {
     expect(await screen.findByText('Изменено в документе')).toBeInTheDocument();
     await userEvent.click(layoutBtn!);
     await waitFor(() => expect(adapter.insertCells).toHaveBeenLastCalledWith('B2', tableLayout));
-    await userEvent.click(gridBtn!);
-    await waitFor(() =>
-      expect(adapter.insertCells).toHaveBeenLastCalledWith('B2', gridLayout(rows)),
-    );
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

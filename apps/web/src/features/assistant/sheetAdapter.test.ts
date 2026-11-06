@@ -672,6 +672,47 @@ describe('replace', () => {
   });
 });
 
+describe('replace: нет методов Spreadsheet API (final #8)', () => {
+  const proto = FakeRange.prototype as unknown as Record<string, unknown>;
+  const without = async (names: string[], run: () => Promise<unknown>) => {
+    const saved = names.map((n) => [n, proto[n]] as const);
+    for (const n of names) proto[n] = undefined;
+    try {
+      return await run();
+    } finally {
+      for (const [n, f] of saved) proto[n] = f;
+    }
+  };
+  const untouched = () => {
+    expect(sheet.row(4)).toEqual(['Item 1', '3', '300,00', 'side']);
+    expect(sheet.row(8)).toEqual(['Item 5', '7', '700,00', '']);
+    expect(sheet.text('A1')).toBe('Invoice No 15');
+    expect(sheet.text('B12')).toBe('Signed: Ivanov');
+  };
+
+  it('нет Delete — ошибка до первого изменения, лист не тронут', async () => {
+    invoiceSheet();
+    await expect(
+      without(['Delete'], () => createSheetAdapter(fakeConnector()).replace(items, invoiceTable())),
+    ).rejects.toThrow('Delete');
+    untouched();
+  });
+
+  it('нет ни Copy, ни GetValue — ошибка, лист не тронут; без Copy с GetValue — запасной путь', async () => {
+    invoiceSheet();
+    await expect(
+      without(['Copy', 'GetValue'], () =>
+        createSheetAdapter(fakeConnector()).replace(items, invoiceTable()),
+      ),
+    ).rejects.toThrow('Copy');
+    untouched();
+    const r = await without(['Copy'], () =>
+      createSheetAdapter(fakeConnector()).replace(items, invoiceTable()),
+    );
+    expect(r).toEqual({ notFound: { items: [], table: false } });
+  });
+});
+
 describe('ошибки и жизненный цикл', () => {
   it('ошибка внутри команды — отклонённый Promise', async () => {
     g.Api = {

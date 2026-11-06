@@ -325,6 +325,21 @@ function replaceCommand(): unknown {
     };
     const notFound: { items: number[]; table: boolean } = { items: [], table: false };
 
+    // 0. Методы API — до первого изменения: без них таблица применилась бы частично.
+    const has = (o: unknown, m: string) =>
+      typeof (o as Record<string, unknown> | null)?.[m] === 'function';
+    const probe = cell(0, 0);
+    const missing: string[] = [];
+    for (const m of ['GetText', 'SetValue']) if (!has(probe, m)) missing.push(m);
+    if (items.length && !has(probe, 'GetValue')) missing.push('GetValue');
+    if (table) {
+      const rowsProbe = wholeRows(table.firstDataRow, table.lastDataRow);
+      for (const m of ['Insert', 'Delete']) if (!has(rowsProbe, m)) missing.push(m);
+      if (!has(probe, 'Copy') && !has(probe, 'GetValue')) missing.push('Copy or GetValue');
+    }
+    if (missing.length)
+      return { error: 'Spreadsheet API methods are missing: ' + missing.join(', ') };
+
     // 1. Таблица.
     let shift = 0;
     let applied = false;

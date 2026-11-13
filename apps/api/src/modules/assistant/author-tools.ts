@@ -375,14 +375,14 @@ export async function buildListTable(
 }
 
 /**
- * Подсказка модели к частой ошибке PostgreSQL в запросе групп (§53.2): агрегат внутри json_agg.
- * Текст ошибки — на языке сервера базы, поэтому оба варианта.
+ * Подсказка модели к частым ошибкам PostgreSQL в запросе групп (§53.2): агрегат или оконная
+ * функция внутри json_agg. Текст ошибки — на языке сервера базы, поэтому оба варианта.
  */
-const NESTED_AGG =
-  /aggregate function calls cannot be nested|вызовы агрегатных функций не могут быть вложенными/i;
+const GROUP_SQL_ERR =
+  /aggregate function calls cannot be nested|вызовы агрегатных функций не могут быть вложенными|OVER specified|указан OVER/i;
 function sqlHint(check: Partial<QueryCheck>): string | undefined {
-  if (check.ok !== false || !NESTED_AGG.test(String(check.error ?? ''))) return undefined;
-  return 'Nested rows of json_agg hold plain row values, not aggregates: compute per-row sums or counts in a subquery or CTE first, then json_agg over it (subtotals and totals come from Carbone aggregators in the sheet).';
+  if (check.ok !== false || !GROUP_SQL_ERR.test(String(check.error ?? ''))) return undefined;
+  return 'Nested rows of json_agg hold plain row values: no aggregates and no window functions (OVER) inside json_agg. Compute per-row sums or counts in a subquery or CTE first, then json_agg over it (subtotals and totals come from Carbone aggregators in the sheet).';
 }
 
 export function createAuthorTools(

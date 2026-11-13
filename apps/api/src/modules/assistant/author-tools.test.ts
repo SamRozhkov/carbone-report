@@ -125,6 +125,26 @@ describe('createAuthorTools', () => {
     expect(JSON.stringify('card' in r && r.card)).not.toContain('subquery');
   });
 
+  it('оконная функция в json_agg — подсказка модели в check_sql и propose_query', async () => {
+    const fail = {
+      ok: false,
+      error:
+        'OVER specified, but json_build_object is not a window function nor an aggregate function',
+    };
+    const { tools } = setup({
+      [`/api/templates/${TID}/queries/check`]: { status: 200, body: fail },
+    });
+    const sql =
+      "select c.name as client, json_agg(json_build_object('sum', sum(x)) over (partition by c.name)) as rows from t group by c.name";
+    const checked = await tools.run('check_sql', { sql });
+    expect(checked).toMatchObject({ result: fail });
+    expect(JSON.stringify(checked)).toContain('window');
+    const r = await tools.run('propose_query', { key: 'g', mode: 'list', sql });
+    expect(r).toMatchObject({ card: { check: fail }, result: { ok: true, check: fail } });
+    expect(JSON.stringify('result' in r && r.result)).toContain('subquery');
+    expect(JSON.stringify('card' in r && r.card)).not.toContain('subquery');
+  });
+
   it('propose_query: сбой проверки — безопасный текст в карточке', async () => {
     const { tools } = setup({
       [`/api/templates/${TID}/queries/check`]: {

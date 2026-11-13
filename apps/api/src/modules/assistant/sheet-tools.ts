@@ -43,7 +43,7 @@ import type { AgentTools, ToolContext, ToolOutcome } from './tools';
 
 const NOT_OPEN = 'spreadsheet is not open — ask the author to open the Document tab';
 const NESTED_HINT =
-  "build the nested rows in SQL with json_agg(json_build_object(...)), e.g. select contractor, json_agg(json_build_object('date', date, 'sum', sum) order by date) as rows from … group by contractor, and propose that query first";
+  "build the nested rows in SQL with json_agg(json_build_object(...)), e.g. select contractor, json_agg(json_build_object('date', date, 'sum', amount) order by date) as rows from … group by contractor (amount is a plain row value; no aggregate or OVER inside json_agg — compute a sum or count in a subquery or CTE first), and propose that query first";
 
 const LIMITS = { header: 20, columns: 20, group: 5, items: 100, width: 50 } as const;
 const SHEET_AGGS = [
